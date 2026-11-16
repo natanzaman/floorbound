@@ -33,6 +33,7 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Skills | 1, 2, 3 | Small buttons |
 | Dodge roll | Shift or K | Dodge button |
 | Jump | Space (hop over the boss's slams) | Jump button |
+| Guard / parry (Guardian) | Hold R to guard; tap R just before a hit to parry | — |
 | Select a character (enemy or ally) | Ctrl+click it (Cmd+click on Mac); Ctrl+click empty ground to clear | Lock on button (enemies) |
 | Lock on / cycle enemies | Tab (Esc to clear) | Lock on button |
 | Chat | Enter | Chat button |
@@ -52,7 +53,7 @@ Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 
 | Bramble Spitter | 4 | Rooted plant. Draws a red line, then fires a thorn along it: sidestep or roll. |
 | Alpha Wolf (elite) | 7 | Leads a pack: nearby wolves hit 25% harder. Howls to send the pack into a frenzy. |
 | Warden's Hound | 8 | Summoned by the Warden in phase 2. Stays in the chamber. |
-| The Horned Warden (boss) | 10 | Three phases. 100–66%: cleaves and ground slams. 66–33%: adds hounds and a horn charge down a red lane. Below 33%: enraged spin and rockfall circles under everyone. |
+| The Horned Warden (boss) | 10 | Three phases. 100–66%: cleaves and ground slams. 66–33%: adds hounds and a horn charge down a red lane. Below 33%: enraged spin and rockfall circles under everyone. In every phase (more often later): the perilous **Horn Sweep**. |
 
 ## The raid gate and the Last Attack Bonus
 
@@ -108,11 +109,15 @@ New characters get a short step-by-step guide card (move, hit, dodge, kill, bag,
 
 With a database, the server records play events (session start/end, first kill, deaths and their cause, party joins, guide steps, boss attempts, rare drops) in `play_events`. See the aggregates at **/stats.html** (raw JSON at `/api/stats?days=7`).
 
-## Combat: Break and Switch
+## Combat: posture, Break and Switch
 
 - **Dodge roll** gives a short window of invulnerability; roll through the boss's red circles.
-- **Break** an enemy with Ground Slam (Guardian), the Burst Combo finisher (Swordsman), or a Smite that lands while it's winding up an attack (Cleric). It's stunned for a moment and shows a yellow dizzy ring.
+- **Posture:** every enemy has a thin yellow posture bar under its health (nameplate, target frame, boss bar). Every hit fills it in proportion to the damage; heavy hits and combo finishers fill it twice as fast; Break skills (Ground Slam, the Burst Combo finisher) fill about half of it on normal enemies (less on the boss); a Smite that lands while the enemy winds up an attack fills a big chunk and interrupts it. Posture drains slowly after 2.5 s without being hit.
+- **Break:** when posture is full the enemy is BROKEN: stunned for a moment (yellow dizzy ring), its wind-up is cancelled, and its posture resets. The Warden can be broken again as soon as its posture refills.
 - **Switch:** the first hit from a *teammate* on a broken enemy does 2.5x damage, and follow-up hits do 1.4x. You can't Switch your own Break. Charms of the Switch boost this further.
+- **Perfect dodge:** start a roll at most ~0.2 s before a hit lands and it's PERFECT: a brief slow-motion flash, heavy posture damage to the attacker, and for 1.5 s your next hit does +50% damage and double posture damage.
+- **Guard and parry (Guardian, R):** hold R to guard: hits from the front (±70°) take 70% less damage, but you can't attack and you move at half speed. Press R at most ~0.2 s before a frontal hit lands to **parry** it: no damage at all, and big posture damage to the attacker. Mashing R doesn't parry.
+- **Perilous attacks:** the Warden's **Horn Sweep** shows an orange/gold circle around it with a "!" glint and its own warning horn (about 0.9 s). Anyone inside takes about 80% of their max health: Shield Wall, Taunt, guarding, gear and jumping don't reduce it. Roll through it (i-frames) or parry it. Breaking the Warden during the wind-up cancels it. It comes every ~18 s in phase 1, more often later.
 
 ## Classes
 
@@ -127,10 +132,12 @@ With a database, the server records play events (session start/end, first kill, 
 ```
 shared/data.js   classes, skills, mobs, map, collision — used by server AND client
 server/game.js   authoritative simulation: combat, AI, boss, XP, parties
+server/combat.js posture/Break, perfect dodge, guard/parry, Horn Sweep (mixed into Game)
 server/index.js  static file server + WebSocket server (20 ticks/sec)
 public/          Three.js client (no build step): main.js, world.js, style.css
 public/models/   rigged character models (glTF) with shared animations
 test/bots.js     headless bot players for load/gameplay testing
+test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
 shared/teambots.js  role-playing party bots (tank / DPS / healer), used by test/team.js and public/bots.html
 ```
 

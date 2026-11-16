@@ -11,6 +11,7 @@ import { createWorld, makePlayerModel, makeMobModel, Effects, loadAssets } from 
 import { TwistClient } from '/twists.js';
 import { Sound } from '/audio.js';
 import { createSmith } from '/smith.js';
+import { initCombat } from '/combat.js';
 
 const sfx = new Sound();
 
@@ -177,6 +178,8 @@ async function join(joinMsg) {
 const send = o => state.ws?.readyState === 1 && state.ws.send(JSON.stringify(o));
 const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
 const smith = createSmith({ scene, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
+// posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
+const combat = initCombat({ state, players, mobs, fx, sfx, guide, send, floatNum, slowMotion, shake: a => shake(a), bossShot: (...a) => bossShot(...a), lockedMob: () => lockedMob(), nearestMob: r => nearestMob(r) });
 
 // ---------------- networking ----------------
 function onMessage(msg) {
@@ -203,8 +206,8 @@ function onMessage(msg) {
     buildSkillBar();
     guide.start(msg.charId ? `c${msg.charId}` : `anon_${state.cls}`, msg.lvl);
     log('Welcome to Floorbound! Head north through the field and defeat the Horned Warden.', 'sys');
-    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion.' : 'WASD move · right-drag or screen edge to look · Left click (or J) attack · 1 2 3 skills · Shift dodge · Space jump · 4 5 6 items · B bag · F interact · P party · Ctrl+click select', 'sys');
-    log('Break an enemy (Ground Slam, Burst Combo finisher, or Smite during its wind-up), then a teammate hits it for a SWITCH: big bonus damage.', 'sys');
+    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion.' : `WASD move · right-drag or screen edge to look · Left click (or J) attack · 1 2 3 skills · Shift dodge · Space jump${state.cls === 'guardian' ? ' · R guard / parry' : ''} · 4 5 6 items · B bag · F interact · P party · Ctrl+click select`, 'sys');
+    log('Fill an enemy\'s yellow posture bar (heavy hits, Break skills, perfect dodges, parries) to BREAK it, then a teammate hits it for a SWITCH: big bonus damage.', 'sys');
     return;
   }
   if (msg.type === 'roster') {
@@ -259,11 +262,11 @@ function onSnapshot({ me, w }) {
 
   const seenM = new Set();
   for (const a of w.mobs) {
-    const [id, ti, x, z, face, hp, maxHp, flags] = a;
+    const [id, ti, x, z, face, hp, maxHp, flags, posture] = a;
     seenM.add(id);
     let e = mobs.get(id);
     if (!e) e = addMobEntity(id, MOB_IDS[ti], x, z, face);
-    Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, moving: flags & 1, engaged: flags & 2, enraged: flags & 4, stunned: flags & 8, winding: flags & 16, staggered: flags & 32, frenzy: flags & 64 });
+    Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, moving: flags & 1, engaged: flags & 2, enraged: flags & 4, stunned: flags & 8, winding: flags & 16, staggered: flags & 32, frenzy: flags & 64, posture: posture || 0 });
   }
   for (const [id, e] of mobs) if (!seenM.has(id) && !e.dying) { removeEntity(e); mobs.delete(id); if (e === boss) boss = null; }
   renderPlayersThrottled();
@@ -271,6 +274,7 @@ function onSnapshot({ me, w }) {
 
 function handleEvent(e) {
   const me = state.myId;
+  if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
   switch (e.t) {
     case 'tp':
       if (e.id === me) { state.x = e.x; state.z = e.z; state.seq = e.s; }
@@ -611,6 +615,7 @@ addEventListener('keydown', e => {
   if (k === ' ') { e.preventDefault(); if (!e.repeat) jump(); }
   if (k === '1' || k === '2' || k === '3') useSkill(+k);
   if (k === 'shift' || k === 'k') dodge();
+  if (k === 'r' && !e.repeat) combat.guard(true);
   if (k === 'tab') { e.preventDefault(); cycleLock(); }
   if (k === 'escape') { state.lock = 0; state.focus = 0; }
   if (k === 'p') $('players-btn').click();
@@ -623,8 +628,9 @@ addEventListener('keyup', e => {
   const k = e.key.toLowerCase();
   keys.delete(k);
   if (k === 'j') attackHeld = false;
+  if (k === 'r') combat.guard(false);
 });
-addEventListener('blur', () => { keys.clear(); attackHeld = false; });
+addEventListener('blur', () => { keys.clear(); attackHeld = false; combat.guard(false); });
 
 // camera drag (mouse + touch on the right/anywhere outside the stick)
 const drag = { id: null, x: 0, y: 0 };
@@ -692,6 +698,7 @@ function buildSkillBar(lvl = state.lvl) {
       <span class="key">${i === 0 ? (isTouch ? '' : 'CLICK') : i}</span>${s.name}${locked ? `<br><small>Lv ${s.lvl}</small>` : ''}<span class="cd"></span><span class="cdt"></span></button>`;
   }).join('') + `<button class="sk sd" data-slot="dodge" title="Dodge roll: dash and avoid damage"><span class="key">${isTouch ? '' : 'SHIFT'}</span>Dodge<span class="cd"></span><span class="cdt"></span></button>`
     + `<button class="sk sj" data-slot="jump" title="Jump: hop over the boss's ground slams"><span class="key">${isTouch ? '' : 'SPACE'}</span>Jump<span class="cd"></span><span class="cdt"></span></button>`
+    + combat.guardButton(state.cls, isTouch)
     + CONSUMABLE_IDS.map(id => `<button class="sk it2 ${id}" data-item="${id}" title="${CONSUMABLES[id].name}: ${CONSUMABLES[id].desc}"><span class="key">${isTouch ? '' : CONSUMABLES[id].key}</span>${CONSUMABLES[id].name.split(' ').pop()}<span class="cnt"></span><span class="cd"></span></button>`).join('')
     + `<button class="sk act" data-slot="act">Ready</button>`;
   for (const b of $('skills').children) {
@@ -701,6 +708,7 @@ function buildSkillBar(lvl = state.lvl) {
       b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up); b.addEventListener('pointercancel', up);
       continue;
     }
+    if (b.dataset.slot === 'guard') { combat.bindGuardButton(b); continue; }
     if (b.dataset.slot === 'dodge' || b.dataset.slot === 'jump') {
       const act = b.dataset.slot === 'dodge' ? dodge : jump;
       b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('pressed'); act(); });
@@ -792,11 +800,11 @@ function updateTargetFrame(t, isMob) {
   const name = isMob ? t.def.name : t.name;
   const sub = isMob ? `Lv ${t.def.level}${t.def.elite ? ' · Elite' : t.def.boss ? ' · Boss' : ''}${t.staggered ? ' · BROKEN' : ''}` : `Lv ${t.lvl} · ${CLASSES[t.cls].name}`;
   const pct = Math.max(0, Math.round((t.hp / t.maxHp) * 100));
-  const key = `${name}|${sub}|${pct}|${isMob}`;
+  const key = `${name}|${sub}|${pct}|${isMob}|${isMob ? `${t.posture}${t.staggered}` : ''}`;
   if (key === tfKey) return;
   tfKey = key;
   el.className = `frame ${isMob ? 'foe' : 'friend'}`;
-  el.innerHTML = `<div class="row"><span>${esc(name)}</span><span class="sub">${sub}</span></div><div class="bar hp"><div style="width:${pct}%"></div><span>${t.hp} / ${t.maxHp}</span></div>`;
+  el.innerHTML = `<div class="row"><span>${esc(name)}</span><span class="sub">${sub}</span></div><div class="bar hp"><div style="width:${pct}%"></div><span>${t.hp} / ${t.maxHp}</span></div>${isMob ? combat.frameBar(t) : ''}`;
 }
 
 let calloutT = 0;
@@ -820,7 +828,7 @@ function useSkill(slot) {
   if (state.dead || !state.joined) return;
   const sk = CLASSES[state.cls].skills[slot];
   const now = performance.now();
-  if (!sk || state.lvl < sk.lvl || now < state.ready[slot]) return;
+  if (!sk || state.lvl < sk.lvl || now < state.ready[slot] || combat.guarding) return;
   const auto = ['slash', 'bash', 'rush', 'smite', 'burst'].includes(sk.id);
   if (auto) {
     const lm = lockedMob();
@@ -1087,6 +1095,7 @@ function updateHud(now) {
   $('boss').classList.toggle('hidden', !showBoss);
   if (showBoss) {
     setBar($('boss-hp'), (boss.hp / boss.maxHp) * 100); $('boss').classList.toggle('enraged', !!boss.enraged);
+    combat.bossBar(boss);
     $('boss-phase').textContent = ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '';
     twists.bossLine($('boss-phase'));
   }
@@ -1109,6 +1118,7 @@ function updateHud(now) {
       btn.querySelector('.cd').style.setProperty('--p', `${Math.min(100, (left / CONSUMABLES[id].cd) * 100)}%`);
       continue;
     }
+    if (btn.dataset.slot === 'guard') { btn.classList.toggle('on', combat.guarding); continue; }
     if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); btn.textContent = a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : state.meReady ? 'Unready' : 'Ready'; continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : CLASSES[state.cls].skills[slot];
@@ -1303,6 +1313,7 @@ function animateEntity(e, dt) {
     if (txt !== e.label.text) { e.label.text = txt; e.label.nm.innerHTML = txt; }
     const pct = Math.round((e.hp / e.maxHp) * 100);
     if (pct !== e.label.pct) { e.label.pct = pct; e.label.fill.style.width = `${pct}%`; }
+    if (e.kind === 'mob') combat.label(e); // posture bar
     if (e.kind === 'player') e.label.el.className = `lbl ${state.party && e.party === state.party ? 'party' : 'ally'}`;
     else if (e.def.elite && !e.label.el.classList.contains('elite')) e.label.el.classList.add('elite');
   }
@@ -1408,8 +1419,8 @@ function frame(now) {
       const fwd = [Math.sin(fy), Math.cos(fy)], right = [-Math.cos(fy), Math.sin(fy)];
       let mx = fwd[0] * iz + right[0] * ix, mz = fwd[1] * iz + right[1] * ix;
       const ml = Math.hypot(mx, mz); mx /= ml; mz /= ml;
-      const sprint = performance.now() - state.lastCombat > SPRINT_AFTER * 1000;
-      const want = (sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag;
+      const sprint = performance.now() - state.lastCombat > SPRINT_AFTER * 1000 && !combat.guarding;
+      const want = (sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult(); // half speed while guarding
       state.speed += (want - state.speed) * Math.min(1, dt * (want > state.speed ? 3 : 10));
       const step = state.speed * dt;
       let nx = state.x + mx * step, nz = state.z + mz * step;
@@ -1424,6 +1435,7 @@ function frame(now) {
       state.face = Math.atan2(mx, mz);
     } else state.speed = 0;
     if (attackHeld && !state.roll) useSkill(0);
+    combat.frame(); // guarding: face the enemy, drop the guard on a roll
   }
 
   if (state.joined && !state.spectator && now - sendT >= 1000 / TICK_RATE) {

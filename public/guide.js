@@ -26,6 +26,10 @@ const TIPS = {
   loot: 'You found gear! Open your bag (B) to equip it.',
   howl: 'The Alpha howled: nearby wolves are frenzied. Back off or burst them down.',
   mats: 'Materials! Take them to the Smith in town to refine or craft gear.',
+  posture: 'Yellow bar = posture. Every hit fills it; heavy finishers, Break skills, perfect dodges and parries fill it fast. When it\'s full the enemy is BROKEN.',
+  perfect: 'PERFECT dodge! Rolling just before a hit lands staggers the attacker\'s posture, and your next hit does +50% damage.',
+  peril: 'Orange = perilous: dodge through it or parry (Guardian R). Shields won\'t save you.',
+  rguard: 'R is the Guardian\'s guard: hold it to block, tap it just before a hit to parry.',
 };
 
 export class Guide {
