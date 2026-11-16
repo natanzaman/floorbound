@@ -9,6 +9,7 @@ import {
 } from '../shared/items.js';
 import { TITLES, newStats, meetsTitle } from '../shared/titles.js';
 import crypto from 'node:crypto';
+import { SmithMethods } from './smith.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
@@ -149,6 +150,7 @@ export class Game {
       case 'buy': return this.buy(p, msg.i | 0);
       case 'sell': return this.sell(p, msg.u | 0);
       case 'title': return this.setTitle(p, msg.id);
+      case 'smith': return this.smith(p, msg);
       case 'track': // the client's first-time guide reports progress
         if (msg.k === 'guide' && Number.isInteger(msg.step) && msg.step >= 0 && msg.step < 30 && p.trackN++ < 60) this.track(p, 'guide', { step: msg.step });
         return;
@@ -216,7 +218,7 @@ export class Game {
 
   // ---------- items ----------
   invFor(p) {
-    return { type: 'inv', gold: p.gold, bag: p.inv.bag, eq: p.inv.eq, cons: p.inv.cons,
+    return { type: 'inv', gold: p.gold, bag: p.inv.bag, eq: p.inv.eq, cons: p.inv.cons, mats: p.inv.mats || {},
       stats: { atk: Math.round(p.atk * 10) / 10, maxHp: p.maxHp, crit: Math.round(p.crit * 100), haste: Math.round(p.haste * 100), sw: Math.round(p.swPow * 100), dr: Math.round(p.gearDr * 100) },
       life: p.stats }; // lifetime stats, earned titles (life.titles) and life.activeTitle
   }
@@ -367,7 +369,8 @@ export class Game {
     }
     let pot = 0;
     if (Math.random() < d.potion) { p.inv.cons.potion = (p.inv.cons.potion || 0) + 1; pot = 1; }
-    this.events.push({ t: 'loot', to: p.id, x: r2(m.x), z: r2(m.z), g: gold, items, pot });
+    const mats = this.dropMats(p, m);
+    this.events.push({ t: 'loot', to: p.id, x: r2(m.x), z: r2(m.z), g: gold, items, pot, mats });
     this.invChanged(p);
   }
 
@@ -1177,3 +1180,6 @@ export class Game {
     return [...this.players.values()].map(p => ({ id: p.id, name: p.name, cls: p.cls, title: p.stats?.activeTitle || null }));
   }
 }
+
+// Town Smith: refine, salvage, reforge, recipes (server/smith.js)
+Object.assign(Game.prototype, SmithMethods);
