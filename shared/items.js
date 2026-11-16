@@ -77,6 +77,11 @@ export function lastAttackItem() {
   return { u: ++uid, slot: 'charm', r: 4, name: 'Horn of the Warden', st: { crit: 10, haste: 8, sw: 40 }, la: 1 };
 }
 
+// The Floor 2 Last Attack Bonus: only whoever lands the killing blow on the Drowned Sovereign gets this.
+export function lastAttackItem2() {
+  return { u: ++uid, slot: 'armor', r: 4, name: "Sovereign's Tidecloak", st: { hp: 30, dr: 10, haste: 6 }, la: 2 };
+}
+
 // Rarity tables (weights for common..epic).
 const TABLES = {
   field: [62, 28, 9, 1],
@@ -84,6 +89,7 @@ const TABLES = {
   boss: [0, 0, 70, 30],
   rare: [0, 20, 55, 25],
 };
+Object.assign(TABLES, { mire: [40, 40, 17, 3], mireElite: [0, 30, 48, 22], boss2: [0, 0, 45, 55] }); // Floor 2
 export function rollRarity(table, rnd = Math.random) {
   const w = TABLES[table];
   let x = rnd() * w.reduce((a, b) => a + b, 0);
@@ -103,6 +109,15 @@ export const DROPS = {
   ghostfang: { gold: [40, 70], item: 1, potion: 1, table: 'rare' },
   thornmother: { gold: [40, 70], item: 1, potion: 1, table: 'rare' },
 };
+
+Object.assign(DROPS, { // Floor 2
+  shieldback: { gold: [8, 14], item: 0.13, potion: 0.14, table: 'mire' },
+  wisp: { gold: [7, 12], item: 0.11, potion: 0.12, table: 'mire' },
+  lurker: { gold: [8, 13], item: 0.13, potion: 0.14, table: 'mire' },
+  thrall: { gold: [2, 4], item: 0, potion: 0.2, table: 'mire' },
+  matron: { gold: [50, 80], item: 1, potion: 0.6, table: 'mireElite' },
+  sovereign: { gold: [260, 340], item: 2, potion: 2, table: 'boss2' },
+});
 
 export const RANDOM_SLOT = rnd => SLOTS[Math.floor(rnd() * SLOTS.length)];
 

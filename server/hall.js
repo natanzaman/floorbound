@@ -3,25 +3,32 @@
 import * as db from './db.js';
 
 const RECENT = 20, FASTEST = 5;
-const cache = { first: null, fastest: [], recent: [] };
+const caches = new Map(); // floor -> { first, fastest, recent }
+const cacheFor = f => { if (!caches.has(f)) caches.set(f, { first: null, fastest: [], recent: [] }); return caches.get(f); };
+const cache = cacheFor(1);
+export const FLOORS = [1, 2];
 
 const fromRow = r => ({ at: new Date(r.at).toISOString(), floor: r.floor, secs: r.secs, players: r.players || [], lastAttack: r.last_attack, deaths: r.deaths });
 
 export async function load() {
   if (!db.enabled) return;
   try {
-    const [first] = await db.q('SELECT * FROM floor_clears ORDER BY id LIMIT 1');
-    cache.first = first ? fromRow(first) : null;
-    cache.fastest = (await db.q('SELECT * FROM floor_clears ORDER BY secs, id LIMIT $1', [FASTEST])).map(fromRow);
-    cache.recent = (await db.q('SELECT * FROM floor_clears ORDER BY id DESC LIMIT $1', [RECENT])).map(fromRow);
+    for (const f of FLOORS) {
+      const cache = cacheFor(f);
+      const [first] = await db.q('SELECT * FROM floor_clears WHERE floor = $1 ORDER BY id LIMIT 1', [f]);
+      cache.first = first ? fromRow(first) : null;
+      cache.fastest = (await db.q('SELECT * FROM floor_clears WHERE floor = $1 ORDER BY secs, id LIMIT $2', [f, FASTEST])).map(fromRow);
+      cache.recent = (await db.q('SELECT * FROM floor_clears WHERE floor = $1 ORDER BY id DESC LIMIT $2', [f, RECENT])).map(fromRow);
+    }
   } catch (e) { console.error('hall load failed', e.message); }
 }
 
-export const hasFirst = () => !!cache.first;
+export const hasFirst = (f = 1) => !!cacheFor(f).first;
 
 // rec = { floor, secs, players: [{ name, cls, lvl }], lastAttack, deaths }
 export function add(rec) {
   const r = { at: new Date().toISOString(), floor: rec.floor | 0 || 1, secs: Math.max(0, rec.secs | 0), players: rec.players || [], lastAttack: rec.lastAttack || null, deaths: rec.deaths | 0 };
+  const cache = cacheFor(r.floor);
   if (!cache.first) cache.first = r;
   cache.recent.unshift(r);
   cache.recent.length = Math.min(cache.recent.length, RECENT);
@@ -34,4 +41,8 @@ export function add(rec) {
   }
 }
 
-export const message = () => ({ type: 'hall', first: cache.first, fastest: cache.fastest, recent: cache.recent.slice(0, 10) });
+// Floor 1 at the top level (as before); other floors under `floors`.
+export const message = () => ({
+  type: 'hall', first: cache.first, fastest: cache.fastest, recent: cache.recent.slice(0, 10),
+  floors: Object.fromEntries(FLOORS.filter(f => f > 1).map(f => { const c = cacheFor(f); return [f, { first: c.first, fastest: c.fastest, recent: c.recent.slice(0, 10) }]; })),
+});

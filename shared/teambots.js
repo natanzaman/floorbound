@@ -6,31 +6,37 @@
 // Everyone dodge-rolls out of the boss's red circles and plays Break -> Switch.
 // The Warden's perilous Horn Sweep: DPS and healer roll through it at the last moment (a perfect dodge), the tank parries it.
 // A fresh (low-level) party warms up on boars before taking on wolves.
+// floor: 2 sends the party to Floor 2 (via a waystone once unlocked, or the Stairway after a Warden kill): they farm the
+// Glimmering Mire until level 15, then take on the Drowned Sovereign (rolling through its Tidal Waves).
 import { MOBS, MOB_IDS, PLAYER_SPEED, DODGE, SWEEP, walkable, resolveCollision, inGateZone, inArena } from './data.js';
+import { F2, WAYSTONES, STAIRWAY, SOVEREIGN, inGateZone2, inArena2, onFloor2, floorUnlocked } from './floor2.js';
 
 export const TEAM_NAMES = { guardian: 'Brann', swordsman: 'Kael', cleric: 'Lyra' };
 
-export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = ['guardian', 'swordsman', 'cleric'], suffix = '', inviteHumans = false, log = () => {} }) {
+export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = ['guardian', 'swordsman', 'cleric'], suffix = '', inviteHumans = false, log = () => {}, floor = 1 }) {
   const ROSTER = roles.map(c => [c, TEAM_NAMES[c] + suffix]);
   const DT = 0.05;
   const send = (b, o) => b.ws.readyState === 1 && b.ws.send(JSON.stringify(o));
   const d2 = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
 
   const team = ROSTER.map(([cls, name], i) => {
-    const b = { i, cls, name, id: 0, x: 0, z: 0, seq: 0, face: 0, t: 0, mobs: [], players: [], me: null, dead: false, hp: 1, maxHp: 1, tele: [], fresh: false, cds: [0, 0, 0, 0], dodgeCd: 0, roll: null, stag: {} };
+    const b = { i, cls, name, id: 0, x: 0, z: 0, seq: 0, face: 0, t: 0, mobs: [], players: [], me: null, dead: false, hp: 1, maxHp: 1, tele: [], fresh: false, cds: [0, 0, 0, 0], dodgeCd: 0, roll: null, stag: {}, waves: [], orbs: [], pools: [], life: null };
     b.ws = new WS(url);
     b.ws.addEventListener('open', () => send(b, { type: 'join', name, cls }));
     b.ws.addEventListener('close', () => { b.closed = true; });
     b.ws.addEventListener('message', ev => {
       const msg = JSON.parse(typeof ev.data === 'string' ? ev.data : ev.data.toString());
       if (msg.type === 'welcome') Object.assign(b, { id: msg.id, x: msg.x, z: msg.z, seq: msg.seq });
+      if (msg.type === 'inv') b.life = msg.life;
       if (msg.type !== 'snap') return;
       b.t += DT;
       b.me = msg.me;
       b.cds = msg.me.cds.map((c, k) => (b.t - (b.pressed?.[k] || -9) < 0.3 ? Math.max(c, 0.2) : c));
       if (b.t - (b.dodgePressed || -9) > 0.3) b.dodgeCd = msg.me.dodge || 0;
       b.mobs = msg.w.mobs.map(m => ({ id: m[0], type: MOB_IDS[m[1]], x: m[2], z: m[3], hp: m[5], maxHp: m[6], engaged: !!(m[7] & 2), enraged: !!(m[7] & 4), winding: !!(m[7] & 16), staggered: !!(m[7] & 32), def: MOBS[MOB_IDS[m[1]]] }));
-      b.gateOpen = !!msg.w.gate?.[0];
+      const f2 = msg.w.f2;
+      b.gateOpen = onFloor2(b.x) ? !!f2?.gate?.[0] : !!msg.w.gate?.[0];
+      b.orbs = f2?.orbs || []; b.pools = f2?.pools || []; b.deluge = !!f2?.del;
       b.players = msg.w.players.map(p => ({ id: p[0], x: p[1], z: p[2], hp: p[4], maxHp: p[5], party: p[8], dead: !!p[9] }));
       const mine = b.players.find(p => p.id === b.id);
       if (mine) Object.assign(b, { hp: mine.hp, maxHp: mine.maxHp, dead: mine.dead, party: mine.party });
@@ -44,6 +50,8 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
         if (b.i === 0 && (e.t === 'perfect' || e.t === 'parry')) log(`[${e.t}] by ${e.id}`);
         if (e.t === 'tele') b.tele.push({ x: e.x, z: e.z, r: e.r, until: b.t + e.d + 0.2, follow: e.follow, line: e.k === 'line' ? [e.x2, e.z2, e.w] : null });
         if (b.i === 0 && e.t === 'sys' && !e.to) log(`[sys] ${e.text}`);
+        if (e.t === 'f2wave') b.waves.push({ x: e.x, z: e.z, start: b.t + e.d, sp: e.sp, w: e.w, max: e.max });
+        if (e.t === 'stair') b.stair = { x: e.x, z: e.z, until: b.t + e.d };
       }
       b.fresh = true;
       tick();
@@ -75,7 +83,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
   // Roll out of danger if the dodge is ready; otherwise just run.
   function evade(b, tx, tz) {
     if (b.roll) return;
-    if (b.dodgeCd <= 0) {
+    if (b.dodgeCd <= 0 && !waveSoon(b, 1.4)) {
       const dir = Math.atan2(tx - b.x, tz - b.z);
       b.roll = { left: DODGE.time, dir }; b.face = dir;
       b.dodgeCd = DODGE.cd; b.dodgePressed = b.t;
@@ -107,9 +115,45 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
     return true;
   }
 
+  // Floor 2: seconds until the next Tidal Wave reaches us (Infinity if none).
+  function waveEta(b) {
+    let best = Infinity;
+    for (const w of b.waves) {
+      const r = (b.t - w.start) * w.sp, d = d2(b.x, b.z, w.x, w.z);
+      if (r - w.w > d) continue; // already past us
+      best = Math.min(best, (d - r - w.w) / w.sp);
+    }
+    return best;
+  }
+  const waveSoon = (b, secs) => waveEta(b) < secs;
+  // Roll INTO the wave just before it arrives: the i-frames carry us through.
+  function waveDodge(b) {
+    b.waves = b.waves.filter(w => (b.t - w.start) * w.sp < w.max);
+    const eta = waveEta(b);
+    if (eta > 0.22 || eta < -0.08 || b.roll || b.dodgeCd > 0) return false;
+    const w = b.waves.find(w => { const r = (b.t - w.start) * w.sp; return r - w.w <= d2(b.x, b.z, w.x, w.z); });
+    const dir = Math.atan2(w.x - b.x, w.z - b.z);
+    b.roll = { left: DODGE.time, dir }; b.face = dir;
+    b.dodgeCd = DODGE.cd; b.dodgePressed = b.t;
+    send(b, { type: 'dodge', face: dir });
+    return true;
+  }
+
   // Point just outside any active telegraph circle we're standing in, or null.
   function dodgeSpot(b) {
     b.tele = b.tele.filter(t => t.until > b.t);
+    if (onFloor2(b.x)) { // Floor 2 hazards: homing orbs, mire pools, the Deluge
+      for (const [, ox, oz] of b.orbs) {
+        const d = d2(b.x, b.z, ox, oz);
+        if (d < 2.6) { const ux = (b.x - ox) / (d || 1), uz = (b.z - oz) / (d || 1); return [b.x - uz * 4, b.z + ux * 4]; }
+      }
+      for (const [, px, pz, r] of b.pools) {
+        const d = d2(b.x, b.z, px, pz);
+        if (d < r + 0.8) { const ux = d > 0.1 ? (b.x - px) / d : 1, uz = d > 0.1 ? (b.z - pz) / d : 0; return [px + ux * (r + 2), pz + uz * (r + 2)]; }
+      }
+      const A = F2.arena, dc = d2(b.x, b.z, A.x, A.z);
+      if (b.deluge && inArena2(b.x, b.z) && dc > SOVEREIGN.deluge.r - 1) return [A.x + ((b.x - A.x) / dc) * 11, A.z + ((b.z - A.z) / dc) * 11];
+    }
     for (const t of b.tele) {
       if (t.line) { // the Warden's charge lane: step sideways out of it
         const [x2, z2, w] = t.line, lx = x2 - t.x, lz = z2 - t.z, len = Math.hypot(lx, lz) || 1;
@@ -162,18 +206,20 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
   }
 
   // Progression: boars until level 3, wolves until level 5, then the Warden.
+  // Floor 2: farm the Mire until level 15, then the Sovereign.
+  const F2_BOSS_LVL = 15;
   function pickTankTarget() {
-    const lvl = tank.me?.lvl || 1;
-    const boss = tank.mobs.find(m => m.type === 'warden');
-    if (boss && tank.z > 162 && lvl >= 5) return boss;
-    const want = lvl < 3 ? 'boar' : lvl < 5 ? 'wolf' : null;
+    const lvl = tank.me?.lvl || 1, f2 = onFloor2(tank.x);
+    const boss = tank.mobs.find(m => m.type === (f2 ? 'sovereign' : 'warden'));
+    if (boss && tank.z > 162 && lvl >= (f2 ? F2_BOSS_LVL : 5)) return boss;
+    const want = f2 ? (lvl < F2_BOSS_LVL ? 'mire' : null) : lvl < 3 ? 'boar' : lvl < 5 ? 'wolf' : null;
     let best = null, bd = 1e9;
     for (const m of tank.mobs) {
-      if (m.type === 'warden') continue;
+      if (m.def.boss || onFloor2(m.x) !== f2) continue;
       const d = d2(m.x, m.z, tank.x, tank.z);
-      const hunt = m.type === want;                 // what we're farming right now
+      const hunt = want === 'mire' ? m.type !== 'thrall' : m.type === want; // what we're farming right now
       const threat = m.engaged && d < 15;           // anything that's attacking us
-      const inWay = want === null && d < 15 && (m.type === 'wolf' || m.engaged); // on the road to the boss
+      const inWay = want === null && d < 15 && (f2 || m.type === 'wolf' || m.engaged); // on the road to the boss
       if (!(hunt || threat || inWay)) continue;
       const score = d - (threat ? 100 : 0);
       if (score < bd) { bd = score; best = m; }
@@ -187,12 +233,13 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
     const tgt = pickTankTarget();
     if (tgt?.id !== targetId) { targetId = tgt?.id ?? null; engagedAt = null; }
     const dodge = dodgeSpot(tank);
-    if (!tgt && (tank.me?.lvl || 1) < 5) { moveToward(tank, 0, 60); return; } // nothing to farm nearby: head into the field
+    const ox = onFloor2(tank.x) ? F2.x : 0; // Floor 2 mirrors Floor 1's layout, 600 m east
+    if (!tgt && (tank.me?.lvl || 1) < (ox ? F2_BOSS_LVL : 5)) { moveToward(tank, ox, ox ? 70 : 60); return; } // nothing to farm nearby: head into the field
     if (!tgt) { // travel: get onto the road, then up to the chamber
-      if (!tank.gateOpen && tank.z > 120) { moveToward(tank, 0, 154); return; } // wait at the raid gate
-      if (tank.z < 150 && Math.abs(tank.x) > 3) moveToward(tank, 0, Math.min(150, tank.z + 6));
-      else if (tank.z < 162) moveToward(tank, 0, 172);
-      else moveToward(tank, 0, 182);
+      if (!tank.gateOpen && tank.z > 120) { moveToward(tank, ox, 154); return; } // wait at the raid gate
+      if (tank.z < 150 && Math.abs(tank.x - ox) > 3) moveToward(tank, ox, Math.min(150, tank.z + 6));
+      else if (tank.z < 162) moveToward(tank, ox, 172);
+      else moveToward(tank, ox, 182);
       return;
     }
     const reach = tgt.def.radius + 1.6;
@@ -236,7 +283,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
     const crowd = dps.mobs.filter(m => d2(m.x, m.z, dps.x, dps.z) < 4.5 + m.def.radius).length;
     if (switchOpen(dps, tgt) && useSkill(dps, 3, face)) return;            // Switch in with Burst Combo
     if (!tgt.staggered && tank.cds[3] > 6 && useSkill(dps, 3, face)) return; // or Burst to break it for Brann
-    if ((crowd >= 2 || tgt.type === 'warden') && useSkill(dps, 2, face)) return; // Whirl
+    if ((crowd >= 2 || tgt.def.boss) && useSkill(dps, 2, face)) return; // Whirl
     useSkill(dps, 0, face);                                                 // Slash
   }
 
@@ -255,24 +302,39 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
     if (tgt) healer.face = face;
     if (tgt?.winding && !tgt.staggered && d2(healer.x, healer.z, tgt.x, tgt.z) < 11 && useSkill(healer, 0, face)) return; // Smite interrupt
     if (hurt.length && useSkill(healer, 1, face)) return;                       // Heal
-    if (low >= 1 && tgt?.type === 'warden' && useSkill(healer, 3, face)) return; // Sanctuary
+    if (low >= 1 && tgt?.def.boss && useSkill(healer, 3, face)) return; // Sanctuary
     if (tgt && engagedAt !== null && useSkill(healer, 2, face)) return;          // Blessing
     if (tgt && engagedAt !== null && tank.t - engagedAt > 0.8 && d2(healer.x, healer.z, tgt.x, tgt.z) < 11) useSkill(healer, 0, face); // Smite
   }
 
   function upkeep(b) {
     if (b.dead || !b.me) return;
-    if (!b.gateOpen && inGateZone(b.x, b.z) && !b.me.ready && b.t - (b.readyT || -9) > 1) { b.readyT = b.t; send(b, { type: 'ready' }); }
+    if (!b.gateOpen && (inGateZone(b.x, b.z) || inGateZone2(b.x, b.z)) && !b.me.ready && b.t - (b.readyT || -9) > 1) { b.readyT = b.t; send(b, { type: 'ready' }); }
     if (b.hp / b.maxHp < 0.35 && b.t - (b.potT || -99) > 10) { b.potT = b.t; send(b, { type: 'use', id: 'potion' }); }
+  }
+
+  // Getting to Floor 2: the Stairway right after a Warden kill, otherwise the town waystone (once unlocked).
+  function travel(b) {
+    if (floor !== 2 || onFloor2(b.x) || !floorUnlocked(b.life, 2)) return false;
+    const warp = () => { if (b.t - (b.warpT || -9) > 1) { b.warpT = b.t; send(b, { type: 'warp', f: 2 }); } };
+    if (b.stair && b.stair.until > b.t + 2 && b.z > 150) {
+      if (!moveToward(b, b.stair.x, b.stair.z, 1.2) || d2(b.x, b.z, b.stair.x, b.stair.z) < STAIRWAY.use - 0.5) warp();
+      return true;
+    }
+    if (b.z > 150 && !b.gateOpen) return false; // shut in the chamber: wait for the next Stairway
+    const w = WAYSTONES[0];
+    if (b.z > 20 && Math.abs(b.x) > 3) moveToward(b, 0, b.z - 6); // back to the road, then south to town
+    else if (!moveToward(b, w.x, w.z + 2.4, 0.3) || d2(b.x, b.z, w.x, w.z) < 3) warp();
+    return true;
   }
 
   function tick() {
     if (!team.every(b => b.fresh || b.closed)) return;
     for (const b of team) b.fresh = false;
     for (const b of team) upkeep(b);
-    if (tank && !tank.dead && !stepRoll(tank) && !perilous(tank)) actTank();
-    if (dps && !dps.dead && !stepRoll(dps) && !perilous(dps)) actDps();
-    if (healer && !healer.dead && !stepRoll(healer) && !perilous(healer)) actHealer();
+    if (tank && !tank.dead && !stepRoll(tank) && !perilous(tank) && !waveDodge(tank) && !travel(tank)) actTank();
+    if (dps && !dps.dead && !stepRoll(dps) && !perilous(dps) && !waveDodge(dps) && !travel(dps)) actDps();
+    if (healer && !healer.dead && !stepRoll(healer) && !perilous(healer) && !waveDodge(healer) && !travel(healer)) actHealer();
     for (const b of team) if (!b.dead) send(b, { type: 'input', x: +b.x.toFixed(2), z: +b.z.toFixed(2), face: +b.face.toFixed(2), seq: b.seq });
   }
 

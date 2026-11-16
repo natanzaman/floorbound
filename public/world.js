@@ -5,6 +5,8 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { WORLD, OBSTACLES, CLASSES, GATE, rng } from '/shared/data.js';
 import { MERCHANT } from '/shared/items.js';
 import { HALL } from '/shared/titles.js';
+import { MOBS } from '/shared/data.js';
+import { makeF2Mob, decorateSovereign } from '/floor2world.js';
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
 
@@ -477,11 +479,22 @@ export function makePlayerModel(cls) {
 }
 
 export function makeMobModel(type) {
+  if (MOBS[type]?.f2) return type === 'sovereign' && ASSETS ? makeSovereignRig() : makeF2Mob(type); // Floor 2 (floor2world.js)
   if (type !== 'warden' || !ASSETS) return makeBlockMob(type);
   const { g, root, mats, height } = buildRig('warden');
   const cursor = cursorFor(0xef4444, height, 0.3);
   g.add(cursor);
   return { group: g, root, mats, cursor, height, anim: new Animator(root, '2H_Melee_Idle'), legs: [] };
+}
+
+// Floor 2's boss: the mage rig, sea-green and huge, with a crown and a trident head on its staff.
+function makeSovereignRig() {
+  RIGS.sovereign ||= { file: 'mage', hide: ['Spellbook', 'Spellbook_open', '1H_Wand', 'Mage_Hat'], height: 6.4, tint: 0x8cc7bd };
+  const { g, root, mats, height } = buildRig('sovereign');
+  decorateSovereign(root, height);
+  const cursor = cursorFor(0xef4444, height, 0.3);
+  g.add(cursor);
+  return { group: g, root, mats, cursor, height, anim: new Animator(root, 'Idle'), legs: [] };
 }
 
 // ---------- trees between the camera and the player turn see-through ----------

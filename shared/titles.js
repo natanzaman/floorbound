@@ -4,7 +4,7 @@
 // The Hall of Clearers: a stone board in the Town of Beginnings (mirrors the merchant at x:9).
 export const HALL = { x: -9, z: 3, r: 3.5 };
 
-export const STAT_KEYS = ['kills', 'boarKills', 'wolfKills', 'switches', 'deaths', 'wardenKills', 'lastAttacks', 'floorClearsFirst', 'flawlessWarden', 'maxLvl'];
+export const STAT_KEYS = ['kills', 'boarKills', 'wolfKills', 'switches', 'deaths', 'wardenKills', 'lastAttacks', 'floorClearsFirst', 'flawlessWarden', 'maxLvl', 'floor2', 'sovereignKills'];
 
 export function newStats(raw) {
   const s = {};
@@ -23,6 +23,7 @@ export const TITLES = [
   { id: 'switch_master', name: 'Switch Master', color: '#67e8f9', need: ['switches', 50], req: 'Land 50 Switches' },
   { id: 'boarbane', name: 'Boarbane', color: '#fdba74', need: ['boarKills', 100], req: 'Slay 100 Forest Boars' },
   { id: 'wolfsbane', name: 'Wolfsbane', color: '#cbd5e1', need: ['wolfKills', 100], req: 'Slay 100 Dire Wolves' },
+  { id: 'mirebreaker', name: 'Mirebreaker', color: '#5eead4', need: ['sovereignKills', 1], req: 'Help defeat the Drowned Sovereign (Floor 2)' },
   { id: 'frontliner', name: 'Frontliner', color: '#fde047', need: ['floorClearsFirst', 1], req: "Be part of the server's first-ever Floor 1 clear" },
 ];
 export const TITLE_BY_ID = Object.fromEntries(TITLES.map(t => [t.id, t]));
