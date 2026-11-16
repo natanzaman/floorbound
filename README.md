@@ -63,7 +63,7 @@ server/index.js  static file server + WebSocket server (20 ticks/sec)
 public/          Three.js client (no build step): main.js, world.js, style.css
 public/models/   rigged character models (glTF) with shared animations
 test/bots.js     headless bot players for load/gameplay testing
-test/team.js     role-playing party bots (tank / DPS / healer)
+shared/teambots.js  role-playing party bots (tank / DPS / healer), used by test/team.js and public/bots.html
 ```
 
 Tuning lives in `shared/data.js` (class HP/ATK, cooldowns, mob stats). New skills are a `case` in `Game.useSkill` plus an entry in `CLASSES`.
@@ -84,6 +84,8 @@ START_LEVEL=6 SPAWN_AT=-26,116 npm start
 node test/team.js                           # Brann (tank), Kael (DPS), Lyra (healer)
 # open http://localhost:3000/?spectate=1
 ```
+
+**On any server (including the live one):** open `/bots.html` to add bot parties from your browser (`/bots.html?teams=2` for two), then watch at `/?spectate=1` or play alongside them. Keep the bots tab open.
 
 `?spectate=1` works on any server: it watches without joining and frames the whole group.
 

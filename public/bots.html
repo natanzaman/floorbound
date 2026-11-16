@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Floorbound · Bot parties</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Cpath d=%22M50 5 80 50 50 95 20 50z%22 fill=%22%239cc4ff%22/%3E%3C/svg%3E" />
+  <style>
+    body { margin: 0; padding: 24px; background: #0b1020; color: #eef3ff; font: 15px/1.45 "Segoe UI", system-ui, sans-serif; }
+    h1 { margin: 0 0 4px; letter-spacing: .12em; }
+    p { opacity: .8; margin: 0 0 16px; max-width: 640px; }
+    button, a.btn { font: inherit; color: #fff; padding: 9px 16px; border-radius: 8px; border: 1px solid rgba(160,200,255,.35); background: rgba(120,170,255,.15); cursor: pointer; text-decoration: none; display: inline-block; margin: 0 6px 6px 0; }
+    .team { margin: 14px 0; padding: 12px 14px; border-radius: 10px; background: rgba(255,255,255,.05); border: 1px solid rgba(160,200,255,.18); max-width: 640px; }
+    .bot { display: grid; grid-template-columns: 150px 120px 1fr 60px; gap: 10px; align-items: center; padding: 3px 0; font-size: 14px; }
+    .bar { height: 8px; border-radius: 4px; background: rgba(255,255,255,.1); overflow: hidden; }
+    .bar div { height: 100%; background: #4ade80; }
+    .dead { opacity: .45; }
+    #log { margin-top: 16px; max-width: 640px; height: 160px; overflow: auto; font: 12px/1.4 ui-monospace, monospace; opacity: .75; white-space: pre-wrap; }
+    label { margin-right: 14px; }
+  </style>
+</head>
+<body>
+  <h1>BOT PARTIES</h1>
+  <p>Each party is a tank (Brann), a DPS (Kael) and a healer (Lyra), each its own connection like a real player. They level up on boars, then wolves, then take on the Warden. Keep this tab open: closing it disconnects the bots.</p>
+  <label><input type="checkbox" id="invite" /> Invite me into the first party</label>
+  <div style="margin-top:10px">
+    <button id="add">Add a party</button>
+    <button id="stop">Stop all</button>
+    <a class="btn" href="/?spectate=1" target="_blank">Watch (spectate)</a>
+    <a class="btn" href="/" target="_blank">Play alongside them</a>
+  </div>
+  <div id="teams"></div>
+  <div id="log"></div>
+  <script type="module">
+    import { startTeam } from '/shared/teambots.js';
+    import { CLASSES } from '/shared/data.js';
+    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+    const SUFFIX = ['', ' II', ' III', ' IV', ' V'];
+    const teams = [];
+    const logEl = document.getElementById('log');
+    const log = t => { logEl.textContent += t + '\n'; logEl.scrollTop = 1e9; };
+    function add() {
+      if (teams.length >= SUFFIX.length) return log('That is plenty of bots for one server.');
+      const n = teams.length;
+      teams.push(startTeam({ url, suffix: SUFFIX[n], inviteHumans: n === 0 && document.getElementById('invite').checked, log }));
+      log(`Party ${n + 1} joining…`);
+    }
+    document.getElementById('add').onclick = add;
+    document.getElementById('stop').onclick = () => { teams.splice(0).forEach(t => t.stop()); render(); log('All bots disconnected.'); };
+    function render() {
+      document.getElementById('teams').innerHTML = teams.map((t, i) => `<div class="team"><b>Party ${i + 1}</b>${t.team.map(b => {
+        const pct = Math.round((b.hp / b.maxHp) * 100) || 0;
+        return `<div class="bot ${b.dead ? 'dead' : ''}"><span>${b.name}</span><span>${CLASSES[b.cls].name} · ${CLASSES[b.cls].role}</span><div class="bar"><div style="width:${pct}%"></div></div><span>Lv ${b.me?.lvl ?? 1}</span></div>`;
+      }).join('')}</div>`).join('');
+    }
+    setInterval(render, 500);
+    const n = Math.min(SUFFIX.length, Math.max(1, +(new URLSearchParams(location.search).get('teams') || 1)));
+    for (let i = 0; i < n; i++) add();
+  </script>
+</body>
+</html>
