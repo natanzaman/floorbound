@@ -8,6 +8,8 @@ import {
   CONSUMABLES, SHOP, MERCHANT, BAG_SIZE, SLOTS, DROPS, makeItem, lastAttackItem, rollRarity, gearStats, sellPrice, newInventory,
 } from '../shared/items.js';
 import { TITLES, newStats, meetsTitle } from '../shared/titles.js';
+import { F2, crossesGate2 } from '../shared/floor2.js';
+import { F2Methods } from './floor2.js';
 import crypto from 'node:crypto';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -33,6 +35,7 @@ export class Game {
     const rr = ([a, b]) => a + Math.random() * (b - a);
     this.rare = { mob: null, next: process.env.RARE_SOON ? RARE.soon : rr(RARE.first) }; // RARE_SOON is a testing aid
     this.spawnMobs();
+    this.initFloor2(); // Floor 2 — The Glimmering Mire (server/floor2.js)
   }
 
   id() { return this.nextId++; }
@@ -155,6 +158,7 @@ export class Game {
       case 'accept': return this.accept(p, msg.from);
       case 'decline': p.invite = null; return;
       case 'leave': return this.leaveParty(p);
+      case 'warp': return this.warp(p, msg.f); // waystones and the Stairway (server/floor2.js)
     }
   }
 
@@ -171,13 +175,15 @@ export class Game {
     if (d > maxD) { x = p.x + (dx / d) * maxD; z = p.z + (dz / d) * maxD; }
     if (!this.walk(x, z)) return;
     if (!this.gate.open && crossesGate(p.x, p.z, x, z)) return;
+    if (!this.gate2.open && crossesGate2(p.x, p.z, x, z)) return;
     p.x = x; p.z = z;
   }
 
-  walk(x, z) { return walkable(x, z, !this.gate.open); }
+  walk(x, z) { return walkable(x, z, !(x > F2.split ? this.gate2 : this.gate).open); }
 
   // ---------- raid gate ----------
   toggleReady(p) {
+    if (p.x > F2.split) return this.toggleReady2(p);
     const g = this.gate;
     if (p.dead || g.open || !inGateZone(p.x, p.z)) return;
     if (g.ready.has(p.id)) g.ready.delete(p.id);
@@ -600,6 +606,7 @@ export class Game {
 
   damageMob(m, p, base, { threat = 1, stun = 0, brk = false, interrupt = false, knock = 0, heavy = false } = {}) {
     if (m.dead) return;
+    if (m.def.f2 && (base = this.f2DamageMod(m, p, base)) <= 0) return; // Floor 2: shells, burrowed lurkers
     const t = this.time;
     p.lastCombat = t;
     const crit = Math.random() < (p.crit ?? 0.1);
@@ -652,6 +659,7 @@ export class Game {
     if (m.temp || m.rare) this.mobs.delete(m.id);
     if (!killer.kills++) this.track(killer, 'first_kill', { secs: Math.round(this.time - killer.joinedAt), mob: m.type });
     this.statKill(m, killer);
+    if (m.def.f2boss) return this.killSovereign(m, killer);
     if (m.def.boss) {
       const names = [];
       for (const id of m.contributors) {
@@ -665,8 +673,9 @@ export class Game {
       this.clearHounds();
       this.floorClears++;
       this.events.push({ t: 'clear', names, n: this.floorClears });
-      this.sys(`The Horned Warden has fallen! Floor 1 cleared by ${names.join(', ')}. Floor 2 unlocks in a future update.`);
+      this.sys(`The Horned Warden has fallen! Floor 1 cleared by ${names.join(', ')}. The Stairway to Floor 2 has opened!`);
       this.recordClear(m, killer);
+      this.f2WardenKilled(m);
       this.endFight('kill', m);
       return;
     }
@@ -763,7 +772,7 @@ export class Game {
       if (p.dead) {
         if (t >= p.respawnAt) {
           p.dead = false; p.hp = p.maxHp;
-          const [x, z] = this.spawnPoint();
+          const [x, z] = this.respawnPoint(p) || this.spawnPoint(); // Floor 2 deaths return to its camp
           this.teleport(p, x, z);
         }
         continue;
@@ -789,6 +798,7 @@ export class Game {
     for (const m of [...this.mobs.values()]) this.updateMob(m, dt);
     this.updateProjectiles(dt);
     this.updateGate();
+    this.updateFloor2(dt);
     this.updateRare();
     if (t >= this.lfgT) { this.lfgT = t + 1; this.matchParties(); }
 
@@ -812,6 +822,7 @@ export class Game {
   }
 
   updateMob(m, dt) {
+    if (m.def.ai) return this[m.def.ai](m, dt); // Floor 2 mobs run their own AI (server/floor2.js)
     const t = this.time, def = m.def;
     m.moving = false;
     if (m.dead) {
@@ -1151,13 +1162,13 @@ export class Game {
     }
     const mobs = [];
     for (const m of this.mobs.values()) {
-      if (m.dead) continue;
+      if (m.dead || m.hidden) continue; // burrowed lurkers are sent as w.f2.bur
       mobs.push([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase >= 2 ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0) | (m.windupAt ? 16 : 0) | (this.time < m.staggerUntil ? 32 : 0) | (this.time < m.frenzyUntil ? 64 : 0)]);
     }
     const g = this.gate;
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
     const gate = [g.open ? 1 : 0, waiting, g.ready.size, g.countAt ? r1(Math.max(0, g.countAt - this.time)) : 0];
-    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, events: this.events });
+    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, events: this.events, f2: this.f2Snap() });
     this.events = [];
     return out;
   }
@@ -1167,7 +1178,7 @@ export class Game {
       xp: p.xp, next: xpToNext(p.lvl), lvl: p.lvl,
       cds: p.cds.map(c => Math.max(0, r2(c - this.time))),
       dodge: Math.max(0, r2(p.dodgeCd - this.time)),
-      gold: p.gold, ready: this.gate.ready.has(p.id) ? 1 : 0,
+      gold: p.gold, ready: this.gate.ready.has(p.id) || this.gate2.ready.has(p.id) ? 1 : 0,
       ccd: Object.fromEntries(Object.entries(p.consCd).map(([k, v]) => [k, Math.max(0, r1(v - this.time))])),
       tonic: Math.max(0, r1(p.tonicUntil - this.time)), draught: Math.max(0, r1(p.draughtUntil - this.time)),
     };
@@ -1177,3 +1188,5 @@ export class Game {
     return [...this.players.values()].map(p => ({ id: p.id, name: p.name, cls: p.cls, title: p.stats?.activeTitle || null }));
   }
 }
+
+Object.assign(Game.prototype, F2Methods); // Floor 2 (server/floor2.js)

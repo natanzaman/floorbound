@@ -1,11 +1,12 @@
 // Shared game data and helpers, imported by both the server and the browser client.
+import { F2, F2_MOB_IDS, F2_MOBS, F2_BITE, inCamp2, walkable2, areaName2, floor2Obstacles } from './floor2.js';
 
 export const TICK_RATE = 20;
 export const PLAYER_SPEED = 7;
 export const SPRINT_SPEED = 10; // automatic when out of combat for a few seconds
 export const SPRINT_AFTER = 3;   // seconds without dealing or taking damage
 export const PLAYER_RADIUS = 0.5;
-export const MAX_LEVEL = 10;
+export const MAX_LEVEL = 20;
 export const PARTY_MAX = 6;
 
 // Dodge roll: a short burst of movement with invulnerability frames.
@@ -22,7 +23,7 @@ export const WORLD = {
   town: { x: 0, z: 0, r: 26 },
 };
 
-export const inTown = (x, z) => Math.hypot(x - WORLD.town.x, z - WORLD.town.z) < WORLD.town.r;
+export const inTown = (x, z) => Math.hypot(x - WORLD.town.x, z - WORLD.town.z) < WORLD.town.r || inCamp2(x, z); // Floor 2's camp is a safe zone too
 export const inArena = (x, z) => Math.hypot(x - WORLD.arena.x, z - WORLD.arena.z) < WORLD.arena.r;
 
 // Raid gate: a portcullis across the corridor to the Warden's chamber. It opens after a ready check.
@@ -33,6 +34,7 @@ const gateBlocks = (x, z) => Math.abs(x) < GATE.half && z > GATE.band[0] && z < 
 export const crossesGate = (x0, z0, x1, z1) => (z0 < GATE.z) !== (z1 < GATE.z) && Math.abs((x0 + x1) / 2) < GATE.half + 1;
 
 export function walkable(x, z, gateClosed = false) {
+  if (x > F2.split) return walkable2(x, z, gateClosed); // Floor 2: gateClosed means Floor 2's gate there
   if (gateClosed && gateBlocks(x, z)) return false;
   const { rect, corridor } = WORLD;
   if (x >= rect.x0 && x <= rect.x1 && z >= rect.z0 && z <= rect.z1) return true;
@@ -41,6 +43,7 @@ export function walkable(x, z, gateClosed = false) {
 }
 
 export function areaName(x, z) {
+  if (x > F2.split) return areaName2(x, z);
   if (inTown(x, z)) return 'Town of Beginnings';
   if (inArena(x, z)) return "Warden's Chamber";
   if (z > 148) return 'Chamber Gate';
@@ -75,6 +78,7 @@ export const OBSTACLES = (() => {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
     out.push({ kind: 'pillar', x: WORLD.arena.x + Math.cos(a) * 21, z: WORLD.arena.z + Math.sin(a) * 21, r: 1.6 });
   }
+  out.push(...floor2Obstacles()); // waystones + Floor 2 (see shared/floor2.js)
   return out;
 })();
 
@@ -143,10 +147,15 @@ export const MOBS = {
   thornmother: { name: 'Thornmother', hp: 700, atk: 12, speed: 0, aggro: 18, range: 16, atkCd: 2.4, xp: 180, radius: 1.5, level: 7, elite: true, rare: true, ranged: true, spread: 3 },
 };
 
+// Floor 2 enemies (shared/floor2.js), appended so existing type indices never move.
+MOB_IDS.push(...F2_MOB_IDS);
+Object.assign(MOBS, F2_MOBS);
+
 export const xpToNext = lvl => 50 * lvl;
 
 // Melee bites hit a wedge in front of the attacker (shown as a red wedge during the wind-up).
 export const BITE = { boar: [2.6, 0.7], wolf: [2.8, 0.6], alpha: [3.4, 0.85], hound: [2.8, 0.6], oldtusk: [3.6, 0.8], ghostfang: [3.4, 0.85] }; // [reach, half-angle]
+Object.assign(BITE, F2_BITE);
 export const PACK = { auraRange: 12, auraAtk: 0.25, howlEvery: 12, howlRange: 16, frenzy: 6 };
 // The Warden's three phases: 100-66% (cleave + slams), 66-33% (+ hounds, horn charge), <33% (+ spin, rockfall).
 export const WARDEN = {
