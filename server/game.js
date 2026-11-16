@@ -1,6 +1,6 @@
 // Authoritative world simulation: players, mobs, the floor boss, combat, XP and parties.
 import {
-  WORLD, CLASSES, CLASS_IDS, MOBS, MOB_IDS, MAX_LEVEL, PARTY_MAX, PLAYER_SPEED, SPRINT_SPEED, DODGE, SWITCH,
+  WORLD, CLASSES, CLASS_IDS, MOBS, MOB_IDS, MAX_LEVEL, PARTY_MAX, PLAYER_SPEED, SPRINT_SPEED, DODGE, JUMP, SWITCH,
   inTown, inArena, walkable, resolveCollision, rng, angleTo, wrapAngle, xpToNext, statsFor,
 } from '../shared/data.js';
 
@@ -59,7 +59,7 @@ export class Game {
     const p = {
       id: this.id(), ws, name, cls, lvl: 1, xp: 0, x, z, face: 0, dead: false, respawnAt: 0,
       cds: [0, 0, 0, 0], dr: { until: 0, v: 0 }, dmg: { until: 0, v: 0 }, party: null,
-      posSeq: 0, lastMoveT: this.time, lastHurt: -99, invite: null, dodgeCd: 0, rollUntil: 0, iframeUntil: 0, combo: 0, lastBasic: -9,
+      posSeq: 0, lastMoveT: this.time, lastHurt: -99, invite: null, dodgeCd: 0, rollUntil: 0, iframeUntil: 0, combo: 0, lastBasic: -9, jumpCd: 0, airFrom: 0, airUntil: 0,
     };
     p.lvl = Math.min(MAX_LEVEL, Math.max(1, Number(process.env.START_LEVEL) || 1)); // START_LEVEL is a testing aid
     Object.assign(p, statsFor(cls, p.lvl));
@@ -89,6 +89,7 @@ export class Game {
       case 'input': return this.onInput(p, msg);
       case 'skill': return this.useSkill(p, msg.slot | 0, msg.face);
       case 'dodge': return this.dodge(p, msg.face);
+      case 'jump': return this.jump(p);
       case 'chat': {
         const text = String(msg.text || '').slice(0, 200).trim();
         if (text) this.events.push({ t: 'chat', from: p.name, id: p.id, text });
@@ -125,6 +126,13 @@ export class Game {
     p.iframeUntil = this.time + DODGE.iframes;
     p.face = wrapAngle(face);
     this.events.push({ t: 'roll', id: p.id, f: r2(p.face) });
+  }
+
+  jump(p) {
+    const t = this.time;
+    if (p.dead || t < p.jumpCd) return;
+    p.jumpCd = t + JUMP.cd; p.airFrom = t + JUMP.airFrom; p.airUntil = t + JUMP.airTo;
+    this.events.push({ t: 'jump', id: p.id });
   }
 
   // ---------- parties ----------
@@ -388,9 +396,10 @@ export class Game {
     if (by && this.boss && !this.boss.dead && this.boss.threat.size && inArena(t.x, t.z)) this.boss.contributors.add(by.id);
   }
 
-  damagePlayer(p, base) {
+  damagePlayer(p, base, { ground = false } = {}) {
     if (p.dead || inTown(p.x, p.z)) return;
     if (this.time < p.iframeUntil) { this.events.push({ t: 'evade', id: p.id }); return; }
+    if (ground && this.time >= p.airFrom && this.time < p.airUntil) { this.events.push({ t: 'evade', id: p.id, k: 'jump' }); return; }
     const dr = this.time < p.dr.until ? p.dr.v : 0;
     const amount = Math.max(1, Math.round(base * (0.9 + Math.random() * 0.2) * (1 - dr)));
     p.hp -= amount;
@@ -557,7 +566,7 @@ export class Game {
       this.schedule(d, () => {
         if (m.dead) return;
         this.events.push({ t: 'fx', k: 'boom', x: r2(x), z: r2(z), r });
-        for (const p of this.players.values()) if (!p.dead && Math.hypot(p.x - x, p.z - z) <= r) this.damagePlayer(p, m.def.atk * 1.8);
+        for (const p of this.players.values()) if (!p.dead && Math.hypot(p.x - x, p.z - z) <= r) this.damagePlayer(p, m.def.atk * 1.8, { ground: true });
       });
     }
     if (m.phase === 1 && t >= m.spinT) {
@@ -567,7 +576,7 @@ export class Game {
       this.schedule(d, () => {
         if (m.dead) return;
         this.events.push({ t: 'fx', k: 'boom', x: r2(m.x), z: r2(m.z), r });
-        for (const p of this.players.values()) if (!p.dead && dist(p, m) <= r) this.damagePlayer(p, m.def.atk * 1.4);
+        for (const p of this.players.values()) if (!p.dead && dist(p, m) <= r) this.damagePlayer(p, m.def.atk * 1.4, { ground: true });
       });
     }
   }

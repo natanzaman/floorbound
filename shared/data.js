@@ -10,6 +10,8 @@ export const PARTY_MAX = 6;
 
 // Dodge roll: a short burst of movement with invulnerability frames.
 export const DODGE = { dist: 5.2, time: 0.34, iframes: 0.42, cd: 1.1 };
+// Jump: cosmetic hop, but you're airborne (and safe from ground slams) for most of it.
+export const JUMP = { time: 0.65, height: 1.1, airFrom: 0.08, airTo: 0.58, cd: 0.75 };
 // Switch: a "break" hit staggers an enemy; the next hit from a DIFFERENT player is a Switch.
 export const SWITCH = { window: 2.4, bossWindow: 1.8, bossCd: 9, first: 2.5, follow: 1.4 };
 

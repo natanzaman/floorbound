@@ -1,7 +1,7 @@
 // Floorbound browser client: networking, input, camera, entities and HUD.
 import * as THREE from 'three';
 import {
-  CLASSES, CLASS_IDS, MOBS, MOB_IDS, PLAYER_SPEED, SPRINT_SPEED, SPRINT_AFTER, TICK_RATE, MAX_LEVEL, DODGE,
+  CLASSES, CLASS_IDS, MOBS, MOB_IDS, PLAYER_SPEED, SPRINT_SPEED, SPRINT_AFTER, TICK_RATE, MAX_LEVEL, DODGE, JUMP,
   walkable, resolveCollision, inTown, inArena, areaName, angleTo,
 } from '/shared/data.js';
 import { createWorld, makePlayerModel, makeMobModel, Effects, loadAssets } from '/world.js';
@@ -37,7 +37,7 @@ addEventListener('resize', resize); resize();
 const state = {
   ws: null, myId: 0, seq: 0, x: 0, z: 0, face: 0, cls: 'swordsman', lvl: 1, hp: 1, maxHp: 1, xp: 0, next: 50,
   dead: false, party: 0, joined: false, yaw: 0, pitch: 0.5, camDist: 11,
-  ready: [0, 0, 0, 0], lastPress: [0, 0, 0, 0], dodgeReady: 0, dodgePress: 0, roll: null, moveDir: null, lastCombat: -1e9, speed: 0, lock: 0, roster: new Map(), area: '', invite: null,
+  ready: [0, 0, 0, 0], lastPress: [0, 0, 0, 0], dodgeReady: 0, dodgePress: 0, roll: null, moveDir: null, lastCombat: -1e9, speed: 0, lock: 0, jumpReady: 0, jumpPress: 0, roster: new Map(), area: '', invite: null,
 };
 const players = new Map(); // id -> entity
 const mobs = new Map();
@@ -95,7 +95,7 @@ function onMessage(msg) {
     $('login').classList.add('hidden'); $('hud').classList.remove('hidden');
     buildSkillBar();
     log('Welcome to Floorbound! Head north through the field and defeat the Horned Warden.', 'sys');
-    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills and dodge.' : 'WASD move · drag to look · Space/J attack · 1 2 3 skills · Shift dodge · Tab lock-on · Enter chat', 'sys');
+    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge and jump.' : 'WASD move · right-drag or push the cursor to the screen edge to look · Left click (or J) attack · 1 2 3 skills · Shift dodge · Space jump · Tab lock-on · Enter chat', 'sys');
     log('Break an enemy (Ground Slam, Burst Combo finisher, or Smite during its wind-up), then a teammate hits it for a SWITCH: big bonus damage.', 'sys');
     return;
   }
@@ -178,13 +178,18 @@ function handleEvent(e) {
       else if (e.k === 'boom') { fx.ring(e.x, e.z, e.r, 0xff7a2f, 0.5); shake(0.35); }
       break;
     }
+    case 'jump': {
+      const p = players.get(e.id);
+      if (p && e.id !== me) { p.jumpT = 0; p.model.anim?.shot('Jump_Full_Short', 1.75); }
+      break;
+    }
     case 'roll': {
       const p = players.get(e.id);
       if (p) sfx.play('roll', p.model.group.position, e.id === me ? 1 : 0.6);
       if (p) { p.model.anim?.shot('Dodge_Forward', 1.9); fx.ring(p.model.group.position.x, p.model.group.position.z, 1.2, 0xe5e7eb, 0.3); }
       break;
     }
-    case 'evade': { const p = players.get(e.id); if (p && (e.id === me || state.spectator)) { floatNum(p.model.group.position, 2.4, 'Dodged!', 'evade'); sfx.play('evade', p.model.group.position); } break; }
+    case 'evade': { const p = players.get(e.id); if (p && (e.id === me || state.spectator)) { floatNum(p.model.group.position, 2.4, e.k === 'jump' ? 'Jumped!' : 'Dodged!', 'evade'); sfx.play('evade', p.model.group.position); } break; }
     case 'stagger': {
       const m = mobs.get(e.id);
       if (!m) break;
@@ -369,7 +374,8 @@ addEventListener('keydown', e => {
   if (e.key === 'Enter') { chat.focus(); e.preventDefault(); return; }
   const k = e.key.toLowerCase();
   keys.add(k);
-  if (k === ' ' || k === 'j') { attackHeld = true; e.preventDefault(); }
+  if (k === 'j') attackHeld = true;
+  if (k === ' ') { e.preventDefault(); if (!e.repeat) jump(); }
   if (k === '1' || k === '2' || k === '3') useSkill(+k);
   if (k === 'shift' || k === 'k') dodge();
   if (k === 'tab') { e.preventDefault(); cycleLock(); }
@@ -379,13 +385,19 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => {
   const k = e.key.toLowerCase();
   keys.delete(k);
-  if (k === ' ' || k === 'j') attackHeld = false;
+  if (k === 'j') attackHeld = false;
 });
 addEventListener('blur', () => { keys.clear(); attackHeld = false; });
 
 // camera drag (mouse + touch on the right/anywhere outside the stick)
 const drag = { id: null, x: 0, y: 0 };
+let mouseAttack = false;
+canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse') {
+    if (e.button === 0) { mouseAttack = true; attackHeld = true; return; }
+    if (e.button !== 2) return;
+  }
   if (drag.id !== null) return;
   drag.id = e.pointerId; drag.x = e.clientX; drag.y = e.clientY;
   canvas.setPointerCapture(e.pointerId);
@@ -397,7 +409,16 @@ canvas.addEventListener('pointermove', e => {
   state.pitch = Math.min(1.25, Math.max(0.12, state.pitch + (e.clientY - drag.y) * s));
   drag.x = e.clientX; drag.y = e.clientY;
 });
-const endDrag = e => { if (e.pointerId === drag.id) drag.id = null; };
+const endDrag = e => {
+  if (e.pointerType === 'mouse' && e.button === 0 && mouseAttack) { mouseAttack = false; attackHeld = false; }
+  if (e.pointerId === drag.id) drag.id = null;
+};
+addEventListener('pointerup', e => { if (e.pointerType === 'mouse' && e.button === 0 && mouseAttack) { mouseAttack = false; attackHeld = false; } });
+// screen-edge turning: park the cursor at the left/right edge to turn the camera that way
+const mouse = { x: 0, y: 0, inside: false, onCanvas: false };
+addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.inside = true; mouse.onCanvas = e.target === canvas || e.target.closest?.('#labels'); });
+document.documentElement.addEventListener('mouseleave', () => { mouse.inside = false; });
+addEventListener('blur', () => { mouse.inside = false; mouseAttack = false; });
 canvas.addEventListener('pointerup', endDrag);
 canvas.addEventListener('pointercancel', endDrag);
 canvas.addEventListener('wheel', e => { state.camDist = Math.min(22, Math.max(5, state.camDist + e.deltaY * 0.01)); }, { passive: true });
@@ -429,11 +450,13 @@ function buildSkillBar(lvl = state.lvl) {
     const s = skills[i];
     const locked = lvl < s.lvl;
     return `<button class="sk s${i} ${i === 0 ? 'basic' : ''} ${locked ? 'locked' : ''}" data-slot="${i}" title="${s.name}: ${s.desc}${locked ? ` (unlocks at Lv ${s.lvl})` : ''}">
-      <span class="key">${i === 0 ? (isTouch ? '' : 'SPC') : i}</span>${s.name}${locked ? `<br><small>Lv ${s.lvl}</small>` : ''}<span class="cd"></span><span class="cdt"></span></button>`;
-  }).join('') + `<button class="sk sd" data-slot="dodge" title="Dodge roll: dash and avoid damage"><span class="key">${isTouch ? '' : 'SHIFT'}</span>Dodge<span class="cd"></span><span class="cdt"></span></button>`;
+      <span class="key">${i === 0 ? (isTouch ? '' : 'CLICK') : i}</span>${s.name}${locked ? `<br><small>Lv ${s.lvl}</small>` : ''}<span class="cd"></span><span class="cdt"></span></button>`;
+  }).join('') + `<button class="sk sd" data-slot="dodge" title="Dodge roll: dash and avoid damage"><span class="key">${isTouch ? '' : 'SHIFT'}</span>Dodge<span class="cd"></span><span class="cdt"></span></button>`
+    + `<button class="sk sj" data-slot="jump" title="Jump: hop over the boss's ground slams"><span class="key">${isTouch ? '' : 'SPACE'}</span>Jump<span class="cd"></span><span class="cdt"></span></button>`;
   for (const b of $('skills').children) {
-    if (b.dataset.slot === 'dodge') {
-      b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('pressed'); dodge(); });
+    if (b.dataset.slot === 'dodge' || b.dataset.slot === 'jump') {
+      const act = b.dataset.slot === 'dodge' ? dodge : jump;
+      b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('pressed'); act(); });
       const up = () => b.classList.remove('pressed');
       b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up); b.addEventListener('pointercancel', up);
       continue;
@@ -466,6 +489,16 @@ function lockedMob() {
   const m = state.lock && mobs.get(state.lock);
   if (!m || m.dying || Math.hypot(m.x - state.x, m.z - state.z) > 35) { state.lock = 0; return null; }
   return m;
+}
+
+function jump() {
+  const now = performance.now();
+  if (state.dead || !state.joined || state.spectator || state.roll || now < state.jumpReady) return;
+  state.jumpReady = now + JUMP.cd * 1000; state.jumpPress = now;
+  const me = players.get(state.myId);
+  if (me) { me.jumpT = 0; me.model.anim?.shot('Jump_Full_Short', 1.75); }
+  sfx.play('roll', null, 0.4);
+  send({ type: 'jump' });
 }
 
 function dodge() {
@@ -597,11 +630,11 @@ function updateHud(now) {
 
   // cooldowns
   for (const btn of $('skills').children) {
-    const isDodge = btn.dataset.slot === 'dodge';
-    const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : CLASSES[state.cls].skills[slot];
-    const left = Math.max(0, (isDodge ? state.dodgeReady : state.ready[slot]) - now) / 1000;
+    const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
+    const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : CLASSES[state.cls].skills[slot];
+    const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
     btn.querySelector('.cd').style.setProperty('--p', `${Math.min(100, (left / sk.cd) * 100)}%`);
-    btn.querySelector('.cdt').textContent = left > 0.3 && slot > 0 && !isDodge ? left.toFixed(left < 3 ? 1 : 0) : '';
+    btn.querySelector('.cdt').textContent = left > 0.3 && slot > 0 && !isDodge && !isJump ? left.toFixed(left < 3 ? 1 : 0) : '';
   }
 
   const fightingBoss = boss && (boss.engaged || boss.hp < boss.maxHp) && state.z > 150;
@@ -639,6 +672,11 @@ function animateEntity(e, dt) {
   const k = Math.min(1, dt * (self ? 25 : 12));
   const px = g.position.x, pz = g.position.z;
   const tx = self ? e.x : e.tx, tz = self ? e.z : e.tz;
+  if (e.jumpT !== undefined && e.jumpT < JUMP.time) {
+    e.jumpT += dt;
+    const jk = Math.min(1, e.jumpT / JUMP.time);
+    g.position.y = 4 * JUMP.height * jk * (1 - jk);
+  } else g.position.y = 0;
   if (e.punch > 0) e.punch -= dt;
   const kk = e.punch > 0 ? Math.min(1, dt * 22) : k;
   if (Math.hypot(tx - px, tz - pz) > 15) g.position.set(tx, 0, tz);
@@ -710,7 +748,7 @@ function animateEntity(e, dt) {
   for (const mt of e.mats) { mt.emissive.setHex(e.flash > 0 && !enr ? 0xffffff : 0xff2200); mt.emissiveIntensity = glow; }
 
   if (e.label) {
-    const p = project(g.position.x, m.height + 0.55, g.position.z);
+    const p = project(g.position.x, g.position.y + m.height + 0.55, g.position.z);
     const d = Math.hypot(g.position.x - state.x, g.position.z - state.z);
     if (!p || d > 45 || (e.kind === 'player' && e.dead)) { e.label.el.style.display = 'none'; return; }
     e.label.el.style.display = '';
@@ -766,6 +804,11 @@ function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   hitStop = Math.max(0, hitStop - dt);
   const lm = state.joined && !state.spectator ? lockedMob() : null;
+  if (state.joined && !state.spectator && !isTouch && mouse.inside && mouse.onCanvas && drag.id === null && document.activeElement !== $('chat-input')) {
+    const edge = Math.max(40, innerWidth * 0.06);
+    if (mouse.x < edge) state.yaw += dt * 2.4 * (1 - mouse.x / edge);
+    else if (mouse.x > innerWidth - edge) state.yaw -= dt * 2.4 * (1 - (innerWidth - mouse.x) / edge);
+  }
   if (lm) { // ease the camera round to keep the locked target in view
     const want = Math.atan2(lm.x - state.x, lm.z - state.z);
     state.yaw += Math.atan2(Math.sin(want - state.yaw), Math.cos(want - state.yaw)) * Math.min(1, dt * 3);

@@ -28,14 +28,15 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Action | Desktop | Phone |
 | --- | --- | --- |
 | Move | WASD / arrows | Left side of the screen (joystick) |
-| Look | Drag the mouse, Q/E, wheel to zoom | Drag the right side |
-| Basic attack | Space or J (hold) | Big round button (hold) |
-| Dodge roll | Shift or K | Dodge button |
-| Lock on / cycle target | Tab (Esc to clear) | Lock on button |
-| Sound on/off | Sound button | Sound button |
+| Look | Right-click drag, or park the cursor at the left/right screen edge; Q/E; wheel to zoom | Drag the right side |
+| Basic attack | Left click or J (hold) | Big round button (hold) |
 | Skills | 1, 2, 3 | Small buttons |
+| Dodge roll | Shift or K | Dodge button |
+| Jump | Space (hop over the boss's slams) | Jump button |
+| Lock on / cycle target | Tab (Esc to clear) | Lock on button |
 | Chat | Enter | Chat button |
 | Party | Players button (P) → Invite | Players button → Invite |
+| Sound on/off | Sound button | Sound button |
 
 Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 3-hit combos with a heavy, knockback finisher. You sprint automatically after 3 seconds out of combat. All sound effects and music are synthesized in the browser (`public/audio.js`), so there are no audio files.
 

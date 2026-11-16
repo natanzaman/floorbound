@@ -106,12 +106,12 @@ input { font: inherit; }
 .touch #chat-input { display: none; }
 .touch #log { max-height: 90px; font-size: 11px; }
 .touch #skills { left: auto; right: max(12px, env(safe-area-inset-right)); transform: none; display: grid;
-  grid-template-columns: 60px 60px 92px; grid-template-rows: 60px 60px; gap: 10px; align-items: center; justify-items: center; }
+  grid-template-columns: 60px 60px 92px; grid-template-rows: 46px 60px 60px; gap: 10px; align-items: center; justify-items: center; }
 .touch .sk { width: 60px; height: 60px; font-size: 10px; }
-.touch .sk.s1 { grid-column: 1; grid-row: 1; }
-.touch .sk.s2 { grid-column: 1; grid-row: 2; }
-.touch .sk.s3 { grid-column: 2; grid-row: 2; }
-.touch .sk.s0 { grid-column: 3; grid-row: 1 / span 2; width: 92px; height: 92px; border-radius: 50%; }
+.touch .sk.s1 { grid-column: 1; grid-row: 2; }
+.touch .sk.s2 { grid-column: 1; grid-row: 3; }
+.touch .sk.s3 { grid-column: 2; grid-row: 3; }
+.touch .sk.s0 { grid-column: 3; grid-row: 2 / span 2; width: 92px; height: 92px; border-radius: 50%; }
 .touch #me-frame { width: 200px; }
 .touch #party { width: 160px; top: calc(max(10px, env(safe-area-inset-top)) + 76px); }
 
@@ -155,7 +155,9 @@ input { font: inherit; }
 
 /* dodge + switch */
 .sk.sd { border-color: rgba(229,231,235,.55); }
-.touch .sk.sd { grid-column: 2; grid-row: 1; }
+.touch .sk.sd { grid-column: 2; grid-row: 2; }
+.touch .sk.sj { grid-column: 3; grid-row: 1; height: 46px; width: 76px; }
+.sk.sj { border-color: rgba(229,231,235,.55); }
 .num.evade { color: #e0f2fe; font-size: 16px; }
 .num.switch { color: #fde047; font-size: 30px; text-shadow: 0 0 12px rgba(250,204,21,.8), 0 2px 4px #000; }
 .lbl .brk { color: #fde047; font-size: 10px; letter-spacing: .08em; }
@@ -168,6 +170,6 @@ input { font: inherit; }
 #sound-btn { right: 110px; }
 .touch #sound-btn { right: 190px; }
 #lock-btn { display: none; }
-.touch #lock-btn { display: block; top: auto; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 150px); right: max(12px, env(safe-area-inset-right)); }
+.touch #lock-btn { display: block; top: auto; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 200px); right: max(12px, env(safe-area-inset-right)); }
 .spectator #sound-btn { right: 10px; }
 .spectator #lock-btn { display: none !important; }
