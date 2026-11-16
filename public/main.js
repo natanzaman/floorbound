@@ -9,6 +9,7 @@ import { TITLES, TITLE_BY_ID, DEFAULT_TITLE, HALL, titleProgress } from '/shared
 import { Guide } from '/guide.js';
 import { createWorld, makePlayerModel, makeMobModel, Effects, loadAssets } from '/world.js';
 import { Sound } from '/audio.js';
+import { createSmith } from '/smith.js';
 
 const sfx = new Sound();
 
@@ -62,7 +63,7 @@ renderClasses();
 $('enter').disabled = true;
 const assetsReady = loadAssets(p => { $('enter').textContent = `Loading characters… ${Math.round(p * 100)}%`; })
   .catch(err => console.error('Model load failed, using block characters', err))
-  .finally(() => { $('enter').disabled = false; addMerchant(); if (SPECTATE) join({ type: 'spectate' }); else initLogin(); });
+  .finally(() => { $('enter').disabled = false; addMerchant(); smith.addNpc(); if (SPECTATE) join({ type: 'spectate' }); else initLogin(); });
 let merchantNpc = null;
 function addMerchant() { // the shopkeeper stands behind the stall's counter, facing the plaza
   const m = makePlayerModel('cleric'), face = Math.atan2(-MERCHANT.x, -MERCHANT.z);
@@ -173,6 +174,7 @@ async function join(joinMsg) {
 }
 const send = o => state.ws?.readyState === 1 && state.ws.send(JSON.stringify(o));
 const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
+const smith = createSmith({ scene, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
 
 // ---------------- networking ----------------
 function onMessage(msg) {
@@ -209,7 +211,7 @@ function onMessage(msg) {
     renderPlayers();
     return;
   }
-  if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); return; }
+  if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); smith.render(); return; }
   if (msg.type === 'hall') { state.hallData = msg; renderHall(); return; }
   if (msg.type === 'snap') {
     const busy = msg.w.events.some(e => e.t === 'clear' || e.t === 'lvl');
@@ -477,11 +479,13 @@ function handleEvent(e) {
       break;
     }
     case 'clear': sfx.play('clear'); banner('FLOOR 1 CLEARED', e.names.join(' · ')); if (inArena(state.x, state.z)) guide.did('boss'); break;
+    case 'forge': smith.onForge(e); break;
     case 'loot': {
       if (e.to !== me) break;
       const p = players.get(me);
       if (p && e.g) floatNum(p.model.group.position, 3.2, `+${e.g} gold`, 'gold');
       if (e.pot) log('Loot: Health Potion', 'r0');
+      smith.onLoot(e);
       let best = -1;
       for (const it of e.items) { log(`Loot: ${it.name} (${RARITY[it.r].name})`, `r${it.r}`); best = Math.max(best, it.r); }
       if (best >= 0) {
@@ -828,6 +832,7 @@ function interactKind() {
   if (state.dead || !state.joined || state.spectator) return null;
   if (nearMerchant()) return 'shop';
   if (nearHall()) return 'hall';
+  if (smith.near()) return 'smith';
   if (!state.gateOpen && inGateZone(state.x, state.z)) return 'gate';
   return null;
 }
@@ -835,6 +840,7 @@ function interact() {
   const k = interactKind();
   if (k === 'shop') { state.shopOpen = true; $('bag').classList.remove('hidden'); renderBag(); sfx.play('ui'); }
   else if (k === 'hall') { toggleHall(); sfx.play('ui'); }
+  else if (k === 'smith') { smith.toggle(); sfx.play('ui'); }
   else if (k === 'gate') { send({ type: 'ready' }); sfx.play('ui'); state.meReady = state.meReady ? 0 : 1; updateGateBox(true); }
 }
 
@@ -928,6 +934,7 @@ function renderBag() {
     const usable = !it.cls || it.cls === state.cls;
     return `<div class="it"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}</div>`;
   }).join('') : '<div class="it empty"><span class="nm"><small>Nothing yet. Enemies drop gear; the Warden always does.</small></span></div>';
+  h += smith.matsHtml(inv);
   h += renderTitles(inv.life);
   el.innerHTML = h;
 }
@@ -1094,7 +1101,7 @@ function updateHud(now) {
       btn.querySelector('.cd').style.setProperty('--p', `${Math.min(100, (left / CONSUMABLES[id].cd) * 100)}%`);
       continue;
     }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); btn.textContent = a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : state.meReady ? 'Unready' : 'Ready'; continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); btn.textContent = a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : state.meReady ? 'Unready' : 'Ready'; continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : CLASSES[state.cls].skills[slot];
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
@@ -1422,6 +1429,7 @@ function frame(now) {
   crystal.rotation.y += vdt;
   gateMesh.update(vdt);
   if (merchantNpc?.anim) merchantNpc.anim.update(vdt);
+  smith.frame(vdt);
   if (state.joined && !state.spectator) {
     const ml = $('merchant-lbl'), mp = project(MERCHANT.x, 3.6, MERCHANT.z), md = Math.hypot(state.x - MERCHANT.x, state.z - MERCHANT.z);
     if (mp && md < 20) { ml.style.display = ''; ml.style.left = `${mp[0]}px`; ml.style.top = `${mp[1]}px`; ml.innerHTML = `Merchant${md < MERCHANT.r + 1 ? `<br><small>${isTouch ? 'tap Trade' : 'press F to trade'}</small>` : ''}`; }

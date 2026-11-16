@@ -25,6 +25,7 @@ const TIPS = {
   broken: 'BROKEN: the next hit from a different player is a SWITCH for 2.5× damage.',
   loot: 'You found gear! Open your bag (B) to equip it.',
   howl: 'The Alpha howled: nearby wolves are frenzied. Back off or burst them down.',
+  mats: 'Materials! Take them to the Smith in town to refine or craft gear.',
 };
 
 export class Guide {

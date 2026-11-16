@@ -289,3 +289,37 @@ input { font: inherit; }
 #hall .row .who { flex: 1; min-width: 0; }
 #hall .row small, #hall .first small { opacity: .65; display: block; }
 #hall .empty { opacity: .55; padding: 6px 4px; }
+
+/* Town Smith (public/smith.js) */
+.lbl.npc.smith { color: #fdba74; }
+#log .mat { color: #fdba74; }
+#smith { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); left: 50%; transform: translateX(-50%); width: min(480px, 94vw); max-height: calc(100vh - 140px); display: flex; flex-direction: column; padding: 12px 14px; font-size: 13px; z-index: 3; border-color: rgba(251,146,60,.5); }
+#smith.hidden { display: none; }
+#smith .top { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 16px; letter-spacing: .1em; color: #fdba74; }
+#smith .top .gold { color: #fcd34d; font-size: 13px; letter-spacing: 0; margin-left: 6px; }
+#smith .x { padding: 2px 9px; border-radius: 6px; border: 1px solid rgba(160,200,255,.3); background: transparent; }
+.mats { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 6px; }
+.mats span { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px; font-size: 11px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); }
+.mats span i { width: 8px; height: 8px; border-radius: 2px; transform: rotate(45deg); background: var(--c); flex: none; }
+.mats span b { color: var(--c); }
+.mats span.zero { opacity: .4; }
+.mats-hint { display: block; opacity: .6; font-size: 11px; margin: -2px 0 4px; }
+#smith .tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+#smith .tabs button { flex: 1; padding: 6px 0; border-radius: 8px; border: 1px solid rgba(251,146,60,.3); background: rgba(255,255,255,.03); font-size: 12px; font-weight: 700; letter-spacing: .04em; }
+#smith .tabs button.on { background: rgba(251,146,60,.22); border-color: rgba(251,146,60,.7); color: #fed7aa; }
+#smith .body { overflow: auto; min-height: 0; flex: 1; }
+#smith .hint { margin: 0 0 8px; font-size: 11px; opacity: .65; line-height: 1.35; }
+#smith .it { align-items: flex-start; }
+#smith .it > button, #smith .it .btns { align-self: center; }
+#smith .it .btns { display: flex; flex-direction: column; gap: 4px; flex: none; }
+#smith .it button:disabled { opacity: .35; cursor: default; }
+#smith .it button.warn { border-color: rgba(248,113,113,.7); background: rgba(248,113,113,.2); }
+#smith .it .slot em { font-style: normal; font-size: 9px; opacity: .9; }
+#smith .it small.next { color: #86efac; opacity: .9; }
+#smith .it small.max, #smith .it small.desc { font-style: italic; opacity: .55; }
+#smith .it small.lbl2 { margin-top: 3px; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; opacity: .5; }
+#smith .cost { display: flex; flex-wrap: wrap; gap: 3px 8px; margin-top: 3px; font-size: 11px; }
+#smith .cost span { color: var(--c, #e5e7eb); }
+#smith .cost span.g { color: #fcd34d; }
+#smith .cost span.no { color: #f87171; text-decoration: line-through; text-decoration-color: rgba(248,113,113,.5); }
+#smith .cost i { font-style: normal; opacity: .6; }
