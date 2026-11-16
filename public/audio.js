@@ -135,6 +135,11 @@ export class Sound {
         this.noise(o, { dur: 0.7, vol: 0.6, type: 'lowpass', f: 900, to: 120 });
         break;
       case 'warn': this.tone(o, { f: 520, dur: 0.12, vol: 0.12, type: 'square' }); this.tone(o, { f: 520, dur: 0.12, vol: 0.12, type: 'square', at: 0.18 }); break;
+      case 'spit': this.noise(o, { dur: 0.12, vol: 0.3, f: 1200, to: 400, q: 2 }); this.tone(o, { f: 500, to: 200, dur: 0.1, vol: 0.15, type: 'square' }); break;
+      case 'howl':
+        this.tone(o, { f: 330, to: 620, dur: 0.6, vol: 0.22, type: 'sawtooth', attack: 0.1 });
+        this.tone(o, { f: 620, to: 420, dur: 0.9, vol: 0.18, type: 'sawtooth', at: 0.55 });
+        break;
       case 'growl': this.tone(o, { f: 110 * j, to: 80, dur: 0.35, vol: 0.18, type: 'sawtooth' }); break;
       case 'step': this.noise(o, { dur: 0.05, vol: 0.06, type: 'lowpass', f: 500 }); break;
       case 'ui': this.tone(o, { f: 880, dur: 0.06, vol: 0.08, type: 'triangle' }); break;

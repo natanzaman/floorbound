@@ -210,18 +210,45 @@ function makeBlockMob(type) {
     }
     for (const [x, z] of [[-0.35, 0.5], [0.35, 0.5], [-0.35, -0.5], [0.35, -0.5]]) legs.push(part(new THREE.BoxGeometry(0.18, 0.5, 0.18), 0x4b2e19, x, 0.25, z, body));
     height = 1.6;
-  } else if (type === 'wolf') {
-    part(new THREE.BoxGeometry(0.6, 0.6, 1.5), 0x5b5f6b, 0, 0.95, 0, body);
-    const head = part(new THREE.BoxGeometry(0.48, 0.45, 0.6), 0x4b4f5a, 0, 1.2, 0.95, body);
-    part(new THREE.BoxGeometry(0.26, 0.2, 0.3), 0x3a3d45, 0, -0.1, 0.42, head);
+  } else if (type === 'wolf' || type === 'alpha') {
+    const alpha = type === 'alpha';
+    const fur = alpha ? 0x2f2a33 : 0x5b5f6b, dark = alpha ? 0x1c1820 : 0x3a3d45;
+    part(new THREE.BoxGeometry(0.6, 0.6, 1.5), fur, 0, 0.95, 0, body);
+    const head = part(new THREE.BoxGeometry(0.48, 0.45, 0.6), alpha ? 0x26212a : 0x4b4f5a, 0, 1.2, 0.95, body);
+    part(new THREE.BoxGeometry(0.26, 0.2, 0.3), dark, 0, -0.1, 0.42, head);
     for (const sx of [-1, 1]) {
-      part(new THREE.ConeGeometry(0.1, 0.28, 4), 0x3a3d45, sx * 0.16, 0.32, -0.05, head);
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+      part(new THREE.ConeGeometry(0.1, 0.28, 4), dark, sx * 0.16, 0.32, -0.05, head);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), new THREE.MeshBasicMaterial({ color: alpha ? 0xff3b1f : 0xffd23f }));
       eye.position.set(sx * 0.13, 0.08, 0.31); head.add(eye);
     }
-    const tail = part(new THREE.BoxGeometry(0.14, 0.14, 0.7), 0x5b5f6b, 0, 1.1, -1.0, body); tail.rotation.x = 0.5;
-    for (const [x, z] of [[-0.2, 0.55], [0.2, 0.55], [-0.2, -0.55], [0.2, -0.55]]) legs.push(part(new THREE.BoxGeometry(0.15, 0.7, 0.15), 0x3a3d45, x, 0.35, z, body));
+    if (alpha) { // bone-white mane spikes and a scarred muzzle
+      for (let i = 0; i < 6; i++) {
+        const sp = part(new THREE.ConeGeometry(0.09, 0.42, 4), 0xd8cfc0, (i % 2 ? 1 : -1) * 0.12, 1.3, 0.45 - i * 0.18, body);
+        sp.rotation.x = -0.5;
+      }
+      part(new THREE.BoxGeometry(0.04, 0.22, 0.04), 0xb91c1c, 0.12, 0.05, 0.3, head);
+    }
+    const tail = part(new THREE.BoxGeometry(0.14, 0.14, 0.7), fur, 0, 1.1, -1.0, body); tail.rotation.x = 0.5;
+    for (const [x, z] of [[-0.2, 0.55], [0.2, 0.55], [-0.2, -0.55], [0.2, -0.55]]) legs.push(part(new THREE.BoxGeometry(0.15, 0.7, 0.15), dark, x, 0.35, z, body));
     height = 1.8;
+    if (alpha) { body.scale.setScalar(1.55); height = 2.8; }
+  } else if (type === 'spitter') {
+    part(new THREE.SphereGeometry(0.9, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0x3f5f2a, 0, 0, 0, body); // root mound
+    const bulb = part(new THREE.SphereGeometry(0.62, 10, 8), 0x5f9e3a, 0, 1.0, 0, body);
+    bulb.scale.set(1, 1.15, 1);
+    for (let i = 0; i < 7; i++) { // thorns
+      const a = (i / 7) * Math.PI * 2;
+      const th = part(new THREE.ConeGeometry(0.08, 0.4, 4), 0xd6c48a, Math.cos(a) * 0.55, 1.0 + (i % 2) * 0.25, Math.sin(a) * 0.55, body);
+      th.rotation.z = -Math.cos(a) * 1.2; th.rotation.x = Math.sin(a) * 1.2;
+    }
+    for (let i = 0; i < 5; i++) { // petals around the mouth
+      const a = (i / 5) * Math.PI * 2;
+      const pe = part(new THREE.BoxGeometry(0.28, 0.06, 0.4), 0xb3245c, Math.cos(a) * 0.22, 1.72, Math.sin(a) * 0.22 + 0.15, body);
+      pe.rotation.y = -a; pe.rotation.x = -0.6;
+    }
+    const mouth = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 0.3, 8), new THREE.MeshBasicMaterial({ color: 0x1a0f0f }));
+    mouth.position.set(0, 1.66, 0.25); mouth.rotation.x = 1.1; body.add(mouth);
+    height = 2.0;
   } else { // warden boss
     const s = 2.3;
     legs.push(part(new THREE.BoxGeometry(0.45 * s, 1.0 * s, 0.5 * s), 0x3b1f1f, -0.3 * s, 0.5 * s, 0, body));
@@ -507,6 +534,35 @@ export class Effects {
       if (follow) { const p = follow(); if (p) mesh.position.set(p.x, 0.08, p.z); }
     });
   }
+
+  wedge(x, z, face, r, half, life, color = 0xff3b3b) {
+    const g = new THREE.Group();
+    const geo = () => new THREE.CircleGeometry(r, 20, face - Math.PI / 2 - half, half * 2);
+    const edge = new THREE.Mesh(geo(), this.fadeMat(color, 0.18));
+    const fill = new THREE.Mesh(geo(), this.fadeMat(color, 0.35));
+    edge.rotation.x = fill.rotation.x = -Math.PI / 2; fill.position.y = 0.01;
+    g.add(edge, fill); g.position.set(x, 0.07, z);
+    this.add(g, life, (mesh, k) => { fill.scale.setScalar(Math.max(0.01, k)); });
+  }
+
+  aimLine(x0, z0, x1, z1, life) {
+    const len = Math.hypot(x1 - x0, z1 - z0) || 0.1;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.35, len), this.fadeMat(0xff3b3b, 0.35));
+    m.rotation.x = -Math.PI / 2; m.rotation.z = -Math.atan2(x1 - x0, z1 - z0) + Math.PI;
+    m.position.set((x0 + x1) / 2, 0.08, (z0 + z1) / 2);
+    this.add(m, life, (mesh, k) => { mesh.material.opacity = 0.2 + 0.5 * k; mesh.scale.x = 1 + k; });
+  }
+
+  thorn(x, z, vx, vz, ttl) {
+    const m = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.6, 5), new THREE.MeshStandardMaterial({ color: 0xd6c48a, emissive: 0x6b5a1a, emissiveIntensity: 0.6 }));
+    m.rotation.x = Math.PI / 2; m.rotation.order = 'YXZ';
+    const g = new THREE.Group(); g.add(m); g.rotation.y = Math.atan2(vx, vz); g.position.set(x, 1.2, z);
+    const e = { mesh: g, life: ttl, age: 0, update: (mesh, k, dt) => { mesh.position.x += vx * dt; mesh.position.z += vz * dt; } };
+    this.scene.add(g); this.list.push(e);
+    return e;
+  }
+
+  end(e) { if (e) e.age = e.life; }
 
   heal(obj) {
     for (let i = 0; i < 3; i++) {

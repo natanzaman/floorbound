@@ -33,12 +33,23 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Skills | 1, 2, 3 | Small buttons |
 | Dodge roll | Shift or K | Dodge button |
 | Jump | Space (hop over the boss's slams) | Jump button |
-| Lock on / cycle target | Tab (Esc to clear) | Lock on button |
+| Select a character (enemy or ally) | Ctrl+click it (Cmd+click on Mac); Ctrl+click empty ground to clear | Lock on button (enemies) |
+| Lock on / cycle enemies | Tab (Esc to clear) | Lock on button |
 | Chat | Enter | Chat button |
 | Party | Players button (P) → Invite | Players button → Invite |
 | Sound on/off | Sound button | Sound button |
 
 Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 3-hit combos with a heavy, knockback finisher. You sprint automatically after 3 seconds out of combat. All sound effects and music are synthesized in the browser (`public/audio.js`), so there are no audio files.
+
+## Floor 1 enemies
+
+| Enemy | Level | What it does |
+| --- | --- | --- |
+| Forest Boar | 2 | Passive until hit. Charges with a short bite. |
+| Dire Wolf | 5 | Hunts in packs. Every bite shows a red wedge first: step out of it. |
+| Bramble Spitter | 4 | Rooted plant. Draws a red line, then fires a thorn along it: sidestep or roll. |
+| Alpha Wolf (elite) | 7 | Leads a pack: nearby wolves hit 25% harder. Howls to send the pack into a frenzy. |
+| The Horned Warden (boss) | 10 | Axe swings, ground slams, and an enraged spin. Jump or roll the red circles. |
 
 ## Combat: Break and Switch
 

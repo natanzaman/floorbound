@@ -120,15 +120,22 @@ export const CLASSES = {
   },
 };
 
-export const MOB_IDS = ['boar', 'wolf', 'warden'];
+export const MOB_IDS = ['boar', 'wolf', 'warden', 'alpha', 'spitter'];
 
 export const MOBS = {
   boar: { name: 'Forest Boar', hp: 60, atk: 6, speed: 4.5, aggro: 0, range: 1.8, atkCd: 1.6, xp: 20, radius: 0.8, level: 2 },
   wolf: { name: 'Dire Wolf', hp: 110, atk: 11, speed: 6.2, aggro: 11, range: 2.0, atkCd: 1.3, xp: 40, radius: 0.8, level: 5 },
+  alpha: { name: 'Alpha Wolf', hp: 480, atk: 15, speed: 6.6, aggro: 14, range: 2.4, atkCd: 1.4, xp: 150, radius: 1.2, level: 7, elite: true },
+  spitter: { name: 'Bramble Spitter', hp: 80, atk: 10, speed: 0, aggro: 17, range: 15, atkCd: 2.2, xp: 30, radius: 0.9, level: 4, ranged: true },
   warden: { name: 'The Horned Warden', hp: 2400, atk: 20, speed: 4.2, aggro: 18, range: 4.2, atkCd: 2.0, xp: 600, radius: 2.2, level: 10, boss: true },
 };
 
 export const xpToNext = lvl => 50 * lvl;
+
+// Melee bites hit a wedge in front of the attacker (shown as a red wedge during the wind-up).
+export const BITE = { boar: [2.6, 0.7], wolf: [2.8, 0.6], alpha: [3.4, 0.85] }; // [reach, half-angle]
+export const PACK = { auraRange: 12, auraAtk: 0.25, howlEvery: 12, howlRange: 16, frenzy: 6 };
+export const THORN = { speed: 16, radius: 0.6, wind: 0.75 };
 
 export function statsFor(cls, lvl) {
   const c = CLASSES[cls];

@@ -1,6 +1,6 @@
 // Authoritative world simulation: players, mobs, the floor boss, combat, XP and parties.
 import {
-  WORLD, CLASSES, CLASS_IDS, MOBS, MOB_IDS, MAX_LEVEL, PARTY_MAX, PLAYER_SPEED, SPRINT_SPEED, DODGE, JUMP, SWITCH,
+  WORLD, CLASSES, CLASS_IDS, MOBS, MOB_IDS, MAX_LEVEL, PARTY_MAX, PLAYER_SPEED, SPRINT_SPEED, DODGE, JUMP, SWITCH, BITE, PACK, THORN,
   inTown, inArena, walkable, resolveCollision, rng, angleTo, wrapAngle, xpToNext, statsFor,
 } from '../shared/data.js';
 
@@ -14,6 +14,7 @@ export class Game {
     this.mobs = new Map();
     this.parties = new Map();
     this.zones = [];
+    this.projectiles = [];
     this.scheduled = [];
     this.events = [];
     this.nextId = 1;
@@ -30,6 +31,9 @@ export class Game {
     for (let i = 0; i < 14; i++) this.addMob('boar', -60 + r() * 120, 38 + r() * 55);
     for (let i = 0; i < 10; i++) this.addMob('wolf', -60 + r() * 120, 100 + r() * 45);
     this.boss = this.addMob('warden', WORLD.arena.x, WORLD.arena.z + 4);
+    this.addMob('alpha', -38, 122); // each Alpha leads a pack in the wolf woods
+    this.addMob('alpha', 38, 116);
+    for (const [x, z] of [[-24, 58], [28, 70], [-48, 84], [46, 96], [-16, 132], [20, 140]]) this.addMob('spitter', x, z);
   }
 
   addMob(type, x, z) {
@@ -40,7 +44,7 @@ export class Game {
       hp: def.hp, maxHp: def.hp, dead: false, deadUntil: 0, threat: new Map(),
       atkT: 0, windupAt: 0, stunUntil: 0, wanderT: Math.random() * 4, wx: x, wz: z,
       contributors: new Set(), phase: 0, slamT: 0, spinT: 0, moving: false,
-      staggerUntil: 0, staggerBy: 0, staggerCd: 0, switched: false,
+      staggerUntil: 0, staggerBy: 0, staggerCd: 0, switched: false, howlT: 0, frenzyUntil: 0, aimX: 0, aimZ: 0,
     };
     this.mobs.set(m.id, m);
     return m;
@@ -328,7 +332,7 @@ export class Game {
     if (stun && m.def.boss) m.stunUntil = Math.max(m.stunUntil, t + stun * 0.3);
     this.events.push({ t: 'hit', id: m.id, a: amount, c: crit ? 1 : 0, by: p.id, sw, h: heavy ? 1 : 0 });
     if (m.hp <= 0) return this.killMob(m, p);
-    if (knock && !m.def.boss) this.knockback(m, p, knock);
+    if (knock && !m.def.boss && !m.def.ranged) this.knockback(m, p, knock);
     if (brk && t >= m.staggerUntil && (!m.def.boss || t >= m.staggerCd)) {
       const dur = m.def.boss ? SWITCH.bossWindow : SWITCH.window;
       m.staggerUntil = t + dur; m.staggerBy = p.id; m.switched = false;
@@ -351,7 +355,7 @@ export class Game {
 
   killMob(m, killer) {
     m.dead = true; m.hp = 0;
-    m.deadUntil = this.time + (m.def.boss ? 60 : 15);
+    m.deadUntil = this.time + (m.def.boss ? 60 : m.def.elite ? 45 : 15);
     this.events.push({ t: 'die', id: m.id, x: r2(m.x), z: r2(m.z), b: m.def.boss ? 1 : 0 });
     if (m.def.boss) {
       const names = [];
@@ -450,6 +454,7 @@ export class Game {
     this.zones = this.zones.filter(zn => t < zn.until);
 
     for (const m of this.mobs.values()) this.updateMob(m, dt);
+    this.updateProjectiles(dt);
 
     // keep mobs from stacking
     const list = [...this.mobs.values()].filter(m => !m.dead);
@@ -529,8 +534,10 @@ export class Game {
             if (d <= def.range + 1 && Math.abs(wrapAngle(angleTo(m.x, m.z, p.x, p.z) - m.face)) < 1.3) this.damagePlayer(p, def.atk);
           }
           this.events.push({ t: 'fx', k: 'marc', id: m.id, x: r2(m.x), z: r2(m.z), f: r2(m.face), r: def.range + 1 });
-        } else if (dist(m, target) <= def.range + 1.2) {
-          this.damagePlayer(target, def.atk);
+        } else if (def.ranged) {
+          this.shootThorn(m);
+        } else {
+          this.bite(m);
         }
       }
       return;
@@ -538,14 +545,78 @@ export class Game {
 
     const d = dist(m, target);
     m.face = angleTo(m.x, m.z, target.x, target.z);
+    const frenzy = t < m.frenzyUntil;
+    if (def.elite) this.alphaHowl(m);
     if (d > def.range + 0.4) {
-      this.moveMob(m, target.x, target.z, def.speed * (enraged ? 1.25 : 1), dt, def.range);
+      this.moveMob(m, target.x, target.z, def.speed * (enraged ? 1.25 : 1) * (frenzy ? 1.3 : 1), dt, def.range);
     } else if (t >= m.atkT) {
-      const wind = def.boss ? 0.6 : 0.45;
+      const wind = def.boss ? 0.6 : def.ranged ? THORN.wind : 0.45;
       m.windupAt = t + wind;
-      m.atkT = t + def.atkCd * (enraged ? 0.7 : 1);
-      this.events.push({ t: 'wind', id: m.id, d: wind });
+      m.atkT = t + def.atkCd * (enraged ? 0.7 : 1) * (frenzy ? 0.7 : 1);
+      const ev = { t: 'wind', id: m.id, d: wind, f: r2(m.face) };
+      if (def.ranged) { m.aimX = target.x; m.aimZ = target.z; ev.ax = r2(target.x); ev.az = r2(target.z); }
+      else if (BITE[m.type]) { ev.r = BITE[m.type][0]; ev.h = BITE[m.type][1]; }
+      this.events.push(ev);
     }
+  }
+
+  // A wolf/boar bite: lunge forward and hit everyone in the wedge in front of it.
+  bite(m) {
+    const [reach, half] = BITE[m.type] || [m.def.range + 1, 0.6];
+    let atk = m.def.atk;
+    if (m.type === 'wolf' && this.alphaNear(m)) atk *= 1 + PACK.auraAtk; // the pack hits harder with its Alpha around
+    let nx = m.x + Math.sin(m.face) * 1.0, nz = m.z + Math.cos(m.face) * 1.0;
+    [nx, nz] = resolveCollision(nx, nz, m.def.radius * 0.8);
+    if (walkable(nx, nz) && Math.hypot(nx - WORLD.town.x, nz - WORLD.town.z) > WORLD.town.r + 2) { m.x = nx; m.z = nz; }
+    this.events.push({ t: 'fx', k: 'marc', id: m.id, x: r2(m.x), z: r2(m.z), f: r2(m.face), r: reach * 0.8, small: 1 });
+    for (const p of this.players.values()) {
+      if (p.dead) continue;
+      const d = dist(m, p);
+      if (d > reach + 0.4) continue;
+      if (d > m.def.radius + 0.6 && Math.abs(wrapAngle(angleTo(m.x, m.z, p.x, p.z) - m.face)) > half) continue;
+      this.damagePlayer(p, atk);
+    }
+  }
+
+  alphaNear(m) {
+    for (const a of this.mobs.values()) if (a.type === 'alpha' && !a.dead && dist(a, m) < PACK.auraRange) return true;
+    return false;
+  }
+
+  alphaHowl(m) {
+    const t = this.time;
+    if (!m.howlT) m.howlT = t + 4;
+    if (t < m.howlT) return;
+    m.howlT = t + PACK.howlEvery;
+    m.frenzyUntil = t + PACK.frenzy;
+    let n = 0;
+    for (const w of this.mobs.values()) {
+      if (w.dead || w.type !== 'wolf' || dist(w, m) > PACK.howlRange) continue;
+      w.frenzyUntil = t + PACK.frenzy; n++;
+    }
+    this.events.push({ t: 'howl', id: m.id, n, r: PACK.howlRange });
+  }
+
+  shootThorn(m) {
+    const dx = m.aimX - m.x, dz = m.aimZ - m.z, d = Math.hypot(dx, dz) || 1;
+    const vx = (dx / d) * THORN.speed, vz = (dz / d) * THORN.speed;
+    const ttl = (m.def.range + 2) / THORN.speed;
+    const pr = { id: this.id(), x: m.x + (dx / d) * 1.1, z: m.z + (dz / d) * 1.1, vx, vz, ttl, atk: m.def.atk };
+    this.projectiles.push(pr);
+    this.events.push({ t: 'proj', id: pr.id, by: m.id, x: r2(pr.x), z: r2(pr.z), vx: r2(vx), vz: r2(vz), ttl: r2(ttl) });
+  }
+
+  updateProjectiles(dt) {
+    for (const pr of this.projectiles) {
+      pr.x += pr.vx * dt; pr.z += pr.vz * dt; pr.ttl -= dt;
+      if (resolveCollision(pr.x, pr.z, 0.1)[0] !== pr.x) pr.ttl = 0; // hit a tree or rock
+      for (const p of this.players.values()) {
+        if (p.dead || pr.ttl <= 0) continue;
+        if (Math.hypot(p.x - pr.x, p.z - pr.z) < THORN.radius + 0.4) { this.damagePlayer(p, pr.atk); pr.ttl = 0; }
+      }
+      if (pr.ttl <= 0) this.events.push({ t: 'pend', id: pr.id, x: r2(pr.x), z: r2(pr.z) });
+    }
+    this.projectiles = this.projectiles.filter(pr => pr.ttl > 0);
   }
 
   bossSpecials(m, target) {
@@ -604,7 +675,7 @@ export class Game {
     const mobs = [];
     for (const m of this.mobs.values()) {
       if (m.dead) continue;
-      mobs.push([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0) | (m.windupAt ? 16 : 0) | (this.time < m.staggerUntil ? 32 : 0)]);
+      mobs.push([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0) | (m.windupAt ? 16 : 0) | (this.time < m.staggerUntil ? 32 : 0) | (this.time < m.frenzyUntil ? 64 : 0)]);
     }
     const out = JSON.stringify({ players, mobs, events: this.events });
     this.events = [];

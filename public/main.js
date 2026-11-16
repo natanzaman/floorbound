@@ -37,7 +37,7 @@ addEventListener('resize', resize); resize();
 const state = {
   ws: null, myId: 0, seq: 0, x: 0, z: 0, face: 0, cls: 'swordsman', lvl: 1, hp: 1, maxHp: 1, xp: 0, next: 50,
   dead: false, party: 0, joined: false, yaw: 0, pitch: 0.5, camDist: 11,
-  ready: [0, 0, 0, 0], lastPress: [0, 0, 0, 0], dodgeReady: 0, dodgePress: 0, roll: null, moveDir: null, lastCombat: -1e9, speed: 0, lock: 0, jumpReady: 0, jumpPress: 0, roster: new Map(), area: '', invite: null,
+  ready: [0, 0, 0, 0], lastPress: [0, 0, 0, 0], dodgeReady: 0, dodgePress: 0, roll: null, moveDir: null, lastCombat: -1e9, speed: 0, lock: 0, focus: 0, jumpReady: 0, jumpPress: 0, roster: new Map(), area: '', invite: null,
 };
 const players = new Map(); // id -> entity
 const mobs = new Map();
@@ -95,7 +95,7 @@ function onMessage(msg) {
     $('login').classList.add('hidden'); $('hud').classList.remove('hidden');
     buildSkillBar();
     log('Welcome to Floorbound! Head north through the field and defeat the Horned Warden.', 'sys');
-    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge and jump.' : 'WASD move · right-drag or push the cursor to the screen edge to look · Left click (or J) attack · 1 2 3 skills · Shift dodge · Space jump · Tab lock-on · Enter chat', 'sys');
+    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge and jump.' : 'WASD move · right-drag or push the cursor to the screen edge to look · Left click (or J) attack · Ctrl+click a character to select it · 1 2 3 skills · Shift dodge · Space jump · Tab lock-on · Enter chat', 'sys');
     log('Break an enemy (Ground Slam, Burst Combo finisher, or Smite during its wind-up), then a teammate hits it for a SWITCH: big bonus damage.', 'sys');
     return;
   }
@@ -141,7 +141,7 @@ function onSnapshot({ me, w }) {
     seenM.add(id);
     let e = mobs.get(id);
     if (!e) e = addMobEntity(id, MOB_IDS[ti], x, z, face);
-    Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, moving: flags & 1, engaged: flags & 2, enraged: flags & 4, stunned: flags & 8, winding: flags & 16, staggered: flags & 32 });
+    Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, moving: flags & 1, engaged: flags & 2, enraged: flags & 4, stunned: flags & 8, winding: flags & 16, staggered: flags & 32, frenzy: flags & 64 });
   }
   for (const [id, e] of mobs) if (!seenM.has(id) && !e.dying) { removeEntity(e); mobs.delete(id); if (e === boss) boss = null; }
   renderPlayersThrottled();
@@ -165,7 +165,7 @@ function handleEvent(e) {
       else if (e.k === 'heal') sfx.play('heal', at, mineFx);
       else if (e.k === 'zone' || (e.k === 'ring' && e.c === 'light')) sfx.play('spell', at, mineFx);
       else if (e.k === 'shield') sfx.play('shield', at, mineFx);
-      else if (e.k === 'marc') sfx.play('swingHeavy', at, 1.3);
+      else if (e.k === 'marc') sfx.play(e.small ? 'swing' : 'swingHeavy', at, e.small ? 0.7 : 1.3);
       else if (e.k === 'boom') sfx.play('boom', at, 1.2);
       const ox = e.id === me ? state.x : e.x, oz = e.id === me ? state.z : e.z;
       if (e.k === 'arc') fx.arc(ox, oz, e.f, e.r, e.r > 3 ? 0.9 : 1.05, e.c === 'gold' ? 0xfde68a : 0xdbeafe);
@@ -174,13 +174,24 @@ function handleEvent(e) {
       else if (e.k === 'bolt') { fx.line(ox, oz, e.x2, e.z2, 0xfde047, 0.22, 0.25, 1.3); fx.ring(e.x2, e.z2, 1.2, 0xfde047, 0.25); }
       else if (e.k === 'heal') { const t = players.get(e.id); if (t) fx.heal(t.model.group); }
       else if (e.k === 'zone') fx.zone(e.x, e.z, e.r, e.d);
-      else if (e.k === 'marc') fx.arc(e.x, e.z, e.f, e.r, 1.3, 0xff4d4d);
+      else if (e.k === 'marc') fx.arc(e.x, e.z, e.f, e.r, e.small ? 0.6 : 1.3, 0xff4d4d);
       else if (e.k === 'boom') { fx.ring(e.x, e.z, e.r, 0xff7a2f, 0.5); shake(0.35); }
       break;
     }
     case 'jump': {
       const p = players.get(e.id);
       if (p && e.id !== me) { p.jumpT = 0; p.model.anim?.shot('Jump_Full_Short', 1.75); }
+      break;
+    }
+    case 'proj': projFx.set(e.id, fx.thorn(e.x, e.z, e.vx, e.vz, e.ttl)); sfx.play('spit', { x: e.x, z: e.z }); break;
+    case 'pend': fx.end(projFx.get(e.id)); projFx.delete(e.id); fx.ring(e.x, e.z, 0.8, 0xd6c48a, 0.25); break;
+    case 'howl': {
+      const m = mobs.get(e.id);
+      if (m) {
+        fx.ring(m.x, m.z, e.r, 0xff7a2f, 0.9); fx.ring(m.x, m.z, e.r * 0.5, 0xffb37a, 0.6);
+        sfx.play('howl', m.model.group.position, 1.2);
+        floatNum(m.model.group.position, m.model.height + 0.6, e.n ? `HOWL! Pack frenzy ×${e.n}` : 'HOWL!', 'crit');
+      }
       break;
     }
     case 'roll': {
@@ -216,7 +227,12 @@ function handleEvent(e) {
     }
     case 'wind': {
       const m = mobs.get(e.id);
-      if (m) { m.wind = e.d; m.model.anim?.shot('2H_Melee_Attack_Chop', 1.4); if (m.type === 'wolf' && Math.random() < 0.4) sfx.play('growl', m.model.group.position, 0.7); }
+      if (m) {
+        m.wind = e.d; m.model.anim?.shot('2H_Melee_Attack_Chop', 1.4);
+        if ((m.type === 'wolf' || m.type === 'alpha') && Math.random() < 0.4) sfx.play('growl', m.model.group.position, 0.7);
+        if (e.r) fx.wedge(m.x, m.z, e.f, e.r, e.h, e.d);                 // bite wedge: step out of it
+        if (e.ax !== undefined) fx.aimLine(m.x, m.z, e.ax, e.az, e.d);   // thorn shot: sidestep the line
+      }
       break;
     }
     case 'tele':
@@ -379,7 +395,7 @@ addEventListener('keydown', e => {
   if (k === '1' || k === '2' || k === '3') useSkill(+k);
   if (k === 'shift' || k === 'k') dodge();
   if (k === 'tab') { e.preventDefault(); cycleLock(); }
-  if (k === 'escape') state.lock = 0;
+  if (k === 'escape') { state.lock = 0; state.focus = 0; }
   if (k === 'p') $('players-btn').click();
 });
 addEventListener('keyup', e => {
@@ -395,6 +411,7 @@ let mouseAttack = false;
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse') {
+    if (e.button === 0 && (e.ctrlKey || e.metaKey)) { selectAt(e.clientX, e.clientY); return; }
     if (e.button === 0) { mouseAttack = true; attackHeld = true; return; }
     if (e.button !== 2) return;
   }
@@ -484,7 +501,34 @@ function cycleLock() {
   if (!list.length) { state.lock = 0; return; }
   const i = list.findIndex(m => m.id === state.lock);
   state.lock = i === -1 ? list[0].id : (i + 1 < list.length ? list[i + 1].id : 0);
+  state.focus = 0;
   sfx.play('ui');
+}
+
+// Ctrl/Cmd + click a character (enemy or ally) to select it and lock the camera on it;
+// Ctrl/Cmd + click empty ground to clear the selection.
+function selectAt(sx, sy) {
+  let best = null, bd = Infinity;
+  const consider = (ent, kind) => {
+    const g = ent.model.group.position, h = ent.model.height;
+    const top = project(g.x, g.y + h, g.z), bot = project(g.x, g.y, g.z);
+    if (!top || !bot) return;
+    const hpx = Math.max(24, bot[1] - top[1]), wpx = Math.max(22, hpx * 0.45);
+    const cx = (top[0] + bot[0]) / 2, cy = (top[1] + bot[1]) / 2;
+    if (Math.abs(sx - cx) > wpx || sy < top[1] - 14 || sy > bot[1] + 10) return;
+    const d = Math.hypot(sx - cx, sy - cy) + Math.hypot(g.x - state.x, g.z - state.z) * 0.5; // nearer wins ties
+    if (d < bd) { bd = d; best = { ent, kind }; }
+  };
+  for (const m of mobs.values()) if (!m.dying) consider(m, 'mob');
+  for (const p of players.values()) if (p.id !== state.myId && !p.dead) consider(p, 'player');
+  state.lock = best?.kind === 'mob' ? best.ent.id : 0;
+  state.focus = best?.kind === 'player' ? best.ent.id : 0;
+  sfx.play('ui');
+}
+function focusedAlly() {
+  const p = state.focus && players.get(state.focus);
+  if (!p || Math.hypot(p.x - state.x, p.z - state.z) > 60) { state.focus = 0; return null; }
+  return p;
 }
 function lockedMob() {
   const m = state.lock && mobs.get(state.lock);
@@ -510,6 +554,20 @@ function dodge() {
   state.face = dir;
   state.dodgeReady = now + DODGE.cd * 1000; state.dodgePress = now;
   send({ type: 'dodge', face: dir });
+}
+
+let tfKey = '';
+function updateTargetFrame(t, isMob) {
+  const el = $('target');
+  if (!t) { if (tfKey) { el.classList.add('hidden'); tfKey = ''; } return; }
+  const name = isMob ? t.def.name : t.name;
+  const sub = isMob ? `Lv ${t.def.level}${t.def.elite ? ' · Elite' : t.def.boss ? ' · Boss' : ''}${t.staggered ? ' · BROKEN' : ''}` : `Lv ${t.lvl} · ${CLASSES[t.cls].name}`;
+  const pct = Math.max(0, Math.round((t.hp / t.maxHp) * 100));
+  const key = `${name}|${sub}|${pct}|${isMob}`;
+  if (key === tfKey) return;
+  tfKey = key;
+  el.className = `frame ${isMob ? 'foe' : 'friend'}`;
+  el.innerHTML = `<div class="row"><span>${esc(name)}</span><span class="sub">${sub}</span></div><div class="bar hp"><div style="width:${pct}%"></div><span>${t.hp} / ${t.maxHp}</span></div>`;
 }
 
 let calloutT = 0;
@@ -744,7 +802,8 @@ function animateEntity(e, dt) {
     }
   }
   if (e.flash > 0) e.flash -= dt;
-  const enr = e.kind === 'mob' && e.enraged ? (m.anim ? 0.12 : 0.3) + Math.sin(performance.now() / 120) * (m.anim ? 0.06 : 0.15) : 0;
+  const enr = e.kind === 'mob' && e.enraged ? (m.anim ? 0.12 : 0.3) + Math.sin(performance.now() / 120) * (m.anim ? 0.06 : 0.15)
+    : e.kind === 'mob' && e.frenzy ? 0.1 + Math.sin(performance.now() / 90) * 0.06 : 0;
   const glow = e.flash > 0 ? (e.type === 'warden' ? 0.18 : 0.35) : enr;
   for (const mt of e.mats) { mt.emissive.setHex(e.flash > 0 && !enr ? 0xffffff : 0xff2200); mt.emissiveIntensity = glow; }
 
@@ -760,6 +819,7 @@ function animateEntity(e, dt) {
     const pct = Math.round((e.hp / e.maxHp) * 100);
     if (pct !== e.label.pct) { e.label.pct = pct; e.label.fill.style.width = `${pct}%`; }
     if (e.kind === 'player') e.label.el.className = `lbl ${state.party && e.party === state.party ? 'party' : 'ally'}`;
+    else if (e.def.elite && !e.label.el.classList.contains('elite')) e.label.el.classList.add('elite');
   }
 }
 
@@ -800,11 +860,14 @@ function spectatorCamera(dt) {
 }
 
 let hitStop = 0;
+const projFx = new Map(); // thorn id -> effect
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   hitStop = Math.max(0, hitStop - dt);
   const lm = state.joined && !state.spectator ? lockedMob() : null;
+  const la = !lm && state.joined && !state.spectator ? focusedAlly() : null;
+  const sel = lm || la;
   if (state.joined && !state.spectator && !isTouch && mouse.inside && mouse.onCanvas && drag.id === null && document.activeElement !== $('chat-input')) {
     const edge = Math.max(40, innerWidth * 0.06);
     const side = mouse.x < edge ? 1 : mouse.x > innerWidth - edge ? -1 : 0;
@@ -815,13 +878,17 @@ function frame(now) {
       state.yaw += side * dt * 2.4 * Math.max(0.25, depth) * Math.min(1, held / 0.3); // ease in over 0.3 s
     }
   } else mouse.edgeSide = 0;
-  if (lm) { // ease the camera round to keep the locked target in view
-    const want = Math.atan2(lm.x - state.x, lm.z - state.z);
-    state.yaw += Math.atan2(Math.sin(want - state.yaw), Math.cos(want - state.yaw)) * Math.min(1, dt * 3);
-    const gp = lm.model.group.position;
+  if (sel) { // ease the camera round to keep the selected character in view
+    const gp = sel.model.group.position;
+    if (Math.hypot(gp.x - state.x, gp.z - state.z) > 1.5) {
+      const want = Math.atan2(gp.x - state.x, gp.z - state.z);
+      state.yaw += Math.atan2(Math.sin(want - state.yaw), Math.cos(want - state.yaw)) * Math.min(1, dt * 3);
+    }
     lockRing.visible = true; lockRing.position.set(gp.x, 0.12, gp.z);
-    lockRing.scale.setScalar(lm.def.radius + 0.6); lockRing.rotation.z += dt * 1.5;
+    lockRing.material.color.setHex(lm ? 0xfbbf24 : 0x4ade80);
+    lockRing.scale.setScalar(lm ? lm.def.radius + 0.6 : 0.9); lockRing.rotation.z += dt * 1.5;
   } else lockRing.visible = false;
+  updateTargetFrame(sel, !!lm);
 
   if (state.joined && !state.dead && !state.spectator) {
     // movement input
@@ -921,4 +988,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { state, players, mobs, banner, sfx };
+window.__fb = { state, players, mobs, banner, sfx, project };
