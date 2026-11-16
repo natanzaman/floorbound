@@ -9,6 +9,8 @@ import { TITLES, TITLE_BY_ID, DEFAULT_TITLE, HALL, titleProgress } from '/shared
 import { Guide } from '/guide.js';
 import { createWorld, makePlayerModel, makeMobModel, Effects, loadAssets } from '/world.js';
 import { Sound } from '/audio.js';
+import { F2, inGateZone2 } from '/shared/floor2.js';
+import { initFloor2Client } from '/floor2client.js';
 
 const sfx = new Sound();
 
@@ -46,6 +48,12 @@ const state = {
 const players = new Map(); // id -> entity
 const mobs = new Map();
 let boss = null;
+// Floor 2 — The Glimmering Mire (floor2client.js): world, waystones, Stairway, hazards and its events.
+const f2 = initFloor2Client({
+  scene, sun, occluders, fx, sfx, state, mobs, players, isTouch,
+  send: o => send(o), banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a),
+  log: (a, b) => log(a, b), shake: a => shake(a), project: (x, y, z) => project(x, y, z), hallOpen: () => !$('hall').classList.contains('hidden'),
+});
 
 // ---------------- login ----------------
 let chosen = localStorage.getItem('fb_cls') || 'swordsman';
@@ -232,6 +240,7 @@ function onSnapshot({ me, w }) {
     for (const id of CONSUMABLE_IDS) if (now - (state.ccdPress?.[id] || 0) > 350) state.ccdReady[id] = now + (me.ccd?.[id] || 0) * 1000;
   }
   if (w.gate) { state.gate = w.gate; state.gateOpen = !!w.gate[0]; gateMesh.set(state.gateOpen); }
+  if (w.f2) f2.snap(w.f2); // on Floor 2, state.gate/gateOpen become Floor 2's gate
   state.phase = w.phase || 0;
 
   // events first (they may reference mobs that are about to vanish)
@@ -266,6 +275,7 @@ function onSnapshot({ me, w }) {
 
 function handleEvent(e) {
   const me = state.myId;
+  f2.onEvent(e);
   switch (e.t) {
     case 'tp':
       if (e.id === me) { state.x = e.x; state.z = e.z; state.seq = e.s; }
@@ -391,7 +401,7 @@ function handleEvent(e) {
       if (e.k === 'rock') { if (mine) { sfx.play('warn', { x: e.x, z: e.z }, 0.6); guide.tip('rock'); } break; }
       sfx.play('warn', { x: e.x, z: e.z });
       if (mine) guide.tip('slam');
-      if (boss) bossShot(boss.id, e.follow ? '2H_Melee_Attack_Spin' : '2H_Melee_Attack_Slice', 1.2, Math.max(0, e.d - 0.55));
+      if (boss && e.k !== 'lurk' && e.k !== 'pool') bossShot(boss.id, e.follow ? '2H_Melee_Attack_Spin' : '2H_Melee_Attack_Slice', 1.2, Math.max(0, e.d - 0.55));
       break;
     }
     case 'buff': {
@@ -563,7 +573,7 @@ function addMobEntity(id, type, x, z, face) {
   model.group.position.set(x, 0, z);
   model.group.rotation.y = face;
   scene.add(model.group);
-  const e = { id, kind: 'mob', type, def: MOBS[type], model, mats: model.mats, label: type === 'warden' ? null : makeLabel('mob'), x, z, face, tx: x, tz: z, tface: face, walk: 0, wind: 0, flash: 0 };
+  const e = { id, kind: 'mob', type, def: MOBS[type], model, mats: model.mats, label: MOBS[type]?.boss ? null : makeLabel('mob'), x, z, face, tx: x, tz: z, tface: face, walk: 0, wind: 0, flash: 0 };
   mobs.set(id, e);
   if (type === 'warden') boss = e;
   if (e.def?.rare && e.label) { // gold "RARE" tag above a rare named enemy's name
@@ -828,14 +838,16 @@ function interactKind() {
   if (state.dead || !state.joined || state.spectator) return null;
   if (nearMerchant()) return 'shop';
   if (nearHall()) return 'hall';
-  if (!state.gateOpen && inGateZone(state.x, state.z)) return 'gate';
-  return null;
+  if (!state.gateOpen && (inGateZone(state.x, state.z) || inGateZone2(state.x, state.z))) return 'gate';
+  return f2.interactKind(); // waystones and the Stairway
+
 }
 function interact() {
   const k = interactKind();
   if (k === 'shop') { state.shopOpen = true; $('bag').classList.remove('hidden'); renderBag(); sfx.play('ui'); }
   else if (k === 'hall') { toggleHall(); sfx.play('ui'); }
   else if (k === 'gate') { send({ type: 'ready' }); sfx.play('ui'); state.meReady = state.meReady ? 0 : 1; updateGateBox(true); }
+  else f2.interact(k);
 }
 
 // ---------------- titles & Hall of Clearers ----------------
@@ -872,6 +884,12 @@ function renderHall() {
   h += d.fastest.length ? d.fastest.map((r, i) => `<div class="row"><span class="n">${i + 1}</span><span class="t">${fmtSecs(r.secs)}</span><span class="who">${hallParty(r)}<small>${fmtDate(r.at)} · ${hallMeta(r)}</small></span></div>`).join('') : '<div class="empty">No clears yet.</div>';
   h += '<h4>Recent clears</h4>';
   h += d.recent.length ? d.recent.map(r => `<div class="row"><span class="t">${fmtSecs(r.secs)}</span><span class="who">${hallParty(r)}<small>${ago(r.at)} · ${hallMeta(r)}</small></span></div>`).join('') : '<div class="empty">No clears yet.</div>';
+  const d2 = d.floors?.[2]; // Floor 2 — The Glimmering Mire
+  if (d2) {
+    h += '<h4>Server first clear · Floor 2</h4>';
+    h += d2.first ? `<div class="first"><b>${hallParty(d2.first)}</b><small>${fmtDate(d2.first.at)} · ${fmtSecs(d2.first.secs)} · ${hallMeta(d2.first)}</small></div>` : '<div class="empty">The Drowned Sovereign still rules the Sunken Court.</div>';
+    if (d2.fastest.length) h += '<h4>Fastest Floor 2 clears</h4>' + d2.fastest.map((r, i) => `<div class="row"><span class="n">${i + 1}</span><span class="t">${fmtSecs(r.secs)}</span><span class="who">${hallParty(r)}<small>${fmtDate(r.at)} · ${hallMeta(r)}</small></span></div>`).join('');
+  }
   el.innerHTML = h;
 }
 $('hall').addEventListener('click', e => { if (e.target.closest('[data-a="close"]')) { toggleHall(false); sfx.play('ui'); } });
@@ -960,13 +978,13 @@ let gateKey = '';
 function updateGateBox(force) {
   const el = $('gatebox');
   const [open, waiting, ready, count] = state.gate;
-  const show = !state.spectator && !state.dead && !open && inGateZone(state.x, state.z);
+  const show = !state.spectator && !state.dead && !open && (inGateZone(state.x, state.z) || inGateZone2(state.x, state.z));
   const key = `${show}|${waiting}|${ready}|${Math.ceil(count)}|${state.meReady}`;
   if (key === gateKey && !force) return;
   gateKey = key;
   el.classList.toggle('hidden', !show);
   if (!show) return;
-  el.innerHTML = `<b>RAID GATE</b><div class="sub">The Horned Warden · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}</div>`
+  el.innerHTML = `<b>RAID GATE</b><div class="sub">${f2.gateText()} · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}</div>`
     + (count > 0 ? `<div class="count">${Math.ceil(count)}</div>` : '')
     + `<button class="${state.meReady ? 'on' : ''}">${state.meReady ? 'Ready ✓' : `Ready${isTouch ? '' : ' (F)'}`}</button>`;
   el.querySelector('button').onclick = interact;
@@ -1068,12 +1086,15 @@ function updateHud(now) {
     return `<div class="frame ${p.dead ? 'dead' : ''}"><div class="row" style="font-size:12px;margin:0"><span>${esc(p.name)}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div></div>`;
   }).join('');
 
-  // boss bar
+  // boss bar (the boss of the floor you're on)
+  const onF2 = state.x > F2.split;
+  if (!boss || !!boss.def.f2 !== onF2) boss = [...mobs.values()].find(m => m.def?.boss && !!m.def.f2 === onF2 && !m.dying) || null;
   const showBoss = boss && (boss.engaged || boss.hp < boss.maxHp) && state.z > 120;
   $('boss').classList.toggle('hidden', !showBoss);
   if (showBoss) {
     setBar($('boss-hp'), (boss.hp / boss.maxHp) * 100); $('boss').classList.toggle('enraged', !!boss.enraged);
-    $('boss-phase').textContent = ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '';
+    const bn = $('boss').querySelector('.boss-name'); if (bn.textContent !== boss.def.name) bn.textContent = boss.def.name;
+    $('boss-phase').textContent = onF2 ? f2.phaseText() : ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '';
   }
 
   // items, raid gate, merchant, guide
@@ -1094,7 +1115,7 @@ function updateHud(now) {
       btn.querySelector('.cd').style.setProperty('--p', `${Math.min(100, (left / CONSUMABLES[id].cd) * 100)}%`);
       continue;
     }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); btn.textContent = a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : state.meReady ? 'Unready' : 'Ready'; continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); btn.textContent = a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'warp' || a === 'stair' ? 'Warp' : state.meReady ? 'Unready' : 'Ready'; continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : CLASSES[state.cls].skills[slot];
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
@@ -1103,7 +1124,7 @@ function updateHud(now) {
   }
 
   const fightingBoss = boss && (boss.engaged || boss.hp < boss.maxHp) && state.z > 150;
-  sfx.setMood(inTown(state.x, state.z) ? 'town' : fightingBoss ? 'boss' : 'field');
+  sfx.setMood(inTown(state.x, state.z) ? 'town' : fightingBoss ? 'boss' : state.x > F2.split ? 'mire' : 'field');
   const a = areaName(state.x, state.z);
   if (a !== state.area) { state.area = a; showArea(a + (inTown(state.x, state.z) ? ' — Safe Zone' : '')); }
 }
@@ -1302,7 +1323,7 @@ function spectatorCamera(dt) {
   for (const p of alive) { ax += p.model.group.position.x; az += p.model.group.position.z; }
   ax /= alive.length; az /= alive.length;
   let foe = null, fd = 16;
-  for (const m of mobs.values()) { const d = Math.hypot(m.x - ax, m.z - az); if (d < fd + (m.type === 'warden' ? 10 : 0)) { fd = d; foe = m; } }
+  for (const m of mobs.values()) { const d = Math.hypot(m.x - ax, m.z - az); if (d < fd + (m.def?.boss ? 10 : 0)) { fd = d; foe = m; } }
   if (foe) { ax = ax * 0.6 + foe.x * 0.4; az = az * 0.6 + foe.z * 0.4; }
   if (!spec.init) { Object.assign(spec, { x: ax, z: az, init: true }); state.yaw = 0; }
   const k = Math.min(1, dt * 2.5);
@@ -1322,7 +1343,7 @@ function spectatorCamera(dt) {
   } else if (Math.hypot(spec.vx, spec.vz) > 1.5) want = Math.atan2(spec.vx, spec.vz);
   const dy = Math.atan2(Math.sin(want - state.yaw), Math.cos(want - state.yaw));
   state.yaw += dy * Math.min(1, dt * 0.9);
-  const big = foe?.type === 'warden';
+  const big = !!foe?.def?.boss;
   state.camDist += ((big ? 19 : foe ? 14 : 13) - state.camDist) * Math.min(1, dt * 1.5);
   state.pitch += ((big ? 0.62 : 0.5) - state.pitch) * Math.min(1, dt * 1.5);
   state.x = spec.x; state.z = spec.z;
@@ -1421,6 +1442,7 @@ function frame(now) {
   fx.update(vdt);
   crystal.rotation.y += vdt;
   gateMesh.update(vdt);
+  f2.update(vdt);
   if (merchantNpc?.anim) merchantNpc.anim.update(vdt);
   if (state.joined && !state.spectator) {
     const ml = $('merchant-lbl'), mp = project(MERCHANT.x, 3.6, MERCHANT.z), md = Math.hypot(state.x - MERCHANT.x, state.z - MERCHANT.z);
