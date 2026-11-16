@@ -1,7 +1,7 @@
 // Authoritative world simulation: players, mobs, the floor boss, combat, XP and parties.
 import {
   WORLD, CLASSES, CLASS_IDS, MOBS, MOB_IDS, MAX_LEVEL, PARTY_MAX, PLAYER_SPEED, SPRINT_SPEED, DODGE, JUMP, SWITCH, BITE, PACK, THORN,
-  GATE, WARDEN, inGateZone, crossesGate, RARE,
+  GATE, WARDEN, inGateZone, crossesGate, RARE, PERFECT, GUARD,
   inTown, inArena, walkable, resolveCollision, rng, angleTo, wrapAngle, xpToNext, statsFor,
 } from '../shared/data.js';
 import {
@@ -9,6 +9,7 @@ import {
 } from '../shared/items.js';
 import { TITLES, newStats, meetsTitle } from '../shared/titles.js';
 import crypto from 'node:crypto';
+import { installCombat } from './combat.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
@@ -135,6 +136,7 @@ export class Game {
       case 'skill': return this.useSkill(p, msg.slot | 0, msg.face);
       case 'dodge': return this.dodge(p, msg.face);
       case 'jump': return this.jump(p);
+      case 'guard': return this.guard(p, msg.on);
       case 'chat': {
         const text = String(msg.text || '').slice(0, 200).trim();
         if (text) this.events.push({ t: 'chat', from: p.name, id: p.id, text });
@@ -475,7 +477,7 @@ export class Game {
   dmgMult(p) { return (this.time < p.dmg.until ? 1 + p.dmg.v : 1) * (this.time < p.tonicUntil ? 1.15 : 1); }
 
   useSkill(p, slot, face) {
-    if (p.dead) return;
+    if (p.dead || p.guarding) return; // a guarding Guardian can't attack
     const sk = CLASSES[p.cls].skills[slot];
     if (!sk || p.lvl < sk.lvl || this.time < p.cds[slot]) return;
     if (typeof face === 'number' && isFinite(face)) p.face = wrapAngle(face);
@@ -541,7 +543,7 @@ export class Game {
           if (perp < 1.2 + m.def.radius && along < bestT) { best = m; bestT = Math.max(0, along); }
         }
         fx('bolt', { x2: r2(p.x + dx * bestT), z2: r2(p.z + dz * bestT) });
-        if (best) this.damageMob(best, p, atk * 1.1, { brk: best.windupAt > 0, interrupt: true });
+        if (best) this.damageMob(best, p, atk * 1.1, { interrupt: best.windupAt > 0 });
         break;
       }
       case 'heal': {
@@ -609,6 +611,8 @@ export class Game {
       if (!m.switched) { mult = SWITCH.first; sw = 1; m.switched = true; } else mult = SWITCH.follow;
       mult *= 1 + (p.swPow || 0);
     }
+    const counter = this.counterHit(p); // perfect-dodge counter window
+    if (counter) mult *= PERFECT.dmg;
     const amount = Math.max(1, Math.round(base * (0.9 + Math.random() * 0.2) * (crit ? 1.5 : 1) * mult));
     m.hp -= amount;
     if (sw) {
@@ -625,14 +629,7 @@ export class Game {
     this.events.push({ t: 'hit', id: m.id, a: amount, c: crit ? 1 : 0, by: p.id, sw, h: heavy ? 1 : 0 });
     if (m.hp <= 0) return this.killMob(m, p);
     if (knock && !m.def.boss && !m.def.ranged) this.knockback(m, p, knock);
-    if (brk && t >= m.staggerUntil && (!m.def.boss || t >= m.staggerCd)) {
-      const dur = m.def.boss ? SWITCH.bossWindow : SWITCH.window;
-      m.staggerUntil = t + dur; m.staggerBy = p.id; m.switched = false;
-      m.stunUntil = Math.max(m.stunUntil, t + dur);
-      m.windupAt = 0; // a break cancels the attack it was winding up
-      if (m.def.boss) m.staggerCd = t + SWITCH.bossCd;
-      this.events.push({ t: 'stagger', id: m.id, by: p.id, d: dur, i: interrupt ? 1 : 0 });
-    }
+    this.addPosture(m, p, amount, { heavy, brk, interrupt, counter }); // full posture = BROKEN (see combat.js)
   }
 
   knockback(m, p, dist) {
@@ -728,12 +725,16 @@ export class Game {
     if (by && this.boss && !this.boss.dead && this.boss.threat.size && inArena(t.x, t.z)) this.boss.contributors.add(by.id);
   }
 
-  damagePlayer(p, base, { ground = false, src = '?' } = {}) {
+  // peril: a perilous attack (Horn Sweep): only dodge i-frames or a parry avoid it; no damage reduction, jumping doesn't help.
+  damagePlayer(p, base, { ground = false, src = '?', peril = false, mob = null } = {}) {
     if (p.dead || inTown(p.x, p.z)) return;
-    if (this.time < p.iframeUntil) { this.events.push({ t: 'evade', id: p.id }); return; }
-    if (ground && this.time >= p.airFrom && this.time < p.airUntil) { this.events.push({ t: 'evade', id: p.id, k: 'jump' }); return; }
-    const dr = Math.min(0.8, (this.time < p.dr.until ? p.dr.v : 0) + (p.gearDr || 0) + (this.time < p.draughtUntil ? 0.15 : 0));
-    const amount = Math.max(1, Math.round(base * (0.9 + Math.random() * 0.2) * (1 - dr)));
+    if (this.time < p.iframeUntil) { this.evadeHit(p, src, mob); return; } // may be a perfect dodge
+    if (ground && !peril && this.time >= p.airFrom && this.time < p.airUntil) { this.events.push({ t: 'evade', id: p.id, k: 'jump' }); return; }
+    const guard = this.guardHit(p, src, mob, peril); // Guardian guard / parry
+    if (guard === 'parry') return;
+    const dr = peril ? 0 : Math.min(0.8, (this.time < p.dr.until ? p.dr.v : 0) + (p.gearDr || 0) + (this.time < p.draughtUntil ? 0.15 : 0));
+    let amount = peril ? Math.round(base) : Math.max(1, Math.round(base * (0.9 + Math.random() * 0.2) * (1 - dr)));
+    if (guard) amount = Math.max(1, Math.round(amount * (1 - GUARD.dr)));
     p.hp -= amount;
     p.lastHurt = this.time; p.lastCombat = this.time;
     this.events.push({ t: 'hurt', id: p.id, a: amount });
@@ -787,6 +788,7 @@ export class Game {
     this.zones = this.zones.filter(zn => t < zn.until);
 
     for (const m of [...this.mobs.values()]) this.updateMob(m, dt);
+    this.updateCombat(dt); // posture decay, Horn Sweep
     this.updateProjectiles(dt);
     this.updateGate();
     this.updateRare();
@@ -913,7 +915,7 @@ export class Game {
       const d = dist(m, p);
       if (d > reach + 0.4) continue;
       if (d > m.def.radius + 0.6 && Math.abs(wrapAngle(angleTo(m.x, m.z, p.x, p.z) - m.face)) > half) continue;
-      this.damagePlayer(p, atk, { src: `${m.type} bite` });
+      this.damagePlayer(p, atk, { src: `${m.type} bite`, mob: m });
     }
   }
 
@@ -1152,7 +1154,7 @@ export class Game {
     const mobs = [];
     for (const m of this.mobs.values()) {
       if (m.dead) continue;
-      mobs.push([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase >= 2 ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0) | (m.windupAt ? 16 : 0) | (this.time < m.staggerUntil ? 32 : 0) | (this.time < m.frenzyUntil ? 64 : 0)]);
+      mobs.push([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase >= 2 ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0) | (m.windupAt ? 16 : 0) | (this.time < m.staggerUntil ? 32 : 0) | (this.time < m.frenzyUntil ? 64 : 0), this.posturePct(m)]);
     }
     const g = this.gate;
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
@@ -1177,3 +1179,5 @@ export class Game {
     return [...this.players.values()].map(p => ({ id: p.id, name: p.name, cls: p.cls, title: p.stats?.activeTitle || null }));
   }
 }
+
+installCombat(Game); // posture, perfect dodge, guard/parry, Horn Sweep (server/combat.js)

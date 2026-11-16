@@ -103,7 +103,7 @@ export const CLASSES = {
       { id: 'slash', name: 'Slash', cd: 0.55, lvl: 1, desc: '3-hit combo; the third swing hits harder and knocks back.' },
       { id: 'rush', name: 'Rush', cd: 6, lvl: 1, desc: 'Dash forward, striking everything in your path.' },
       { id: 'whirl', name: 'Whirl', cd: 8, lvl: 1, desc: 'Spin and hit everything around you.' },
-      { id: 'burst', name: 'Burst Combo', cd: 14, lvl: 3, desc: '4-hit sword skill. The finisher BREAKS the target, opening a Switch.', brk: true },
+      { id: 'burst', name: 'Burst Combo', cd: 14, lvl: 3, desc: '4-hit sword skill. The finisher deals heavy posture damage: fill it to BREAK the target and open a Switch.', brk: true },
     ],
   },
   guardian: {
@@ -113,14 +113,14 @@ export const CLASSES = {
       { id: 'bash', name: 'Bash', cd: 0.7, lvl: 1, desc: '3-hit combo with extra threat; the third hit knocks back.' },
       { id: 'taunt', name: 'Taunt', cd: 10, lvl: 1, desc: 'Pull nearby enemies onto you; take 30% less damage for 4s.' },
       { id: 'wall', name: 'Shield Wall', cd: 14, lvl: 1, desc: 'Take 60% less damage for 4s.' },
-      { id: 'gslam', name: 'Ground Slam', cd: 12, lvl: 3, desc: 'Area hit that BREAKS enemies, opening a Switch.', brk: true },
+      { id: 'gslam', name: 'Ground Slam', cd: 12, lvl: 3, desc: 'Area hit with heavy posture damage: fill it to BREAK enemies and open a Switch.', brk: true },
     ],
   },
   cleric: {
     name: 'Cleric', role: 'Healer', hp: 85, atk: 9, color: 0x22c55e,
     blurb: 'Heals and buffs allies, smites from range.',
     skills: [
-      { id: 'smite', name: 'Smite', cd: 0.8, lvl: 1, desc: 'Ranged bolt. Hitting an enemy mid wind-up interrupts and BREAKS it.' },
+      { id: 'smite', name: 'Smite', cd: 0.8, lvl: 1, desc: 'Ranged bolt. Hitting an enemy mid wind-up interrupts it and deals big posture damage.' },
       { id: 'heal', name: 'Heal', cd: 4, lvl: 1, desc: 'Heal the most hurt ally nearby.' },
       { id: 'bless', name: 'Blessing', cd: 20, lvl: 1, desc: 'Allies nearby deal 25% more damage for 8s.' },
       { id: 'sanct', name: 'Sanctuary', cd: 18, lvl: 3, desc: 'Healing circle for 5s.' },
@@ -173,3 +173,28 @@ export function statsFor(cls, lvl) {
   const c = CLASSES[cls];
   return { maxHp: Math.round(c.hp * (1 + 0.1 * (lvl - 1))), atk: c.atk * (1 + 0.08 * (lvl - 1)) };
 }
+
+// ---------- combat core: posture, perfect dodge, guard/parry, perilous attacks ----------
+// Posture (break meter): every hit fills it; when full the enemy is BROKEN (staggered, Switch window) and it resets.
+// Max posture is a fraction of max HP by tier (a mob def can override it with `posture: N`).
+export const POSTURE = {
+  frac: { normal: 0.6, elite: 0.4, boss: 0.35 },
+  heavy: 2,                       // heavy hits / combo finishers fill posture this many times faster
+  // Big chunks, as a fraction of max posture: [normal / elite, boss]
+  brk: [0.55, 0.2],               // Break skills (Burst Combo finisher, Ground Slam)
+  smite: [0.4, 0.15],             // Smite landing while the enemy winds up an attack
+  perfect: [0.5, 0.15],           // a perfect dodge against its attack
+  parry: [0.6, 0.22],             // a Guardian parry
+  decayAfter: 2.5,                // seconds without being hit before posture drains
+  decay: [0.15, 0.05],            // fraction of max drained per second
+};
+export function postureMax(def, maxHp = def.hp) {
+  if (def.posture) return def.boss ? def.posture * (maxHp / def.hp) : def.posture;
+  return Math.max(10, Math.round(maxHp * POSTURE.frac[def.boss ? 'boss' : def.elite ? 'elite' : 'normal']));
+}
+// Perfect dodge: the roll started at most `window` s before the hit landed.
+export const PERFECT = { window: 0.2, counter: 1.5, dmg: 1.5, posture: 2 };
+// Guardian guard (hold R): frontal hits (within `arc` rad of facing) take `dr` less damage; a press <= `parry` s before a hit negates it.
+export const GUARD = { arc: (70 * Math.PI) / 180, dr: 0.7, parry: 0.2, speed: 0.5, repress: 0.6 };
+// The Warden's perilous Horn Sweep: dodge (i-frames) or parry it; shields, guard, gear and jumping don't help.
+export const SWEEP = { r: 9, wind: 0.9, frac: 0.8, every: [18, 13, 10], first: 12 };
