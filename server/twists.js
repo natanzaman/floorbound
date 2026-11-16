@@ -137,7 +137,7 @@ export const TwistMethods = {
     const W = (this.twistW || WARDEN).charge, delay = W.wind + 0.45 + TWISTS.twinhorns.gap;
     m.busyUntil = Math.max(m.busyUntil || 0, this.time + delay + 0.1);
     this.schedule(delay, () => {
-      if (m.dead || !m.engaged) return;
+      if (m.dead || !m.engaged || this.time < m.stunUntil) return; // a Break cancels the second horn
       const fighters = [...this.players.values()].filter(p => !p.dead && inArena(p.x, p.z));
       const others = fighters.filter(p => p !== v);
       const pool = others.length ? others : fighters;

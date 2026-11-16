@@ -4,52 +4,60 @@
 
 export const TWISTS = {
   packmaster: {
-    name: 'Packmaster', color: '#f97316',
+    name: 'Packmaster', color: '#fb923c',
     desc: 'Hounds from the first second, up to 5 at once, and they frenzy on the Warden\'s howl.',
+    short: 'Hounds from the start, up to 5, frenzied',
     reward: { loot: 1 },
     hounds0: { first: 4, every: 20, n: 2 },     // phase-1 hounds (before the usual phase-2 pack)
     hounds: { every: 18, n: 3, max: 5 },        // replaces WARDEN.hounds
     frenzy: { first: 10, every: 14, d: 5 },
   },
   twinhorns: {
-    name: 'Twin Horns', color: '#ef4444',
+    name: 'Twin Horns', color: '#fca5a5',
     desc: 'Horn charges come in pairs (the second re-aims at someone new) and start in phase 1.',
+    short: 'Horn charges in pairs, from phase 1',
     reward: { gold: 0.5 },
     first: 7, gap: 0.15,                        // first charge (s after engage), pause between the pair
   },
   quaking: {
-    name: 'Quaking', color: '#d97706',
+    name: 'Quaking', color: '#fbbf24',
     desc: 'Every ground slam leaves cracked ground for 6 s. Standing in it hurts.',
+    short: 'Slams leave cracked ground: step out',
     reward: { gold: 0.5 },
     crack: { d: 6, rk: 0.75, tick: 0.5, mult: 0.3 }, // duration, radius vs slam, tick, damage per tick (x Warden atk)
   },
   thornbound: {
-    name: 'Thornbound', color: '#65a30d',
+    name: 'Thornbound', color: '#a3e635',
     desc: 'The Warden raises Thorn Totems at the chamber edge. They shoot thorns until you break them.',
+    short: 'Thorn Totems at the edge: break them',
     reward: { loot: 1 },
     totems: { first: 8, every: 24, n: 2, max: 3, life: 45, dist: 17.5 },
   },
   ironhide: {
-    name: 'Ironhide', color: '#94a3b8',
+    name: 'Ironhide', color: '#cbd5e1',
     desc: 'Takes 40% less damage unless Broken. Broken windows last longer: Break it, then Switch.',
+    short: '40% less damage unless Broken',
     reward: { loot: 1 },
     taken: 0.6, breakBonus: 1.6,                // damage taken outside a Break; seconds added to each boss Break
   },
   berserk: {
-    name: 'Berserk', color: '#dc2626',
+    name: 'Berserk', color: '#f87171',
     desc: 'Enraged from the start: every phase-3 attack at once, but 25% less health.',
+    short: 'Enraged from the start, 25% less health',
     reward: { loot: 1, gold: 0.5 },
     hp: 0.75,
   },
   eclipse: {
-    name: 'Eclipse', color: '#818cf8',
+    name: 'Eclipse', color: '#a5b4fc',
     desc: 'The chamber goes dark and every telegraph gives 25% less warning.',
+    short: 'Darkness, faster telegraphs',
     reward: { loot: 2, gold: 1 },
     wind: 0.75,
   },
   echo: {
-    name: 'Echo', color: '#a855f7',
+    name: 'Echo', color: '#d8b4fe',
     desc: 'Every slam and rockfall strikes again in the same spot 1.5 s later.',
+    short: 'Slams and rockfall strike twice',
     reward: { loot: 1 },
     delay: 1.5,
   },

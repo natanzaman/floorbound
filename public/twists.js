@@ -51,8 +51,8 @@ export class TwistClient {
       el.style.cssText = 'margin-top:2px;letter-spacing:.08em;text-shadow:0 1px 2px #000';
       phaseEl.after(el);
     }
-    const T = this.def, txt = T ? `TWIST · ${T.name.toUpperCase()} — ${T.desc}` : '';
-    if (el.dataset.t !== txt) { el.dataset.t = txt; el.textContent = txt; el.style.color = T?.color || ''; }
+    const T = this.def, txt = T ? `TWIST · ${T.name.toUpperCase()} · ${T.short}` : '';
+    if (el.dataset.t !== txt) { el.dataset.t = txt; el.textContent = txt; el.title = T?.desc || ''; el.style.color = T?.color || ''; }
   }
 
   // 'tele' events this module draws itself (true = handled, skip the default red telegraph)

@@ -1063,7 +1063,7 @@ export class Game {
       // Hounds join the fight
       if (t >= m.houndT) {
         m.houndT = t + W.hounds.every;
-        let alive = 0; for (const h of this.mobs.values()) if (h.temp && !h.dead) alive++;
+        let alive = 0; for (const h of this.mobs.values()) if (h.temp && !h.totem && !h.dead) alive++; // (Thorn Totems don't count)
         for (let i = 0; i < W.hounds.n && alive < W.hounds.max; i++, alive++) {
           const a = Math.random() * Math.PI * 2;
           const h = this.addMob('hound', WORLD.arena.x + Math.sin(a) * 18, WORLD.arena.z + Math.cos(a) * 18);
