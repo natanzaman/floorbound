@@ -2,6 +2,8 @@
 
 export const TICK_RATE = 20;
 export const PLAYER_SPEED = 7;
+export const SPRINT_SPEED = 10; // automatic when out of combat for a few seconds
+export const SPRINT_AFTER = 3;   // seconds without dealing or taking damage
 export const PLAYER_RADIUS = 0.5;
 export const MAX_LEVEL = 10;
 export const PARTY_MAX = 6;
@@ -88,7 +90,7 @@ export const CLASSES = {
     name: 'Swordsman', role: 'Damage', hp: 100, atk: 12, color: 0x3b82f6,
     blurb: 'Fast blade combos and dashes. Hits hard, takes hits poorly.',
     skills: [
-      { id: 'slash', name: 'Slash', cd: 0.55, lvl: 1, desc: 'Frontal sword arc.' },
+      { id: 'slash', name: 'Slash', cd: 0.55, lvl: 1, desc: '3-hit combo; the third swing hits harder and knocks back.' },
       { id: 'rush', name: 'Rush', cd: 6, lvl: 1, desc: 'Dash forward, striking everything in your path.' },
       { id: 'whirl', name: 'Whirl', cd: 8, lvl: 1, desc: 'Spin and hit everything around you.' },
       { id: 'burst', name: 'Burst Combo', cd: 14, lvl: 3, desc: '4-hit sword skill. The finisher BREAKS the target, opening a Switch.', brk: true },
@@ -98,7 +100,7 @@ export const CLASSES = {
     name: 'Guardian', role: 'Tank', hp: 150, atk: 8, color: 0xf59e0b,
     blurb: 'Sword and shield. Holds aggro and keeps the party alive.',
     skills: [
-      { id: 'bash', name: 'Bash', cd: 0.7, lvl: 1, desc: 'Frontal strike with extra threat.' },
+      { id: 'bash', name: 'Bash', cd: 0.7, lvl: 1, desc: '3-hit combo with extra threat; the third hit knocks back.' },
       { id: 'taunt', name: 'Taunt', cd: 10, lvl: 1, desc: 'Pull nearby enemies onto you; take 30% less damage for 4s.' },
       { id: 'wall', name: 'Shield Wall', cd: 14, lvl: 1, desc: 'Take 60% less damage for 4s.' },
       { id: 'gslam', name: 'Ground Slam', cd: 12, lvl: 3, desc: 'Area hit that BREAKS enemies, opening a Switch.', brk: true },

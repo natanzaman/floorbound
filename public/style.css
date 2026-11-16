@@ -164,3 +164,10 @@ input { font: inherit; }
   text-shadow: 0 0 18px rgba(250,204,21,.7), 0 3px 8px #000; transition: opacity .15s, transform .15s; white-space: nowrap; }
 #callout small { display: block; font-size: 38%; letter-spacing: .04em; font-weight: 700; color: #fff; margin-top: 2px; }
 #callout.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+#sound-btn { right: 110px; }
+.touch #sound-btn { right: 190px; }
+#lock-btn { display: none; }
+.touch #lock-btn { display: block; top: auto; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 150px); right: max(12px, env(safe-area-inset-right)); }
+.spectator #sound-btn { right: 10px; }
+.spectator #lock-btn { display: none !important; }

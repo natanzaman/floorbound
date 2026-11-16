@@ -1,10 +1,13 @@
 // Floorbound browser client: networking, input, camera, entities and HUD.
 import * as THREE from 'three';
 import {
-  CLASSES, CLASS_IDS, MOBS, MOB_IDS, PLAYER_SPEED, TICK_RATE, MAX_LEVEL, DODGE,
+  CLASSES, CLASS_IDS, MOBS, MOB_IDS, PLAYER_SPEED, SPRINT_SPEED, SPRINT_AFTER, TICK_RATE, MAX_LEVEL, DODGE,
   walkable, resolveCollision, inTown, inArena, areaName, angleTo,
 } from '/shared/data.js';
 import { createWorld, makePlayerModel, makeMobModel, Effects, loadAssets } from '/world.js';
+import { Sound } from '/audio.js';
+
+const sfx = new Sound();
 
 const $ = id => document.getElementById(id);
 const SPECTATE = new URLSearchParams(location.search).has('spectate');
@@ -34,7 +37,7 @@ addEventListener('resize', resize); resize();
 const state = {
   ws: null, myId: 0, seq: 0, x: 0, z: 0, face: 0, cls: 'swordsman', lvl: 1, hp: 1, maxHp: 1, xp: 0, next: 50,
   dead: false, party: 0, joined: false, yaw: 0, pitch: 0.5, camDist: 11,
-  ready: [0, 0, 0, 0], lastPress: [0, 0, 0, 0], dodgeReady: 0, dodgePress: 0, roll: null, moveDir: null, roster: new Map(), area: '', invite: null,
+  ready: [0, 0, 0, 0], lastPress: [0, 0, 0, 0], dodgeReady: 0, dodgePress: 0, roll: null, moveDir: null, lastCombat: -1e9, speed: 0, lock: 0, roster: new Map(), area: '', invite: null,
 };
 const players = new Map(); // id -> entity
 const mobs = new Map();
@@ -60,6 +63,7 @@ $('enter').onclick = join;
 $('name').addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
 
 async function join() {
+  sfx.unlock();
   await assetsReady;
   if (state.ws) return;
   const name = $('name').value.trim() || `Hero${Math.floor(Math.random() * 900 + 100)}`;
@@ -91,7 +95,7 @@ function onMessage(msg) {
     $('login').classList.add('hidden'); $('hud').classList.remove('hidden');
     buildSkillBar();
     log('Welcome to Floorbound! Head north through the field and defeat the Horned Warden.', 'sys');
-    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills and dodge.' : 'WASD move · drag to look · Space/J attack · 1 2 3 skills · Shift dodge · Enter chat', 'sys');
+    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills and dodge.' : 'WASD move · drag to look · Space/J attack · 1 2 3 skills · Shift dodge · Tab lock-on · Enter chat', 'sys');
     log('Break an enemy (Ground Slam, Burst Combo finisher, or Smite during its wind-up), then a teammate hits it for a SWITCH: big bonus damage.', 'sys');
     return;
   }
@@ -153,6 +157,16 @@ function handleEvent(e) {
       const ent = players.get(e.id) || mobs.get(e.id);
       if (ent && players.has(e.id) && ['arc', 'rush', 'ring', 'bolt'].includes(e.k)) ent.swing = 0.3;
       if (e.s) playSkillAnim(players.get(e.k === 'heal' ? e.by : e.id), e.s, e.n);
+      const at = { x: e.x, z: e.z }, mineFx = e.id === me || e.by === me ? 1 : 0.6;
+      if (e.k === 'arc' && !e.fin && e.c !== 'gold') sfx.play('swing', at, mineFx);
+      else if (e.k === 'arc' || (e.k === 'ring' && e.c !== 'light')) sfx.play('swingHeavy', at, mineFx);
+      else if (e.k === 'rush') sfx.play('roll', at, mineFx);
+      else if (e.k === 'bolt') sfx.play('bolt', at, mineFx);
+      else if (e.k === 'heal') sfx.play('heal', at, mineFx);
+      else if (e.k === 'zone' || (e.k === 'ring' && e.c === 'light')) sfx.play('spell', at, mineFx);
+      else if (e.k === 'shield') sfx.play('shield', at, mineFx);
+      else if (e.k === 'marc') sfx.play('swingHeavy', at, 1.3);
+      else if (e.k === 'boom') sfx.play('boom', at, 1.2);
       const ox = e.id === me ? state.x : e.x, oz = e.id === me ? state.z : e.z;
       if (e.k === 'arc') fx.arc(ox, oz, e.f, e.r, e.r > 3 ? 0.9 : 1.05, e.c === 'gold' ? 0xfde68a : 0xdbeafe);
       else if (e.k === 'ring') fx.ring(ox, oz, e.r, e.c === 'gold' ? 0xfbbf24 : e.c === 'light' ? 0xfef3c7 : 0xbfdbfe, e.r > 10 ? 0.6 : 0.35);
@@ -166,15 +180,17 @@ function handleEvent(e) {
     }
     case 'roll': {
       const p = players.get(e.id);
+      if (p) sfx.play('roll', p.model.group.position, e.id === me ? 1 : 0.6);
       if (p) { p.model.anim?.shot('Dodge_Forward', 1.9); fx.ring(p.model.group.position.x, p.model.group.position.z, 1.2, 0xe5e7eb, 0.3); }
       break;
     }
-    case 'evade': { const p = players.get(e.id); if (p && (e.id === me || state.spectator)) floatNum(p.model.group.position, 2.4, 'Dodged!', 'evade'); break; }
+    case 'evade': { const p = players.get(e.id); if (p && (e.id === me || state.spectator)) { floatNum(p.model.group.position, 2.4, 'Dodged!', 'evade'); sfx.play('evade', p.model.group.position); } break; }
     case 'stagger': {
       const m = mobs.get(e.id);
       if (!m) break;
       m.staggerT = e.d; m.staggerBy = e.by;
       fx.ring(m.x, m.z, m.def.radius + 2.5, 0xfacc15, 0.5);
+      sfx.play('break', m.model.group.position);
       m.model.anim?.shot('Hit_B', 0.9);
       const who = players.get(e.by)?.name || 'Someone';
       if (state.spectator) callout(`${e.i ? 'INTERRUPT' : 'BREAK'}!`, `${who} broke the ${m.def.name} — Switch in!`, e.d);
@@ -187,15 +203,20 @@ function handleEvent(e) {
       if (m) {
         floatNum(m.model.group.position, m.model.height * 0.85, `SWITCH! ${e.a}`, 'switch');
         fx.ring(m.x, m.z, m.def.radius + 4, 0xfde047, 0.6); fx.ring(m.x, m.z, m.def.radius + 1.5, 0xffffff, 0.4);
-        shake(0.3);
+        shake(0.3); sfx.play('switch', m.model.group.position); hitStop = Math.max(hitStop, 0.14);
         const a = players.get(e.from)?.name, b = players.get(e.by)?.name;
         if (a && b) callout('SWITCH!', `${a} ⇄ ${b}`, 1.3);
       }
       break;
     }
-    case 'wind': { const m = mobs.get(e.id); if (m) { m.wind = e.d; m.model.anim?.shot('2H_Melee_Attack_Chop', 1.4); } break; }
+    case 'wind': {
+      const m = mobs.get(e.id);
+      if (m) { m.wind = e.d; m.model.anim?.shot('2H_Melee_Attack_Chop', 1.4); if (m.type === 'wolf' && Math.random() < 0.4) sfx.play('growl', m.model.group.position, 0.7); }
+      break;
+    }
     case 'tele':
       fx.telegraph(e.x, e.z, e.r, e.d, e.follow ? () => mobs.get(e.follow)?.model.group.position : null);
+      sfx.play('warn', { x: e.x, z: e.z });
       if (boss) bossShot(boss.id, e.follow ? '2H_Melee_Attack_Spin' : '2H_Melee_Attack_Slice', 1.2, Math.max(0, e.d - 0.55));
       break;
     case 'buff': {
@@ -211,6 +232,14 @@ function handleEvent(e) {
       if (m && !e.sw) {
         m.flash = 0.08;
         const mine = e.by === me || state.spectator;
+        sfx.play(e.h ? 'hitHeavy' : e.c ? 'crit' : 'hit', m.model.group.position, e.by === me ? 1 : 0.55);
+        if (e.by === me) {
+          state.lastCombat = performance.now();
+          hitStop = Math.max(hitStop, e.h ? 0.1 : e.c ? 0.07 : 0.04);
+          if (e.h) shake(0.18);
+          // knockback lands a little quicker than normal interpolation
+          if (e.h && m.type !== 'warden') m.punch = 0.25;
+        }
         floatNum(m.model.group.position, m.model.height * 0.7, e.c ? `${e.a}!` : `${e.a}`, e.c ? 'crit' : '', mine ? 1 : 0.55);
       }
       break;
@@ -218,6 +247,7 @@ function handleEvent(e) {
     case 'hurt': {
       const p = players.get(e.id);
       if (p) { p.flash = 0.15; const a = p.model.anim; if (a && !a.busy() && !a.dead) a.shot('Hit_A', 1.8);
+        if (e.id === me) { state.lastCombat = performance.now(); sfx.play('hurt'); }
         if (e.id === me || state.spectator) floatNum(p.model.group.position, 2.2, `-${e.a}`, 'hurt'); if (e.id === me) shake(0.15); }
       break;
     }
@@ -230,10 +260,12 @@ function handleEvent(e) {
     case 'lvl': {
       const p = players.get(e.id);
       if (p) fx.ring(p.model.group.position.x, p.model.group.position.z, 3, 0xfde68a, 0.8);
-      if (e.id === me) { banner(`LEVEL UP`, `You are now level ${e.lvl}`); buildSkillBar(e.lvl); }
+      if (e.id === me) { banner(`LEVEL UP`, `You are now level ${e.lvl}`); buildSkillBar(e.lvl); sfx.play('levelup'); }
       break;
     }
     case 'die': {
+      sfx.play('shatter', { x: e.x, z: e.z });
+      if (state.lock === e.id) state.lock = 0;
       const bm = mobs.get(e.id);
       if (bm?.model.anim && !bm.dying) { // the boss collapses first, then shatters
         bm.dying = true; bm.model.anim.die();
@@ -249,8 +281,8 @@ function handleEvent(e) {
       break;
     }
     case 'pdie': { if (e.id === me) $('dead').classList.remove('hidden'); break; }
-    case 'enrage': if (boss) bossShot(boss.id, 'Cheer', 1.2); banner('THE WARDEN IS ENRAGED', 'Watch for the spin — get out of the red circle'); break;
-    case 'clear': banner('FLOOR 1 CLEARED', e.names.join(' · ')); break;
+    case 'enrage': if (boss) { bossShot(boss.id, 'Cheer', 1.2); sfx.play('roar', boss.model.group.position, 1.4); } banner('THE WARDEN IS ENRAGED', 'Watch for the spin — get out of the red circle'); break;
+    case 'clear': sfx.play('clear'); banner('FLOOR 1 CLEARED', e.names.join(' · ')); break;
     case 'invite': if (e.to === me) showInvite(e.from, e.name); break;
     case 'chat': log(`${e.from}: ${e.text}`, e.id === me ? 'me' : ''); break;
     case 'sys': if (!e.to || e.to === me) log(e.text, 'sys'); break;
@@ -259,11 +291,11 @@ function handleEvent(e) {
 
 // ---------------- character animation ----------------
 const SKILL_ANIM = {
-  slash: [['1H_Melee_Attack_Slice_Diagonal', 1.9], ['1H_Melee_Attack_Slice_Horizontal', 1.9], ['1H_Melee_Attack_Chop', 1.9]],
+  slash: [['1H_Melee_Attack_Slice_Diagonal', 2.0], ['1H_Melee_Attack_Slice_Horizontal', 2.0], ['1H_Melee_Attack_Chop', 1.6]],
   rush: [['1H_Melee_Attack_Stab', 1.6]],
   whirl: [['2H_Melee_Attack_Spin', 1.5]],
   burst: [['1H_Melee_Attack_Slice_Diagonal', 2.6], ['1H_Melee_Attack_Slice_Horizontal', 2.6], ['1H_Melee_Attack_Chop', 2.6], ['1H_Melee_Attack_Stab', 1.8]],
-  bash: [['1H_Melee_Attack_Chop', 1.7], ['1H_Melee_Attack_Slice_Diagonal', 1.7]],
+  bash: [['1H_Melee_Attack_Slice_Diagonal', 1.8], ['1H_Melee_Attack_Slice_Horizontal', 1.8], ['Block_Attack', 1.5]],
   taunt: [['Cheer', 1.6]],
   wall: [['Block', 1]],
   gslam: [['2H_Melee_Attack_Chop', 1.6]],
@@ -340,6 +372,8 @@ addEventListener('keydown', e => {
   if (k === ' ' || k === 'j') { attackHeld = true; e.preventDefault(); }
   if (k === '1' || k === '2' || k === '3') useSkill(+k);
   if (k === 'shift' || k === 'k') dodge();
+  if (k === 'tab') { e.preventDefault(); cycleLock(); }
+  if (k === 'escape') state.lock = 0;
   if (k === 'p') $('players-btn').click();
 });
 addEventListener('keyup', e => {
@@ -411,6 +445,29 @@ function buildSkillBar(lvl = state.lvl) {
   }
 }
 
+// ---------- lock-on ----------
+const lockRing = new THREE.Mesh(new THREE.RingGeometry(1, 1.15, 40), new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+lockRing.rotation.x = -Math.PI / 2; lockRing.visible = false; scene.add(lockRing);
+function cycleLock() {
+  const fy = state.yaw, fx0 = Math.sin(fy), fz0 = Math.cos(fy);
+  const list = [...mobs.values()]
+    .filter(m => !m.dying && Math.hypot(m.x - state.x, m.z - state.z) < 25)
+    .map(m => {
+      const dx = m.x - state.x, dz = m.z - state.z, d = Math.hypot(dx, dz) || 1;
+      return { m, score: d * (1.6 - (dx * fx0 + dz * fz0) / d) }; // prefer close and in front of the camera
+    })
+    .sort((a, b) => a.score - b.score).map(o => o.m);
+  if (!list.length) { state.lock = 0; return; }
+  const i = list.findIndex(m => m.id === state.lock);
+  state.lock = i === -1 ? list[0].id : (i + 1 < list.length ? list[i + 1].id : 0);
+  sfx.play('ui');
+}
+function lockedMob() {
+  const m = state.lock && mobs.get(state.lock);
+  if (!m || m.dying || Math.hypot(m.x - state.x, m.z - state.z) > 35) { state.lock = 0; return null; }
+  return m;
+}
+
 function dodge() {
   const now = performance.now();
   if (state.dead || !state.joined || state.spectator || state.roll || now < state.dodgeReady) return;
@@ -445,7 +502,8 @@ function useSkill(slot) {
   if (!sk || state.lvl < sk.lvl || now < state.ready[slot]) return;
   const auto = ['slash', 'bash', 'rush', 'smite', 'burst'].includes(sk.id);
   if (auto) {
-    const t = nearestMob(sk.id === 'smite' ? 11 : sk.id === 'rush' ? 9 : 6);
+    const lm = lockedMob();
+    const t = lm && Math.hypot(lm.x - state.x, lm.z - state.z) < 14 ? lm : nearestMob(sk.id === 'smite' ? 11 : sk.id === 'rush' ? 9 : 6);
     if (t) state.face = angleTo(state.x, state.z, t.x, t.z);
   }
   state.ready[slot] = now + sk.cd * 1000;
@@ -474,6 +532,10 @@ function showArea(name) {
   clearTimeout(areaT); areaT = setTimeout(() => $('area').classList.remove('show'), 2600);
 }
 
+$('sound-btn').textContent = sfx.on ? 'Sound on' : 'Sound off';
+$('sound-btn').onclick = () => { sfx.unlock(); $('sound-btn').textContent = sfx.toggle() ? 'Sound on' : 'Sound off'; };
+$('lock-btn').onpointerdown = e => { e.preventDefault(); cycleLock(); };
+canvas.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
 $('chat-btn').onclick = () => { const t = prompt('Say something'); if (t && t.trim()) send({ type: 'chat', text: t.trim() }); };
 $('players-btn').onclick = () => { $('players').classList.toggle('hidden'); renderPlayers(); };
 function renderPlayers() {
@@ -542,6 +604,8 @@ function updateHud(now) {
     btn.querySelector('.cdt').textContent = left > 0.3 && slot > 0 && !isDodge ? left.toFixed(left < 3 ? 1 : 0) : '';
   }
 
+  const fightingBoss = boss && (boss.engaged || boss.hp < boss.maxHp) && state.z > 150;
+  sfx.setMood(inTown(state.x, state.z) ? 'town' : fightingBoss ? 'boss' : 'field');
   const a = areaName(state.x, state.z);
   if (a !== state.area) { state.area = a; showArea(a + (inTown(state.x, state.z) ? ' — Safe Zone' : '')); }
 }
@@ -575,8 +639,11 @@ function animateEntity(e, dt) {
   const k = Math.min(1, dt * (self ? 25 : 12));
   const px = g.position.x, pz = g.position.z;
   const tx = self ? e.x : e.tx, tz = self ? e.z : e.tz;
+  if (e.punch > 0) e.punch -= dt;
+  const kk = e.punch > 0 ? Math.min(1, dt * 22) : k;
   if (Math.hypot(tx - px, tz - pz) > 15) g.position.set(tx, 0, tz);
-  else { g.position.x += (tx - px) * k; g.position.z += (tz - pz) * k; }
+  else if (e.punch > 0) { g.position.x += (tx - px) * kk; g.position.z += (tz - pz) * kk; }
+  else if (!(e.punch > 0)) { g.position.x += (tx - px) * k; g.position.z += (tz - pz) * k; }
   if (!self) { e.x = g.position.x; e.z = g.position.z; }
   const speed = Math.hypot(g.position.x - px, g.position.z - pz) / Math.max(dt, 1e-3);
   let df = e.tface - g.rotation.y; df = Math.atan2(Math.sin(df), Math.cos(df));
@@ -591,7 +658,7 @@ function animateEntity(e, dt) {
     if (e.spd > (isP ? 3.5 : 4.6)) a.base('Running_A', 0.2, Math.max(0.7, e.spd / (isP ? 6.5 : 5.5)));
     else if (e.spd > 0.5) a.base('Walking_A', 0.2, isP ? 1.2 : Math.max(0.6, e.spd / 3.5));
     else a.base(a.idle, 0.25);
-    a.update(dt);
+    a.update(hitStop > 0 ? dt * 0.08 : dt);
     if (isP) m.cursor.material.color.setHex(state.party && e.party === state.party && !self ? 0xa78bfa : 0x4ade80);
     else m.cursor.rotation.y += dt * 2;
     m.cursor.visible = !(isP && e.dead);
@@ -693,9 +760,19 @@ function spectatorCamera(dt) {
   return [spec.x, spec.z];
 }
 
+let hitStop = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  hitStop = Math.max(0, hitStop - dt);
+  const lm = state.joined && !state.spectator ? lockedMob() : null;
+  if (lm) { // ease the camera round to keep the locked target in view
+    const want = Math.atan2(lm.x - state.x, lm.z - state.z);
+    state.yaw += Math.atan2(Math.sin(want - state.yaw), Math.cos(want - state.yaw)) * Math.min(1, dt * 3);
+    const gp = lm.model.group.position;
+    lockRing.visible = true; lockRing.position.set(gp.x, 0.12, gp.z);
+    lockRing.scale.setScalar(lm.def.radius + 0.6); lockRing.rotation.z += dt * 1.5;
+  } else lockRing.visible = false;
 
   if (state.joined && !state.dead && !state.spectator) {
     // movement input
@@ -728,7 +805,10 @@ function frame(now) {
       const fwd = [Math.sin(fy), Math.cos(fy)], right = [-Math.cos(fy), Math.sin(fy)];
       let mx = fwd[0] * iz + right[0] * ix, mz = fwd[1] * iz + right[1] * ix;
       const ml = Math.hypot(mx, mz); mx /= ml; mz /= ml;
-      const step = PLAYER_SPEED * mag * dt;
+      const sprint = performance.now() - state.lastCombat > SPRINT_AFTER * 1000;
+      const want = (sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag;
+      state.speed += (want - state.speed) * Math.min(1, dt * (want > state.speed ? 3 : 10));
+      const step = state.speed * dt;
       let nx = state.x + mx * step, nz = state.z + mz * step;
       [nx, nz] = resolveCollision(nx, nz);
       if (!walkable(nx, nz)) { // slide along the boundary
@@ -736,7 +816,7 @@ function frame(now) {
       }
       state.x = nx; state.z = nz;
       state.face = Math.atan2(mx, mz);
-    }
+    } else state.speed = 0;
     if (attackHeld && !state.roll) useSkill(0);
   }
 
@@ -773,6 +853,7 @@ function frame(now) {
   }
   sun.position.set(cx + 30, 60, cz - 20); sun.target.position.set(cx, 0, cz);
   if (state.joined) treeFader.update(dt, camera.position, cx, cz);
+  sfx.listener.x = cx; sfx.listener.z = cz;
 
   // floating numbers
   for (let i = nums.length - 1; i >= 0; i--) {
