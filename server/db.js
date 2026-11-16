@@ -20,6 +20,9 @@ export const q = (text, params) => pool.query(text, params).then(r => r.rows);
 
 export async function migrate() {
   if (!enabled) return;
+  let host = '?';
+  try { host = new URL(cleanUrl).hostname || 'local socket'; } catch { host = 'unreadable DATABASE_URL (expected postgresql://...)'; }
+  console.log(`Connecting to database at ${host}`);
   try { await setup(); console.log('Database connected.'); }
   catch (err) { // keep the game up without accounts rather than crash-looping
     console.error('Database unavailable, running without accounts:', err.message);
