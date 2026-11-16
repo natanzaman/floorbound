@@ -58,25 +58,103 @@ renderClasses();
 $('enter').disabled = true;
 const assetsReady = loadAssets(p => { $('enter').textContent = `Loading characters… ${Math.round(p * 100)}%`; })
   .catch(err => console.error('Model load failed, using block characters', err))
-  .finally(() => { $('enter').textContent = 'Enter the Tower'; $('enter').disabled = false; if (SPECTATE) join(); });
-$('enter').onclick = join;
-$('name').addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
+  .finally(() => { $('enter').disabled = false; if (SPECTATE) join({ type: 'spectate' }); else initLogin(); });
+$('enter').onclick = () => onEnter();
+$('name').addEventListener('keydown', e => { if (e.key === 'Enter') onEnter(); });
 
-async function join() {
+// ---------------- accounts: Discord / guest sign-in and character select ----------------
+const acct = { cfg: { accounts: false }, token: localStorage.getItem('fb_session'), me: null };
+const loginMsg = t => { $('login-msg').textContent = t || ''; };
+async function api(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { 'content-type': 'application/json', ...(acct.token ? { authorization: `Bearer ${acct.token}` } : {}) } });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(body.error || 'Something went wrong'), { status: r.status });
+  return body;
+}
+function showPanel(id) { for (const p of ['auth', 'chars', 'create']) $(p).classList.toggle('hidden', p !== id); }
+async function initLogin() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get('session')) { acct.token = h.get('session'); localStorage.setItem('fb_session', acct.token); }
+  if (h.get('signin')) loginMsg(h.get('signin') === 'cancelled' ? 'Discord sign-in was cancelled.' : 'Discord sign-in failed. Try again?');
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  try { acct.cfg = await fetch('/api/config').then(r => r.json()); } catch {}
+  if (!acct.cfg.accounts) { $('enter').textContent = 'Enter the Tower'; return showPanel('create'); } // anonymous mode
+  if (!acct.token) return showAuth();
+  await loadMe();
+}
+function showAuth() { $('discord-btn').classList.toggle('hidden', !acct.cfg.discord); showPanel('auth'); }
+async function loadMe() {
+  try {
+    acct.me = await api('/api/me');
+    renderChars();
+    if (!acct.me.characters.length) showCreate(); else showPanel('chars');
+  } catch (e) {
+    if (e.status === 401) { localStorage.removeItem('fb_session'); acct.token = null; showAuth(); } else loginMsg(e.message);
+  }
+}
+function renderChars() {
+  const { account, characters } = acct.me;
+  $('acct-bar').innerHTML = account.discord
+    ? `${account.avatar ? `<img src="${account.avatar}" alt="">` : ''}<span class="who">Signed in as <b>${esc(account.discord)}</b></span><button id="signout">Sign out</button>`
+    : `<span class="who">Guest account: saved in this browser</span>${acct.cfg.discord ? '<button id="link-discord" class="link">Link Discord</button>' : ''}<button id="signout">Sign out</button>`;
+  $('char-list').innerHTML = characters.map(c => {
+    const k = CLASSES[c.cls], hex = '#' + k.color.toString(16).padStart(6, '0');
+    return `<div class="char"><span class="dot" style="background:${hex}"></span><div class="info"><b>${esc(c.name)}</b><small>Lv ${c.lvl} ${k.name} · ${k.role}</small></div><button class="play" data-id="${c.id}">Play</button><button class="del" data-id="${c.id}" title="Delete">✕</button></div>`;
+  }).join('');
+  $('new-char').classList.toggle('hidden', characters.length >= (acct.cfg.maxCharacters || 4));
+  for (const b of $('char-list').querySelectorAll('.play')) b.onclick = () => {
+    const c = characters.find(x => x.id === +b.dataset.id);
+    state.cls = c.cls;
+    join({ type: 'join', session: acct.token, character: c.id });
+  };
+  for (const b of $('char-list').querySelectorAll('.del')) b.onclick = async () => {
+    const c = characters.find(x => x.id === +b.dataset.id);
+    if (!confirm(`Delete ${c.name} (Lv ${c.lvl} ${CLASSES[c.cls].name})? This can't be undone.`)) return;
+    try { await api(`/api/characters/${c.id}`, { method: 'DELETE' }); await loadMe(); } catch (e) { loginMsg(e.message); }
+  };
+  const so = $('signout'); if (so) so.onclick = async () => { try { await api('/api/logout', { method: 'POST' }); } catch {} localStorage.removeItem('fb_session'); acct.token = null; showAuth(); };
+  const ld = $('link-discord'); if (ld) ld.onclick = () => { location.href = `/auth/discord?link=${encodeURIComponent(acct.token)}`; };
+}
+function showCreate() {
+  $('name').value = ''; $('enter').textContent = 'Create character';
+  $('create-back').classList.toggle('hidden', !acct.me?.characters.length);
+  showPanel('create'); $('name').focus();
+}
+$('discord-btn').onclick = () => { location.href = '/auth/discord'; };
+$('guest-btn').onclick = async () => {
+  try { acct.token = (await api('/api/guest', { method: 'POST' })).token; localStorage.setItem('fb_session', acct.token); await loadMe(); } catch (e) { loginMsg(e.message); }
+};
+$('new-char').onclick = showCreate;
+$('create-back').onclick = () => { loginMsg(''); showPanel('chars'); };
+async function onEnter() {
+  if (!acct.cfg.accounts) { // anonymous mode (local dev): pick a name and go
+    const name = $('name').value.trim() || `Hero${Math.floor(Math.random() * 900 + 100)}`;
+    localStorage.setItem('fb_name', name); localStorage.setItem('fb_cls', chosen);
+    state.cls = chosen;
+    return join({ type: 'join', name, cls: chosen });
+  }
+  try {
+    const { character } = await api('/api/characters', { method: 'POST', body: JSON.stringify({ name: $('name').value, cls: chosen }) });
+    loginMsg('');
+    await loadMe();
+    state.cls = character.cls;
+    join({ type: 'join', session: acct.token, character: character.id }); // jump straight in with the new character
+  } catch (e) { loginMsg(e.message); }
+}
+
+async function join(joinMsg) {
   sfx.unlock();
   await assetsReady;
   if (state.ws) return;
-  const name = $('name').value.trim() || `Hero${Math.floor(Math.random() * 900 + 100)}`;
-  localStorage.setItem('fb_name', name); localStorage.setItem('fb_cls', chosen);
-  state.cls = chosen;
-  $('login-msg').textContent = 'Connecting…';
+  loginMsg('Connecting…');
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   state.ws = ws;
-  ws.onopen = () => ws.send(JSON.stringify(SPECTATE ? { type: 'spectate' } : { type: 'join', name, cls: chosen }));
+  ws.onopen = () => ws.send(JSON.stringify(joinMsg));
   ws.onmessage = e => onMessage(JSON.parse(e.data));
   ws.onclose = () => {
+    if (state.ws !== ws) return; // replaced or denied
     if (state.joined) { log('Disconnected from the server. Refresh to reconnect.', 'sys'); banner('DISCONNECTED', 'Refresh the page to reconnect'); }
-    else $('login-msg').textContent = 'Could not connect to the server.';
+    else { state.ws = null; loginMsg('Could not connect to the server.'); }
   };
 }
 const send = o => state.ws?.readyState === 1 && state.ws.send(JSON.stringify(o));
@@ -84,6 +162,15 @@ const send = o => state.ws?.readyState === 1 && state.ws.send(JSON.stringify(o))
 // ---------------- networking ----------------
 function onMessage(msg) {
   if (msg.type === 'full') { $('login-msg').textContent = 'Server is full.'; return; }
+  if (msg.type === 'denied') {
+    const wasIn = state.joined;
+    state.joined = false; const ws = state.ws; state.ws = null; ws?.close();
+    if (msg.signedOut) { localStorage.removeItem('fb_session'); acct.token = null; }
+    if (wasIn) { alert(msg.reason); location.reload(); return; }
+    loginMsg(msg.reason);
+    if (msg.signedOut) showAuth();
+    return;
+  }
   if (msg.type === 'welcome' && msg.spectator) {
     Object.assign(state, { spectator: true, joined: true, myId: -1 });
     document.body.classList.add('spectator');

@@ -5,6 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Game } from './game.js';
+import * as db from './db.js';
+import * as accounts from './accounts.js';
 import { TICK_RATE } from '../shared/data.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -22,9 +24,13 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 const game = new Game();
 const spectators = new Set(); // watch-only clients (?spectate=1)
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   if (res.handled) return;
-  const url = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  const full = new URL(req.url, 'http://x');
+  if (full.pathname.startsWith('/api/') || full.pathname.startsWith('/auth/')) {
+    if (await accounts.handle(req, res, full)) return;
+  }
+  const url = decodeURIComponent(full.pathname);
   if (url === '/status') {
     res.writeHead(200, { 'content-type': 'application/json' });
     return res.end(JSON.stringify({ players: game.players.size, floorClears: game.floorClears, uptime: Math.round(game.time) }));
@@ -52,7 +58,27 @@ function broadcastRoster() {
 }
 
 wss.on('connection', ws => {
-  let player = null;
+  let player = null, joining = false;
+
+  // Account characters join with { session, character }; without them it's an anonymous (unsaved) player.
+  async function join(msg) {
+    if (msg.session && db.enabled) {
+      const acct = await accounts.accountFromToken(msg.session);
+      if (!acct) { ws.send(JSON.stringify({ type: 'denied', reason: 'Your session expired. Sign in again.', signedOut: true })); return null; }
+      let c = await accounts.loadCharacter(acct.id, msg.character);
+      if (!c) { ws.send(JSON.stringify({ type: 'denied', reason: 'Character not found.' })); return null; }
+      for (const other of [...game.players.values()]) {
+        if (other.charId !== c.id) continue; // same character opened twice: save the old one, the newer tab wins
+        await accounts.saveCharacter(other.charId, other.lvl, other.xp);
+        other.ws.send(JSON.stringify({ type: 'denied', reason: 'This character was opened somewhere else.' }));
+        game.removePlayer(other);
+        other.ws.close();
+        c = await accounts.loadCharacter(acct.id, msg.character);
+      }
+      return game.addPlayer(ws, c.name, c.cls, { charId: c.id, lvl: c.lvl, xp: c.xp });
+    }
+    return game.addPlayer(ws, msg.name, msg.cls);
+  }
   let budget = 60; // simple flood guard: messages per second
   const refill = setInterval(() => { budget = 60; }, 1000);
 
@@ -67,11 +93,16 @@ wss.on('connection', ws => {
         ws.send(JSON.stringify({ type: 'roster', players: game.roster() }));
         return;
       }
-      if (msg.type !== 'join') return;
+      if (msg.type !== 'join' || joining) return;
       if (game.players.size >= MAX_PLAYERS) { ws.send(JSON.stringify({ type: 'full' })); return ws.close(); }
-      player = game.addPlayer(ws, msg.name, msg.cls);
-      ws.send(JSON.stringify({ type: 'welcome', id: player.id, x: player.x, z: player.z, seq: player.posSeq }));
-      broadcastRoster();
+      joining = true;
+      join(msg).then(p => {
+        joining = false;
+        if (!p || ws.readyState !== 1) { if (p) game.removePlayer(p); return; }
+        player = p;
+        ws.send(JSON.stringify({ type: 'welcome', id: player.id, x: player.x, z: player.z, seq: player.posSeq, lvl: player.lvl, xp: player.xp }));
+        broadcastRoster();
+      }).catch(err => { joining = false; console.error('join failed', err); ws.send(JSON.stringify({ type: 'denied', reason: 'Server error, try again.' })); });
       return;
     }
     game.handle(player, msg);
@@ -80,7 +111,10 @@ wss.on('connection', ws => {
   ws.on('close', () => {
     clearInterval(refill);
     spectators.delete(ws);
-    if (player) { game.removePlayer(player); broadcastRoster(); }
+    if (player && game.players.get(player.id) === player) {
+      if (player.charId) accounts.saveCharacter(player.charId, player.lvl, player.xp).catch(e => console.error('save failed', e));
+      game.removePlayer(player); broadcastRoster();
+    }
   });
 });
 
@@ -112,4 +146,17 @@ if (process.env.LOCKSTEP) {
   }, 1000 / TICK_RATE);
 }
 
-server.listen(PORT, () => console.log(`Floorbound running on http://localhost:${PORT}`));
+// Save account characters every 15 s (and on disconnect / level-up via the dirty flag).
+if (db.enabled) {
+  setInterval(() => {
+    for (const p of game.players.values()) {
+      if (!p.charId || !p.dirty) continue;
+      p.dirty = false;
+      accounts.saveCharacter(p.charId, p.lvl, p.xp).catch(e => { p.dirty = true; console.error('save failed', e); });
+    }
+  }, 15000);
+}
+
+db.migrate()
+  .then(() => server.listen(PORT, () => console.log(`Floorbound running on http://localhost:${PORT}${db.enabled ? ' (accounts on' + (accounts.discordEnabled ? ', Discord sign-in on' : '') + ')' : ''}`)))
+  .catch(err => { console.error('Database setup failed', err); process.exit(1); });

@@ -7,8 +7,11 @@
     "start": "node server/index.js",
     "bots": "node test/bots.js"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
+    "pg": "^8.23.1",
     "three": "^0.170.0",
     "ws": "^8.18.0"
   }

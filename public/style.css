@@ -185,3 +185,21 @@ input { font: inherit; }
 #target.friend { border-color: rgba(74,222,128,.5); }
 .touch #target { width: 210px; }
 .spectator #target { display: none !important; }
+
+/* sign-in + character select */
+.discord { width: 100%; padding: 14px; border: 0; border-radius: 10px; font-weight: 700; background: #5865f2; letter-spacing: .03em; }
+.ghost { width: 100%; margin-top: 10px; padding: 11px; border-radius: 10px; border: 1px solid rgba(160,200,255,.3); background: rgba(255,255,255,.05); }
+.small { margin-top: 12px; font-size: 12px; opacity: .65; text-align: center; line-height: 1.4; }
+#acct-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 13px; }
+#acct-bar img { width: 28px; height: 28px; border-radius: 50%; }
+#acct-bar .who { flex: 1; opacity: .9; }
+#acct-bar button { padding: 5px 10px; border-radius: 6px; border: 1px solid rgba(160,200,255,.3); background: rgba(255,255,255,.05); font-size: 12px; }
+#acct-bar .link { background: #5865f2; border-color: #5865f2; }
+.char { display: flex; align-items: center; gap: 12px; padding: 12px; margin-bottom: 8px; border-radius: 10px; border: 1px solid rgba(160,200,255,.2); background: rgba(255,255,255,.04); }
+.char .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.char .info { flex: 1; }
+.char b { display: block; font-size: 16px; }
+.char small { opacity: .7; }
+.char .play { padding: 9px 18px; border: 0; border-radius: 8px; font-weight: 700; background: linear-gradient(90deg, #3b82f6, #7c3aed); }
+.char .del { padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,120,120,.3); background: transparent; color: #fca5a5; }
+#char-list:empty::before { content: 'No characters yet. Make your first one!'; display: block; opacity: .6; text-align: center; padding: 10px; font-size: 13px; }

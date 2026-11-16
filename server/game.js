@@ -56,7 +56,8 @@ export class Game {
     return resolveCollision(Math.sin(a) * d, Math.cos(a) * d);
   }
 
-  addPlayer(ws, name, cls) {
+  // saved = { charId, lvl, xp } for an account character; omitted for anonymous players (not saved)
+  addPlayer(ws, name, cls, saved = null) {
     if (!CLASSES[cls]) cls = 'swordsman';
     name = String(name || '').replace(/[^\w \-.]/g, '').trim().slice(0, 16) || `Player${this.nextId}`;
     const [x, z] = this.spawnPoint();
@@ -66,6 +67,7 @@ export class Game {
       posSeq: 0, lastMoveT: this.time, lastHurt: -99, invite: null, dodgeCd: 0, rollUntil: 0, iframeUntil: 0, combo: 0, lastBasic: -9, jumpCd: 0, airFrom: 0, airUntil: 0,
     };
     p.lvl = Math.min(MAX_LEVEL, Math.max(1, Number(process.env.START_LEVEL) || 1)); // START_LEVEL is a testing aid
+    if (saved) { p.charId = saved.charId; p.lvl = Math.min(MAX_LEVEL, Math.max(1, saved.lvl | 0)); p.xp = Math.max(0, saved.xp | 0); }
     Object.assign(p, statsFor(cls, p.lvl));
     p.hp = p.maxHp;
     this.players.set(p.id, p);
@@ -390,6 +392,7 @@ export class Game {
       if (unlocked) this.sys(`New skill unlocked: ${unlocked.name}!`, p.id);
     }
     if (p.lvl >= MAX_LEVEL) p.xp = 0;
+    p.dirty = true;
   }
 
   healPlayer(t, amount, by) {
@@ -411,7 +414,7 @@ export class Game {
     this.events.push({ t: 'hurt', id: p.id, a: amount });
     if (p.hp <= 0) {
       p.hp = 0; p.dead = true; p.respawnAt = this.time + 4;
-      p.xp = Math.max(0, p.xp - Math.round(xpToNext(p.lvl) * 0.1));
+      p.xp = Math.max(0, p.xp - Math.round(xpToNext(p.lvl) * 0.1)); p.dirty = true;
       this.events.push({ t: 'pdie', id: p.id });
       this.sys(`${p.name} was defeated.`);
     }

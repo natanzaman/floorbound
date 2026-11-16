@@ -79,6 +79,16 @@ shared/teambots.js  role-playing party bots (tank / DPS / healer), used by test/
 
 Tuning lives in `shared/data.js` (class HP/ATK, cooldowns, mob stats). New skills are a `case` in `Game.useSkill` plus an entry in `CLASSES`.
 
+## Accounts and saved characters
+
+Set `DATABASE_URL` (any Postgres; the live game uses Neon) to turn on accounts. Tables are created automatically on startup.
+
+- **Play as guest:** a guest account is saved in that browser (no password, no email).
+- **Sign in with Discord:** set `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` from a Discord app, with the redirect URL `https://YOUR-HOST/auth/discord/callback`. Signing in while playing as a guest links the guest's characters to Discord.
+- Up to 4 characters per account; names are unique. Level and XP save every 15 s, on level-up and on disconnect.
+
+Without `DATABASE_URL` the game runs in anonymous mode (pick a name and play, nothing saved), which is handy for local development.
+
 ## Testing
 
 ```bash

@@ -17,9 +17,25 @@
     <div class="login-card">
       <div class="logo">FLOORBOUND</div>
       <div class="tagline">100 floors. One way out. Clear them together.</div>
-      <label class="field">Name<input id="name" maxlength="16" placeholder="Your name" autocomplete="off" /></label>
-      <div id="classes"></div>
-      <button id="enter" class="primary">Enter the Tower</button>
+      <!-- signed out: Discord or guest -->
+      <div id="auth" class="hidden">
+        <button id="discord-btn" class="discord">Continue with Discord</button>
+        <button id="guest-btn" class="ghost">Play as guest</button>
+        <div class="small">Guest characters are saved in this browser. Sign in with Discord anytime to keep them on every device.</div>
+      </div>
+      <!-- signed in: pick a character -->
+      <div id="chars" class="hidden">
+        <div id="acct-bar"></div>
+        <div id="char-list"></div>
+        <button id="new-char" class="ghost">+ New character</button>
+      </div>
+      <!-- create a character (also the anonymous join form when accounts are off) -->
+      <div id="create" class="hidden">
+        <label class="field">Name<input id="name" maxlength="16" placeholder="Your name" autocomplete="off" /></label>
+        <div id="classes"></div>
+        <button id="enter" class="primary">Enter the Tower</button>
+        <button id="create-back" class="ghost hidden">Back</button>
+      </div>
       <div id="login-msg"></div>
       <div class="hint">WASD move · right-drag or screen edge to look · click attack · 1 2 3 skills · Shift dodge · Space jump · Tab lock-on</div>
     </div>
