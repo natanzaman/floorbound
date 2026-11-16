@@ -5,7 +5,7 @@
 // Healer (Cleric)  hangs back behind the tank, heals whoever is hurt, buffs, smites when idle.
 // Everyone dodge-rolls out of the boss's red circles and plays Break -> Switch.
 // A fresh (low-level) party warms up on boars before taking on wolves.
-import { MOBS, MOB_IDS, PLAYER_SPEED, DODGE, walkable, resolveCollision } from './data.js';
+import { MOBS, MOB_IDS, PLAYER_SPEED, DODGE, walkable, resolveCollision, inGateZone } from './data.js';
 
 export const TEAM_NAMES = { guardian: 'Brann', swordsman: 'Kael', cleric: 'Lyra' };
 
@@ -29,6 +29,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
       b.cds = msg.me.cds.map((c, k) => (b.t - (b.pressed?.[k] || -9) < 0.3 ? Math.max(c, 0.2) : c));
       if (b.t - (b.dodgePressed || -9) > 0.3) b.dodgeCd = msg.me.dodge || 0;
       b.mobs = msg.w.mobs.map(m => ({ id: m[0], type: MOB_IDS[m[1]], x: m[2], z: m[3], hp: m[5], maxHp: m[6], engaged: !!(m[7] & 2), enraged: !!(m[7] & 4), winding: !!(m[7] & 16), staggered: !!(m[7] & 32), def: MOBS[MOB_IDS[m[1]]] }));
+      b.gateOpen = !!msg.w.gate?.[0];
       b.players = msg.w.players.map(p => ({ id: p[0], x: p[1], z: p[2], hp: p[4], maxHp: p[5], party: p[8], dead: !!p[9] }));
       const mine = b.players.find(p => p.id === b.id);
       if (mine) Object.assign(b, { hp: mine.hp, maxHp: mine.maxHp, dead: mine.dead, party: mine.party });
@@ -37,7 +38,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
         if (e.t === 'invite' && e.to === b.id) send(b, { type: 'accept', from: e.from });
         if (e.t === 'stagger') b.stag[e.id] = { by: e.by, until: b.t + e.d };
         if (b.i === 0 && (e.t === 'switch' || e.t === 'stagger')) log(`[${e.t}] mob ${e.id} by ${e.by}`);
-        if (e.t === 'tele') b.tele.push({ x: e.x, z: e.z, r: e.r, until: b.t + e.d + 0.2, follow: e.follow });
+        if (e.t === 'tele') b.tele.push({ x: e.x, z: e.z, r: e.r, until: b.t + e.d + 0.2, follow: e.follow, line: e.k === 'line' ? [e.x2, e.z2, e.w] : null });
         if (b.i === 0 && e.t === 'sys' && !e.to) log(`[sys] ${e.text}`);
       }
       b.fresh = true;
@@ -83,7 +84,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
     const step = Math.min(b.roll.left, DT) * (DODGE.dist / DODGE.time);
     b.roll.left -= DT;
     const [nx, nz] = resolveCollision(b.x + Math.sin(b.roll.dir) * step, b.z + Math.cos(b.roll.dir) * step);
-    if (walkable(nx, nz)) { b.x = nx; b.z = nz; }
+    if (walkable(nx, nz, !b.gateOpen)) { b.x = nx; b.z = nz; }
     if (b.roll.left <= 0) b.roll = null;
     return true;
   }
@@ -97,7 +98,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
     const step = Math.min(d - stop, PLAYER_SPEED * DT);
     let nx = b.x + (dx / d) * step, nz = b.z + (dz / d) * step;
     [nx, nz] = resolveCollision(nx, nz);
-    if (!walkable(nx, nz)) return false;
+    if (!walkable(nx, nz, !b.gateOpen)) return false;
     b.x = nx; b.z = nz; b.face = Math.atan2(dx, dz);
     return true;
   }
@@ -106,6 +107,17 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
   function dodgeSpot(b) {
     b.tele = b.tele.filter(t => t.until > b.t);
     for (const t of b.tele) {
+      if (t.line) { // the Warden's charge lane: step sideways out of it
+        const [x2, z2, w] = t.line, lx = x2 - t.x, lz = z2 - t.z, len = Math.hypot(lx, lz) || 1;
+        const k = Math.max(0, Math.min(1, ((b.x - t.x) * lx + (b.z - t.z) * lz) / (len * len)));
+        const px = t.x + lx * k, pz = t.z + lz * k, off = Math.hypot(b.x - px, b.z - pz);
+        if (off < w + 1.2) {
+          let nx = -lz / len, nz = lx / len;
+          if ((b.x - px) * nx + (b.z - pz) * nz < 0) { nx = -nx; nz = -nz; }
+          return [px + nx * (w + 3), pz + nz * (w + 3)];
+        }
+        continue;
+      }
       let cx = t.x, cz = t.z;
       if (t.follow) { const m = b.mobs.find(m => m.id === t.follow); if (m) { cx = m.x; cz = m.z; } }
       const d = d2(b.x, b.z, cx, cz);
@@ -145,6 +157,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
     const dodge = dodgeSpot(tank);
     if (!tgt && (tank.me?.lvl || 1) < 5) { moveToward(tank, 0, 60); return; } // nothing to farm nearby: head into the field
     if (!tgt) { // travel: get onto the road, then up to the chamber
+      if (!tank.gateOpen && tank.z > 120) { moveToward(tank, 0, 154); return; } // wait at the raid gate
       if (tank.z < 150 && Math.abs(tank.x) > 3) moveToward(tank, 0, Math.min(150, tank.z + 6));
       else if (tank.z < 162) moveToward(tank, 0, 172);
       else moveToward(tank, 0, 182);
@@ -212,9 +225,16 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
     if (tgt && engagedAt !== null && tank.t - engagedAt > 0.8 && d2(healer.x, healer.z, tgt.x, tgt.z) < 11) useSkill(healer, 0, face); // Smite
   }
 
+  function upkeep(b) {
+    if (b.dead || !b.me) return;
+    if (!b.gateOpen && inGateZone(b.x, b.z) && !b.me.ready && b.t - (b.readyT || -9) > 1) { b.readyT = b.t; send(b, { type: 'ready' }); }
+    if (b.hp / b.maxHp < 0.35 && b.t - (b.potT || -99) > 10) { b.potT = b.t; send(b, { type: 'use', id: 'potion' }); }
+  }
+
   function tick() {
     if (!team.every(b => b.fresh || b.closed)) return;
     for (const b of team) b.fresh = false;
+    for (const b of team) upkeep(b);
     if (tank && !tank.dead && !stepRoll(tank)) actTank();
     if (dps && !dps.dead && !stepRoll(dps)) actDps();
     if (healer && !healer.dead && !stepRoll(healer)) actHealer();

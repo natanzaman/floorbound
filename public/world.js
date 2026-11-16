@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { WORLD, OBSTACLES, CLASSES, rng } from '/shared/data.js';
+import { WORLD, OBSTACLES, CLASSES, GATE, rng } from '/shared/data.js';
+import { MERCHANT } from '/shared/items.js';
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
 
@@ -141,7 +142,45 @@ export function createWorld(scene) {
   const tower = new THREE.Mesh(new THREE.CylinderGeometry(14, 22, 420, 10), mat(0x8792b0, { fog: false }));
   tower.position.set(60, 200, 420); scene.add(tower);
 
-  return { sun, crystal, occluders, treeFader };
+  // Raid gate: a portcullis across the corridor. It rises when the party is ready.
+  const raid = new THREE.Group();
+  const iron = mat(0x2b2a30, { metalness: 0.6, roughness: 0.5 });
+  for (const sx of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(1.4, 10, 1.6), wallMat); post.position.set(sx * (GATE.half + 0.7), 5, 0);
+    raid.add(post); occluders.push(post);
+  }
+  const top = new THREE.Mesh(new THREE.BoxGeometry(GATE.half * 2 + 2.8, 1.4, 1.8), wallMat); top.position.y = 10.2; raid.add(top);
+  const bars = new THREE.Group();
+  for (let i = 0; i < 9; i++) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.22, 9.4, 0.22), iron);
+    b.position.set(-GATE.half + 0.6 + i * ((GATE.half * 2 - 1.2) / 8), 4.7, 0); bars.add(b);
+  }
+  for (const y of [2.2, 5, 7.8]) { const c = new THREE.Mesh(new THREE.BoxGeometry(GATE.half * 2, 0.22, 0.26), iron); c.position.y = y; bars.add(c); }
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(GATE.half * 2, 9), new THREE.MeshBasicMaterial({ color: 0xff4040, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }));
+  glow.position.y = 4.6; bars.add(glow);
+  raid.add(bars);
+  raid.position.set(0, 0, GATE.z);
+  raid.traverse(m => { if (m.isMesh) m.castShadow = true; });
+  scene.add(raid);
+  const raidGate = {
+    open: false, h: 0,
+    set(open) { this.open = open; },
+    update(dt) { const want = this.open ? 9.2 : 0; this.h += (want - this.h) * Math.min(1, dt * (this.open ? 1.2 : 3)); bars.position.y = this.h; glow.material.opacity = this.open ? 0 : 0.12; },
+  };
+
+  // Merchant's stall in town
+  const stall = new THREE.Group();
+  const wood = mat(0x8a5a35), cloth = mat(0x2f6fb2);
+  const counter = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.1, 1.1), wood); counter.position.set(0, 0.55, 0.9); stall.add(counter);
+  for (const [x, z] of [[-1.5, 1.4], [1.5, 1.4], [-1.5, -1], [1.5, -1]]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.18, 3, 0.18), wood); p.position.set(x, 1.5, z); stall.add(p); }
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.15, 3), cloth); roof.position.set(0, 3.05, 0.2); roof.rotation.x = -0.18; stall.add(roof);
+  for (let i = 0; i < 3; i++) { const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.4, 8), mat([0xef4444, 0xf59e0b, 0x22c55e][i], { emissive: [0xef4444, 0xf59e0b, 0x22c55e][i], emissiveIntensity: 0.4 })); jar.position.set(-0.8 + i * 0.8, 1.3, 0.9); stall.add(jar); }
+  stall.position.set(MERCHANT.x, 0, MERCHANT.z);
+  stall.rotation.y = Math.atan2(-MERCHANT.x, -MERCHANT.z);
+  stall.traverse(m => { if (m.isMesh) m.castShadow = true; });
+  scene.add(stall);
+
+  return { sun, crystal, occluders, treeFader, gate: raidGate, stall };
 }
 
 // ---------- characters ----------
@@ -210,9 +249,9 @@ function makeBlockMob(type) {
     }
     for (const [x, z] of [[-0.35, 0.5], [0.35, 0.5], [-0.35, -0.5], [0.35, -0.5]]) legs.push(part(new THREE.BoxGeometry(0.18, 0.5, 0.18), 0x4b2e19, x, 0.25, z, body));
     height = 1.6;
-  } else if (type === 'wolf' || type === 'alpha') {
-    const alpha = type === 'alpha';
-    const fur = alpha ? 0x2f2a33 : 0x5b5f6b, dark = alpha ? 0x1c1820 : 0x3a3d45;
+  } else if (type === 'wolf' || type === 'alpha' || type === 'hound') {
+    const alpha = type === 'alpha', hound = type === 'hound';
+    const fur = alpha ? 0x2f2a33 : hound ? 0x7a3b2e : 0x5b5f6b, dark = alpha ? 0x1c1820 : hound ? 0x4a2018 : 0x3a3d45;
     part(new THREE.BoxGeometry(0.6, 0.6, 1.5), fur, 0, 0.95, 0, body);
     const head = part(new THREE.BoxGeometry(0.48, 0.45, 0.6), alpha ? 0x26212a : 0x4b4f5a, 0, 1.2, 0.95, body);
     part(new THREE.BoxGeometry(0.26, 0.2, 0.3), dark, 0, -0.1, 0.42, head);
@@ -551,6 +590,33 @@ export class Effects {
     m.rotation.x = -Math.PI / 2; m.rotation.z = -Math.atan2(x1 - x0, z1 - z0) + Math.PI;
     m.position.set((x0 + x1) / 2, 0.08, (z0 + z1) / 2);
     this.add(m, life, (mesh, k) => { mesh.material.opacity = 0.2 + 0.5 * k; mesh.scale.x = 1 + k; });
+  }
+
+  lane(x0, z0, x1, z1, w, life) { // the Warden's charge lane
+    const len = Math.hypot(x1 - x0, z1 - z0) || 0.1;
+    const g = new THREE.Group();
+    const edge = new THREE.Mesh(new THREE.PlaneGeometry(w * 2, len), this.fadeMat(0xff2a2a, 0.22));
+    const fill = new THREE.Mesh(new THREE.PlaneGeometry(w * 2, len), this.fadeMat(0xff3b3b, 0.45));
+    edge.rotation.x = fill.rotation.x = -Math.PI / 2; fill.position.y = 0.01;
+    edge.position.z = fill.position.z = len / 2;
+    g.add(edge, fill); g.position.set(x0, 0.09, z0); g.rotation.y = Math.atan2(x1 - x0, z1 - z0);
+    this.add(g, life, (mesh, k) => { fill.scale.y = Math.max(0.01, k); fill.position.z = (len * k) / 2; });
+  }
+
+  rock(x, z, r) { // a boulder drops onto a rockfall circle
+    const m = new THREE.Mesh(new THREE.DodecahedronGeometry(r * 0.45, 0), new THREE.MeshStandardMaterial({ color: 0x6b6470, flatShading: true, transparent: true }));
+    m.position.set(x, 14, z);
+    this.add(m, 0.9, (mesh, k, dt) => {
+      mesh.position.y = Math.max(r * 0.3, 14 - k * 60); mesh.rotation.x += dt * 4;
+      if (k > 0.3) mesh.material.opacity = 1 - (k - 0.3) / 0.7;
+    });
+  }
+
+  beam(x, z, color, life = 3) { // loot beam
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.6, 14, 12, 1, true), this.fadeMat(color, 0.55));
+    m.position.set(x, 7, z);
+    this.add(m, life, (mesh, k) => { mesh.material.opacity = 0.55 * (1 - k * k); mesh.rotation.y += 0.05; });
+    this.ring(x, z, 2.2, color, 0.8);
   }
 
   thorn(x, z, vx, vz, ttl) {

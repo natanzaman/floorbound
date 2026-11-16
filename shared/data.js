@@ -25,7 +25,15 @@ export const WORLD = {
 export const inTown = (x, z) => Math.hypot(x - WORLD.town.x, z - WORLD.town.z) < WORLD.town.r;
 export const inArena = (x, z) => Math.hypot(x - WORLD.arena.x, z - WORLD.arena.z) < WORLD.arena.r;
 
-export function walkable(x, z) {
+// Raid gate: a portcullis across the corridor to the Warden's chamber. It opens after a ready check.
+export const GATE = { z: 161, half: 5.6, band: [157.5, 165.5], zone: { x: 12, z0: 138, z1: 158 }, count: 5 };
+export const inGateZone = (x, z) => Math.abs(x) < GATE.zone.x && z > GATE.zone.z0 && z < GATE.zone.z1;
+const gateBlocks = (x, z) => Math.abs(x) < GATE.half && z > GATE.band[0] && z < GATE.band[1];
+// Does a move from (x0,z0) to (x1,z1) pass through the closed gate?
+export const crossesGate = (x0, z0, x1, z1) => (z0 < GATE.z) !== (z1 < GATE.z) && Math.abs((x0 + x1) / 2) < GATE.half + 1;
+
+export function walkable(x, z, gateClosed = false) {
+  if (gateClosed && gateBlocks(x, z)) return false;
   const { rect, corridor } = WORLD;
   if (x >= rect.x0 && x <= rect.x1 && z >= rect.z0 && z <= rect.z1) return true;
   if (x >= corridor.x0 && x <= corridor.x1 && z >= corridor.z0 && z <= corridor.z1) return true;
@@ -120,21 +128,31 @@ export const CLASSES = {
   },
 };
 
-export const MOB_IDS = ['boar', 'wolf', 'warden', 'alpha', 'spitter'];
+export const MOB_IDS = ['boar', 'wolf', 'warden', 'alpha', 'spitter', 'hound'];
 
 export const MOBS = {
   boar: { name: 'Forest Boar', hp: 60, atk: 6, speed: 4.5, aggro: 0, range: 1.8, atkCd: 1.6, xp: 20, radius: 0.8, level: 2 },
   wolf: { name: 'Dire Wolf', hp: 110, atk: 11, speed: 6.2, aggro: 11, range: 2.0, atkCd: 1.3, xp: 40, radius: 0.8, level: 5 },
   alpha: { name: 'Alpha Wolf', hp: 480, atk: 15, speed: 6.6, aggro: 14, range: 2.4, atkCd: 1.4, xp: 150, radius: 1.2, level: 7, elite: true },
   spitter: { name: 'Bramble Spitter', hp: 80, atk: 10, speed: 0, aggro: 17, range: 15, atkCd: 2.2, xp: 30, radius: 0.9, level: 4, ranged: true },
-  warden: { name: 'The Horned Warden', hp: 2400, atk: 20, speed: 4.2, aggro: 18, range: 4.2, atkCd: 2.0, xp: 600, radius: 2.2, level: 10, boss: true },
+  hound: { name: "Warden's Hound", hp: 90, atk: 12, speed: 6.6, aggro: 30, range: 2.0, atkCd: 1.2, xp: 15, radius: 0.8, level: 8 },
+  warden: { name: 'The Horned Warden', hp: 2400, atk: 26, speed: 4.2, aggro: 18, range: 4.2, atkCd: 2.0, xp: 600, radius: 2.2, level: 10, boss: true },
 };
 
 export const xpToNext = lvl => 50 * lvl;
 
 // Melee bites hit a wedge in front of the attacker (shown as a red wedge during the wind-up).
-export const BITE = { boar: [2.6, 0.7], wolf: [2.8, 0.6], alpha: [3.4, 0.85] }; // [reach, half-angle]
+export const BITE = { boar: [2.6, 0.7], wolf: [2.8, 0.6], alpha: [3.4, 0.85], hound: [2.8, 0.6] }; // [reach, half-angle]
 export const PACK = { auraRange: 12, auraAtk: 0.25, howlEvery: 12, howlRange: 16, frenzy: 6 };
+// The Warden's three phases: 100-66% (cleave + slams), 66-33% (+ hounds, horn charge), <33% (+ spin, rockfall).
+export const WARDEN = {
+  phases: [0.66, 0.33], hpBase: 2400, hpPer: 900,
+  slam: { every: [8, 6, 4.5], r: 5.5, wind: 1.2, mult: 2.0 },
+  charge: { every: 11, len: 15, width: 2.4, wind: 1.1, mult: 2.2 },
+  hounds: { every: 28, n: 2, max: 3 },
+  spin: { every: 9, r: 8, wind: 1.4, mult: 1.6 },
+  rock: { every: 7, r: 3.2, wind: 1.3, extra: 3, mult: 1.5 },
+};
 export const THORN = { speed: 16, radius: 0.6, wind: 0.75 };
 
 export function statsFor(cls, lvl) {

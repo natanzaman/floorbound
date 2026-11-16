@@ -10,7 +10,7 @@
 </head>
 <body>
   <canvas id="view"></canvas>
-  <div id="labels"></div>
+  <div id="labels"><div id="merchant-lbl" class="lbl npc" style="display:none"></div></div>
 
   <!-- Login -->
   <div id="login">
@@ -37,7 +37,7 @@
         <button id="create-back" class="ghost hidden">Back</button>
       </div>
       <div id="login-msg"></div>
-      <div class="hint">WASD move · right-drag or screen edge to look · click attack · 1 2 3 skills · Shift dodge · Space jump · Tab lock-on</div>
+      <div class="hint">WASD move · right-drag or screen edge to look · click attack · 1 2 3 skills · Shift dodge · Space jump · 4 potion · B bag · F interact · P party</div>
     </div>
   </div>
 
@@ -55,6 +55,7 @@
     <div id="boss" class="hidden">
       <div class="boss-name">The Horned Warden</div>
       <div class="bar boss-hp"><div id="boss-hp"></div></div>
+      <div class="phase" id="boss-phase"></div>
     </div>
     <div id="banner"></div>
     <div id="callout"></div>
@@ -64,7 +65,12 @@
     <button id="chat-btn" class="chip">Chat</button>
     <button id="sound-btn" class="chip">Sound on</button>
     <button id="lock-btn" class="chip">Lock on</button>
+    <button id="bag-btn" class="chip">Bag <span id="gold-chip"></span></button>
     <div id="players" class="panel hidden"></div>
+    <div id="bag" class="panel hidden"></div>
+    <div id="gatebox" class="panel hidden"></div>
+    <div id="guide" class="panel hidden"></div>
+    <div id="tip"></div>
 
     <div id="invite" class="panel hidden"></div>
 

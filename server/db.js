@@ -42,4 +42,10 @@ async function setup() {
     name TEXT NOT NULL, cls TEXT NOT NULL, lvl INT NOT NULL DEFAULT 1, xp INT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   await q(`CREATE UNIQUE INDEX IF NOT EXISTS characters_name_unique ON characters (lower(name))`);
+  await q(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS gold INT NOT NULL DEFAULT 0`);
+  await q(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS inv JSONB`);
+  await q(`CREATE TABLE IF NOT EXISTS play_events (
+    id BIGSERIAL PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT now(), account_id INT, char_id INT, sid TEXT,
+    kind TEXT NOT NULL, data JSONB)`);
+  await q(`CREATE INDEX IF NOT EXISTS play_events_kind_at ON play_events (kind, at)`);
 }

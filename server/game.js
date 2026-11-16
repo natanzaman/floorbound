@@ -1,8 +1,13 @@
 // Authoritative world simulation: players, mobs, the floor boss, combat, XP and parties.
 import {
   WORLD, CLASSES, CLASS_IDS, MOBS, MOB_IDS, MAX_LEVEL, PARTY_MAX, PLAYER_SPEED, SPRINT_SPEED, DODGE, JUMP, SWITCH, BITE, PACK, THORN,
+  GATE, WARDEN, inGateZone, crossesGate,
   inTown, inArena, walkable, resolveCollision, rng, angleTo, wrapAngle, xpToNext, statsFor,
 } from '../shared/data.js';
+import {
+  CONSUMABLES, SHOP, MERCHANT, BAG_SIZE, SLOTS, DROPS, makeItem, lastAttackItem, rollRarity, gearStats, sellPrice, newInventory,
+} from '../shared/items.js';
+import crypto from 'node:crypto';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
@@ -20,6 +25,10 @@ export class Game {
     this.nextId = 1;
     this.time = 0;
     this.floorClears = 0;
+    this.gate = { open: false, ready: new Set(), countAt: 0, emptySince: 0 };
+    this.fight = null;   // the current Warden attempt, for tracking
+    this.lfgT = 0;
+    this.track = () => {}; // set by the server to record play events
     this.spawnMobs();
   }
 
@@ -56,7 +65,7 @@ export class Game {
     return resolveCollision(Math.sin(a) * d, Math.cos(a) * d);
   }
 
-  // saved = { charId, lvl, xp } for an account character; omitted for anonymous players (not saved)
+  // saved = { charId, accountId, lvl, xp, gold, inv } for an account character; omitted for anonymous players (not saved)
   addPlayer(ws, name, cls, saved = null) {
     if (!CLASSES[cls]) cls = 'swordsman';
     name = String(name || '').replace(/[^\w \-.]/g, '').trim().slice(0, 16) || `Player${this.nextId}`;
@@ -65,20 +74,44 @@ export class Game {
       id: this.id(), ws, name, cls, lvl: 1, xp: 0, x, z, face: 0, dead: false, respawnAt: 0,
       cds: [0, 0, 0, 0], dr: { until: 0, v: 0 }, dmg: { until: 0, v: 0 }, party: null,
       posSeq: 0, lastMoveT: this.time, lastHurt: -99, invite: null, dodgeCd: 0, rollUntil: 0, iframeUntil: 0, combo: 0, lastBasic: -9, jumpCd: 0, airFrom: 0, airUntil: 0,
+      gold: 0, inv: newInventory(), consCd: {}, tonicUntil: 0, draughtUntil: 0, lfg: false,
+      sid: crypto.randomBytes(6).toString('hex'), joinedAt: this.time, kills: 0, deaths: 0, switches: 0, trackN: 0,
     };
     p.lvl = Math.min(MAX_LEVEL, Math.max(1, Number(process.env.START_LEVEL) || 1)); // START_LEVEL is a testing aid
-    if (saved) { p.charId = saved.charId; p.lvl = Math.min(MAX_LEVEL, Math.max(1, saved.lvl | 0)); p.xp = Math.max(0, saved.xp | 0); }
-    Object.assign(p, statsFor(cls, p.lvl));
+    if (saved) {
+      p.charId = saved.charId; p.accountId = saved.accountId;
+      p.lvl = Math.min(MAX_LEVEL, Math.max(1, saved.lvl | 0)); p.xp = Math.max(0, saved.xp | 0);
+      p.gold = Math.max(0, saved.gold | 0);
+      if (saved.inv && Array.isArray(saved.inv.bag) && saved.inv.eq && saved.inv.cons) p.inv = saved.inv;
+    }
+    p.lvlStart = p.lvl;
+    this.recompute(p);
     p.hp = p.maxHp;
     this.players.set(p.id, p);
     this.sys(`${p.name} the ${CLASSES[cls].name} entered the tower.`);
+    this.track(p, 'session_start', { cls, lvl: p.lvl, anon: !saved, fresh: !!saved && p.lvl === 1 && p.xp === 0 });
     return p;
   }
 
   removePlayer(p) {
     this.leaveParty(p);
+    this.gate.ready.delete(p.id);
     this.players.delete(p.id);
     this.sys(`${p.name} left.`);
+    this.track(p, 'session_end', { secs: Math.round(this.time - p.joinedAt), kills: p.kills, deaths: p.deaths, lvl: p.lvl, lvlStart: p.lvlStart, switches: p.switches, gold: p.gold });
+  }
+
+  // Base class stats plus equipped gear. Keeps the same health fraction.
+  recompute(p) {
+    const frac = p.maxHp ? p.hp / p.maxHp : 1;
+    const base = statsFor(p.cls, p.lvl), g = gearStats(p.inv.eq);
+    p.atk = base.atk * (1 + g.atk / 100);
+    p.maxHp = Math.round(base.maxHp * (1 + g.hp / 100));
+    p.crit = 0.1 + g.crit / 100;
+    p.haste = Math.min(0.4, g.haste / 100);
+    p.swPow = g.sw / 100;
+    p.gearDr = Math.min(0.3, g.dr / 100);
+    if (p.hp !== undefined) p.hp = Math.max(1, Math.min(p.maxHp, Math.round(p.maxHp * frac)));
   }
 
   // ---------- messaging helpers ----------
@@ -102,6 +135,16 @@ export class Game {
         return;
       }
       case 'invite': return this.invite(p, msg.id);
+      case 'ready': return this.toggleReady(p);
+      case 'lfg': return this.toggleLfg(p);
+      case 'use': return this.useItem(p, String(msg.id));
+      case 'equip': return this.equip(p, msg.u | 0);
+      case 'unequip': return this.unequip(p, String(msg.slot));
+      case 'buy': return this.buy(p, msg.i | 0);
+      case 'sell': return this.sell(p, msg.u | 0);
+      case 'track': // the client's first-time guide reports progress
+        if (msg.k === 'guide' && Number.isInteger(msg.step) && msg.step >= 0 && msg.step < 30 && p.trackN++ < 60) this.track(p, 'guide', { step: msg.step });
+        return;
       case 'accept': return this.accept(p, msg.from);
       case 'decline': p.invite = null; return;
       case 'leave': return this.leaveParty(p);
@@ -119,8 +162,192 @@ export class Game {
     const maxD = (rolling ? DODGE.dist / DODGE.time : SPRINT_SPEED) * dt * 1.3 + 0.35;
     const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
     if (d > maxD) { x = p.x + (dx / d) * maxD; z = p.z + (dz / d) * maxD; }
-    if (!walkable(x, z)) return;
+    if (!this.walk(x, z)) return;
+    if (!this.gate.open && crossesGate(p.x, p.z, x, z)) return;
     p.x = x; p.z = z;
+  }
+
+  walk(x, z) { return walkable(x, z, !this.gate.open); }
+
+  // ---------- raid gate ----------
+  toggleReady(p) {
+    const g = this.gate;
+    if (p.dead || g.open || !inGateZone(p.x, p.z)) return;
+    if (g.ready.has(p.id)) g.ready.delete(p.id);
+    else { g.ready.add(p.id); this.track(p, 'gate_ready', {}); }
+  }
+
+  updateGate() {
+    const g = this.gate, t = this.time;
+    const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z));
+    for (const id of g.ready) if (!waiting.some(p => p.id === id)) g.ready.delete(id);
+    if (!g.open) {
+      const allReady = waiting.length > 0 && g.ready.size === waiting.length;
+      if (allReady && !g.countAt) {
+        g.countAt = t + GATE.count;
+        this.events.push({ t: 'gate', s: 'count', d: GATE.count });
+      } else if (!allReady && g.countAt) {
+        g.countAt = 0;
+        this.events.push({ t: 'gate', s: 'cancel' });
+      }
+      if (g.countAt && t >= g.countAt) {
+        g.open = true; g.countAt = 0; g.ready.clear(); g.emptySince = 0;
+        this.events.push({ t: 'gate', s: 'open' });
+        this.sys('The raid gate rises. The Horned Warden awaits.');
+      }
+      return;
+    }
+    // Close again once the chamber is empty and the boss isn't fighting anyone.
+    const inside = [...this.players.values()].some(p => !p.dead && (inArena(p.x, p.z) || (Math.abs(p.x) < 7 && p.z > GATE.band[0] - 1)));
+    const busy = this.boss && !this.boss.dead && this.boss.threat.size > 0;
+    if (inside || busy) { g.emptySince = 0; return; }
+    if (!g.emptySince) g.emptySince = t;
+    if (t - g.emptySince > 15) { g.open = false; g.emptySince = 0; this.events.push({ t: 'gate', s: 'close' }); }
+  }
+
+  // ---------- items ----------
+  invFor(p) {
+    return { type: 'inv', gold: p.gold, bag: p.inv.bag, eq: p.inv.eq, cons: p.inv.cons,
+      stats: { atk: Math.round(p.atk * 10) / 10, maxHp: p.maxHp, crit: Math.round(p.crit * 100), haste: Math.round(p.haste * 100), sw: Math.round(p.swPow * 100), dr: Math.round(p.gearDr * 100) } };
+  }
+  invChanged(p) { p.invDirty = true; p.dirty = true; }
+
+  giveItem(p, it) {
+    if (p.inv.bag.length >= BAG_SIZE) {
+      p.gold += sellPrice(it);
+      this.sys(`Bag full: ${it.name} was sold for ${sellPrice(it)} gold.`, p.id);
+      return false;
+    }
+    p.inv.bag.push(it);
+    return true;
+  }
+
+  useItem(p, id) {
+    const c = CONSUMABLES[id], t = this.time;
+    if (!c || p.dead || !(p.inv.cons[id] > 0) || t < (p.consCd[id] || 0)) return;
+    if (id === 'potion') {
+      if (p.hp >= p.maxHp) return this.sys('Already at full health.', p.id);
+      this.healPlayer(p, p.maxHp * 0.4);
+      this.events.push({ t: 'fx', k: 'heal', s: 'potion', by: p.id, id: p.id, x: r2(p.x), z: r2(p.z) });
+    } else if (id === 'tonic') {
+      p.tonicUntil = t + 30; this.events.push({ t: 'buff', id: p.id, k: 'tonic', d: 30 });
+    } else if (id === 'draught') {
+      p.draughtUntil = t + 30; this.events.push({ t: 'buff', id: p.id, k: 'draught', d: 30 });
+    }
+    p.inv.cons[id]--;
+    p.consCd[id] = t + c.cd;
+    this.events.push({ t: 'drink', id: p.id, k: id });
+    this.invChanged(p);
+  }
+
+  equip(p, u) {
+    const i = p.inv.bag.findIndex(it => it.u === u);
+    if (i < 0) return;
+    const it = p.inv.bag[i];
+    if (!SLOTS.includes(it.slot)) return;
+    if (it.cls && it.cls !== p.cls) return this.sys(`Only a ${CLASSES[it.cls].name} can use that.`, p.id);
+    p.inv.bag.splice(i, 1);
+    const old = p.inv.eq[it.slot];
+    if (old) p.inv.bag.splice(i, 0, old);
+    p.inv.eq[it.slot] = it;
+    this.recompute(p); this.invChanged(p);
+    this.events.push({ t: 'equip', id: p.id });
+  }
+
+  unequip(p, slot) {
+    const it = p.inv.eq[slot];
+    if (!it) return;
+    if (p.inv.bag.length >= BAG_SIZE) return this.sys('Your bag is full.', p.id);
+    p.inv.eq[slot] = null; p.inv.bag.push(it);
+    this.recompute(p); this.invChanged(p);
+  }
+
+  nearMerchant(p) { return !p.dead && Math.hypot(p.x - MERCHANT.x, p.z - MERCHANT.z) < MERCHANT.r + 1.5; }
+
+  buy(p, i) {
+    const s = SHOP[i];
+    if (!s || !this.nearMerchant(p)) return;
+    const price = s.kind === 'cons' ? CONSUMABLES[s.id].price : s.price;
+    if (p.gold < price) return this.sys('Not enough gold.', p.id);
+    if (s.kind === 'gear' && p.inv.bag.length >= BAG_SIZE) return this.sys('Your bag is full.', p.id);
+    p.gold -= price;
+    if (s.kind === 'cons') p.inv.cons[s.id] = (p.inv.cons[s.id] || 0) + 1;
+    else p.inv.bag.push(makeItem(s.slot, 1, p.cls));
+    this.events.push({ t: 'coin', id: p.id });
+    this.invChanged(p);
+  }
+
+  sell(p, u) {
+    if (!this.nearMerchant(p)) return;
+    const i = p.inv.bag.findIndex(it => it.u === u);
+    if (i < 0) return;
+    const [it] = p.inv.bag.splice(i, 1);
+    p.gold += sellPrice(it);
+    this.events.push({ t: 'coin', id: p.id });
+    this.invChanged(p);
+  }
+
+  // Personal loot: every eligible player rolls their own drops.
+  dropLoot(p, m) {
+    const d = DROPS[m.type];
+    if (!d || !p) return;
+    const gold = d.gold[0] + Math.floor(Math.random() * (d.gold[1] - d.gold[0] + 1));
+    p.gold += gold;
+    const items = [];
+    const n = d.item >= 1 ? d.item : Math.random() < d.item ? 1 : 0;
+    for (let i = 0; i < n; i++) {
+      const slot = SLOTS[Math.floor(Math.random() * SLOTS.length)];
+      const it = makeItem(slot, rollRarity(d.table), p.cls);
+      if (this.giveItem(p, it)) items.push({ name: it.name, r: it.r });
+      if (it.r >= 2) this.track(p, 'loot', { r: it.r, slot, mob: m.type });
+    }
+    let pot = 0;
+    if (Math.random() < d.potion) { p.inv.cons.potion = (p.inv.cons.potion || 0) + 1; pot = 1; }
+    this.events.push({ t: 'loot', to: p.id, x: r2(m.x), z: r2(m.z), g: gold, items, pot });
+    this.invChanged(p);
+  }
+
+  // ---------- party finder ----------
+  toggleLfg(p) {
+    const party = this.partyOf(p);
+    if (party) {
+      party.open = !party.open && party.members.length < PARTY_MAX;
+      for (const id of party.members) this.sys(party.open ? `${p.name} opened the party to the party finder.` : 'The party is no longer recruiting.', id);
+      return;
+    }
+    p.lfg = !p.lfg;
+    this.sys(p.lfg ? 'Looking for a party… you\'ll be matched with other players automatically.' : 'Stopped looking for a party.', p.id);
+  }
+
+  matchParties() {
+    const seekers = [...this.players.values()].filter(p => p.lfg && !p.party);
+    for (const p of seekers) {
+      if (!p.lfg || p.party) continue;
+      let best = null;
+      for (const party of this.parties.values()) {
+        if (!party.open || party.members.length >= PARTY_MAX) continue;
+        if (!best || party.members.length < best.members.length) best = party;
+      }
+      if (best) { this.joinParty(p, best, 'finder'); continue; }
+      const other = seekers.find(o => o !== p && o.lfg && !o.party);
+      if (!other) continue;
+      const party = { id: this.id(), members: [other.id], open: true };
+      this.parties.set(party.id, party);
+      other.party = party.id; other.lfg = false;
+      this.track(other, 'party_join', { via: 'finder', secs: Math.round(this.time - other.joinedAt) });
+      this.joinParty(p, party, 'finder');
+    }
+  }
+
+  joinParty(p, party, via) {
+    if (party.members.length >= PARTY_MAX) return this.sys('That party is full.', p.id);
+    if (p.party !== party.id) this.leaveParty(p);
+    party.members.push(p.id);
+    p.party = party.id; p.lfg = false;
+    if (party.members.length >= PARTY_MAX) party.open = false;
+    for (const id of party.members) this.sys(`${p.name} joined the party${via === 'finder' ? ' (party finder)' : ''}.`, id);
+    this.events.push({ t: 'pjoin', id: p.id, party: party.id });
+    this.track(p, 'party_join', { via, secs: Math.round(this.time - p.joinedAt), size: party.members.length });
   }
 
   // ---------- dodge roll ----------
@@ -165,11 +392,7 @@ export class Game {
       this.parties.set(party.id, party);
       inviter.party = party.id;
     }
-    if (party.members.length >= PARTY_MAX) return this.sys('That party is full.', p.id);
-    this.leaveParty(p);
-    party.members.push(p.id);
-    p.party = party.id;
-    for (const id of party.members) this.sys(`${p.name} joined the party.`, id);
+    this.joinParty(p, party, 'invite');
   }
 
   leaveParty(p) {
@@ -185,14 +408,14 @@ export class Game {
   }
 
   // ---------- skills ----------
-  dmgMult(p) { return this.time < p.dmg.until ? 1 + p.dmg.v : 1; }
+  dmgMult(p) { return (this.time < p.dmg.until ? 1 + p.dmg.v : 1) * (this.time < p.tonicUntil ? 1.15 : 1); }
 
   useSkill(p, slot, face) {
     if (p.dead) return;
     const sk = CLASSES[p.cls].skills[slot];
     if (!sk || p.lvl < sk.lvl || this.time < p.cds[slot]) return;
     if (typeof face === 'number' && isFinite(face)) p.face = wrapAngle(face);
-    p.cds[slot] = this.time + sk.cd;
+    p.cds[slot] = this.time + sk.cd * (slot > 0 ? 1 - p.haste : 1);
     const atk = p.atk * this.dmgMult(p);
     const fx = (k, extra = {}) => this.events.push({ t: 'fx', k, s: sk.id, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), ...extra });
     const t = this.time;
@@ -211,7 +434,7 @@ export class Game {
         let tx = p.x, tz = p.z;
         for (let i = 1; i <= 16; i++) {
           const nx = p.x + Math.sin(p.face) * i * 0.5, nz = p.z + Math.cos(p.face) * i * 0.5;
-          if (!walkable(nx, nz)) break;
+          if (!this.walk(nx, nz)) break;
           [tx, tz] = resolveCollision(nx, nz);
         }
         fx('rush', { x2: r2(tx), z2: r2(tz) });
@@ -315,11 +538,12 @@ export class Game {
     if (m.dead) return;
     const t = this.time;
     p.lastCombat = t;
-    const crit = Math.random() < 0.1;
+    const crit = Math.random() < (p.crit ?? 0.1);
     // Switch: a staggered enemy takes extra damage from anyone but the player who broke it
     let mult = 1, sw = 0;
     if (t < m.staggerUntil && p.id !== m.staggerBy) {
       if (!m.switched) { mult = SWITCH.first; sw = 1; m.switched = true; } else mult = SWITCH.follow;
+      mult *= 1 + (p.swPow || 0);
     }
     const amount = Math.max(1, Math.round(base * (0.9 + Math.random() * 0.2) * (crit ? 1.5 : 1) * mult));
     m.hp -= amount;
@@ -327,6 +551,7 @@ export class Game {
       this.events.push({ t: 'switch', id: m.id, by: p.id, from: m.staggerBy, a: amount });
       const from = this.players.get(m.staggerBy);
       if (from) this.giveXp(from, 5); // a little thank-you for setting it up
+      p.switches++;
     }
     m.threat.set(p.id, (m.threat.get(p.id) || 0) + amount * threat);
     m.contributors.add(p.id);
@@ -359,15 +584,23 @@ export class Game {
     m.dead = true; m.hp = 0;
     m.deadUntil = this.time + (m.def.boss ? 60 : m.def.elite ? 45 : 15);
     this.events.push({ t: 'die', id: m.id, x: r2(m.x), z: r2(m.z), b: m.def.boss ? 1 : 0 });
+    if (m.temp) this.mobs.delete(m.id);
+    if (!killer.kills++) this.track(killer, 'first_kill', { secs: Math.round(this.time - killer.joinedAt), mob: m.type });
     if (m.def.boss) {
       const names = [];
       for (const id of m.contributors) {
         const p = this.players.get(id);
-        if (p) { names.push(p.name); this.giveXp(p, m.def.xp); }
+        if (p) { names.push(p.name); this.giveXp(p, m.def.xp); this.dropLoot(p, m); }
       }
+      // Last Attack Bonus: a unique reward for whoever landed the killing blow.
+      if (this.giveItem(killer, lastAttackItem())) this.invChanged(killer);
+      this.events.push({ t: 'la', id: killer.id, name: killer.name, x: r2(m.x), z: r2(m.z) });
+      this.sys(`LAST ATTACK BONUS: ${killer.name} landed the final blow and earned the Horn of the Warden!`);
+      this.clearHounds();
       this.floorClears++;
       this.events.push({ t: 'clear', names, n: this.floorClears });
       this.sys(`The Horned Warden has fallen! Floor 1 cleared by ${names.join(', ')}. Floor 2 unlocks in a future update.`);
+      this.endFight('kill', m);
       return;
     }
     const party = this.partyOf(killer);
@@ -375,7 +608,30 @@ export class Game {
     const recips = ids.map(id => this.players.get(id)).filter(p => p && !p.dead && dist(p, m) <= 30);
     if (!recips.length) recips.push(killer);
     const share = Math.round((m.def.xp * (1 + 0.2 * (recips.length - 1))) / recips.length);
-    for (const p of recips) this.giveXp(p, share);
+    for (const p of recips) { this.giveXp(p, share); this.dropLoot(p, m); }
+  }
+
+  startFight(m) {
+    const ids = [...this.players.values()].filter(p => !p.dead && inArena(p.x, p.z)).map(p => p.id);
+    this.fight = { start: this.time, ids: new Set(ids), deaths: 0, hp: m.maxHp };
+    for (const id of ids) this.track(this.players.get(id), 'boss_start', { players: ids.length, hp: m.maxHp });
+  }
+
+  endFight(result, m) {
+    const f = this.fight;
+    if (!f) return;
+    this.fight = null;
+    const data = { result, secs: Math.round(this.time - f.start), players: f.ids.size, deaths: f.deaths, hpLeft: result === 'wipe' ? Math.round((m.hp / m.maxHp) * 100) : 0, phase: m.phase };
+    let first = true;
+    for (const id of f.ids) { const p = this.players.get(id); if (p) { this.track(p, 'boss_end', first ? data : { ...data, sys: 1 }); first = false; } }
+  }
+
+  clearHounds() {
+    for (const h of [...this.mobs.values()]) {
+      if (!h.temp) continue;
+      if (!h.dead) this.events.push({ t: 'die', id: h.id, x: r2(h.x), z: r2(h.z), b: 0 });
+      this.mobs.delete(h.id);
+    }
   }
 
   giveXp(p, amount) {
@@ -385,9 +641,9 @@ export class Game {
     while (p.lvl < MAX_LEVEL && p.xp >= xpToNext(p.lvl)) {
       p.xp -= xpToNext(p.lvl);
       p.lvl++;
-      Object.assign(p, statsFor(p.cls, p.lvl));
-      p.hp = p.maxHp;
+      this.recompute(p); p.hp = p.maxHp;
       this.events.push({ t: 'lvl', id: p.id, lvl: p.lvl });
+      this.track(p, 'level', { lvl: p.lvl, secs: Math.round(this.time - p.joinedAt) });
       const unlocked = CLASSES[p.cls].skills.find(s => s.lvl === p.lvl);
       if (unlocked) this.sys(`New skill unlocked: ${unlocked.name}!`, p.id);
     }
@@ -403,11 +659,11 @@ export class Game {
     if (by && this.boss && !this.boss.dead && this.boss.threat.size && inArena(t.x, t.z)) this.boss.contributors.add(by.id);
   }
 
-  damagePlayer(p, base, { ground = false } = {}) {
+  damagePlayer(p, base, { ground = false, src = '?' } = {}) {
     if (p.dead || inTown(p.x, p.z)) return;
     if (this.time < p.iframeUntil) { this.events.push({ t: 'evade', id: p.id }); return; }
     if (ground && this.time >= p.airFrom && this.time < p.airUntil) { this.events.push({ t: 'evade', id: p.id, k: 'jump' }); return; }
-    const dr = this.time < p.dr.until ? p.dr.v : 0;
+    const dr = Math.min(0.8, (this.time < p.dr.until ? p.dr.v : 0) + (p.gearDr || 0) + (this.time < p.draughtUntil ? 0.15 : 0));
     const amount = Math.max(1, Math.round(base * (0.9 + Math.random() * 0.2) * (1 - dr)));
     p.hp -= amount;
     p.lastHurt = this.time; p.lastCombat = this.time;
@@ -415,7 +671,10 @@ export class Game {
     if (p.hp <= 0) {
       p.hp = 0; p.dead = true; p.respawnAt = this.time + 4;
       p.xp = Math.max(0, p.xp - Math.round(xpToNext(p.lvl) * 0.1)); p.dirty = true;
-      this.events.push({ t: 'pdie', id: p.id });
+      p.deaths++;
+      if (this.fight?.ids.has(p.id)) this.fight.deaths++;
+      this.track(p, 'death', { cause: src, lvl: p.lvl, area: inArena(p.x, p.z) ? 'arena' : p.z > 95 ? 'woods' : 'field' });
+      this.events.push({ t: 'pdie', id: p.id, src });
       this.sys(`${p.name} was defeated.`);
     }
   }
@@ -456,8 +715,10 @@ export class Game {
     }
     this.zones = this.zones.filter(zn => t < zn.until);
 
-    for (const m of this.mobs.values()) this.updateMob(m, dt);
+    for (const m of [...this.mobs.values()]) this.updateMob(m, dt);
     this.updateProjectiles(dt);
+    this.updateGate();
+    if (t >= this.lfgT) { this.lfgT = t + 1; this.matchParties(); }
 
     // keep mobs from stacking
     const list = [...this.mobs.values()].filter(m => !m.dead);
@@ -474,7 +735,7 @@ export class Game {
 
   validTarget(m, p) {
     if (!p || p.dead || inTown(p.x, p.z)) return false;
-    if (m.def.boss) return inArena(p.x, p.z);
+    if (m.def.boss || m.temp) return inArena(p.x, p.z); // the Warden and its hounds stay in the chamber
     return dist(m, p) < 40;
   }
 
@@ -505,8 +766,9 @@ export class Game {
 
     if (!target) {
       m.windupAt = 0;
-      if (def.boss && m.hp < m.maxHp) { // reset the fight
-        m.hp = m.maxHp; m.phase = 0; m.contributors.clear();
+      if (def.boss && (m.hp < m.maxHp || m.engaged)) { // everyone left or died: reset the fight
+        this.endFight('wipe', m);
+        m.hp = m.maxHp; m.phase = 0; m.contributors.clear(); this.clearHounds();
       }
       m.engaged = false;
       if (t >= m.wanderT) {
@@ -521,10 +783,12 @@ export class Game {
     if (def.boss && !m.engaged) { // scale the boss to the group that walks in
       m.engaged = true;
       let n = 0; for (const p of this.players.values()) if (!p.dead && inArena(p.x, p.z)) n++;
-      m.maxHp = m.hp = def.hp - 900 + 700 * Math.max(1, n);
+      m.maxHp = m.hp = WARDEN.hpBase + WARDEN.hpPer * Math.max(1, n);
+      m.phase = 0; m.slamT = t + 5; m.busyUntil = 0; m.houndT = m.chargeT = m.spinT = m.rockT = Infinity;
+      this.startFight(m);
     }
-    const enraged = def.boss && m.phase === 1;
-    if (def.boss) this.bossSpecials(m, target);
+    const enraged = def.boss && m.phase === 2;
+    if (def.boss) { this.bossSpecials(m, target); if (t < m.busyUntil) return; }
 
     // finish a wind-up attack
     if (m.windupAt) {
@@ -534,7 +798,7 @@ export class Game {
           for (const p of this.players.values()) {
             if (p.dead) continue;
             const d = dist(m, p);
-            if (d <= def.range + 1 && Math.abs(wrapAngle(angleTo(m.x, m.z, p.x, p.z) - m.face)) < 1.3) this.damagePlayer(p, def.atk);
+            if (d <= def.range + 1 && Math.abs(wrapAngle(angleTo(m.x, m.z, p.x, p.z) - m.face)) < 1.3) this.damagePlayer(p, def.atk, { src: 'warden cleave' });
           }
           this.events.push({ t: 'fx', k: 'marc', id: m.id, x: r2(m.x), z: r2(m.z), f: r2(m.face), r: def.range + 1 });
         } else if (def.ranged) {
@@ -577,7 +841,7 @@ export class Game {
       const d = dist(m, p);
       if (d > reach + 0.4) continue;
       if (d > m.def.radius + 0.6 && Math.abs(wrapAngle(angleTo(m.x, m.z, p.x, p.z) - m.face)) > half) continue;
-      this.damagePlayer(p, atk);
+      this.damagePlayer(p, atk, { src: `${m.type} bite` });
     }
   }
 
@@ -615,42 +879,111 @@ export class Game {
       if (resolveCollision(pr.x, pr.z, 0.1)[0] !== pr.x) pr.ttl = 0; // hit a tree or rock
       for (const p of this.players.values()) {
         if (p.dead || pr.ttl <= 0) continue;
-        if (Math.hypot(p.x - pr.x, p.z - pr.z) < THORN.radius + 0.4) { this.damagePlayer(p, pr.atk); pr.ttl = 0; }
+        if (Math.hypot(p.x - pr.x, p.z - pr.z) < THORN.radius + 0.4) { this.damagePlayer(p, pr.atk, { src: 'spitter thorn' }); pr.ttl = 0; }
       }
       if (pr.ttl <= 0) this.events.push({ t: 'pend', id: pr.id, x: r2(pr.x), z: r2(pr.z) });
     }
     this.projectiles = this.projectiles.filter(pr => pr.ttl > 0);
   }
 
+  // The Horned Warden: each phase ADDS attacks rather than just more health.
   bossSpecials(m, target) {
-    const t = this.time;
-    if (m.phase === 0 && m.hp < m.maxHp * 0.5) {
-      m.phase = 1;
-      this.events.push({ t: 'enrage', id: m.id });
-      this.sys('The Horned Warden is enraged!');
-      m.spinT = t + 3;
+    const t = this.time, W = WARDEN, f = m.hp / m.maxHp;
+    const want = f < W.phases[1] ? 2 : f < W.phases[0] ? 1 : 0;
+    while (m.phase < want) {
+      m.phase++;
+      this.events.push({ t: 'phase', id: m.id, n: m.phase });
+      if (m.phase === 1) {
+        this.sys('The Horned Warden howls for its hounds!');
+        m.houndT = t + 1.5; m.chargeT = t + 5;
+      } else {
+        this.events.push({ t: 'enrage', id: m.id });
+        this.sys('The Horned Warden is enraged! The ceiling is coming down.');
+        m.spinT = t + 3; m.rockT = t + 6;
+      }
     }
-    if (!m.slamT || m.slamT < t - 20) m.slamT = t + 5;
-    if (t >= m.slamT) {
-      m.slamT = t + (m.phase ? 5 : 8);
-      const ids = [...m.threat.keys()];
-      const victim = this.players.get(ids[Math.floor(Math.random() * ids.length)]) || target;
-      const x = victim.x, z = victim.z, r = 5.5, d = 1.2;
-      this.events.push({ t: 'tele', x: r2(x), z: r2(z), r, d });
-      this.schedule(d, () => {
-        if (m.dead) return;
-        this.events.push({ t: 'fx', k: 'boom', x: r2(x), z: r2(z), r });
-        for (const p of this.players.values()) if (!p.dead && Math.hypot(p.x - x, p.z - z) <= r) this.damagePlayer(p, m.def.atk * 1.8, { ground: true });
-      });
+    const fighters = [...this.players.values()].filter(p => !p.dead && inArena(p.x, p.z));
+    const pick = () => fighters[Math.floor(Math.random() * fighters.length)] || target;
+
+    // Ground slam on a random fighter (jump or roll out)
+    if (t >= m.slamT && t >= m.busyUntil) {
+      m.slamT = t + W.slam.every[m.phase];
+      const v = pick(), { r, wind } = W.slam;
+      this.circleAttack(m, v.x, v.z, r, wind, m.def.atk * W.slam.mult, 'warden slam', true);
     }
-    if (m.phase === 1 && t >= m.spinT) {
-      m.spinT = t + 9;
-      const r = 8, d = 1.4;
-      this.events.push({ t: 'tele', x: r2(m.x), z: r2(m.z), r, d, follow: m.id });
-      this.schedule(d, () => {
+    if (m.phase >= 1) {
+      // Hounds join the fight
+      if (t >= m.houndT) {
+        m.houndT = t + W.hounds.every;
+        let alive = 0; for (const h of this.mobs.values()) if (h.temp && !h.dead) alive++;
+        for (let i = 0; i < W.hounds.n && alive < W.hounds.max; i++, alive++) {
+          const a = Math.random() * Math.PI * 2;
+          const h = this.addMob('hound', WORLD.arena.x + Math.sin(a) * 18, WORLD.arena.z + Math.cos(a) * 18);
+          h.temp = true; h.sx = h.x; h.sz = h.z;
+          const v = pick(); if (v) h.threat.set(v.id, 5);
+          this.events.push({ t: 'fx', k: 'summon', x: r2(h.x), z: r2(h.z) });
+        }
+      }
+      // Horn charge: a long red lane, then the Warden barrels down it
+      if (t >= m.chargeT && t >= m.busyUntil && !m.windupAt) {
+        m.chargeT = t + W.charge.every;
+        this.hornCharge(m, pick());
+      }
+    }
+    if (m.phase >= 2) {
+      if (t >= m.spinT && t >= m.busyUntil) {
+        m.spinT = t + W.spin.every;
+        const { r, wind } = W.spin;
+        this.events.push({ t: 'tele', x: r2(m.x), z: r2(m.z), r, d: wind, follow: m.id });
+        this.schedule(wind, () => {
+          if (m.dead) return;
+          this.events.push({ t: 'fx', k: 'boom', x: r2(m.x), z: r2(m.z), r });
+          for (const p of this.players.values()) if (!p.dead && dist(p, m) <= r) this.damagePlayer(p, m.def.atk * W.spin.mult, { ground: true, src: 'warden spin' });
+        });
+      }
+      // Rockfall: a circle under every fighter, plus a few strays
+      if (t >= m.rockT) {
+        m.rockT = t + W.rock.every;
+        const spots = fighters.map(p => [p.x, p.z]);
+        for (let i = 0; i < W.rock.extra; i++) {
+          const a = Math.random() * Math.PI * 2, d = 4 + Math.random() * 16;
+          spots.push([WORLD.arena.x + Math.sin(a) * d, WORLD.arena.z + Math.cos(a) * d]);
+        }
+        for (const [x, z] of spots) this.circleAttack(m, x, z, W.rock.r, W.rock.wind, m.def.atk * W.rock.mult, 'rockfall', false, 'rock');
+      }
+    }
+  }
+
+  circleAttack(m, x, z, r, wind, amount, src, ground, kind) {
+    this.events.push({ t: 'tele', x: r2(x), z: r2(z), r, d: wind, k: kind });
+    this.schedule(wind, () => {
+      if (m.dead) return;
+      this.events.push({ t: 'fx', k: kind === 'rock' ? 'rock' : 'boom', x: r2(x), z: r2(z), r });
+      for (const p of this.players.values()) if (!p.dead && Math.hypot(p.x - x, p.z - z) <= r) this.damagePlayer(p, amount, { ground, src });
+    });
+  }
+
+  hornCharge(m, v) {
+    const W = WARDEN.charge, a = angleTo(m.x, m.z, v.x, v.z);
+    let x2 = m.x + Math.sin(a) * W.len, z2 = m.z + Math.cos(a) * W.len;
+    const ex = x2 - WORLD.arena.x, ez = z2 - WORLD.arena.z, ed = Math.hypot(ex, ez), maxR = WORLD.arena.r - 3;
+    if (ed > maxR) { x2 = WORLD.arena.x + (ex / ed) * maxR; z2 = WORLD.arena.z + (ez / ed) * maxR; }
+    const x0 = m.x, z0 = m.z;
+    m.face = a; m.busyUntil = this.time + W.wind + 0.45;
+    this.events.push({ t: 'tele', k: 'line', x: r2(x0), z: r2(z0), x2: r2(x2), z2: r2(z2), w: W.width, d: W.wind, id: m.id });
+    const steps = 3;
+    for (let i = 1; i <= steps; i++) {
+      this.schedule(W.wind + i * 0.1, () => {
         if (m.dead) return;
-        this.events.push({ t: 'fx', k: 'boom', x: r2(m.x), z: r2(m.z), r });
-        for (const p of this.players.values()) if (!p.dead && dist(p, m) <= r) this.damagePlayer(p, m.def.atk * 1.4, { ground: true });
+        m.x = x0 + (x2 - x0) * (i / steps); m.z = z0 + (z2 - z0) * (i / steps); m.moving = true;
+        if (i < steps) return;
+        this.events.push({ t: 'fx', k: 'charge', id: m.id, x: r2(x0), z: r2(z0), x2: r2(x2), z2: r2(z2) });
+        const lx = x2 - x0, lz = z2 - z0, len2 = lx * lx + lz * lz || 1;
+        for (const p of this.players.values()) {
+          if (p.dead) continue;
+          const k = Math.max(0, Math.min(1, ((p.x - x0) * lx + (p.z - z0) * lz) / len2));
+          if (Math.hypot(p.x - (x0 + lx * k), p.z - (z0 + lz * k)) <= W.width + 0.4) this.damagePlayer(p, m.def.atk * W.mult, { src: 'warden charge' });
+        }
       });
     }
   }
@@ -662,7 +995,7 @@ export class Game {
     let nx = m.x + (dx / d) * step, nz = m.z + (dz / d) * step;
     [nx, nz] = resolveCollision(nx, nz, m.def.radius * 0.8);
     if (Math.hypot(nx - WORLD.town.x, nz - WORLD.town.z) < WORLD.town.r + 2) return;
-    if (m.def.boss && !inArena(nx, nz)) return;
+    if ((m.def.boss || m.temp) && !inArena(nx, nz)) return;
     if (!walkable(nx, nz)) return;
     m.face = Math.atan2(dx, dz);
     m.x = nx; m.z = nz; m.moving = true;
@@ -672,15 +1005,19 @@ export class Game {
   snapshot() {
     const players = [];
     for (const p of this.players.values()) {
-      const buffs = (this.time < p.dr.until ? 1 : 0) | (this.time < p.dmg.until ? 2 : 0);
+      const party = this.partyOf(p);
+      const buffs = (this.time < p.dr.until ? 1 : 0) | (this.time < p.dmg.until ? 2 : 0) | (p.lfg || party?.open ? 4 : 0) | (this.time < p.tonicUntil ? 8 : 0) | (this.time < p.draughtUntil ? 16 : 0);
       players.push([p.id, r2(p.x), r2(p.z), r2(p.face), p.hp, p.maxHp, p.lvl, CLASS_IDS.indexOf(p.cls), p.party || 0, p.dead ? 1 : 0, buffs]);
     }
     const mobs = [];
     for (const m of this.mobs.values()) {
       if (m.dead) continue;
-      mobs.push([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0) | (m.windupAt ? 16 : 0) | (this.time < m.staggerUntil ? 32 : 0) | (this.time < m.frenzyUntil ? 64 : 0)]);
+      mobs.push([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase >= 2 ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0) | (m.windupAt ? 16 : 0) | (this.time < m.staggerUntil ? 32 : 0) | (this.time < m.frenzyUntil ? 64 : 0)]);
     }
-    const out = JSON.stringify({ players, mobs, events: this.events });
+    const g = this.gate;
+    const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
+    const gate = [g.open ? 1 : 0, waiting, g.ready.size, g.countAt ? r1(Math.max(0, g.countAt - this.time)) : 0];
+    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, events: this.events });
     this.events = [];
     return out;
   }
@@ -690,6 +1027,9 @@ export class Game {
       xp: p.xp, next: xpToNext(p.lvl), lvl: p.lvl,
       cds: p.cds.map(c => Math.max(0, r2(c - this.time))),
       dodge: Math.max(0, r2(p.dodgeCd - this.time)),
+      gold: p.gold, ready: this.gate.ready.has(p.id) ? 1 : 0,
+      ccd: Object.fromEntries(Object.entries(p.consCd).map(([k, v]) => [k, Math.max(0, r1(v - this.time))])),
+      tonic: Math.max(0, r1(p.tonicUntil - this.time)), draught: Math.max(0, r1(p.draughtUntil - this.time)),
     };
   }
 

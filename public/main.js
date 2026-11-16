@@ -2,8 +2,10 @@
 import * as THREE from 'three';
 import {
   CLASSES, CLASS_IDS, MOBS, MOB_IDS, PLAYER_SPEED, SPRINT_SPEED, SPRINT_AFTER, TICK_RATE, MAX_LEVEL, DODGE, JUMP,
-  walkable, resolveCollision, inTown, inArena, areaName, angleTo,
+  walkable, resolveCollision, inTown, inArena, areaName, angleTo, inGateZone,
 } from '/shared/data.js';
+import { RARITY, CONSUMABLES, CONSUMABLE_IDS, SHOP, MERCHANT, SLOTS, statLabel, sellPrice } from '/shared/items.js';
+import { Guide } from '/guide.js';
 import { createWorld, makePlayerModel, makeMobModel, Effects, loadAssets } from '/world.js';
 import { Sound } from '/audio.js';
 
@@ -22,7 +24,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 900);
-const { sun, crystal, occluders, treeFader } = createWorld(scene);
+const { sun, crystal, occluders, treeFader, gate: gateMesh } = createWorld(scene);
 const ray = new THREE.Raycaster();
 let camCur = 11;
 const fx = new Effects(scene);
@@ -37,6 +39,7 @@ addEventListener('resize', resize); resize();
 const state = {
   ws: null, myId: 0, seq: 0, x: 0, z: 0, face: 0, cls: 'swordsman', lvl: 1, hp: 1, maxHp: 1, xp: 0, next: 50,
   dead: false, party: 0, joined: false, yaw: 0, pitch: 0.5, camDist: 11,
+  gate: [0, 0, 0, 0], gateOpen: false, gold: 0, inv: null, ccd: {}, ccdReady: {}, meReady: 0, phase: 0, moved: 0, tonic: 0, draught: 0,
   ready: [0, 0, 0, 0], lastPress: [0, 0, 0, 0], dodgeReady: 0, dodgePress: 0, roll: null, moveDir: null, lastCombat: -1e9, speed: 0, lock: 0, focus: 0, jumpReady: 0, jumpPress: 0, roster: new Map(), area: '', invite: null,
 };
 const players = new Map(); // id -> entity
@@ -58,7 +61,17 @@ renderClasses();
 $('enter').disabled = true;
 const assetsReady = loadAssets(p => { $('enter').textContent = `Loading characters… ${Math.round(p * 100)}%`; })
   .catch(err => console.error('Model load failed, using block characters', err))
-  .finally(() => { $('enter').disabled = false; if (SPECTATE) join({ type: 'spectate' }); else initLogin(); });
+  .finally(() => { $('enter').disabled = false; addMerchant(); if (SPECTATE) join({ type: 'spectate' }); else initLogin(); });
+let merchantNpc = null;
+function addMerchant() { // the shopkeeper stands behind the stall's counter, facing the plaza
+  const m = makePlayerModel('cleric'), face = Math.atan2(-MERCHANT.x, -MERCHANT.z);
+  m.cursor.visible = false; m.anim?.base(m.anim.idle);
+  m.group.position.set(MERCHANT.x - Math.sin(face) * 0.3, 0, MERCHANT.z - Math.cos(face) * 0.3);
+  m.group.rotation.y = face;
+  for (const mt of m.mats || []) mt.color?.multiplyScalar(0.8);
+  scene.add(m.group);
+  merchantNpc = m;
+}
 $('enter').onclick = () => onEnter();
 $('name').addEventListener('keydown', e => { if (e.key === 'Enter') onEnter(); });
 
@@ -158,6 +171,7 @@ async function join(joinMsg) {
   };
 }
 const send = o => state.ws?.readyState === 1 && state.ws.send(JSON.stringify(o));
+const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
 
 // ---------------- networking ----------------
 function onMessage(msg) {
@@ -173,6 +187,7 @@ function onMessage(msg) {
   }
   if (msg.type === 'welcome' && msg.spectator) {
     Object.assign(state, { spectator: true, joined: true, myId: -1 });
+    guide.off = true;
     document.body.classList.add('spectator');
     $('login').classList.add('hidden'); $('hud').classList.remove('hidden');
     return;
@@ -181,8 +196,9 @@ function onMessage(msg) {
     Object.assign(state, { myId: msg.id, x: msg.x, z: msg.z, seq: msg.seq, joined: true });
     $('login').classList.add('hidden'); $('hud').classList.remove('hidden');
     buildSkillBar();
+    guide.start(msg.charId ? `c${msg.charId}` : `anon_${state.cls}`, msg.lvl);
     log('Welcome to Floorbound! Head north through the field and defeat the Horned Warden.', 'sys');
-    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge and jump.' : 'WASD move · right-drag or push the cursor to the screen edge to look · Left click (or J) attack · Ctrl+click a character to select it · 1 2 3 skills · Shift dodge · Space jump · Tab lock-on · Enter chat', 'sys');
+    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion.' : 'WASD move · right-drag or screen edge to look · Left click (or J) attack · 1 2 3 skills · Shift dodge · Space jump · 4 5 6 items · B bag · F interact · P party · Ctrl+click select', 'sys');
     log('Break an enemy (Ground Slam, Burst Combo finisher, or Smite during its wind-up), then a teammate hits it for a SWITCH: big bonus damage.', 'sys');
     return;
   }
@@ -192,6 +208,7 @@ function onMessage(msg) {
     renderPlayers();
     return;
   }
+  if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); return; }
   if (msg.type === 'snap') onSnapshot(msg);
 }
 
@@ -202,7 +219,11 @@ function onSnapshot({ me, w }) {
     if (me.lvl !== state.lvl) { state.lvl = me.lvl; buildSkillBar(me.lvl); }
     me.cds.forEach((c, i) => { if (now - state.lastPress[i] > 350) state.ready[i] = now + c * 1000; });
     if (now - state.dodgePress > 350) state.dodgeReady = now + (me.dodge || 0) * 1000;
+    state.gold = me.gold; state.meReady = me.ready; state.tonic = me.tonic; state.draught = me.draught;
+    for (const id of CONSUMABLE_IDS) if (now - (state.ccdPress?.[id] || 0) > 350) state.ccdReady[id] = now + (me.ccd?.[id] || 0) * 1000;
   }
+  if (w.gate) { state.gate = w.gate; state.gateOpen = !!w.gate[0]; gateMesh.set(state.gateOpen); }
+  state.phase = w.phase || 0;
 
   // events first (they may reference mobs that are about to vanish)
   for (const e of w.events) handleEvent(e);
@@ -263,6 +284,9 @@ function handleEvent(e) {
       else if (e.k === 'zone') fx.zone(e.x, e.z, e.r, e.d);
       else if (e.k === 'marc') fx.arc(e.x, e.z, e.f, e.r, e.small ? 0.6 : 1.3, 0xff4d4d);
       else if (e.k === 'boom') { fx.ring(e.x, e.z, e.r, 0xff7a2f, 0.5); shake(0.35); }
+      else if (e.k === 'rock') { fx.rock(e.x, e.z, e.r); setTimeout(() => { fx.ring(e.x, e.z, e.r, 0x9ca3af, 0.5); shake(0.2); sfx.play('boom', { x: e.x, z: e.z }, 0.7); }, 200); }
+      else if (e.k === 'charge') { fx.line(e.x, e.z, e.x2, e.z2, 0xff7a2f, 4, 0.5, 0.5); shake(0.45); sfx.play('boom', { x: e.x2, z: e.z2 }, 1.3); }
+      else if (e.k === 'summon') { fx.ring(e.x, e.z, 3, 0xff3b1f, 0.7); sfx.play('howl', { x: e.x, z: e.z }, 0.8); }
       break;
     }
     case 'jump': {
@@ -273,6 +297,7 @@ function handleEvent(e) {
     case 'proj': projFx.set(e.id, fx.thorn(e.x, e.z, e.vx, e.vz, e.ttl)); sfx.play('spit', { x: e.x, z: e.z }); break;
     case 'pend': fx.end(projFx.get(e.id)); projFx.delete(e.id); fx.ring(e.x, e.z, 0.8, 0xd6c48a, 0.25); break;
     case 'howl': {
+      if (Math.hypot(state.x - (mobs.get(e.id)?.x ?? 1e9), state.z - (mobs.get(e.id)?.z ?? 1e9)) < 25) guide.tip('howl');
       const m = mobs.get(e.id);
       if (m) {
         fx.ring(m.x, m.z, e.r, 0xff7a2f, 0.9); fx.ring(m.x, m.z, e.r * 0.5, 0xffb37a, 0.6);
@@ -284,6 +309,7 @@ function handleEvent(e) {
     case 'roll': {
       const p = players.get(e.id);
       if (p) sfx.play('roll', p.model.group.position, e.id === me ? 1 : 0.6);
+      if (e.id === me) guide.did('dodge');
       if (p) { p.model.anim?.shot('Dodge_Forward', 1.9); fx.ring(p.model.group.position.x, p.model.group.position.z, 1.2, 0xe5e7eb, 0.3); }
       break;
     }
@@ -292,6 +318,7 @@ function handleEvent(e) {
       const m = mobs.get(e.id);
       if (!m) break;
       m.staggerT = e.d; m.staggerBy = e.by;
+      if (Math.hypot(m.x - state.x, m.z - state.z) < 25) guide.tip('broken');
       fx.ring(m.x, m.z, m.def.radius + 2.5, 0xfacc15, 0.5);
       sfx.play('break', m.model.group.position);
       m.model.anim?.shot('Hit_B', 0.9);
@@ -302,6 +329,7 @@ function handleEvent(e) {
       break;
     }
     case 'switch': {
+      if (e.by === me || e.from === me) guide.did('switch');
       const m = mobs.get(e.id);
       if (m) {
         floatNum(m.model.group.position, m.model.height * 0.85, `SWITCH! ${e.a}`, 'switch');
@@ -319,20 +347,36 @@ function handleEvent(e) {
         if ((m.type === 'wolf' || m.type === 'alpha') && Math.random() < 0.4) sfx.play('growl', m.model.group.position, 0.7);
         if (e.r) fx.wedge(m.x, m.z, e.f, e.r, e.h, e.d);                 // bite wedge: step out of it
         if (e.ax !== undefined) fx.aimLine(m.x, m.z, e.ax, e.az, e.d);   // thorn shot: sidestep the line
+        const near = Math.hypot(m.x - state.x, m.z - state.z) < 6;
+        if (e.r && near) guide.tip('wedge');
+        if (e.ax !== undefined && Math.hypot(e.ax - state.x, e.az - state.z) < 3) guide.tip('aim');
       }
       break;
     }
-    case 'tele':
+    case 'tele': {
+      const mine = Math.hypot(e.x - state.x, e.z - state.z) < e.r + 2;
+      if (e.k === 'line') {
+        fx.lane(e.x, e.z, e.x2, e.z2, e.w, e.d);
+        sfx.play('warn', { x: e.x, z: e.z }, 1.3);
+        if (boss) { bossShot(boss.id, 'Cheer', 1.6); bossShot(boss.id, '2H_Melee_Attack_Stab', 1.4, Math.max(0, e.d - 0.2)); }
+        guide.tip('lane');
+        break;
+      }
       fx.telegraph(e.x, e.z, e.r, e.d, e.follow ? () => mobs.get(e.follow)?.model.group.position : null);
+      if (e.k === 'rock') { if (mine) { sfx.play('warn', { x: e.x, z: e.z }, 0.6); guide.tip('rock'); } break; }
       sfx.play('warn', { x: e.x, z: e.z });
+      if (mine) guide.tip('slam');
       if (boss) bossShot(boss.id, e.follow ? '2H_Melee_Attack_Spin' : '2H_Melee_Attack_Slice', 1.2, Math.max(0, e.d - 0.55));
       break;
+    }
     case 'buff': {
       const p = players.get(e.id);
       if (!p) break;
       if (e.k === 'wall') fx.shield(p.model.group, e.d, 0x60a5fa);
       else if (e.k === 'dr') fx.shield(p.model.group, e.d, 0xfbbf24);
       else if (e.k === 'bless') fx.ring(p.model.group.position.x, p.model.group.position.z, 1.5, 0xfde68a, 0.6);
+      else if (e.k === 'tonic') fx.ring(p.model.group.position.x, p.model.group.position.z, 1.6, 0xfb923c, 0.6);
+      else if (e.k === 'draught') fx.shield(p.model.group, 1.2, 0x4ade80);
       break;
     }
     case 'hit': {
@@ -342,6 +386,7 @@ function handleEvent(e) {
         const mine = e.by === me || state.spectator;
         sfx.play(e.h ? 'hitHeavy' : e.c ? 'crit' : 'hit', m.model.group.position, e.by === me ? 1 : 0.55);
         if (e.by === me) {
+          guide.did('hit');
           state.lastCombat = performance.now();
           hitStop = Math.max(hitStop, e.h ? 0.1 : e.c ? 0.07 : 0.04);
           if (e.h) shake(0.18);
@@ -364,7 +409,7 @@ function handleEvent(e) {
       if (p && (state.spectator || e.id === me || (state.party && p.party === state.party))) floatNum(p.model.group.position, 2.4, `+${e.a}`, 'heal');
       break;
     }
-    case 'xp': if (e.to === me) { const p = players.get(me); if (p) floatNum(p.model.group.position, 2.9, `+${e.a} XP`, 'xp'); } break;
+    case 'xp': if (e.to === me) { const p = players.get(me); if (p) floatNum(p.model.group.position, 2.9, `+${e.a} XP`, 'xp'); if (e.a >= 10) guide.did('kill'); } break;
     case 'lvl': {
       const p = players.get(e.id);
       if (p) fx.ring(p.model.group.position.x, p.model.group.position.z, 3, 0xfde68a, 0.8);
@@ -388,9 +433,51 @@ function handleEvent(e) {
       if (m) { removeEntity(m); mobs.delete(e.id); if (m === boss) boss = null; }
       break;
     }
-    case 'pdie': { if (e.id === me) $('dead').classList.remove('hidden'); break; }
-    case 'enrage': if (boss) { bossShot(boss.id, 'Cheer', 1.2); sfx.play('roar', boss.model.group.position, 1.4); } banner('THE WARDEN IS ENRAGED', 'Watch for the spin — get out of the red circle'); break;
-    case 'clear': sfx.play('clear'); banner('FLOOR 1 CLEARED', e.names.join(' · ')); break;
+    case 'pdie': {
+      if (e.id === me) {
+        $('dead').innerHTML = `<div>You were defeated</div><small>${e.src && e.src !== '?' ? `by ${esc(e.src)} · ` : ''}returning to town…</small>`;
+        $('dead').classList.remove('hidden');
+      }
+      break;
+    }
+    case 'phase':
+      if (e.n === 1) { if (boss) { bossShot(boss.id, 'Cheer', 1.2); sfx.play('howl', boss.model.group.position, 1.3); } banner('THE HOUNDS ARE LOOSE', 'Phase 2: hounds and horn charges. Get out of the red lanes'); }
+      break;
+    case 'enrage': if (boss) { bossShot(boss.id, 'Cheer', 1.2); sfx.play('roar', boss.model.group.position, 1.4); } banner('THE WARDEN IS ENRAGED', 'Phase 3: spins and falling rocks. Keep moving'); break;
+    case 'la': {
+      fx.beam(e.x, e.z, 0xfbbf24, 4.5); sfx.play('loot', { x: e.x, z: e.z }, 1.3);
+      setTimeout(() => banner('LAST ATTACK BONUS', `${e.name} · Horn of the Warden`), 3400);
+      break;
+    }
+    case 'clear': sfx.play('clear'); banner('FLOOR 1 CLEARED', e.names.join(' · ')); if (inArena(state.x, state.z)) guide.did('boss'); break;
+    case 'loot': {
+      if (e.to !== me) break;
+      const p = players.get(me);
+      if (p && e.g) floatNum(p.model.group.position, 3.2, `+${e.g} gold`, 'gold');
+      if (e.pot) log('Loot: Health Potion', 'r0');
+      let best = -1;
+      for (const it of e.items) { log(`Loot: ${it.name} (${RARITY[it.r].name})`, `r${it.r}`); best = Math.max(best, it.r); }
+      if (best >= 0) {
+        fx.beam(e.x, e.z, parseInt(RARITY[best].color.slice(1), 16), best >= 2 ? 3.5 : 1.6);
+        if (p) floatNum(p.model.group.position, 3.6, e.items[0].name, `loot r${best}`);
+        sfx.play('loot', { x: e.x, z: e.z }, best >= 2 ? 1 : 0.5);
+        guide.tip('loot');
+      } else if (e.g) sfx.play('coin', null, 0.5);
+      break;
+    }
+    case 'drink': {
+      const p = players.get(e.id);
+      if (p) { p.model.anim?.shot('Spellcast_Raise', 2); if (e.id === me) sfx.play('drink'); }
+      if (e.id === me) guide.did('bag');
+      break;
+    }
+    case 'coin': if (e.id === me) sfx.play('coin'); break;
+    case 'equip': if (e.id === me) sfx.play('shield', null, 0.5); break;
+    case 'pjoin': if (e.id === me) { guide.did('party'); sfx.play('ui'); } break;
+    case 'gate':
+      if (e.s === 'count' && inGateZone(state.x, state.z)) { for (let i = 0; i < e.d; i++) setTimeout(() => sfx.play('tick'), i * 1000); }
+      if (e.s === 'open') { sfx.play('gate', { x: 0, z: 161 }, 1.5); if (Math.abs(state.x) < 30 && state.z > 120) banner('THE RAID GATE OPENS', 'The Horned Warden awaits'); }
+      break;
     case 'invite': if (e.to === me) showInvite(e.from, e.name); break;
     case 'chat': log(`${e.from}: ${e.text}`, e.id === me ? 'me' : ''); break;
     case 'sys': if (!e.to || e.to === me) log(e.text, 'sys'); break;
@@ -484,6 +571,10 @@ addEventListener('keydown', e => {
   if (k === 'tab') { e.preventDefault(); cycleLock(); }
   if (k === 'escape') { state.lock = 0; state.focus = 0; }
   if (k === 'p') $('players-btn').click();
+  if (k === 'b' || k === 'i') toggleBag();
+  if (k === 'f') interact();
+  const ci = ['4', '5', '6'].indexOf(k);
+  if (ci >= 0) useItem(CONSUMABLE_IDS[ci]);
 });
 addEventListener('keyup', e => {
   const k = e.key.toLowerCase();
@@ -557,8 +648,16 @@ function buildSkillBar(lvl = state.lvl) {
     return `<button class="sk s${i} ${i === 0 ? 'basic' : ''} ${locked ? 'locked' : ''}" data-slot="${i}" title="${s.name}: ${s.desc}${locked ? ` (unlocks at Lv ${s.lvl})` : ''}">
       <span class="key">${i === 0 ? (isTouch ? '' : 'CLICK') : i}</span>${s.name}${locked ? `<br><small>Lv ${s.lvl}</small>` : ''}<span class="cd"></span><span class="cdt"></span></button>`;
   }).join('') + `<button class="sk sd" data-slot="dodge" title="Dodge roll: dash and avoid damage"><span class="key">${isTouch ? '' : 'SHIFT'}</span>Dodge<span class="cd"></span><span class="cdt"></span></button>`
-    + `<button class="sk sj" data-slot="jump" title="Jump: hop over the boss's ground slams"><span class="key">${isTouch ? '' : 'SPACE'}</span>Jump<span class="cd"></span><span class="cdt"></span></button>`;
+    + `<button class="sk sj" data-slot="jump" title="Jump: hop over the boss's ground slams"><span class="key">${isTouch ? '' : 'SPACE'}</span>Jump<span class="cd"></span><span class="cdt"></span></button>`
+    + CONSUMABLE_IDS.map(id => `<button class="sk it2 ${id}" data-item="${id}" title="${CONSUMABLES[id].name}: ${CONSUMABLES[id].desc}"><span class="key">${isTouch ? '' : CONSUMABLES[id].key}</span>${CONSUMABLES[id].name.split(' ').pop()}<span class="cnt"></span><span class="cd"></span></button>`).join('')
+    + `<button class="sk act" data-slot="act">Ready</button>`;
   for (const b of $('skills').children) {
+    if (b.dataset.item || b.dataset.slot === 'act') {
+      b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('pressed'); if (b.dataset.item) useItem(b.dataset.item); else interact(); });
+      const up = () => b.classList.remove('pressed');
+      b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up); b.addEventListener('pointercancel', up);
+      continue;
+    }
     if (b.dataset.slot === 'dodge' || b.dataset.slot === 'jump') {
       const act = b.dataset.slot === 'dodge' ? dodge : jump;
       b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('pressed'); act(); });
@@ -690,6 +789,96 @@ function useSkill(slot) {
   send({ type: 'skill', slot, face: state.face });
 }
 
+// ---------------- items, merchant, raid gate ----------------
+const nearMerchant = () => !state.dead && Math.hypot(state.x - MERCHANT.x, state.z - MERCHANT.z) < MERCHANT.r + 1;
+function interactKind() {
+  if (state.dead || !state.joined || state.spectator) return null;
+  if (nearMerchant()) return 'shop';
+  if (!state.gateOpen && inGateZone(state.x, state.z)) return 'gate';
+  return null;
+}
+function interact() {
+  const k = interactKind();
+  if (k === 'shop') { state.shopOpen = true; $('bag').classList.remove('hidden'); renderBag(); sfx.play('ui'); }
+  else if (k === 'gate') { send({ type: 'ready' }); sfx.play('ui'); state.meReady = state.meReady ? 0 : 1; updateGateBox(true); }
+}
+function useItem(id) {
+  if (state.dead || !state.joined || !CONSUMABLES[id]) return;
+  const now = performance.now();
+  if (!(state.inv?.cons?.[id] > 0)) { log(`No ${CONSUMABLES[id].name}s left. The merchant in town sells them.`, 'sys'); return; }
+  if (now < (state.ccdReady[id] || 0)) return;
+  if (id === 'potion' && state.hp >= state.maxHp) { log('Already at full health.', 'sys'); return; }
+  state.ccdReady[id] = now + CONSUMABLES[id].cd * 1000; (state.ccdPress ||= {})[id] = now;
+  send({ type: 'use', id });
+}
+function toggleBag() {
+  const el = $('bag');
+  el.classList.toggle('hidden');
+  if (!el.classList.contains('hidden')) { state.shopOpen = nearMerchant(); renderBag(); guide.did('bag'); sfx.play('ui'); }
+}
+$('bag-btn').onclick = toggleBag;
+
+const statsText = it => Object.entries(it.st).map(([k, v]) => statLabel(k, v)).join(' · ');
+function mainStat(it) { return it ? (it.st.atk ?? it.st.hp ?? Object.values(it.st).reduce((a, b) => a + b, 0)) : 0; }
+function renderBag() {
+  const el = $('bag');
+  if (el.classList.contains('hidden') || !state.inv) return;
+  const inv = state.inv, near = nearMerchant();
+  const shopping = near && state.shopOpen;
+  const row = (it, slotName, actions) => it
+    ? `<div class="it"><span class="slot">${slotName}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}</b><small>${statsText(it)}</small></span>${actions}</div>`
+    : `<div class="it empty"><span class="slot">${slotName}</span><span class="nm"><small>Empty</small></span></div>`;
+  let h = `<div class="top"><span>Bag <span class="gold">${inv.gold} gold</span></span><button class="x" data-a="close">✕</button></div>`;
+  if (shopping) {
+    h += `<div class="shop"><h4>Merchant</h4>${SHOP.map((s, i) => {
+      const name = s.kind === 'cons' ? CONSUMABLES[s.id].name : s.slot === 'weapon' ? 'Uncommon weapon (your class)' : 'Uncommon armour';
+      const desc = s.kind === 'cons' ? CONSUMABLES[s.id].desc : s.slot === 'weapon' ? '+7–9% damage' : '+8–12% max health';
+      const price = s.kind === 'cons' ? CONSUMABLES[s.id].price : s.price;
+      return `<div class="it"><span class="nm"><b>${name}</b><small>${desc}</small></span><button data-a="buy" data-i="${i}" ${inv.gold < price ? 'disabled style="opacity:.4"' : ''}>${price}g</button></div>`;
+    }).join('')}</div>`;
+  } else if (near) h += `<div class="it"><span class="nm"><small>You're at the merchant.</small></span><button data-a="shop">Trade</button></div>`;
+  h += `<h4>Equipped</h4>${SLOTS.map(sl => row(inv.eq[sl], sl, inv.eq[sl] ? `<button data-a="unequip" data-s="${sl}">Remove</button>` : '')).join('')}`;
+  const st = inv.stats;
+  h += `<div class="stats"><span>Damage ${st.atk}</span><span>Health ${st.maxHp}</span><span>Crit ${st.crit}%</span><span>Cooldowns −${st.haste}%</span><span>Switch +${st.sw}%</span><span>Damage taken −${st.dr}%</span></div>`;
+  h += `<h4>Consumables</h4>${CONSUMABLE_IDS.map(id => `<div class="it"><span class="slot">${CONSUMABLES[id].key}</span><span class="nm"><b>${CONSUMABLES[id].name} ×${inv.cons[id] || 0}</b><small>${CONSUMABLES[id].desc}</small></span><button data-a="use" data-id="${id}" ${inv.cons[id] ? '' : 'disabled style="opacity:.4"'}>Use</button></div>`).join('')}`;
+  h += `<h4>Bag (${inv.bag.length}/24)</h4>`;
+  h += inv.bag.length ? inv.bag.map(it => {
+    const cur = inv.eq[it.slot], diff = mainStat(it) - mainStat(cur);
+    const cmp = it.slot !== 'charm' && cur ? (diff > 0 ? ` <span class="up">▲${diff}</span>` : diff < 0 ? ` <span class="down">▼${-diff}</span>` : '') : !cur ? ' <span class="up">new</span>' : '';
+    const usable = !it.cls || it.cls === state.cls;
+    return `<div class="it"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}</div>`;
+  }).join('') : '<div class="it empty"><span class="nm"><small>Nothing yet. Enemies drop gear; the Warden always does.</small></span></div>';
+  el.innerHTML = h;
+}
+$('bag').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || b.disabled) return;
+  const a = b.dataset.a;
+  if (a === 'close') { $('bag').classList.add('hidden'); return; }
+  if (a === 'shop') { state.shopOpen = true; renderBag(); return; }
+  if (a === 'buy') send({ type: 'buy', i: +b.dataset.i });
+  if (a === 'sell') send({ type: 'sell', u: +b.dataset.u });
+  if (a === 'equip') send({ type: 'equip', u: +b.dataset.u });
+  if (a === 'unequip') send({ type: 'unequip', slot: b.dataset.s });
+  if (a === 'use') useItem(b.dataset.id);
+  sfx.play('ui');
+});
+
+let gateKey = '';
+function updateGateBox(force) {
+  const el = $('gatebox');
+  const [open, waiting, ready, count] = state.gate;
+  const show = !state.spectator && !state.dead && !open && inGateZone(state.x, state.z);
+  const key = `${show}|${waiting}|${ready}|${Math.ceil(count)}|${state.meReady}`;
+  if (key === gateKey && !force) return;
+  gateKey = key;
+  el.classList.toggle('hidden', !show);
+  if (!show) return;
+  el.innerHTML = `<b>RAID GATE</b><div class="sub">The Horned Warden · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}</div>`
+    + (count > 0 ? `<div class="count">${Math.ceil(count)}</div>` : '')
+    + `<button class="${state.meReady ? 'on' : ''}">${state.meReady ? 'Ready ✓' : `Ready${isTouch ? '' : ' (F)'}`}</button>`;
+  el.querySelector('button').onclick = interact;
+}
+
 // ---------------- HUD ----------------
 const logEl = $('log');
 function log(text, cls = '') {
@@ -724,9 +913,13 @@ function renderPlayers() {
     if (id === state.myId) continue;
     const p = players.get(id);
     const inParty = state.party && p?.party === state.party;
-    rows.push(`<div class="p"><span>${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small></span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}</div>`);
+    const lfgTag = (p?.buffs || 0) & 4 ? '<span class="tag">LFG</span>' : '';
+    rows.push(`<div class="p"><span>${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}</div>`);
   }
-  $('players').innerHTML = `<b>Online (${state.roster.size})</b>${rows.join('') || '<div style="opacity:.6;font-size:13px;padding:6px 0">Nobody else yet. Share the link with friends!</div>'}${state.party ? '<button class="leave">Leave party</button>' : ''}`;
+  const meE = players.get(state.myId), seeking = !!((meE?.buffs || 0) & 4);
+  const lfgBtn = `<button class="lfg ${seeking ? 'on' : ''}">${state.party ? (seeking ? 'Recruiting via party finder ✓' : 'Recruit with party finder') : seeking ? 'Searching for a party… (cancel)' : 'Find party'}</button>`;
+  $('players').innerHTML = `${lfgBtn}<b>Online (${state.roster.size})</b>${rows.join('') || '<div style="opacity:.6;font-size:13px;padding:6px 0">Nobody else yet. Share the link with friends!</div>'}${state.party ? '<button class="leave">Leave party</button>' : ''}`;
+  $('players').querySelector('.lfg').onclick = () => { send({ type: 'lfg' }); sfx.play('ui'); setTimeout(renderPlayers, 150); };
   for (const b of $('players').querySelectorAll('[data-inv]')) b.onclick = () => { send({ type: 'invite', id: +b.dataset.inv }); b.textContent = 'Sent'; b.disabled = true; };
   const lv = $('players').querySelector('.leave'); if (lv) lv.onclick = () => send({ type: 'leave' });
 }
@@ -772,10 +965,30 @@ function updateHud(now) {
   // boss bar
   const showBoss = boss && (boss.engaged || boss.hp < boss.maxHp) && state.z > 120;
   $('boss').classList.toggle('hidden', !showBoss);
-  if (showBoss) { setBar($('boss-hp'), (boss.hp / boss.maxHp) * 100); $('boss').classList.toggle('enraged', !!boss.enraged); }
+  if (showBoss) {
+    setBar($('boss-hp'), (boss.hp / boss.maxHp) * 100); $('boss').classList.toggle('enraged', !!boss.enraged);
+    $('boss-phase').textContent = ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '';
+  }
+
+  // items, raid gate, merchant, guide
+  $('gold-chip').textContent = `${state.gold}g`;
+  $('me-buffs').innerHTML += `${state.tonic > 0 ? `<span>Tonic ${Math.ceil(state.tonic)}s</span>` : ''}${state.draught > 0 ? `<span>Ironbark ${Math.ceil(state.draught)}s</span>` : ''}`;
+  updateGateBox();
+  const near = nearMerchant();
+  if (near !== state.wasNear) { state.wasNear = near; if (!near) state.shopOpen = false; renderBag(); }
+  if (!state.dead && state.hp / state.maxHp < 0.35 && state.hp > 0) guide.tip('lowhp');
+  if (inArena(state.x, state.z)) guide.did('gate');
 
   // cooldowns
   for (const btn of $('skills').children) {
+    if (btn.dataset.item) {
+      const id = btn.dataset.item, n = state.inv?.cons?.[id] || 0, left = Math.max(0, (state.ccdReady[id] || 0) - now) / 1000;
+      btn.querySelector('.cnt').textContent = `×${n}`;
+      btn.classList.toggle('none', n === 0);
+      btn.querySelector('.cd').style.setProperty('--p', `${Math.min(100, (left / CONSUMABLES[id].cd) * 100)}%`);
+      continue;
+    }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); btn.textContent = a === 'shop' ? 'Trade' : state.meReady ? 'Unready' : 'Ready'; continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : CLASSES[state.cls].skills[slot];
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
@@ -1001,7 +1214,7 @@ function frame(now) {
       const step = Math.min(state.roll.left, dt) * (DODGE.dist / DODGE.time);
       state.roll.left -= dt;
       let [nx, nz] = resolveCollision(state.x + Math.sin(state.roll.dir) * step, state.z + Math.cos(state.roll.dir) * step);
-      if (walkable(nx, nz)) { state.x = nx; state.z = nz; }
+      if (walkable(nx, nz, !state.gateOpen)) { state.x = nx; state.z = nz; }
       if (state.roll.left <= 0) state.roll = null;
     } else if (mag > 0.08) {
       const fy = state.yaw;
@@ -1014,9 +1227,12 @@ function frame(now) {
       const step = state.speed * dt;
       let nx = state.x + mx * step, nz = state.z + mz * step;
       [nx, nz] = resolveCollision(nx, nz);
-      if (!walkable(nx, nz)) { // slide along the boundary
-        if (walkable(nx, state.z)) nz = state.z; else if (walkable(state.x, nz)) nx = state.x; else { nx = state.x; nz = state.z; }
+      const gc = !state.gateOpen;
+      if (!walkable(nx, nz, gc)) { // slide along the boundary
+        if (walkable(nx, state.z, gc)) nz = state.z; else if (walkable(state.x, nz, gc)) nx = state.x; else { nx = state.x; nz = state.z; }
       }
+      state.moved += Math.hypot(nx - state.x, nz - state.z);
+      if (state.moved > 10) guide.did('move');
       state.x = nx; state.z = nz;
       state.face = Math.atan2(mx, mz);
     } else state.speed = 0;
@@ -1032,6 +1248,13 @@ function frame(now) {
   for (const e of mobs.values()) animateEntity(e, dt);
   fx.update(dt);
   crystal.rotation.y += dt;
+  gateMesh.update(dt);
+  if (merchantNpc?.anim) merchantNpc.anim.update(dt);
+  if (state.joined && !state.spectator) {
+    const ml = $('merchant-lbl'), mp = project(MERCHANT.x, 3.6, MERCHANT.z), md = Math.hypot(state.x - MERCHANT.x, state.z - MERCHANT.z);
+    if (mp && md < 20) { ml.style.display = ''; ml.style.left = `${mp[0]}px`; ml.style.top = `${mp[1]}px`; ml.innerHTML = `Merchant${md < MERCHANT.r + 1 ? `<br><small>${isTouch ? 'tap Trade' : 'press F to trade'}</small>` : ''}`; }
+    else ml.style.display = 'none';
+  }
 
   // camera
   const me = players.get(state.myId);

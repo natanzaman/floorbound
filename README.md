@@ -36,7 +36,9 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Select a character (enemy or ally) | Ctrl+click it (Cmd+click on Mac); Ctrl+click empty ground to clear | Lock on button (enemies) |
 | Lock on / cycle enemies | Tab (Esc to clear) | Lock on button |
 | Chat | Enter | Chat button |
-| Party | Players button (P) → Invite | Players button → Invite |
+| Party | Players button (P) → Find party, or Invite | Players button → Find party / Invite |
+| Items | 4 potion, 5 tonic, 6 draught; B bag | Potion button; Bag button |
+| Interact (merchant, raid gate) | F | Trade / Ready button |
 | Sound on/off | Sound button | Sound button |
 
 Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 3-hit combos with a heavy, knockback finisher. You sprint automatically after 3 seconds out of combat. All sound effects and music are synthesized in the browser (`public/audio.js`), so there are no audio files.
@@ -49,13 +51,33 @@ Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 
 | Dire Wolf | 5 | Hunts in packs. Every bite shows a red wedge first: step out of it. |
 | Bramble Spitter | 4 | Rooted plant. Draws a red line, then fires a thorn along it: sidestep or roll. |
 | Alpha Wolf (elite) | 7 | Leads a pack: nearby wolves hit 25% harder. Howls to send the pack into a frenzy. |
-| The Horned Warden (boss) | 10 | Axe swings, ground slams, and an enraged spin. Jump or roll the red circles. |
+| Warden's Hound | 8 | Summoned by the Warden in phase 2. Stays in the chamber. |
+| The Horned Warden (boss) | 10 | Three phases. 100–66%: cleaves and ground slams. 66–33%: adds hounds and a horn charge down a red lane. Below 33%: enraged spin and rockfall circles under everyone. |
+
+## The raid gate and the Last Attack Bonus
+
+A portcullis blocks the corridor to the Warden's chamber. Everyone standing at the gate presses **F** (or taps Ready); when all of them are ready, it counts down 5 seconds and rises. It closes again once the chamber is empty. Boss health scales with the number of players inside when the fight starts. Whoever lands the killing blow gets the **Last Attack Bonus**: the unique *Horn of the Warden* charm.
+
+## Items
+
+- **Gear:** weapon (+damage), armour (+health, and less damage taken at Rare+), charm (crit, cooldowns or Switch damage). Rarities: Common, Uncommon, Rare, Epic, plus the gold Last Attack item. Weapons are class-specific.
+- **Drops are personal:** every party member nearby rolls their own gold, potions and gear. Alphas always drop Uncommon+; the Warden drops two Rare+ items for everyone who fought.
+- **Consumables:** Health Potion (40% health), Battle Tonic (+15% damage, 30 s), Ironbark Draught (−15% damage taken, 30 s). New characters start with 3 potions.
+- **Merchant** in town (press F at the stall): buy consumables and Uncommon gear, sell items.
+
+## New players and the party finder
+
+New characters get a short step-by-step guide card (move, hit, dodge, kill, bag, party, Switch, raid gate, boss) plus one-time tips the first time they see each attack type. **Find party** puts you in the party finder: solo players are matched together, or into any party that has turned on recruiting.
+
+## Play tracking
+
+With a database, the server records play events (session start/end, first kill, deaths and their cause, party joins, guide steps, boss attempts, rare drops) in `play_events`. See the aggregates at **/stats.html** (raw JSON at `/api/stats?days=7`).
 
 ## Combat: Break and Switch
 
 - **Dodge roll** gives a short window of invulnerability; roll through the boss's red circles.
 - **Break** an enemy with Ground Slam (Guardian), the Burst Combo finisher (Swordsman), or a Smite that lands while it's winding up an attack (Cleric). It's stunned for a moment and shows a yellow dizzy ring.
-- **Switch:** the first hit from a *teammate* on a broken enemy does 2.5x damage, and follow-up hits do 1.4x. You can't Switch your own Break.
+- **Switch:** the first hit from a *teammate* on a broken enemy does 2.5x damage, and follow-up hits do 1.4x. You can't Switch your own Break. Charms of the Switch boost this further.
 
 ## Classes
 

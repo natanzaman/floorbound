@@ -38,12 +38,14 @@ export async function listCharacters(accountId) {
 }
 
 export async function loadCharacter(accountId, charId) {
-  const rows = await q('SELECT id, name, cls, lvl, xp FROM characters WHERE id = $1 AND account_id = $2', [charId | 0, accountId]);
+  const rows = await q('SELECT id, name, cls, lvl, xp, gold, inv FROM characters WHERE id = $1 AND account_id = $2', [charId | 0, accountId]);
   return rows[0] || null;
 }
 
-export async function saveCharacter(charId, lvl, xp) {
-  await q('UPDATE characters SET lvl = $2, xp = $3, updated_at = now() WHERE id = $1', [charId, Math.min(MAX_LEVEL, lvl), xp]);
+// p: an in-game player with charId, lvl, xp, gold, inv
+export async function saveCharacter(p) {
+  await q('UPDATE characters SET lvl = $2, xp = $3, gold = $4, inv = $5, updated_at = now() WHERE id = $1',
+    [p.charId, Math.min(MAX_LEVEL, p.lvl), p.xp, Math.max(0, p.gold | 0), JSON.stringify(p.inv)]);
 }
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _.-]{1,14}[A-Za-z0-9]$/;

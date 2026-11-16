@@ -143,6 +143,11 @@ export class Sound {
       case 'growl': this.tone(o, { f: 110 * j, to: 80, dur: 0.35, vol: 0.18, type: 'sawtooth' }); break;
       case 'step': this.noise(o, { dur: 0.05, vol: 0.06, type: 'lowpass', f: 500 }); break;
       case 'ui': this.tone(o, { f: 880, dur: 0.06, vol: 0.08, type: 'triangle' }); break;
+      case 'coin': [84, 91].forEach((n, i) => this.tone(o, { f: NOTE(n), dur: 0.18, vol: 0.1, type: 'square', at: i * 0.06 })); break;
+      case 'loot': [72, 79, 84, 88].forEach((n, i) => this.tone(o, { f: NOTE(n), dur: 0.4, vol: 0.13, type: 'triangle', at: i * 0.07 })); break;
+      case 'drink': this.noise(o, { dur: 0.25, vol: 0.15, type: 'lowpass', f: 700, to: 300 }); this.tone(o, { f: NOTE(76), to: NOTE(83), dur: 0.3, vol: 0.1, type: 'sine', at: 0.15 }); break;
+      case 'gate': this.tone(o, { f: 70, to: 50, dur: 1.6, vol: 0.3, type: 'sawtooth', attack: 0.1 }); this.noise(o, { dur: 1.6, vol: 0.2, type: 'lowpass', f: 300 }); break;
+      case 'tick': this.tone(o, { f: 660, dur: 0.08, vol: 0.12, type: 'square' }); break;
       case 'clear': [60, 64, 67, 72, 67, 72, 76, 79].forEach((n, i) => this.tone(o, { f: NOTE(n), dur: 0.6, vol: 0.16, type: 'triangle', at: i * 0.12 })); break;
     }
   }

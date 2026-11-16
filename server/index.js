@@ -7,6 +7,7 @@ import { WebSocketServer } from 'ws';
 import { Game } from './game.js';
 import * as db from './db.js';
 import * as accounts from './accounts.js';
+import * as track from './track.js';
 import { TICK_RATE } from '../shared/data.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -22,11 +23,17 @@ const MOUNTS = [
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.glb': 'model/gltf-binary' };
 
 const game = new Game();
+game.track = track.record;
 const spectators = new Set(); // watch-only clients (?spectate=1)
 
 const server = http.createServer(async (req, res) => {
   if (res.handled) return;
   const full = new URL(req.url, 'http://x');
+  if (full.pathname === '/api/stats') {
+    const body = await track.stats(Number(full.searchParams.get('days')) || 7).catch(e => ({ error: e.message }));
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    return res.end(JSON.stringify(body));
+  }
   if (full.pathname.startsWith('/api/') || full.pathname.startsWith('/auth/')) {
     if (await accounts.handle(req, res, full)) return;
   }
@@ -69,13 +76,13 @@ wss.on('connection', ws => {
       if (!c) { ws.send(JSON.stringify({ type: 'denied', reason: 'Character not found.' })); return null; }
       for (const other of [...game.players.values()]) {
         if (other.charId !== c.id) continue; // same character opened twice: save the old one, the newer tab wins
-        await accounts.saveCharacter(other.charId, other.lvl, other.xp);
+        await accounts.saveCharacter(other);
         other.ws.send(JSON.stringify({ type: 'denied', reason: 'This character was opened somewhere else.' }));
         game.removePlayer(other);
         other.ws.close();
         c = await accounts.loadCharacter(acct.id, msg.character);
       }
-      return game.addPlayer(ws, c.name, c.cls, { charId: c.id, lvl: c.lvl, xp: c.xp });
+      return game.addPlayer(ws, c.name, c.cls, { charId: c.id, accountId: acct.id, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv });
     }
     return game.addPlayer(ws, msg.name, msg.cls);
   }
@@ -100,7 +107,8 @@ wss.on('connection', ws => {
         joining = false;
         if (!p || ws.readyState !== 1) { if (p) game.removePlayer(p); return; }
         player = p;
-        ws.send(JSON.stringify({ type: 'welcome', id: player.id, x: player.x, z: player.z, seq: player.posSeq, lvl: player.lvl, xp: player.xp }));
+        ws.send(JSON.stringify({ type: 'welcome', id: player.id, x: player.x, z: player.z, seq: player.posSeq, lvl: player.lvl, xp: player.xp, charId: player.charId || 0 }));
+        ws.send(JSON.stringify(game.invFor(player))); player.invDirty = false;
         broadcastRoster();
       }).catch(err => { joining = false; console.error('join failed', err); ws.send(JSON.stringify({ type: 'denied', reason: 'Server error, try again.' })); });
       return;
@@ -112,7 +120,7 @@ wss.on('connection', ws => {
     clearInterval(refill);
     spectators.delete(ws);
     if (player && game.players.get(player.id) === player) {
-      if (player.charId) accounts.saveCharacter(player.charId, player.lvl, player.xp).catch(e => console.error('save failed', e));
+      if (player.charId) accounts.saveCharacter(player).catch(e => console.error('save failed', e));
       game.removePlayer(player); broadcastRoster();
     }
   });
@@ -124,6 +132,7 @@ function tick(dt) {
   for (const p of game.players.values()) {
     if (p.ws.readyState !== 1) continue;
     p.ws.send(`{"type":"snap","me":${JSON.stringify(game.meFor(p))},"w":${world}}`);
+    if (p.invDirty) { p.invDirty = false; p.ws.send(JSON.stringify(game.invFor(p))); }
   }
   for (const ws of spectators) if (ws.readyState === 1) ws.send(`{"type":"snap","me":null,"w":${world}}`);
 }
@@ -153,7 +162,7 @@ if (process.env.LOCKSTEP) {
     for (const p of game.players.values()) {
       if (!p.charId || !p.dirty) continue;
       p.dirty = false;
-      accounts.saveCharacter(p.charId, p.lvl, p.xp).catch(e => { p.dirty = true; console.error('save failed', e); });
+      accounts.saveCharacter(p).catch(e => { p.dirty = true; console.error('save failed', e); });
     }
   }, 15000);
 }
