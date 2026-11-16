@@ -100,7 +100,15 @@ export class Sound {
         break;
       case 'crit':
         this.play('hit', pos, vol);
-        this.tone(o, { f: 1400 * j, to: 900, dur: 0.18, vol: 0.18, type: 'triangle' });
+        this.noise(o, { dur: 0.035, vol: 0.55, type: 'highpass', f: 5200, attack: 0.001 }); // bright transient "tick"
+        this.tone(o, { f: 2600 * j, to: 1700, dur: 0.07, vol: 0.2, type: 'square', attack: 0.001 });
+        this.tone(o, { f: 1400 * j, to: 900, dur: 0.22, vol: 0.22, type: 'triangle' });
+        this.tone(o, { f: 2100 * j, dur: 0.3, vol: 0.08, type: 'sine', at: 0.02 }); // ring-out
+        break;
+      case 'rare': // a horn call: something big has appeared
+        [57, 64, 69].forEach((n, i) => this.tone(o, { f: NOTE(n), dur: 0.7, vol: 0.2, type: 'sawtooth', at: i * 0.22, attack: 0.04 }));
+        this.tone(o, { f: NOTE(45), dur: 1.4, vol: 0.25, type: 'triangle', attack: 0.08 });
+        this.noise(o, { dur: 1.0, vol: 0.12, type: 'lowpass', f: 500, to: 2000, attack: 0.2 });
         break;
       case 'break':
         this.tone(o, { f: 320, dur: 0.6, vol: 0.25, type: 'square' });

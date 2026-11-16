@@ -26,7 +26,7 @@ export const inTown = (x, z) => Math.hypot(x - WORLD.town.x, z - WORLD.town.z) <
 export const inArena = (x, z) => Math.hypot(x - WORLD.arena.x, z - WORLD.arena.z) < WORLD.arena.r;
 
 // Raid gate: a portcullis across the corridor to the Warden's chamber. It opens after a ready check.
-export const GATE = { z: 161, half: 5.6, band: [157.5, 165.5], zone: { x: 12, z0: 138, z1: 158 }, count: 5 };
+export const GATE = { z: 161, half: 5.6, band: [157.5, 165.5], zone: { x: 12, z0: 138, z1: 158 }, count: 5, force: 20 };
 export const inGateZone = (x, z) => Math.abs(x) < GATE.zone.x && z > GATE.zone.z0 && z < GATE.zone.z1;
 const gateBlocks = (x, z) => Math.abs(x) < GATE.half && z > GATE.band[0] && z < GATE.band[1];
 // Does a move from (x0,z0) to (x1,z1) pass through the closed gate?
@@ -128,7 +128,7 @@ export const CLASSES = {
   },
 };
 
-export const MOB_IDS = ['boar', 'wolf', 'warden', 'alpha', 'spitter', 'hound'];
+export const MOB_IDS = ['boar', 'wolf', 'warden', 'alpha', 'spitter', 'hound', 'oldtusk', 'ghostfang', 'thornmother'];
 
 export const MOBS = {
   boar: { name: 'Forest Boar', hp: 60, atk: 6, speed: 4.5, aggro: 0, range: 1.8, atkCd: 1.6, xp: 20, radius: 0.8, level: 2 },
@@ -137,12 +137,16 @@ export const MOBS = {
   spitter: { name: 'Bramble Spitter', hp: 80, atk: 10, speed: 0, aggro: 17, range: 15, atkCd: 2.2, xp: 30, radius: 0.9, level: 4, ranged: true },
   hound: { name: "Warden's Hound", hp: 90, atk: 12, speed: 6.6, aggro: 30, range: 2.0, atkCd: 1.2, xp: 15, radius: 0.8, level: 8 },
   warden: { name: 'The Horned Warden', hp: 2400, atk: 26, speed: 4.2, aggro: 18, range: 4.2, atkCd: 2.0, xp: 600, radius: 2.2, level: 10, boss: true },
+  // Rare named elites: one at a time, announced server-wide, temporary (see RARE).
+  oldtusk: { name: 'Old Tusk', hp: 600, atk: 14, speed: 5.0, aggro: 10, range: 2.2, atkCd: 1.5, xp: 160, radius: 1.4, level: 6, elite: true, rare: true },
+  ghostfang: { name: 'Ghostfang', hp: 750, atk: 16, speed: 7.2, aggro: 14, range: 2.4, atkCd: 1.2, xp: 200, radius: 1.3, level: 8, elite: true, rare: true, howl: true },
+  thornmother: { name: 'Thornmother', hp: 700, atk: 12, speed: 0, aggro: 18, range: 16, atkCd: 2.4, xp: 180, radius: 1.5, level: 7, elite: true, rare: true, ranged: true, spread: 3 },
 };
 
 export const xpToNext = lvl => 50 * lvl;
 
 // Melee bites hit a wedge in front of the attacker (shown as a red wedge during the wind-up).
-export const BITE = { boar: [2.6, 0.7], wolf: [2.8, 0.6], alpha: [3.4, 0.85], hound: [2.8, 0.6] }; // [reach, half-angle]
+export const BITE = { boar: [2.6, 0.7], wolf: [2.8, 0.6], alpha: [3.4, 0.85], hound: [2.8, 0.6], oldtusk: [3.6, 0.8], ghostfang: [3.4, 0.85] }; // [reach, half-angle]
 export const PACK = { auraRange: 12, auraAtk: 0.25, howlEvery: 12, howlRange: 16, frenzy: 6 };
 // The Warden's three phases: 100-66% (cleave + slams), 66-33% (+ hounds, horn charge), <33% (+ spin, rockfall).
 export const WARDEN = {
@@ -154,6 +158,16 @@ export const WARDEN = {
   rock: { every: 7, r: 3.2, wind: 1.3, extra: 3, mult: 1.5 },
 };
 export const THORN = { speed: 16, radius: 0.6, wind: 0.75 };
+// Rare named spawns: at most one alive; first after `first` s, then `every` s after the last one is gone.
+export const RARE = {
+  first: [180, 300], every: [360, 600], despawn: 300, soon: 10,
+  spawns: { // biome per rare: x range, z range, and the area name used in the announcement
+    oldtusk: { x: [-60, 60], z: [38, 93], where: 'the Verdant Field' },
+    ghostfang: { x: [-60, 60], z: [100, 145], where: 'the Wolf Woods' },
+    thornmother: { x: [-60, 60], z: [55, 140], where: 'the Verdant Field' },
+  },
+  spreadAngle: 0.28, // radians between Thornmother's thorns
+};
 
 export function statsFor(cls, lvl) {
   const c = CLASSES[cls];

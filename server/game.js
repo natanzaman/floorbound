@@ -1,12 +1,13 @@
 // Authoritative world simulation: players, mobs, the floor boss, combat, XP and parties.
 import {
   WORLD, CLASSES, CLASS_IDS, MOBS, MOB_IDS, MAX_LEVEL, PARTY_MAX, PLAYER_SPEED, SPRINT_SPEED, DODGE, JUMP, SWITCH, BITE, PACK, THORN,
-  GATE, WARDEN, inGateZone, crossesGate,
+  GATE, WARDEN, inGateZone, crossesGate, RARE,
   inTown, inArena, walkable, resolveCollision, rng, angleTo, wrapAngle, xpToNext, statsFor,
 } from '../shared/data.js';
 import {
   CONSUMABLES, SHOP, MERCHANT, BAG_SIZE, SLOTS, DROPS, makeItem, lastAttackItem, rollRarity, gearStats, sellPrice, newInventory,
 } from '../shared/items.js';
+import { TITLES, newStats, meetsTitle } from '../shared/titles.js';
 import crypto from 'node:crypto';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -29,6 +30,8 @@ export class Game {
     this.fight = null;   // the current Warden attempt, for tracking
     this.lfgT = 0;
     this.track = () => {}; // set by the server to record play events
+    const rr = ([a, b]) => a + Math.random() * (b - a);
+    this.rare = { mob: null, next: process.env.RARE_SOON ? RARE.soon : rr(RARE.first) }; // RARE_SOON is a testing aid
     this.spawnMobs();
   }
 
@@ -85,6 +88,9 @@ export class Game {
       if (saved.inv && Array.isArray(saved.inv.bag) && saved.inv.eq && saved.inv.cons) p.inv = saved.inv;
     }
     p.lvlStart = p.lvl;
+    p.stats = newStats(saved?.stats); // lifetime stats + titles (memory-only for anonymous players)
+    p.stats.maxLvl = Math.max(p.stats.maxLvl, p.lvl);
+    this.checkTitles(p);
     this.recompute(p);
     p.hp = p.maxHp;
     this.players.set(p.id, p);
@@ -142,6 +148,7 @@ export class Game {
       case 'unequip': return this.unequip(p, String(msg.slot));
       case 'buy': return this.buy(p, msg.i | 0);
       case 'sell': return this.sell(p, msg.u | 0);
+      case 'title': return this.setTitle(p, msg.id);
       case 'track': // the client's first-time guide reports progress
         if (msg.k === 'guide' && Number.isInteger(msg.step) && msg.step >= 0 && msg.step < 30 && p.trackN++ < 60) this.track(p, 'guide', { step: msg.step });
         return;
@@ -182,7 +189,9 @@ export class Game {
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z));
     for (const id of g.ready) if (!waiting.some(p => p.id === id)) g.ready.delete(id);
     if (!g.open) {
-      const allReady = waiting.length > 0 && g.ready.size === waiting.length;
+      // Everyone at the gate ready, OR someone has been ready for a while (so an idle player can't block the raid)
+      if (!g.ready.size) g.firstReadyAt = 0; else if (!g.firstReadyAt) g.firstReadyAt = t;
+      const allReady = waiting.length > 0 && (g.ready.size === waiting.length || (g.firstReadyAt && t - g.firstReadyAt >= GATE.force));
       if (allReady && !g.countAt) {
         g.countAt = t + GATE.count;
         this.events.push({ t: 'gate', s: 'count', d: GATE.count });
@@ -208,9 +217,64 @@ export class Game {
   // ---------- items ----------
   invFor(p) {
     return { type: 'inv', gold: p.gold, bag: p.inv.bag, eq: p.inv.eq, cons: p.inv.cons,
-      stats: { atk: Math.round(p.atk * 10) / 10, maxHp: p.maxHp, crit: Math.round(p.crit * 100), haste: Math.round(p.haste * 100), sw: Math.round(p.swPow * 100), dr: Math.round(p.gearDr * 100) } };
+      stats: { atk: Math.round(p.atk * 10) / 10, maxHp: p.maxHp, crit: Math.round(p.crit * 100), haste: Math.round(p.haste * 100), sw: Math.round(p.swPow * 100), dr: Math.round(p.gearDr * 100) },
+      life: p.stats }; // lifetime stats, earned titles (life.titles) and life.activeTitle
   }
   invChanged(p) { p.invDirty = true; p.dirty = true; }
+
+  // ---------- lifetime stats & titles ----------
+  bumpStat(p, k, n = 1) { p.stats[k] = (p.stats[k] || 0) + n; p.dirty = true; this.checkTitles(p); }
+
+  statKill(m, killer) {
+    const s = killer.stats;
+    s.kills++;
+    if (m.type === 'boar') s.boarKills++;
+    else if (m.type === 'wolf') s.wolfKills++;
+    killer.dirty = true;
+    this.checkTitles(killer);
+  }
+
+  // Award any newly met titles. With no active title yet, the first one earned is worn automatically.
+  checkTitles(p) {
+    const s = p.stats;
+    let got = false;
+    for (const t of TITLES) {
+      if (s.titles.includes(t.id) || !meetsTitle(t, s)) continue;
+      s.titles.push(t.id); got = true;
+      this.events.push({ t: 'title', to: p.id, id: t.id, name: t.name });
+      this.sys(`Title earned: ${t.name}`, p.id);
+      this.track(p, 'title', { id: t.id });
+      if (!s.activeTitle) { s.activeTitle = t.id; this.rosterDirty = true; }
+    }
+    if (got) { p.dirty = true; p.invDirty = true; }
+  }
+
+  setTitle(p, id) {
+    id = id ? String(id) : null;
+    if (id && !p.stats.titles.includes(id)) return;
+    if (p.stats.activeTitle === id) return;
+    p.stats.activeTitle = id;
+    p.dirty = true; p.invDirty = true; this.rosterDirty = true;
+  }
+
+  // A Warden kill: stats/titles for everyone who fought, and a Hall of Clearers record (this.onClear, wired by the server).
+  recordClear(m, killer) {
+    const f = this.fight, first = !this.hadFirstClear;
+    this.hadFirstClear = true;
+    const party = [];
+    for (const id of m.contributors) {
+      const p = this.players.get(id);
+      if (!p) continue;
+      party.push({ name: p.name, cls: p.cls, lvl: p.lvl });
+      p.stats.wardenKills++;
+      if (first) p.stats.floorClearsFirst++;
+      if (f && !f.pd?.get(p.id)) p.stats.flawlessWarden++;
+      p.dirty = true;
+      if (p !== killer) this.checkTitles(p);
+    }
+    this.bumpStat(killer, 'lastAttacks');
+    this.onClear?.({ floor: 1, secs: f ? Math.round(this.time - f.start) : 0, players: party, lastAttack: killer.name, deaths: f?.deaths || 0, first });
+  }
 
   giveItem(p, it) {
     if (p.inv.bag.length >= BAG_SIZE) {
@@ -552,6 +616,7 @@ export class Game {
       const from = this.players.get(m.staggerBy);
       if (from) this.giveXp(from, 5); // a little thank-you for setting it up
       p.switches++;
+      this.bumpStat(p, 'switches');
     }
     m.threat.set(p.id, (m.threat.get(p.id) || 0) + amount * threat);
     m.contributors.add(p.id);
@@ -584,8 +649,9 @@ export class Game {
     m.dead = true; m.hp = 0;
     m.deadUntil = this.time + (m.def.boss ? 60 : m.def.elite ? 45 : 15);
     this.events.push({ t: 'die', id: m.id, x: r2(m.x), z: r2(m.z), b: m.def.boss ? 1 : 0 });
-    if (m.temp) this.mobs.delete(m.id);
+    if (m.temp || m.rare) this.mobs.delete(m.id);
     if (!killer.kills++) this.track(killer, 'first_kill', { secs: Math.round(this.time - killer.joinedAt), mob: m.type });
+    this.statKill(m, killer);
     if (m.def.boss) {
       const names = [];
       for (const id of m.contributors) {
@@ -600,9 +666,11 @@ export class Game {
       this.floorClears++;
       this.events.push({ t: 'clear', names, n: this.floorClears });
       this.sys(`The Horned Warden has fallen! Floor 1 cleared by ${names.join(', ')}. Floor 2 unlocks in a future update.`);
+      this.recordClear(m, killer);
       this.endFight('kill', m);
       return;
     }
+    if (m.rare) return this.killRare(m, killer);
     const party = this.partyOf(killer);
     const ids = party ? party.members : [killer.id];
     const recips = ids.map(id => this.players.get(id)).filter(p => p && !p.dead && dist(p, m) <= 30);
@@ -649,6 +717,7 @@ export class Game {
     }
     if (p.lvl >= MAX_LEVEL) p.xp = 0;
     p.dirty = true;
+    if (p.lvl > p.stats.maxLvl) { p.stats.maxLvl = p.lvl; this.checkTitles(p); }
   }
 
   healPlayer(t, amount, by) {
@@ -673,6 +742,8 @@ export class Game {
       p.xp = Math.max(0, p.xp - Math.round(xpToNext(p.lvl) * 0.1)); p.dirty = true;
       p.deaths++;
       if (this.fight?.ids.has(p.id)) this.fight.deaths++;
+      if (this.fight && (this.fight.ids.has(p.id) || inArena(p.x, p.z))) (this.fight.pd ||= new Map()).set(p.id, (this.fight.pd.get(p.id) || 0) + 1); // for "Undying"
+      this.bumpStat(p, 'deaths');
       this.track(p, 'death', { cause: src, lvl: p.lvl, area: inArena(p.x, p.z) ? 'arena' : p.z > 95 ? 'woods' : 'field' });
       this.events.push({ t: 'pdie', id: p.id, src });
       this.sys(`${p.name} was defeated.`);
@@ -718,6 +789,7 @@ export class Game {
     for (const m of [...this.mobs.values()]) this.updateMob(m, dt);
     this.updateProjectiles(dt);
     this.updateGate();
+    this.updateRare();
     if (t >= this.lfgT) { this.lfgT = t + 1; this.matchParties(); }
 
     // keep mobs from stacking
@@ -813,7 +885,7 @@ export class Game {
     const d = dist(m, target);
     m.face = angleTo(m.x, m.z, target.x, target.z);
     const frenzy = t < m.frenzyUntil;
-    if (def.elite) this.alphaHowl(m);
+    if (m.type === 'alpha' || def.howl) this.alphaHowl(m);
     if (d > def.range + 0.4) {
       this.moveMob(m, target.x, target.z, def.speed * (enraged ? 1.25 : 1) * (frenzy ? 1.3 : 1), dt, def.range);
     } else if (t >= m.atkT) {
@@ -865,12 +937,80 @@ export class Game {
   }
 
   shootThorn(m) {
-    const dx = m.aimX - m.x, dz = m.aimZ - m.z, d = Math.hypot(dx, dz) || 1;
-    const vx = (dx / d) * THORN.speed, vz = (dz / d) * THORN.speed;
-    const ttl = (m.def.range + 2) / THORN.speed;
-    const pr = { id: this.id(), x: m.x + (dx / d) * 1.1, z: m.z + (dz / d) * 1.1, vx, vz, ttl, atk: m.def.atk };
-    this.projectiles.push(pr);
-    this.events.push({ t: 'proj', id: pr.id, by: m.id, x: r2(pr.x), z: r2(pr.z), vx: r2(vx), vz: r2(vz), ttl: r2(ttl) });
+    const base = angleTo(m.x, m.z, m.aimX, m.aimZ), n = m.def.spread || 1; // Thornmother fires a fan
+    const ttl = (m.def.range + 2) / THORN.speed, off = m.def.radius + 0.3;
+    for (let i = 0; i < n; i++) {
+      const a = base + (i - (n - 1) / 2) * RARE.spreadAngle, ux = Math.sin(a), uz = Math.cos(a);
+      const vx = ux * THORN.speed, vz = uz * THORN.speed;
+      const pr = { id: this.id(), x: m.x + ux * off, z: m.z + uz * off, vx, vz, ttl, atk: m.def.atk };
+      this.projectiles.push(pr);
+      this.events.push({ t: 'proj', id: pr.id, by: m.id, x: r2(pr.x), z: r2(pr.z), vx: r2(vx), vz: r2(vz), ttl: r2(ttl) });
+    }
+  }
+
+  // ---------- rare named spawns ----------
+  updateRare() {
+    const R = this.rare, t = this.time;
+    const rr = ([a, b]) => a + Math.random() * (b - a);
+    if (R.mob) {
+      const m = R.mob;
+      if (m.dead || !this.mobs.has(m.id)) { R.mob = null; R.next = t + rr(RARE.every); return; }
+      if (m.threat.size) m.touchedAt = t;
+      if (t - m.bornAt > RARE.despawn && !m.threat.size && t - (m.touchedAt || 0) > 5) {
+        this.events.push({ t: 'rareGone', id: m.id, name: m.def.name, x: r2(m.x), z: r2(m.z) });
+        this.sys(`${m.def.name} has slipped away into the wilds.`);
+        this.mobs.delete(m.id);
+        R.mob = null; R.next = t + rr(RARE.every);
+      }
+      return;
+    }
+    if (t < R.next) return;
+    const type = Object.keys(RARE.spawns)[Math.floor(Math.random() * Object.keys(RARE.spawns).length)];
+    const pos = this.rareSpot(type);
+    if (!pos) { R.next = t + 5; return; }
+    this.spawnRare(type, pos[0], pos[1]);
+  }
+
+  // A random walkable spot in the rare's biome, clear of town, trees and nearby players.
+  rareSpot(type) {
+    const s = RARE.spawns[type], rad = MOBS[type].radius;
+    for (let i = 0; i < 40; i++) {
+      let x = s.x[0] + Math.random() * (s.x[1] - s.x[0]), z = s.z[0] + Math.random() * (s.z[1] - s.z[0]);
+      [x, z] = resolveCollision(x, z, rad);
+      if (!walkable(x, z) || inTown(x, z) || Math.hypot(x - WORLD.town.x, z - WORLD.town.z) < WORLD.town.r + 8) continue;
+      if (z < s.z[0] - 2 || z > s.z[1] + 2) continue;
+      if ([...this.players.values()].some(p => !p.dead && Math.hypot(p.x - x, p.z - z) < 12)) continue;
+      return [x, z];
+    }
+    return null;
+  }
+
+  spawnRare(type, x, z) {
+    const m = this.addMob(type, x, z);
+    m.rare = true; m.bornAt = this.time; m.touchedAt = 0;
+    m.sx = m.x; m.sz = m.z;
+    this.rare.mob = m;
+    this.events.push({ t: 'rare', id: m.id, type, name: m.def.name, x: r2(m.x), z: r2(m.z) });
+    this.sys(`${m.def.name} has been sighted in ${RARE.spawns[type].where}!`);
+    return m;
+  }
+
+  // Everyone who damaged a rare gets XP and their own loot roll, party or not.
+  killRare(m, killer) {
+    const names = [];
+    for (const id of m.contributors) {
+      const p = this.players.get(id);
+      if (!p) continue;
+      names.push(p.name); this.giveXp(p, m.def.xp); this.dropLoot(p, m);
+    }
+    if (!names.length) { names.push(killer.name); this.giveXp(killer, m.def.xp); this.dropLoot(killer, m); }
+    const others = names.filter(n => n !== killer.name);
+    const who = `${killer.name}${others.length ? ` with ${others.join(', ')}` : ''}`;
+    this.events.push({ t: 'rareDown', id: m.id, name: m.def.name, by: killer.id, who: killer.name, x: r2(m.x), z: r2(m.z) });
+    this.sys(`${m.def.name} has been slain by ${who}!`);
+    this.rare.mob = null;
+    const rr = ([a, b]) => a + Math.random() * (b - a);
+    this.rare.next = this.time + rr(RARE.every);
   }
 
   updateProjectiles(dt) {
@@ -1034,6 +1174,6 @@ export class Game {
   }
 
   roster() {
-    return [...this.players.values()].map(p => ({ id: p.id, name: p.name, cls: p.cls }));
+    return [...this.players.values()].map(p => ({ id: p.id, name: p.name, cls: p.cls, title: p.stats?.activeTitle || null }));
   }
 }

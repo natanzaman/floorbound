@@ -5,6 +5,7 @@ import {
   walkable, resolveCollision, inTown, inArena, areaName, angleTo, inGateZone,
 } from '/shared/data.js';
 import { RARITY, CONSUMABLES, CONSUMABLE_IDS, SHOP, MERCHANT, SLOTS, statLabel, sellPrice } from '/shared/items.js';
+import { TITLES, TITLE_BY_ID, DEFAULT_TITLE, HALL, titleProgress } from '/shared/titles.js';
 import { Guide } from '/guide.js';
 import { createWorld, makePlayerModel, makeMobModel, Effects, loadAssets } from '/world.js';
 import { Sound } from '/audio.js';
@@ -209,6 +210,14 @@ function onMessage(msg) {
     return;
   }
   if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); return; }
+  if (msg.type === 'hall') { state.hallData = msg; renderHall(); return; }
+  if (msg.type === 'snap') {
+    const busy = msg.w.events.some(e => e.t === 'clear' || e.t === 'lvl');
+    for (const e of msg.w.events) { // titles and the Hall of Clearers (kept out of handleEvent)
+      if (e.t === 'title' && e.to === state.myId) titleBanner(e.name, busy ? 7000 : 0);
+      if (e.t === 'clear' && !$('hall').classList.contains('hidden')) setTimeout(() => send({ type: 'hall' }), 400);
+    }
+  }
   if (msg.type === 'snap') onSnapshot(msg);
 }
 
@@ -295,6 +304,22 @@ function handleEvent(e) {
       break;
     }
     case 'proj': projFx.set(e.id, fx.thorn(e.x, e.z, e.vx, e.vz, e.ttl)); sfx.play('spit', { x: e.x, z: e.z }); break;
+    case 'rare': { // a rare named enemy appeared somewhere on the floor
+      fx.rareBeam(e.x, e.z, 7);
+      sfx.play('rare', null, 0.9);
+      const [dist, dir] = rareBearing(e.x, e.z);
+      banner(`RARE · ${e.name.toUpperCase()}`, `Sighted ${dist} m ${dir}`);
+      break;
+    }
+    case 'rareDown': {
+      fx.shatter(e.x, e.z, true); fx.beam(e.x, e.z, 0xfbbf24, 3.5);
+      const near = Math.hypot(e.x - state.x, e.z - state.z) < 45;
+      if (near) slowMotion(0.6, 0.3);
+      sfx.play('loot', { x: e.x, z: e.z }, 1.2);
+      banner(`${e.name.toUpperCase()} SLAIN`, `by ${e.who}`);
+      break;
+    }
+    case 'rareGone': fx.ring(e.x, e.z, 4, 0x9ca3af, 0.8); break;
     case 'pend': fx.end(projFx.get(e.id)); projFx.delete(e.id); fx.ring(e.x, e.z, 0.8, 0xd6c48a, 0.25); break;
     case 'howl': {
       if (Math.hypot(state.x - (mobs.get(e.id)?.x ?? 1e9), state.z - (mobs.get(e.id)?.z ?? 1e9)) < 25) guide.tip('howl');
@@ -381,6 +406,7 @@ function handleEvent(e) {
     }
     case 'hit': {
       const m = mobs.get(e.id);
+      if (m) hitJuice(m, e);
       if (m && !e.sw) {
         m.flash = 0.08;
         const mine = e.by === me || state.spectator;
@@ -418,6 +444,7 @@ function handleEvent(e) {
     }
     case 'die': {
       sfx.play('shatter', { x: e.x, z: e.z });
+      if (e.b && Math.hypot(e.x - state.x, e.z - state.z) < 60) slowMotion(0.7, 0.3); // the Warden falls
       if (state.lock === e.id) state.lock = 0;
       const bm = mobs.get(e.id);
       if (bm?.model.anim && !bm.dying) { // the boss collapses first, then shatters
@@ -539,6 +566,12 @@ function addMobEntity(id, type, x, z, face) {
   const e = { id, kind: 'mob', type, def: MOBS[type], model, mats: model.mats, label: type === 'warden' ? null : makeLabel('mob'), x, z, face, tx: x, tz: z, tface: face, walk: 0, wind: 0, flash: 0 };
   mobs.set(id, e);
   if (type === 'warden') boss = e;
+  if (e.def?.rare && e.label) { // gold "RARE" tag above a rare named enemy's name
+    const tag = document.createElement('div');
+    tag.textContent = '★ RARE ★';
+    tag.style.cssText = 'font:800 11px/1 system-ui,sans-serif;letter-spacing:.14em;color:#fde047;text-shadow:0 0 6px #ef4444,0 1px 2px #000;text-align:center;margin-bottom:2px';
+    e.label.el.insertBefore(tag, e.label.el.firstChild);
+  }
   return e;
 }
 
@@ -794,13 +827,60 @@ const nearMerchant = () => !state.dead && Math.hypot(state.x - MERCHANT.x, state
 function interactKind() {
   if (state.dead || !state.joined || state.spectator) return null;
   if (nearMerchant()) return 'shop';
+  if (nearHall()) return 'hall';
   if (!state.gateOpen && inGateZone(state.x, state.z)) return 'gate';
   return null;
 }
 function interact() {
   const k = interactKind();
   if (k === 'shop') { state.shopOpen = true; $('bag').classList.remove('hidden'); renderBag(); sfx.play('ui'); }
+  else if (k === 'hall') { toggleHall(); sfx.play('ui'); }
   else if (k === 'gate') { send({ type: 'ready' }); sfx.play('ui'); state.meReady = state.meReady ? 0 : 1; updateGateBox(true); }
+}
+
+// ---------------- titles & Hall of Clearers ----------------
+const titleTag = id => { const t = TITLE_BY_ID[id]; return t ? `<small class="ttl" style="color:${t.color}">${t.name}</small>` : ''; };
+let titleAt = 0;
+function titleBanner(name, delay = 0) { // queue so several titles (e.g. after a Warden kill) each get their moment
+  const now = performance.now();
+  titleAt = Math.max(now + delay, titleAt + 3400);
+  setTimeout(() => { banner('TITLE EARNED', name); sfx.play('levelup'); }, titleAt - now);
+}
+const nearHall = () => !state.dead && Math.hypot(state.x - HALL.x, state.z - HALL.z) < HALL.r + 1;
+function toggleHall(open = $('hall').classList.contains('hidden')) {
+  $('hall').classList.toggle('hidden', !open);
+  if (open) { renderHall(); send({ type: 'hall' }); }
+}
+const fmtSecs = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+const fmtDate = iso => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+function ago(iso) {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)}m ago` : s < 86400 ? `${Math.floor(s / 3600)}h ago` : fmtDate(iso);
+}
+const hallParty = r => r.players.map(p => `<span title="Lv${p.lvl} ${CLASSES[p.cls]?.name || ''}">${esc(p.name)}</span>`).join(', ') || '—';
+const hallMeta = r => `${esc(r.lastAttack || '?')} took the Last Attack · ${r.deaths} death${r.deaths === 1 ? '' : 's'}`;
+function renderHall() {
+  const el = $('hall');
+  if (el.classList.contains('hidden')) return;
+  const d = state.hallData;
+  let h = `<div class="top"><span>HALL OF CLEARERS</span><button class="x" data-a="close">✕</button></div>`;
+  if (!d) { el.innerHTML = `${h}<div class="empty">Reading the stone…</div>`; return; }
+  h += '<h4>Server first clear · Floor 1</h4>';
+  h += d.first ? `<div class="first"><b>${hallParty(d.first)}</b><small>${fmtDate(d.first.at)} · ${fmtSecs(d.first.secs)} · ${hallMeta(d.first)}</small></div>`
+    : '<div class="empty">No one has cleared Floor 1 yet. The first names carved here could be yours.</div>';
+  h += '<h4>Fastest clears</h4>';
+  h += d.fastest.length ? d.fastest.map((r, i) => `<div class="row"><span class="n">${i + 1}</span><span class="t">${fmtSecs(r.secs)}</span><span class="who">${hallParty(r)}<small>${fmtDate(r.at)} · ${hallMeta(r)}</small></span></div>`).join('') : '<div class="empty">No clears yet.</div>';
+  h += '<h4>Recent clears</h4>';
+  h += d.recent.length ? d.recent.map(r => `<div class="row"><span class="t">${fmtSecs(r.secs)}</span><span class="who">${hallParty(r)}<small>${ago(r.at)} · ${hallMeta(r)}</small></span></div>`).join('') : '<div class="empty">No clears yet.</div>';
+  el.innerHTML = h;
+}
+$('hall').addEventListener('click', e => { if (e.target.closest('[data-a="close"]')) { toggleHall(false); sfx.play('ui'); } });
+// The board's floating label (called every frame), and close the panel when walking away.
+function updateHallLabel() {
+  const hl = $('hall-lbl'), hp = project(HALL.x, 5.4, HALL.z), hd = Math.hypot(state.x - HALL.x, state.z - HALL.z);
+  if (hp && hd < 22) { hl.style.display = ''; hl.style.left = `${hp[0]}px`; hl.style.top = `${hp[1]}px`; const html = `Hall of Clearers${hd < HALL.r + 1 ? `<br><small>${isTouch ? 'tap Read' : 'press F to read'}</small>` : ''}`; if (hl.innerHTML !== html) hl.innerHTML = html; }
+  else hl.style.display = 'none';
+  if (hd > HALL.r + 7 && !$('hall').classList.contains('hidden')) toggleHall(false);
 }
 function useItem(id) {
   if (state.dead || !state.joined || !CONSUMABLES[id]) return;
@@ -848,7 +928,19 @@ function renderBag() {
     const usable = !it.cls || it.cls === state.cls;
     return `<div class="it"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}</div>`;
   }).join('') : '<div class="it empty"><span class="nm"><small>Nothing yet. Enemies drop gear; the Warden always does.</small></span></div>';
+  h += renderTitles(inv.life);
   el.innerHTML = h;
+}
+// Titles section of the bag: earned ones can be worn (shown under your name), locked ones show the requirement.
+function renderTitles(life) {
+  if (!life) return '';
+  const earned = TITLES.filter(t => life.titles.includes(t.id)), locked = TITLES.filter(t => !life.titles.includes(t.id));
+  const wear = (id, on) => `<button data-a="title" data-t="${id || ''}" ${on ? 'disabled' : ''}>${on ? 'Worn ✓' : 'Wear'}</button>`;
+  let h = `<h4>Titles (${earned.length}/${TITLES.length})</h4><div class="titles">`;
+  h += `<div class="it ${!life.activeTitle ? 'on' : ''}"><span class="nm"><b>${DEFAULT_TITLE}</b><small>No title shown</small></span>${wear(null, !life.activeTitle)}</div>`;
+  h += earned.map(t => `<div class="it ${life.activeTitle === t.id ? 'on' : ''}"><span class="nm"><b style="color:${t.color}">${t.name}</b><small>${t.req}</small></span>${wear(t.id, life.activeTitle === t.id)}</div>`).join('');
+  h += locked.map(t => { const [have, need] = titleProgress(t, life); return `<div class="it locked"><span class="nm"><b>${t.name}</b><small>${t.req}</small></span>${need > 1 ? `<span class="prog">${have}/${need}</span>` : ''}</div>`; }).join('');
+  return `${h}</div>`;
 }
 $('bag').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b || b.disabled) return;
@@ -860,6 +952,7 @@ $('bag').addEventListener('click', e => {
   if (a === 'equip') send({ type: 'equip', u: +b.dataset.u });
   if (a === 'unequip') send({ type: 'unequip', slot: b.dataset.s });
   if (a === 'use') useItem(b.dataset.id);
+  if (a === 'title') send({ type: 'title', id: b.dataset.t || null });
   sfx.play('ui');
 });
 
@@ -873,7 +966,7 @@ function updateGateBox(force) {
   gateKey = key;
   el.classList.toggle('hidden', !show);
   if (!show) return;
-  el.innerHTML = `<b>RAID GATE</b><div class="sub">The Horned Warden · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}</div>`
+  el.innerHTML = `<b>RAID GATE</b><div class="sub">The Horned Warden · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}</div>`
     + (count > 0 ? `<div class="count">${Math.ceil(count)}</div>` : '')
     + `<button class="${state.meReady ? 'on' : ''}">${state.meReady ? 'Ready ✓' : `Ready${isTouch ? '' : ' (F)'}`}</button>`;
   el.querySelector('button').onclick = interact;
@@ -888,11 +981,23 @@ function log(text, cls = '') {
   while (logEl.children.length > (isTouch ? 5 : 30)) logEl.firstChild.remove();
 }
 let bannerT = 0;
+// Banners queue up so two at once (e.g. a rare sighting and a title) don't overwrite each other.
+const bannerQ = []; let bannerBusy = false;
 function banner(title, sub = '') {
+  if (bannerQ.some(b => b[0] === title && b[1] === sub)) return;
+  bannerQ.push([title, sub]);
+  if (!bannerBusy) nextBanner();
+}
+function nextBanner() {
+  const b = bannerQ.shift();
+  if (!b) { bannerBusy = false; return; }
+  bannerBusy = true;
+  const [title, sub] = b;
   $('banner').innerHTML = `${title}${sub ? `<small>${sub.replace(/</g, '&lt;')}</small>` : ''}`;
   $('banner').classList.add('show');
   clearTimeout(bannerT);
-  bannerT = setTimeout(() => $('banner').classList.remove('show'), 3200);
+  const hold = bannerQ.length ? 2200 : 3200;
+  bannerT = setTimeout(() => { $('banner').classList.remove('show'); setTimeout(nextBanner, 350); }, hold);
 }
 let areaT = 0;
 function showArea(name) {
@@ -945,7 +1050,8 @@ let hudT = 0;
 function updateHud(now) {
   if (now - hudT < 100) return; hudT = now;
   const name = state.roster.get(state.myId)?.name || '';
-  $('me-name').textContent = name;
+  const meHtml = `${esc(name)}${titleTag(state.roster.get(state.myId)?.title)}`;
+  if ($('me-name').innerHTML !== meHtml) $('me-name').innerHTML = meHtml;
   $('me-lvl').textContent = `Lv ${state.lvl} ${CLASSES[state.cls].name}`;
   const pct = (state.hp / state.maxHp) * 100;
   setBar($('me-hp'), pct, $('me-hp').parentElement);
@@ -959,7 +1065,7 @@ function updateHud(now) {
   const mates = state.spectator ? [...players.values()] : state.party ? [...players.values()].filter(p => p.party === state.party && p.id !== state.myId) : [];
   $('party').innerHTML = mates.map(p => {
     const pc = (p.hp / p.maxHp) * 100;
-    return `<div class="frame ${p.dead ? 'dead' : ''}"><div class="row" style="font-size:12px;margin:0"><span>${esc(p.name)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div></div>`;
+    return `<div class="frame ${p.dead ? 'dead' : ''}"><div class="row" style="font-size:12px;margin:0"><span>${esc(p.name)}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div></div>`;
   }).join('');
 
   // boss bar
@@ -988,7 +1094,7 @@ function updateHud(now) {
       btn.querySelector('.cd').style.setProperty('--p', `${Math.min(100, (left / CONSUMABLES[id].cd) * 100)}%`);
       continue;
     }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); btn.textContent = a === 'shop' ? 'Trade' : state.meReady ? 'Unready' : 'Ready'; continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); btn.textContent = a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : state.meReady ? 'Unready' : 'Ready'; continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : CLASSES[state.cls].skills[slot];
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
@@ -1010,6 +1116,59 @@ function floatNum(pos, h, text, cls, opacity = 1) {
   el.className = `num ${cls}`; el.textContent = text; el.style.opacity = opacity;
   $('labels').appendChild(el);
   nums.push({ el, x: pos.x + (Math.random() - 0.5) * 0.8, y: h, z: pos.z, age: 0, opacity });
+}
+
+// ---------------- juice: hit sparks, flinch, killing-blow slow motion ----------------
+const FLINCH_T = 0.1;
+function hitJuice(m, e) {
+  const g = m.model.group.position, big = m.type === 'warden';
+  const by = players.get(e.by)?.model.group.position;
+  let dx = 0, dz = 0;
+  if (by) { dx = g.x - by.x; dz = g.z - by.z; const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d; }
+  // sparks on the side of the enemy facing the attacker
+  const r = m.def.radius * 0.8, y = Math.min(m.model.height * 0.55, big ? 3.2 : 2.2);
+  const n = e.h ? 10 : e.c ? 9 : 6, color = e.c || e.sw ? 0xfde68a : e.h ? 0xffd9a0 : 0xffffff;
+  fx.sparks(g.x - dx * r, y, g.z - dz * r, n, color, e.h || e.c ? 0.3 : 0.2, e.h ? 10 : 7);
+  if (e.c) fx.sparks(g.x - dx * r, y, g.z - dz * r, 4, 0xffffff, 0.42, 4);
+  // flinch: non-boss enemies squash and get shoved back; the boss barely reacts
+  m.flinch = FLINCH_T;
+  m.flinchAmt = big ? 0.03 : e.h ? 0.16 : 0.12;
+  m.flinchPush = big ? 0 : e.h ? 0.35 : 0.22;
+  m.flinchX = dx; m.flinchZ = dz;
+}
+
+// Slow down visual time (animation and effects only; input and movement keep real time).
+let slowMo = 0, slowMoScale = 1, slowMoLen = 1;
+function slowMotion(secs, scale) {
+  slowMo = slowMoLen = secs; slowMoScale = scale;
+  shake(0.45); hitStop = 0;
+}
+
+const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+function rareBearing(x, z) { // +z is north (towards the Warden); screen-right at the default camera is -x, so east is -x
+  const dx = x - state.x, dz = z - state.z, d = Math.round(Math.hypot(dx, dz));
+  const a = Math.atan2(-dx, dz); // 0 = north, +pi/2 = east
+  return [d, COMPASS[((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8]];
+}
+
+let rareHintEl = null, rareHintT = 0;
+function updateRareHint(now) { // a small HUD line pointing at a live rare: "Old Tusk · 84 m north"
+  if (now - rareHintT < 150) return; rareHintT = now;
+  let rare = null;
+  for (const m of mobs.values()) if (m.def?.rare && !m.dying) { rare = m; break; }
+  if (!rareHintEl) {
+    rareHintEl = document.createElement('div');
+    rareHintEl.id = 'rare-hint';
+    rareHintEl.style.cssText = 'position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:6;pointer-events:none;font:700 13px/1.2 system-ui,sans-serif;color:#fde68a;background:rgba(40,8,8,.72);border:1px solid rgba(251,191,36,.55);border-radius:999px;padding:4px 12px;text-shadow:0 1px 2px #000;white-space:nowrap;display:none';
+    document.body.appendChild(rareHintEl);
+  }
+  if (!rare || !state.joined) { rareHintEl.style.display = 'none'; return; }
+  const [d, dir] = rareBearing(rare.x, rare.z);
+  const rel = Math.atan2(rare.x - state.x, rare.z - state.z) - state.yaw;
+  const deg = Math.round((-Math.atan2(Math.sin(rel), Math.cos(rel)) * 180) / Math.PI);
+  const hp = Math.round((rare.hp / rare.maxHp) * 100);
+  rareHintEl.innerHTML = `<span style="display:inline-block;transform:rotate(${deg}deg);color:#f87171">▲</span> <b style="color:#fbbf24">RARE</b> ${esc(rare.def.name)} · ${d < 6 ? 'here' : `${d} m ${dir}`}${hp < 100 ? ` · ${hp}%` : ''}`;
+  rareHintEl.style.display = '';
 }
 
 // ---------------- main loop ----------------
@@ -1102,6 +1261,17 @@ function animateEntity(e, dt) {
     }
   }
   if (e.flash > 0) e.flash -= dt;
+  if (e.flinch !== undefined) { // hit flinch: quick squash plus a small shove away from the attacker (visual only)
+    e.flinch = Math.max(0, e.flinch - dt);
+    const fk = e.flinch / FLINCH_T, amt = (e.flinchAmt || 0) * fk;
+    g.scale.set(1 + amt * 0.5, 1 - amt, 1 + amt * 0.5);
+    if (!m.anim && m.body) {
+      const r = g.rotation.y, push = amt * (e.flinchPush || 0) / 0.12, dx = e.flinchX || 0, dz = e.flinchZ || 0;
+      m.body.position.x = (dx * Math.cos(r) - dz * Math.sin(r)) * push;
+      m.body.position.z = (dx * Math.sin(r) + dz * Math.cos(r)) * push;
+    }
+    if (e.flinch <= 0) { g.scale.set(1, 1, 1); if (m.body && !m.anim) { m.body.position.x = 0; m.body.position.z = 0; } e.flinch = undefined; }
+  }
   const enr = e.kind === 'mob' && e.enraged ? (m.anim ? 0.12 : 0.3) + Math.sin(performance.now() / 120) * (m.anim ? 0.06 : 0.15)
     : e.kind === 'mob' && e.frenzy ? 0.1 + Math.sin(performance.now() / 90) * 0.06 : 0;
   const glow = e.flash > 0 ? (e.type === 'warden' ? 0.18 : 0.35) : enr;
@@ -1114,7 +1284,7 @@ function animateEntity(e, dt) {
     e.label.el.style.display = '';
     e.label.el.style.transform = `translate(${p[0]}px, ${p[1]}px) translate(-50%, -100%)`;
     e.label.el.style.left = '0'; e.label.el.style.top = '0';
-    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${e.def.name}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}` : `<span class="lv">Lv${e.lvl}</span>${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}`;
+    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${e.def.name}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}` : `<span class="lv">Lv${e.lvl}</span>${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}`;
     if (txt !== e.label.text) { e.label.text = txt; e.label.nm.innerHTML = txt; }
     const pct = Math.round((e.hp / e.maxHp) * 100);
     if (pct !== e.label.pct) { e.label.pct = pct; e.label.fill.style.width = `${pct}%`; }
@@ -1165,6 +1335,8 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   hitStop = Math.max(0, hitStop - dt);
+  slowMo = Math.max(0, slowMo - dt);
+  const vdt = slowMo > 0 ? dt * slowMoScale : dt; // visual dt: animation and effects only
   const lm = state.joined && !state.spectator ? lockedMob() : null;
   const la = !lm && state.joined && !state.spectator ? focusedAlly() : null;
   const sel = lm || la;
@@ -1244,16 +1416,17 @@ function frame(now) {
     send({ type: 'input', x: +state.x.toFixed(2), z: +state.z.toFixed(2), face: +state.face.toFixed(2), seq: state.seq });
   }
 
-  for (const e of players.values()) animateEntity(e, dt);
-  for (const e of mobs.values()) animateEntity(e, dt);
-  fx.update(dt);
-  crystal.rotation.y += dt;
-  gateMesh.update(dt);
-  if (merchantNpc?.anim) merchantNpc.anim.update(dt);
+  for (const e of players.values()) animateEntity(e, e.id === state.myId ? dt : vdt); // your own character stays responsive
+  for (const e of mobs.values()) animateEntity(e, vdt);
+  fx.update(vdt);
+  crystal.rotation.y += vdt;
+  gateMesh.update(vdt);
+  if (merchantNpc?.anim) merchantNpc.anim.update(vdt);
   if (state.joined && !state.spectator) {
     const ml = $('merchant-lbl'), mp = project(MERCHANT.x, 3.6, MERCHANT.z), md = Math.hypot(state.x - MERCHANT.x, state.z - MERCHANT.z);
     if (mp && md < 20) { ml.style.display = ''; ml.style.left = `${mp[0]}px`; ml.style.top = `${mp[1]}px`; ml.innerHTML = `Merchant${md < MERCHANT.r + 1 ? `<br><small>${isTouch ? 'tap Trade' : 'press F to trade'}</small>` : ''}`; }
     else ml.style.display = 'none';
+    updateHallLabel();
   }
 
   // camera
@@ -1267,7 +1440,7 @@ function frame(now) {
   const hit = ray.intersectObjects(occluders, true)[0];
   const allowed = hit ? Math.max(2, hit.distance - 0.6) : state.camDist;
   camCur += (allowed - camCur) * Math.min(1, dt * (allowed < camCur ? 20 : 3));
-  const cd = camCur;
+  const cd = camCur * (slowMo > 0 ? 1 - 0.22 * Math.sin(Math.PI * (1 - slowMo / slowMoLen)) : 1); // killing-blow zoom
   shakeAmt = Math.max(0, shakeAmt - dt);
   const sx = (Math.random() - 0.5) * shakeAmt, sy = (Math.random() - 0.5) * shakeAmt;
   camera.position.set(cx - Math.sin(state.yaw) * Math.cos(cp) * cd + sx, 1.6 + Math.sin(cp) * cd + sy, cz - Math.cos(state.yaw) * Math.cos(cp) * cd);
@@ -1283,7 +1456,7 @@ function frame(now) {
 
   // floating numbers
   for (let i = nums.length - 1; i >= 0; i--) {
-    const n = nums[i]; n.age += dt;
+    const n = nums[i]; n.age += vdt;
     if (n.age > 0.9) { n.el.remove(); nums.splice(i, 1); continue; }
     const p = project(n.x, n.y + n.age * 1.6, n.z);
     if (!p) { n.el.style.display = 'none'; continue; }
@@ -1293,6 +1466,7 @@ function frame(now) {
   }
 
   if (state.joined) updateHud(now);
+  updateRareHint(now);
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);

@@ -8,6 +8,7 @@ import { Game } from './game.js';
 import * as db from './db.js';
 import * as accounts from './accounts.js';
 import * as track from './track.js';
+import * as hall from './hall.js';
 import { TICK_RATE } from '../shared/data.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -24,6 +25,7 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 
 const game = new Game();
 game.track = track.record;
+game.onClear = rec => hall.add(rec); // Hall of Clearers (DB insert + in-memory cache)
 const spectators = new Set(); // watch-only clients (?spectate=1)
 
 const server = http.createServer(async (req, res) => {
@@ -82,7 +84,7 @@ wss.on('connection', ws => {
         other.ws.close();
         c = await accounts.loadCharacter(acct.id, msg.character);
       }
-      return game.addPlayer(ws, c.name, c.cls, { charId: c.id, accountId: acct.id, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv });
+      return game.addPlayer(ws, c.name, c.cls, { charId: c.id, accountId: acct.id, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats });
     }
     return game.addPlayer(ws, msg.name, msg.cls);
   }
@@ -113,6 +115,7 @@ wss.on('connection', ws => {
       }).catch(err => { joining = false; console.error('join failed', err); ws.send(JSON.stringify({ type: 'denied', reason: 'Server error, try again.' })); });
       return;
     }
+    if (msg.type === 'hall') return ws.send(JSON.stringify(hall.message()));
     game.handle(player, msg);
   });
 
@@ -134,6 +137,7 @@ function tick(dt) {
     p.ws.send(`{"type":"snap","me":${JSON.stringify(game.meFor(p))},"w":${world}}`);
     if (p.invDirty) { p.invDirty = false; p.ws.send(JSON.stringify(game.invFor(p))); }
   }
+  if (game.rosterDirty) { game.rosterDirty = false; broadcastRoster(); } // e.g. someone changed their title
   for (const ws of spectators) if (ws.readyState === 1) ws.send(`{"type":"snap","me":null,"w":${world}}`);
 }
 
@@ -168,5 +172,7 @@ if (process.env.LOCKSTEP) {
 }
 
 db.migrate()
+  .then(() => hall.load())
+  .then(() => { game.hadFirstClear = hall.hasFirst(); })
   .then(() => server.listen(PORT, () => console.log(`Floorbound running on http://localhost:${PORT}${db.enabled ? ' (accounts on' + (accounts.discordOn() ? ', Discord sign-in on' : '') + ')' : ''}`)))
   .catch(err => { console.error('Startup failed', err); process.exit(1); });

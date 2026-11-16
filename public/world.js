@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { WORLD, OBSTACLES, CLASSES, GATE, rng } from '/shared/data.js';
 import { MERCHANT } from '/shared/items.js';
+import { HALL } from '/shared/titles.js';
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
 
@@ -180,7 +181,33 @@ export function createWorld(scene) {
   stall.traverse(m => { if (m.isMesh) m.castShadow = true; });
   scene.add(stall);
 
-  return { sun, crystal, occluders, treeFader, gate: raidGate, stall };
+  // Hall of Clearers: an engraved stone tablet facing the plaza (mirrors the merchant's stall)
+  const hall = new THREE.Group();
+  const stone = mat(0x8d8a96), darkStone = mat(0x5e5b68), goldM = mat(0xfbbf24, { emissive: 0xf59e0b, emissiveIntensity: 0.55, metalness: 0.4, roughness: 0.4 });
+  const step = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.3, 1.8), darkStone); step.position.y = 0.15; hall.add(step);
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.5, 1.1), stone); plinth.position.y = 0.55; hall.add(plinth);
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.7, 0.4), stone); slab.position.y = 2.15; hall.add(slab);
+  const ledge = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.18, 0.6), darkStone); ledge.position.y = 3.55; hall.add(ledge);
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 0.36), darkStone); cap.position.y = 3.55; cap.rotation.z = Math.PI / 4; hall.add(cap);
+  const crest = new THREE.Mesh(new THREE.OctahedronGeometry(0.28), goldM); crest.position.y = 4.85; hall.add(crest);
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.2, 0.05), goldM); frame.position.set(0, 2.15, 0.2); hall.add(frame);
+  const face = new THREE.Mesh(new THREE.BoxGeometry(2.0, 2.0, 0.06), mat(0x3f3c48)); face.position.set(0, 2.15, 0.22); hall.add(face);
+  for (let i = 0; i < 6; i++) { // engraved names
+    const w = i === 0 ? 1.3 : 0.9 + ((i * 37) % 7) / 10;
+    const line = new THREE.Mesh(new THREE.BoxGeometry(w, i === 0 ? 0.12 : 0.07, 0.03), goldM); line.position.set(0, 2.9 - i * 0.28 - (i ? 0.12 : 0), 0.26); hall.add(line);
+  }
+  for (const sx of [-1.65, 1.65]) { // braziers
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 1.4, 8), darkStone); post.position.set(sx, 0.7, 0.55); hall.add(post);
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.18, 0.25, 10), darkStone); bowl.position.set(sx, 1.5, 0.55); hall.add(bowl);
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 8), mat(0xfb923c, { emissive: 0xf97316, emissiveIntensity: 1.2 })); flame.position.set(sx, 1.85, 0.55); hall.add(flame);
+  }
+  hall.position.set(HALL.x, 0, HALL.z);
+  hall.rotation.y = Math.atan2(-HALL.x, -HALL.z);
+  hall.traverse(m => { if (m.isMesh) m.castShadow = true; });
+  scene.add(hall);
+  hall.userData.crest = crest;
+
+  return { sun, crystal, occluders, treeFader, gate: raidGate, stall, hall };
 }
 
 // ---------- characters ----------
@@ -238,56 +265,62 @@ function makeBlockMob(type) {
   const body = new THREE.Group(); g.add(body);
   const legs = [];
   let height = 1.4, armR = null;
-  if (type === 'boar') {
-    part(new THREE.SphereGeometry(0.75, 10, 8), 0x7a4b2a, 0, 0.75, 0, body).scale.set(0.9, 0.75, 1.3);
-    const head = part(new THREE.BoxGeometry(0.6, 0.55, 0.6), 0x6a3f22, 0, 0.75, 0.95, body);
-    part(new THREE.BoxGeometry(0.3, 0.22, 0.14), 0xd99a8a, 0, -0.08, 0.33, head);
+  if (type === 'boar' || type === 'oldtusk') {
+    const old = type === 'oldtusk'; // Old Tusk: a huge dark-brown boar with great curved tusks
+    part(new THREE.SphereGeometry(0.75, 10, 8), old ? 0x3d2614 : 0x7a4b2a, 0, 0.75, 0, body).scale.set(0.9, 0.75, 1.3);
+    const head = part(new THREE.BoxGeometry(0.6, 0.55, 0.6), old ? 0x2e1c0e : 0x6a3f22, 0, 0.75, 0.95, body);
+    part(new THREE.BoxGeometry(0.3, 0.22, 0.14), old ? 0x8a5a4e : 0xd99a8a, 0, -0.08, 0.33, head);
     for (const sx of [-1, 1]) {
-      const tusk = part(new THREE.ConeGeometry(0.06, 0.32, 5), 0xf5f0e1, sx * 0.22, -0.12, 0.3, head);
-      tusk.rotation.x = -0.8;
-      part(new THREE.SphereGeometry(0.05, 6, 4), 0x220000, sx * 0.17, 0.12, 0.3, head);
+      const tusk = part(new THREE.ConeGeometry(old ? 0.1 : 0.06, old ? 0.62 : 0.32, 5), 0xf5f0e1, sx * 0.22, -0.12, old ? 0.36 : 0.3, head);
+      tusk.rotation.x = old ? -1.1 : -0.8; if (old) tusk.rotation.z = -sx * 0.35;
+      part(new THREE.SphereGeometry(0.05, 6, 4), old ? 0xff3b1f : 0x220000, sx * 0.17, 0.12, 0.3, head);
     }
-    for (const [x, z] of [[-0.35, 0.5], [0.35, 0.5], [-0.35, -0.5], [0.35, -0.5]]) legs.push(part(new THREE.BoxGeometry(0.18, 0.5, 0.18), 0x4b2e19, x, 0.25, z, body));
+    if (old) for (let i = 0; i < 4; i++) part(new THREE.BoxGeometry(0.08, 0.28, 0.16), 0x1a1008, 0, 1.28, 0.45 - i * 0.28, body).rotation.x = -0.3; // bristle ridge
+    for (const [x, z] of [[-0.35, 0.5], [0.35, 0.5], [-0.35, -0.5], [0.35, -0.5]]) legs.push(part(new THREE.BoxGeometry(0.18, 0.5, 0.18), old ? 0x22150a : 0x4b2e19, x, 0.25, z, body));
     height = 1.6;
-  } else if (type === 'wolf' || type === 'alpha' || type === 'hound') {
-    const alpha = type === 'alpha', hound = type === 'hound';
-    const fur = alpha ? 0x2f2a33 : hound ? 0x7a3b2e : 0x5b5f6b, dark = alpha ? 0x1c1820 : hound ? 0x4a2018 : 0x3a3d45;
+    if (old) { body.scale.setScalar(1.8); height = 2.9; }
+  } else if (type === 'wolf' || type === 'alpha' || type === 'hound' || type === 'ghostfang') {
+    const ghost = type === 'ghostfang', alpha = type === 'alpha' || ghost, hound = type === 'hound';
+    const fur = ghost ? 0xe8eef2 : alpha ? 0x2f2a33 : hound ? 0x7a3b2e : 0x5b5f6b, dark = ghost ? 0xaab8c4 : alpha ? 0x1c1820 : hound ? 0x4a2018 : 0x3a3d45;
     part(new THREE.BoxGeometry(0.6, 0.6, 1.5), fur, 0, 0.95, 0, body);
-    const head = part(new THREE.BoxGeometry(0.48, 0.45, 0.6), alpha ? 0x26212a : 0x4b4f5a, 0, 1.2, 0.95, body);
+    const head = part(new THREE.BoxGeometry(0.48, 0.45, 0.6), ghost ? 0xdde5ea : alpha ? 0x26212a : 0x4b4f5a, 0, 1.2, 0.95, body);
     part(new THREE.BoxGeometry(0.26, 0.2, 0.3), dark, 0, -0.1, 0.42, head);
     for (const sx of [-1, 1]) {
       part(new THREE.ConeGeometry(0.1, 0.28, 4), dark, sx * 0.16, 0.32, -0.05, head);
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), new THREE.MeshBasicMaterial({ color: alpha ? 0xff3b1f : 0xffd23f }));
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(ghost ? 0.06 : 0.05, 6, 4), new THREE.MeshBasicMaterial({ color: ghost ? 0x7dd3fc : alpha ? 0xff3b1f : 0xffd23f }));
       eye.position.set(sx * 0.13, 0.08, 0.31); head.add(eye);
     }
-    if (alpha) { // bone-white mane spikes and a scarred muzzle
+    if (alpha) { // mane spikes (bone-white, or ice-blue on Ghostfang) and a scarred muzzle
       for (let i = 0; i < 6; i++) {
-        const sp = part(new THREE.ConeGeometry(0.09, 0.42, 4), 0xd8cfc0, (i % 2 ? 1 : -1) * 0.12, 1.3, 0.45 - i * 0.18, body);
+        const sp = part(new THREE.ConeGeometry(0.09, 0.42, 4), ghost ? 0x9fd8f5 : 0xd8cfc0, (i % 2 ? 1 : -1) * 0.12, 1.3, 0.45 - i * 0.18, body);
         sp.rotation.x = -0.5;
       }
-      part(new THREE.BoxGeometry(0.04, 0.22, 0.04), 0xb91c1c, 0.12, 0.05, 0.3, head);
+      part(new THREE.BoxGeometry(0.04, 0.22, 0.04), ghost ? 0x38bdf8 : 0xb91c1c, 0.12, 0.05, 0.3, head);
     }
     const tail = part(new THREE.BoxGeometry(0.14, 0.14, 0.7), fur, 0, 1.1, -1.0, body); tail.rotation.x = 0.5;
     for (const [x, z] of [[-0.2, 0.55], [0.2, 0.55], [-0.2, -0.55], [0.2, -0.55]]) legs.push(part(new THREE.BoxGeometry(0.15, 0.7, 0.15), dark, x, 0.35, z, body));
     height = 1.8;
-    if (alpha) { body.scale.setScalar(1.55); height = 2.8; }
-  } else if (type === 'spitter') {
-    part(new THREE.SphereGeometry(0.9, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0x3f5f2a, 0, 0, 0, body); // root mound
-    const bulb = part(new THREE.SphereGeometry(0.62, 10, 8), 0x5f9e3a, 0, 1.0, 0, body);
+    if (ghost) { body.scale.setScalar(1.6); height = 2.9; }
+    else if (alpha) { body.scale.setScalar(1.55); height = 2.8; }
+  } else if (type === 'spitter' || type === 'thornmother') {
+    const tm = type === 'thornmother'; // Thornmother: a huge dark purple-green bramble bulb
+    part(new THREE.SphereGeometry(0.9, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), tm ? 0x223a1e : 0x3f5f2a, 0, 0, 0, body); // root mound
+    const bulb = part(new THREE.SphereGeometry(0.62, 10, 8), tm ? 0x4a2a5e : 0x5f9e3a, 0, 1.0, 0, body);
     bulb.scale.set(1, 1.15, 1);
-    for (let i = 0; i < 7; i++) { // thorns
-      const a = (i / 7) * Math.PI * 2;
-      const th = part(new THREE.ConeGeometry(0.08, 0.4, 4), 0xd6c48a, Math.cos(a) * 0.55, 1.0 + (i % 2) * 0.25, Math.sin(a) * 0.55, body);
+    for (let i = 0; i < (tm ? 11 : 7); i++) { // thorns
+      const n = tm ? 11 : 7, a = (i / n) * Math.PI * 2;
+      const th = part(new THREE.ConeGeometry(0.08, tm ? 0.5 : 0.4, 4), tm ? 0x9bd36a : 0xd6c48a, Math.cos(a) * 0.55, 1.0 + (i % 2) * 0.25, Math.sin(a) * 0.55, body);
       th.rotation.z = -Math.cos(a) * 1.2; th.rotation.x = Math.sin(a) * 1.2;
     }
     for (let i = 0; i < 5; i++) { // petals around the mouth
       const a = (i / 5) * Math.PI * 2;
-      const pe = part(new THREE.BoxGeometry(0.28, 0.06, 0.4), 0xb3245c, Math.cos(a) * 0.22, 1.72, Math.sin(a) * 0.22 + 0.15, body);
+      const pe = part(new THREE.BoxGeometry(0.28, 0.06, 0.4), tm ? 0x6d1a5a : 0xb3245c, Math.cos(a) * 0.22, 1.72, Math.sin(a) * 0.22 + 0.15, body);
       pe.rotation.y = -a; pe.rotation.x = -0.6;
     }
-    const mouth = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 0.3, 8), new THREE.MeshBasicMaterial({ color: 0x1a0f0f }));
+    const mouth = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 0.3, 8), new THREE.MeshBasicMaterial({ color: tm ? 0x8bff5a : 0x1a0f0f }));
     mouth.position.set(0, 1.66, 0.25); mouth.rotation.x = 1.1; body.add(mouth);
     height = 2.0;
+    if (tm) { body.scale.setScalar(1.8); height = 3.6; }
   } else { // warden boss
     const s = 2.3;
     legs.push(part(new THREE.BoxGeometry(0.45 * s, 1.0 * s, 0.5 * s), 0x3b1f1f, -0.3 * s, 0.5 * s, 0, body));
@@ -660,5 +693,44 @@ export class Effects {
   shield(obj, life, color = 0x60a5fa) {
     const m = new THREE.Mesh(new THREE.SphereGeometry(1.3, 16, 12), this.fadeMat(color, 0.18));
     this.add(m, life, (mesh, k) => { mesh.position.set(obj.position.x, 1.2, obj.position.z); mesh.material.opacity = 0.2 * (1 - k * k); });
+  }
+
+  // Hit sparks: one tiny Points cloud per burst (a single draw call), flung outward and fading fast.
+  sparks(x, y, z, n = 8, color = 0xfff3c4, size = 0.22, speed = 7) {
+    const pos = new Float32Array(n * 3), vel = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z;
+      const a = Math.random() * Math.PI * 2, up = 0.2 + Math.random() * 0.9, s = speed * (0.5 + Math.random() * 0.7);
+      vel[i * 3] = Math.cos(a) * s; vel[i * 3 + 1] = up * s; vel[i * 3 + 2] = Math.sin(a) * s;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color, size, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending }));
+    pts.frustumCulled = false;
+    this.add(pts, 0.22 + Math.random() * 0.08, (mesh, k, dt) => {
+      const p = mesh.geometry.attributes.position.array;
+      for (let i = 0; i < n; i++) {
+        p[i * 3] += vel[i * 3] * dt; p[i * 3 + 1] += vel[i * 3 + 1] * dt; p[i * 3 + 2] += vel[i * 3 + 2] * dt;
+        vel[i * 3 + 1] -= 18 * dt; vel[i * 3] *= 0.9; vel[i * 3 + 2] *= 0.9;
+      }
+      mesh.geometry.attributes.position.needsUpdate = true;
+      mesh.material.opacity = 1 - k * k;
+      mesh.material.size = size * (1 - k * 0.6);
+    });
+  }
+
+  // A tall red-and-gold pillar of light marking where a rare named enemy appeared.
+  rareBeam(x, z, life = 6) {
+    const g = new THREE.Group();
+    const outer = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.6, 44, 16, 1, true), this.fadeMat(0xdc2626, 0.45));
+    const core = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 44, 12, 1, true), this.fadeMat(0xfde047, 0.8));
+    core.material.blending = THREE.AdditiveBlending; // the red shell stays normal-blended so it reads red against the sky
+    g.add(outer, core); g.position.set(x, 22, z);
+    this.add(g, life, (mesh, k) => {
+      const f = k < 0.1 ? k / 0.1 : 1 - Math.max(0, k - 0.7) / 0.3;
+      outer.material.opacity = 0.45 * f; core.material.opacity = 0.8 * f;
+      outer.rotation.y += 0.03; core.scale.x = core.scale.z = 1 + Math.sin(k * 40) * 0.15;
+    });
+    this.ring(x, z, 6, 0xfbbf24, 1.2); this.ring(x, z, 3.5, 0xef4444, 0.9);
   }
 }

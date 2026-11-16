@@ -82,6 +82,7 @@ const TABLES = {
   field: [62, 28, 9, 1],
   elite: [0, 55, 35, 10],
   boss: [0, 0, 70, 30],
+  rare: [0, 20, 55, 25],
 };
 export function rollRarity(table, rnd = Math.random) {
   const w = TABLES[table];
@@ -98,6 +99,9 @@ export const DROPS = {
   hound: { gold: [1, 2], item: 0, potion: 0.15, table: 'field' },
   alpha: { gold: [25, 40], item: 1, potion: 0.5, table: 'elite' },
   warden: { gold: [120, 160], item: 2, potion: 1, table: 'boss' },
+  oldtusk: { gold: [40, 70], item: 1, potion: 1, table: 'rare' },
+  ghostfang: { gold: [40, 70], item: 1, potion: 1, table: 'rare' },
+  thornmother: { gold: [40, 70], item: 1, potion: 1, table: 'rare' },
 };
 
 export const RANDOM_SLOT = rnd => SLOTS[Math.floor(rnd() * SLOTS.length)];
