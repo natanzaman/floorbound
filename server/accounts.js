@@ -1,7 +1,9 @@
 // Accounts, sessions, characters and "Sign in with Discord".
 //
 // - Guest: POST /api/guest gives a session token, kept in the browser. No password, no email.
-// - Discord: /auth/discord -> Discord -> /auth/discord/callback -> back to the game with a session.
+// - Discord: /auth/discord -> Discord -> /auth/discord/callback (a tiny page) -> POST /api/discord -> session.
+//   Uses Discord's token flow, so no client secret is needed: the server asks Discord who the token
+//   belongs to and checks it was issued to OUR app before trusting it.
 //   Signing in with Discord while playing as a guest links (or merges) the guest's characters.
 // - Up to MAX_CHARACTERS characters per account; names are unique across the server.
 import crypto from 'node:crypto';
@@ -10,8 +12,7 @@ import { CLASSES, MAX_LEVEL } from '../shared/data.js';
 
 export const MAX_CHARACTERS = 4;
 const DISCORD_ID = process.env.DISCORD_CLIENT_ID;
-const DISCORD_SECRET = process.env.DISCORD_CLIENT_SECRET;
-export const discordEnabled = enabled && !!DISCORD_ID && !!DISCORD_SECRET;
+export const discordEnabled = enabled && !!DISCORD_ID;
 
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 const newToken = () => crypto.randomBytes(32).toString('base64url');
@@ -54,6 +55,16 @@ const readBody = req => new Promise(resolve => {
 });
 const bearer = req => (req.headers.authorization || '').replace(/^Bearer /, '');
 const origin = req => `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers['x-forwarded-host'] || req.headers.host}`;
+
+const CALLBACK_PAGE = `<!doctype html><meta charset="utf-8"><title>Signing in…</title>
+<body style="background:#0b1020;color:#eef3ff;font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0">Signing in…
+<script>
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (!h.get('access_token')) location.replace('/#signin=cancelled');
+  else fetch('/api/discord', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ access_token: h.get('access_token'), state: h.get('state') }) })
+    .then(r => r.json()).then(b => location.replace(b.session ? '/#session=' + b.session : '/#signin=failed'))
+    .catch(() => location.replace('/#signin=failed'));
+</script>`;
 
 const oauthStates = new Map(); // state -> { link, at }
 setInterval(() => { const cut = Date.now() - 10 * 60e3; for (const [k, v] of oauthStates) if (v.at < cut) oauthStates.delete(k); }, 60e3).unref();
@@ -109,22 +120,25 @@ export async function handle(req, res, url) {
       if (!discordEnabled) return json(res, 404, { error: 'Discord sign-in is not set up on this server.' }), true;
       const state = newToken();
       oauthStates.set(state, { link: url.searchParams.get('link') || null, at: Date.now() });
-      const p = new URLSearchParams({ client_id: DISCORD_ID, redirect_uri: `${origin(req)}/auth/discord/callback`, response_type: 'code', scope: 'identify', state, prompt: 'none' });
+      const p = new URLSearchParams({ client_id: DISCORD_ID, redirect_uri: `${origin(req)}/auth/discord/callback`, response_type: 'token', scope: 'identify', state, prompt: 'none' });
       res.writeHead(302, { location: `https://discord.com/oauth2/authorize?${p}` }); res.end();
       return true;
     }
-    if (url.pathname === '/auth/discord/callback') {
-      const st = oauthStates.get(url.searchParams.get('state') || '');
-      oauthStates.delete(url.searchParams.get('state') || '');
-      const code = url.searchParams.get('code');
-      if (!st || !code) { res.writeHead(302, { location: '/#signin=cancelled' }); res.end(); return true; }
-      const tok = await fetch('https://discord.com/api/oauth2/token', {
-        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ client_id: DISCORD_ID, client_secret: DISCORD_SECRET, grant_type: 'authorization_code', code, redirect_uri: `${origin(req)}/auth/discord/callback` }),
-      }).then(r => r.json());
-      if (!tok.access_token) { res.writeHead(302, { location: '/#signin=failed' }); res.end(); return true; }
-      const me = await fetch('https://discord.com/api/users/@me', { headers: { authorization: `Bearer ${tok.access_token}` } }).then(r => r.json());
-      if (!me.id) { res.writeHead(302, { location: '/#signin=failed' }); res.end(); return true; }
+    if (url.pathname === '/auth/discord/callback') { // Discord puts the token in the URL fragment, which only the browser sees
+      res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' });
+      res.end(CALLBACK_PAGE);
+      return true;
+    }
+    if (url.pathname === '/api/discord' && req.method === 'POST') {
+      if (!discordEnabled) return json(res, 404, { error: 'Discord sign-in is not set up.' }), true;
+      const { access_token, state } = await readBody(req);
+      const st = oauthStates.get(state || '');
+      oauthStates.delete(state || '');
+      if (!st || !access_token) return json(res, 400, { error: 'Sign-in expired, try again.' }), true;
+      // Who does this token belong to, and was it issued to our app?
+      const info = await fetch('https://discord.com/api/oauth2/@me', { headers: { authorization: `Bearer ${access_token}` } }).then(r => r.json());
+      const me = info.user;
+      if (!me?.id || info.application?.id !== DISCORD_ID) return json(res, 401, { error: 'Discord sign-in failed.' }), true;
       const display = me.global_name || me.username;
       let [acct] = await q('SELECT id FROM accounts WHERE discord_id = $1', [me.id]);
       const guest = st.link ? await accountFromToken(st.link) : null;
@@ -139,9 +153,7 @@ export async function handle(req, res, url) {
       }
       if (!acct) [acct] = await q('INSERT INTO accounts (discord_id) VALUES ($1) RETURNING id', [me.id]);
       await q('UPDATE accounts SET discord_name = $2, discord_avatar = $3, last_seen = now() WHERE id = $1', [acct.id, display, me.avatar || null]);
-      const session = await newSession(acct.id);
-      res.writeHead(302, { location: `/#session=${session}` }); res.end();
-      return true;
+      return json(res, 200, { session: await newSession(acct.id) }), true;
     }
   } catch (e) {
     console.error('accounts error', e);

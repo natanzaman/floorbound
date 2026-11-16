@@ -84,7 +84,7 @@ Tuning lives in `shared/data.js` (class HP/ATK, cooldowns, mob stats). New skill
 Set `DATABASE_URL` (any Postgres; the live game uses Neon) to turn on accounts. Tables are created automatically on startup.
 
 - **Play as guest:** a guest account is saved in that browser (no password, no email).
-- **Sign in with Discord:** set `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` from a Discord app, with the redirect URL `https://YOUR-HOST/auth/discord/callback`. Signing in while playing as a guest links the guest's characters to Discord.
+- **Sign in with Discord:** set `DISCORD_CLIENT_ID` (the app's public Application ID) and add the redirect URL `https://YOUR-HOST/auth/discord/callback` in the Discord app's OAuth2 settings. No client secret needed: the server checks each sign-in token with Discord and confirms it was issued to this app. Signing in while playing as a guest links the guest's characters to Discord.
 - Up to 4 characters per account; names are unique. Level and XP save every 15 s, on level-up and on disconnect.
 
 Without `DATABASE_URL` the game runs in anonymous mode (pick a name and play, nothing saved), which is handy for local development.
