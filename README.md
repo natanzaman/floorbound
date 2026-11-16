@@ -2,7 +2,7 @@
 
 A co-op 3D action RPG that runs in the browser. You and your friends are stuck in a 100-floor tower: fight through the field, beat the floor boss together, clear the floor.
 
-This is the **Floor 1 prototype**: town hub, open field with mobs, the Horned Warden boss, 3 classes, parties, levels 1–10, and a real-time authoritative server.
+This is the **Floors 1–2 prototype**: town hub, open field with mobs, the Horned Warden boss, a second floor (the Glimmering Mire and the Drowned Sovereign), 3 classes, parties, levels 1–20, and a real-time authoritative server.
 
 ## Run it
 
@@ -54,6 +54,26 @@ Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 
 | Warden's Hound | 8 | Summoned by the Warden in phase 2. Stays in the chamber. |
 | The Horned Warden (boss) | 10 | Three phases. 100–66%: cleaves and ground slams. 66–33%: adds hounds and a horn charge down a red lane. Below 33%: enraged spin and rockfall circles under everyone. |
 
+## Floor 2 — The Glimmering Mire
+
+A misty marsh of dead trees, shallow water and glowing crystals, for levels 11–18. It sits in the same world as Floor 1 (600 m east), with its own camp, field, raid gate and boss court.
+
+- **Unlocking it:** help kill the Horned Warden (anyone who damaged it or healed in the fight). That unlocks Floor 2 for the character for good (saved with the character's stats; anonymous players keep it until they leave). Characters that had already killed the Warden are unlocked automatically.
+- **Getting there:** a **waystone** stands in each town (Town of Beginnings, just south of the fountain; Mirelight Camp, Floor 2's safe zone). Press **F** at it to pick a floor you've unlocked. Right after a Warden kill a glowing **Stairway** also opens at the back of the Warden's chamber for 60 s: step in and press F.
+- **Dying on Floor 2** sends you back to Mirelight Camp.
+- The field takes a party from about level 10 to 15; the boss is meant for level 15+ parties.
+
+| Enemy | Level | What it does |
+| --- | --- | --- |
+| Mire Shieldback | 12 | Turtle brute that turns slowly. Its pale front shell **blocks 80%** of damage from the front (shows BLOCKED): hit it from the side or behind, or Break it. |
+| Will-o'-Wisp | 11 | Floats at range and **blinks away** when you get close. Draws a red aim line, then fires a slow **homing orb**: outrun it, turn hard, or roll through it. |
+| Bog Lurker | 13 | Burrowed and untouchable (a ring of bubbling mud). **Erupts under anyone who stands still** for about 2 s (red circle under you), then fights on the surface for a few seconds before burrowing again. Keep moving. |
+| Mire Matron (elite) | 15 | Leads the lurkers of the Drowned Wood: lurkers near her hit 25% harder, and her **Call of the Mire** sends every lurker nearby up under her target at once. |
+| Drowned Thrall | 16 | Summoned by the Sovereign in phase 2. Stays in the court. |
+| **The Drowned Sovereign** (boss) | 18 | Three phases, each adding attacks. 100–66%: trident sweeps (red wedge) and **geysers** (red circles; roll or jump). 66–33%: + the **Tidal Wave**, a ring of water that sweeps the whole court. You can't outrun it: **dodge-roll through it** as it reaches you (very heavy damage otherwise); + Drowned Thralls and purple **mire pools** that hurt while you stand in them. Below 33%: + **the Deluge** (the outer court floods: stay inside the bright ring) and volleys of homing orbs; waves come faster. |
+
+Behind the Sunken Gate (same ready check as Floor 1's raid gate), the Sovereign's health scales with the party. Floor 2 clears go to their own section of the Hall of Clearers. The **Last Attack Bonus** is the *Sovereign's Tidecloak* (armour: +30% health, 10% less damage taken, 6% faster cooldowns); Floor 2 enemies drop from better loot tables, and the Sovereign drops two Rare/Epic items for everyone who fought. New title: **Mirebreaker** (help defeat the Drowned Sovereign).
+
 ## The raid gate and the Last Attack Bonus
 
 A portcullis blocks the corridor to the Warden's chamber. Everyone standing at the gate presses **F** (or taps Ready); when all of them are ready, it counts down 5 seconds and rises. It closes again once the chamber is empty. Boss health scales with the number of players inside when the fight starts. Whoever lands the killing blow gets the **Last Attack Bonus**: the unique *Horn of the Warden* charm.
@@ -99,6 +119,9 @@ With a database, the server records play events (session start/end, first kill, 
 
 ```
 shared/data.js   classes, skills, mobs, map, collision — used by server AND client
+shared/floor2.js Floor 2: map, waystones, enemies, Sovereign tuning (appended into data.js)
+server/floor2.js Floor 2 AI (Shieldback, Wisp, Lurker, Matron, Sovereign), Sunken Gate, waystones/Stairway
+public/floor2world.js, public/floor2client.js  Floor 2 scene, models, effects, waystone UI
 server/game.js   authoritative simulation: combat, AI, boss, XP, parties
 server/index.js  static file server + WebSocket server (20 ticks/sec)
 public/          Three.js client (no build step): main.js, world.js, style.css
@@ -142,6 +165,13 @@ node test/team.js                           # Brann (tank), Kael (DPS), Lyra (he
 
 Other testing aids: `SPAWN_AT=0,172` spawns players at the chamber gate. `MAX_PLAYERS` caps the server (default 64).
 
+Floor 2: `SPAWN_AT=600,150` spawns at the Sunken Gate (spawning on Floor 2 also unlocks it; deaths respawn there too). The bot party goes to Floor 2 with `FLOOR=2`: from Floor 1 they kill the Warden and take the Stairway (or use the town waystone if already unlocked), farm the Mire until level 15, then fight the Sovereign.
+
+```bash
+START_LEVEL=16 SPAWN_AT=600,150 npm start
+FLOOR=2 node test/team.js                   # the party takes on the Drowned Sovereign
+```
+
 Measured on the prototype: 40 bots used about 5% of one CPU core, about 50 KB/s down per player.
 
 ## Credits
@@ -150,4 +180,4 @@ Character models and animations: [KayKit Adventurers Character Pack](https://git
 
 ## Next steps
 
-See the design doc for the full roadmap: saved characters, gear drops, Floors 2–5, zone servers for hundreds of players.
+See the design doc for the full roadmap: Floors 3–5, zone servers for hundreds of players.
