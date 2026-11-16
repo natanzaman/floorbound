@@ -147,8 +147,9 @@ if (process.env.LOCKSTEP) {
 }
 
 // Save account characters every 15 s (and on disconnect / level-up via the dirty flag).
-if (db.enabled) {
+{
   setInterval(() => {
+    if (!db.enabled) return;
     for (const p of game.players.values()) {
       if (!p.charId || !p.dirty) continue;
       p.dirty = false;
@@ -158,5 +159,5 @@ if (db.enabled) {
 }
 
 db.migrate()
-  .then(() => server.listen(PORT, () => console.log(`Floorbound running on http://localhost:${PORT}${db.enabled ? ' (accounts on' + (accounts.discordEnabled ? ', Discord sign-in on' : '') + ')' : ''}`)))
-  .catch(err => { console.error('Database setup failed', err); process.exit(1); });
+  .then(() => server.listen(PORT, () => console.log(`Floorbound running on http://localhost:${PORT}${db.enabled ? ' (accounts on' + (accounts.discordOn() ? ', Discord sign-in on' : '') + ')' : ''}`)))
+  .catch(err => { console.error('Startup failed', err); process.exit(1); });

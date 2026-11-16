@@ -7,12 +7,13 @@
 //   Signing in with Discord while playing as a guest links (or merges) the guest's characters.
 // - Up to MAX_CHARACTERS characters per account; names are unique across the server.
 import crypto from 'node:crypto';
-import { q, enabled } from './db.js';
+import * as db from './db.js';
+const q = (...a) => db.q(...a);
 import { CLASSES, MAX_LEVEL } from '../shared/data.js';
 
 export const MAX_CHARACTERS = 4;
 const DISCORD_ID = process.env.DISCORD_CLIENT_ID;
-export const discordEnabled = enabled && !!DISCORD_ID;
+export const discordOn = () => db.enabled && !!DISCORD_ID;
 
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 const newToken = () => crypto.randomBytes(32).toString('base64url');
@@ -24,7 +25,7 @@ async function newSession(accountId) {
 }
 
 export async function accountFromToken(token) {
-  if (!enabled || !token || typeof token !== 'string' || token.length > 100) return null;
+  if (!db.enabled || !token || typeof token !== 'string' || token.length > 100) return null;
   const rows = await q(
     `UPDATE sessions s SET last_used = now() FROM accounts a
      WHERE s.token_hash = $1 AND a.id = s.account_id
@@ -71,8 +72,8 @@ setInterval(() => { const cut = Date.now() - 10 * 60e3; for (const [k, v] of oau
 
 // Returns true if it handled the request.
 export async function handle(req, res, url) {
-  if (url.pathname === '/api/config') return json(res, 200, { accounts: enabled, discord: discordEnabled, maxCharacters: MAX_CHARACTERS }), true;
-  if (!enabled) return false;
+  if (url.pathname === '/api/config') return json(res, 200, { accounts: db.enabled, discord: discordOn(), maxCharacters: MAX_CHARACTERS }), true;
+  if (!db.enabled) return false;
   try {
     if (url.pathname === '/api/guest' && req.method === 'POST') {
       const [a] = await q('INSERT INTO accounts DEFAULT VALUES RETURNING id');
@@ -117,7 +118,7 @@ export async function handle(req, res, url) {
 
     // ---------- Sign in with Discord ----------
     if (url.pathname === '/auth/discord') {
-      if (!discordEnabled) return json(res, 404, { error: 'Discord sign-in is not set up on this server.' }), true;
+      if (!discordOn()) return json(res, 404, { error: 'Discord sign-in is not set up on this server.' }), true;
       const state = newToken();
       oauthStates.set(state, { link: url.searchParams.get('link') || null, at: Date.now() });
       const p = new URLSearchParams({ client_id: DISCORD_ID, redirect_uri: `${origin(req)}/auth/discord/callback`, response_type: 'token', scope: 'identify', state, prompt: 'none' });
@@ -130,7 +131,7 @@ export async function handle(req, res, url) {
       return true;
     }
     if (url.pathname === '/api/discord' && req.method === 'POST') {
-      if (!discordEnabled) return json(res, 404, { error: 'Discord sign-in is not set up.' }), true;
+      if (!discordOn()) return json(res, 404, { error: 'Discord sign-in is not set up.' }), true;
       const { access_token, state } = await readBody(req);
       const st = oauthStates.get(state || '');
       oauthStates.delete(state || '');
