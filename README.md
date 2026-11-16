@@ -58,6 +58,23 @@ Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 
 
 A portcullis blocks the corridor to the Warden's chamber. Everyone standing at the gate presses **F** (or taps Ready); when all of them are ready, it counts down 5 seconds and rises. It closes again once the chamber is empty. Boss health scales with the number of players inside when the fight starts. Whoever lands the killing blow gets the **Last Attack Bonus**: the unique *Horn of the Warden* charm.
 
+## Warden twists
+
+Every time the Horned Warden spawns (server start, and each respawn after a kill) it rolls one **twist**, never the same one twice in a row. The twist is announced to the whole server, shown on the raid gate panel and under the boss bar, and pays a bonus to everyone who fought when the Warden dies under it.
+
+| Twist | What changes | Kill bonus |
+| --- | --- | --- |
+| Packmaster | Hounds from the start of the fight, up to 5 at once; the Warden's howl sends them into a frenzy. | +1 loot roll |
+| Twin Horns | Horn charges come in pairs (the second re-aims at someone else) and start in phase 1. | +50% gold |
+| Quaking | Every ground slam leaves cracked ground for 6 s that hurts while you stand in it. | +50% gold |
+| Thornbound | The Warden raises stone Thorn Totems at the chamber edge; they shoot thorns until you break them (or 45 s pass). | +1 loot roll |
+| Ironhide | Takes 40% less damage unless Broken; Broken windows last 1.6 s longer. Break it, then Switch. | +1 loot roll |
+| Berserk | Enraged from the first second (every phase-3 attack), but 25% less health. | +1 loot roll, +50% gold |
+| Eclipse | The chamber goes dark and every telegraph gives 25% less warning. | +2 loot rolls, +100% gold |
+| Echo | Every slam and rockfall strikes again in the same spot 1.5 s later (purple circle). | +1 loot roll |
+
+The table lives in `shared/twists.js`, server behaviour in `server/twists.js`, client visuals in `public/twists.js`. `WARDEN_TWIST=<id>` forces one (testing aid), e.g. `WARDEN_TWIST=eclipse START_LEVEL=10 SPAWN_AT=0,150 npm start`.
+
 ## Rare spawns
 
 Every 6–10 minutes one named rare appears somewhere on Floor 1, announced to the whole server with a beam and a direction hint: **Old Tusk** (giant boar, Verdant Field), **Ghostfang** (white alpha wolf, Wolf Woods) or **Thornmother** (giant spitter, fires 3-thorn fans). Everyone who damages it gets their own Rare-weighted loot roll. It wanders off after 5 minutes if nobody fights it. `RARE_SOON=1` spawns the first one after ~10 s (testing).
@@ -140,7 +157,7 @@ node test/team.js                           # Brann (tank), Kael (DPS), Lyra (he
 
 `?spectate=1` works on any server: it watches without joining and frames the whole group.
 
-Other testing aids: `SPAWN_AT=0,172` spawns players at the chamber gate. `MAX_PLAYERS` caps the server (default 64).
+Other testing aids: `SPAWN_AT=0,172` spawns players at the chamber gate. `WARDEN_TWIST=<id>` forces a Warden twist (see above). `MAX_PLAYERS` caps the server (default 64).
 
 Measured on the prototype: 40 bots used about 5% of one CPU core, about 50 KB/s down per player.
 

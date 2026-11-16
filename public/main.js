@@ -8,6 +8,7 @@ import { RARITY, CONSUMABLES, CONSUMABLE_IDS, SHOP, MERCHANT, SLOTS, statLabel, 
 import { TITLES, TITLE_BY_ID, DEFAULT_TITLE, HALL, titleProgress } from '/shared/titles.js';
 import { Guide } from '/guide.js';
 import { createWorld, makePlayerModel, makeMobModel, Effects, loadAssets } from '/world.js';
+import { TwistClient } from '/twists.js';
 import { Sound } from '/audio.js';
 
 const sfx = new Sound();
@@ -29,6 +30,7 @@ const { sun, crystal, occluders, treeFader, gate: gateMesh } = createWorld(scene
 const ray = new THREE.Raycaster();
 let camCur = 11;
 const fx = new Effects(scene);
+const twists = new TwistClient({ scene, fx, banner: (t, s) => banner(t, s) }); // Warden twists
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
   camera.aspect = innerWidth / innerHeight;
@@ -233,6 +235,7 @@ function onSnapshot({ me, w }) {
   }
   if (w.gate) { state.gate = w.gate; state.gateOpen = !!w.gate[0]; gateMesh.set(state.gateOpen); }
   state.phase = w.phase || 0;
+  twists.snap(w);
 
   // events first (they may reference mobs that are about to vanish)
   for (const e of w.events) handleEvent(e);
@@ -379,6 +382,7 @@ function handleEvent(e) {
       break;
     }
     case 'tele': {
+      if (twists.tele(e)) break; // Warden twists: cracked ground, Echo strikes
       const mine = Math.hypot(e.x - state.x, e.z - state.z) < e.r + 2;
       if (e.k === 'line') {
         fx.lane(e.x, e.z, e.x2, e.z2, e.w, e.d);
@@ -471,6 +475,7 @@ function handleEvent(e) {
       if (e.n === 1) { if (boss) { bossShot(boss.id, 'Cheer', 1.2); sfx.play('howl', boss.model.group.position, 1.3); } banner('THE HOUNDS ARE LOOSE', 'Phase 2: hounds and horn charges. Get out of the red lanes'); }
       break;
     case 'enrage': if (boss) { bossShot(boss.id, 'Cheer', 1.2); sfx.play('roar', boss.model.group.position, 1.4); } banner('THE WARDEN IS ENRAGED', 'Phase 3: spins and falling rocks. Keep moving'); break;
+    case 'twist': twists.announce(e); updateGateBox(true); break;
     case 'la': {
       fx.beam(e.x, e.z, 0xfbbf24, 4.5); sfx.play('loot', { x: e.x, z: e.z }, 1.3);
       setTimeout(() => banner('LAST ATTACK BONUS', `${e.name} · Horn of the Warden`), 3400);
@@ -565,6 +570,7 @@ function addMobEntity(id, type, x, z, face) {
   scene.add(model.group);
   const e = { id, kind: 'mob', type, def: MOBS[type], model, mats: model.mats, label: type === 'warden' ? null : makeLabel('mob'), x, z, face, tx: x, tz: z, tface: face, walk: 0, wind: 0, flash: 0 };
   mobs.set(id, e);
+  twists.decorate(e); // Thorn Totems
   if (type === 'warden') boss = e;
   if (e.def?.rare && e.label) { // gold "RARE" tag above a rare named enemy's name
     const tag = document.createElement('div');
@@ -969,6 +975,7 @@ function updateGateBox(force) {
   el.innerHTML = `<b>RAID GATE</b><div class="sub">The Horned Warden · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}</div>`
     + (count > 0 ? `<div class="count">${Math.ceil(count)}</div>` : '')
     + `<button class="${state.meReady ? 'on' : ''}">${state.meReady ? 'Ready ✓' : `Ready${isTouch ? '' : ' (F)'}`}</button>`;
+  twists.gateBox(el);
   el.querySelector('button').onclick = interact;
 }
 
@@ -1074,6 +1081,7 @@ function updateHud(now) {
   if (showBoss) {
     setBar($('boss-hp'), (boss.hp / boss.maxHp) * 100); $('boss').classList.toggle('enraged', !!boss.enraged);
     $('boss-phase').textContent = ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '';
+    twists.bossLine($('boss-phase'));
   }
 
   // items, raid gate, merchant, guide
@@ -1452,6 +1460,7 @@ function frame(now) {
   }
   sun.position.set(cx + 30, 60, cz - 20); sun.target.position.set(cx, 0, cz);
   if (state.joined) treeFader.update(dt, camera.position, cx, cz);
+  twists.frame(vdt, cx, cz); // Eclipse darkness
   sfx.listener.x = cx; sfx.listener.z = cz;
 
   // floating numbers

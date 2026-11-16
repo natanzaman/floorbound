@@ -9,6 +9,7 @@ import {
 } from '../shared/items.js';
 import { TITLES, newStats, meetsTitle } from '../shared/titles.js';
 import crypto from 'node:crypto';
+import { TwistMethods } from './twists.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
@@ -33,6 +34,7 @@ export class Game {
     const rr = ([a, b]) => a + Math.random() * (b - a);
     this.rare = { mob: null, next: process.env.RARE_SOON ? RARE.soon : rr(RARE.first) }; // RARE_SOON is a testing aid
     this.spawnMobs();
+    this.newTwist(); // Warden twist for the first fight
   }
 
   id() { return this.nextId++; }
@@ -609,6 +611,7 @@ export class Game {
       if (!m.switched) { mult = SWITCH.first; sw = 1; m.switched = true; } else mult = SWITCH.follow;
       mult *= 1 + (p.swPow || 0);
     }
+    mult *= this.twistTaken(m); // Warden twist (Ironhide)
     const amount = Math.max(1, Math.round(base * (0.9 + Math.random() * 0.2) * (crit ? 1.5 : 1) * mult));
     m.hp -= amount;
     if (sw) {
@@ -633,6 +636,7 @@ export class Game {
       if (m.def.boss) m.staggerCd = t + SWITCH.bossCd;
       this.events.push({ t: 'stagger', id: m.id, by: p.id, d: dur, i: interrupt ? 1 : 0 });
     }
+    this.twistAfterHit(m); // Warden twist (Ironhide: longer Broken windows)
   }
 
   knockback(m, p, dist) {
@@ -658,6 +662,7 @@ export class Game {
         const p = this.players.get(id);
         if (p) { names.push(p.name); this.giveXp(p, m.def.xp); this.dropLoot(p, m); }
       }
+      this.twistKill(m); // Warden twist reward bonus
       // Last Attack Bonus: a unique reward for whoever landed the killing blow.
       if (this.giveItem(killer, lastAttackItem())) this.invChanged(killer);
       this.events.push({ t: 'la', id: killer.id, name: killer.name, x: r2(m.x), z: r2(m.z) });
@@ -682,14 +687,14 @@ export class Game {
   startFight(m) {
     const ids = [...this.players.values()].filter(p => !p.dead && inArena(p.x, p.z)).map(p => p.id);
     this.fight = { start: this.time, ids: new Set(ids), deaths: 0, hp: m.maxHp };
-    for (const id of ids) this.track(this.players.get(id), 'boss_start', { players: ids.length, hp: m.maxHp });
+    for (const id of ids) this.track(this.players.get(id), 'boss_start', { players: ids.length, hp: m.maxHp, twist: this.twist?.id });
   }
 
   endFight(result, m) {
     const f = this.fight;
     if (!f) return;
     this.fight = null;
-    const data = { result, secs: Math.round(this.time - f.start), players: f.ids.size, deaths: f.deaths, hpLeft: result === 'wipe' ? Math.round((m.hp / m.maxHp) * 100) : 0, phase: m.phase };
+    const data = { result, secs: Math.round(this.time - f.start), players: f.ids.size, deaths: f.deaths, hpLeft: result === 'wipe' ? Math.round((m.hp / m.maxHp) * 100) : 0, phase: m.phase, twist: this.twist?.id };
     let first = true;
     for (const id of f.ids) { const p = this.players.get(id); if (p) { this.track(p, 'boss_end', first ? data : { ...data, sys: 1 }); first = false; } }
   }
@@ -819,6 +824,7 @@ export class Game {
         Object.assign(m, { dead: false, hp: m.maxHp, x: m.sx, z: m.sz, phase: 0, windupAt: 0, stunUntil: 0 });
         m.threat.clear(); m.contributors.clear();
         if (def.boss) this.sys('The Horned Warden stirs again in its chamber.');
+        if (def.boss) this.newTwist(); // a new Warden twist for every respawn
       }
       return;
     }
@@ -841,6 +847,7 @@ export class Game {
       if (def.boss && (m.hp < m.maxHp || m.engaged)) { // everyone left or died: reset the fight
         this.endFight('wipe', m);
         m.hp = m.maxHp; m.phase = 0; m.contributors.clear(); this.clearHounds();
+        this.twistReset(m); // Warden twist hazards
       }
       m.engaged = false;
       if (t >= m.wanderT) {
@@ -857,6 +864,7 @@ export class Game {
       let n = 0; for (const p of this.players.values()) if (!p.dead && inArena(p.x, p.z)) n++;
       m.maxHp = m.hp = WARDEN.hpBase + WARDEN.hpPer * Math.max(1, n);
       m.phase = 0; m.slamT = t + 5; m.busyUntil = 0; m.houndT = m.chargeT = m.spinT = m.rockT = Infinity;
+      this.twistEngage(m); // Warden twist setup (before startFight records the fight's health)
       this.startFight(m);
     }
     const enraged = def.boss && m.phase === 2;
@@ -1028,7 +1036,7 @@ export class Game {
 
   // The Horned Warden: each phase ADDS attacks rather than just more health.
   bossSpecials(m, target) {
-    const t = this.time, W = WARDEN, f = m.hp / m.maxHp;
+    const t = this.time, W = this.twistW || WARDEN, f = m.hp / m.maxHp;
     const want = f < W.phases[1] ? 2 : f < W.phases[0] ? 1 : 0;
     while (m.phase < want) {
       m.phase++;
@@ -1092,9 +1100,11 @@ export class Game {
         for (const [x, z] of spots) this.circleAttack(m, x, z, W.rock.r, W.rock.wind, m.def.atk * W.rock.mult, 'rockfall', false, 'rock');
       }
     }
+    this.twistSpecials(m, pick); // Warden twist behaviour
   }
 
   circleAttack(m, x, z, r, wind, amount, src, ground, kind) {
+    this.twistCircle(m, x, z, r, wind, amount, src, ground, kind); // Warden twist (Echo, Quaking)
     this.events.push({ t: 'tele', x: r2(x), z: r2(z), r, d: wind, k: kind });
     this.schedule(wind, () => {
       if (m.dead) return;
@@ -1104,7 +1114,7 @@ export class Game {
   }
 
   hornCharge(m, v) {
-    const W = WARDEN.charge, a = angleTo(m.x, m.z, v.x, v.z);
+    const W = (this.twistW || WARDEN).charge, a = angleTo(m.x, m.z, v.x, v.z);
     let x2 = m.x + Math.sin(a) * W.len, z2 = m.z + Math.cos(a) * W.len;
     const ex = x2 - WORLD.arena.x, ez = z2 - WORLD.arena.z, ed = Math.hypot(ex, ez), maxR = WORLD.arena.r - 3;
     if (ed > maxR) { x2 = WORLD.arena.x + (ex / ed) * maxR; z2 = WORLD.arena.z + (ez / ed) * maxR; }
@@ -1126,6 +1136,7 @@ export class Game {
         }
       });
     }
+    this.twistCharge(m, v); // Warden twist (Twin Horns)
   }
 
   moveMob(m, tx, tz, speed, dt, stopAt) {
@@ -1157,7 +1168,7 @@ export class Game {
     const g = this.gate;
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
     const gate = [g.open ? 1 : 0, waiting, g.ready.size, g.countAt ? r1(Math.max(0, g.countAt - this.time)) : 0];
-    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, events: this.events });
+    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events });
     this.events = [];
     return out;
   }
@@ -1177,3 +1188,5 @@ export class Game {
     return [...this.players.values()].map(p => ({ id: p.id, name: p.name, cls: p.cls, title: p.stats?.activeTitle || null }));
   }
 }
+
+Object.assign(Game.prototype, TwistMethods); // Warden twists (server/twists.js)
