@@ -5,7 +5,7 @@
 // Healer (Cleric)  hangs back behind the tank, heals whoever is hurt, buffs, smites when idle.
 // Everyone dodge-rolls out of the boss's red circles and plays Break -> Switch.
 // A fresh (low-level) party warms up on boars before taking on wolves.
-import { MOBS, MOB_IDS, PLAYER_SPEED, DODGE, walkable, resolveCollision, inGateZone } from './data.js';
+import { MOBS, MOB_IDS, PLAYER_SPEED, DODGE, walkable, resolveCollision, inGateZone, inArena } from './data.js';
 
 export const TEAM_NAMES = { guardian: 'Brann', swordsman: 'Kael', cleric: 'Lyra' };
 
@@ -182,8 +182,11 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
 
   function currentTarget(b) { return targetId ? b.mobs.find(m => m.id === targetId) : null; }
 
+  // Warden twist (Thornbound): a Thorn Totem is a spitter inside the chamber; the DPS breaks it first.
+  const totemFor = b => b.mobs.filter(m => m.type === 'spitter' && inArena(m.x, m.z)).sort((a, c) => d2(a.x, a.z, b.x, b.z) - d2(c.x, c.z, b.x, b.z))[0];
+
   function actDps() {
-    const tgt = currentTarget(dps);
+    const tgt = (engagedAt !== null && totemFor(dps)) || currentTarget(dps);
     const dodge = dodgeSpot(dps);
     if (dodge) { evade(dps, ...dodge); return; }
     if (!tgt) { moveToward(dps, tank.x - 2.5, tank.z - 2.5, 1.2); return; }
