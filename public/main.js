@@ -415,7 +415,8 @@ const endDrag = e => {
 };
 addEventListener('pointerup', e => { if (e.pointerType === 'mouse' && e.button === 0 && mouseAttack) { mouseAttack = false; attackHeld = false; } });
 // screen-edge turning: park the cursor at the left/right edge to turn the camera that way
-const mouse = { x: 0, y: 0, inside: false, onCanvas: false };
+const EDGE_DELAY = 0.5; // seconds the cursor must rest at a screen edge before the camera turns
+const mouse = { x: 0, y: 0, inside: false, onCanvas: false, edgeSide: 0, edgeSince: 0 };
 addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.inside = true; mouse.onCanvas = e.target === canvas || e.target.closest?.('#labels'); });
 document.documentElement.addEventListener('mouseleave', () => { mouse.inside = false; });
 addEventListener('blur', () => { mouse.inside = false; mouseAttack = false; });
@@ -806,9 +807,14 @@ function frame(now) {
   const lm = state.joined && !state.spectator ? lockedMob() : null;
   if (state.joined && !state.spectator && !isTouch && mouse.inside && mouse.onCanvas && drag.id === null && document.activeElement !== $('chat-input')) {
     const edge = Math.max(40, innerWidth * 0.06);
-    if (mouse.x < edge) state.yaw += dt * 2.4 * (1 - mouse.x / edge);
-    else if (mouse.x > innerWidth - edge) state.yaw -= dt * 2.4 * (1 - (innerWidth - mouse.x) / edge);
-  }
+    const side = mouse.x < edge ? 1 : mouse.x > innerWidth - edge ? -1 : 0;
+    if (side !== mouse.edgeSide) { mouse.edgeSide = side; mouse.edgeSince = now; }
+    const held = (now - mouse.edgeSince) / 1000 - EDGE_DELAY; // turn only after the cursor rests there for a moment
+    if (side && held > 0) {
+      const depth = side > 0 ? 1 - mouse.x / edge : 1 - (innerWidth - mouse.x) / edge;
+      state.yaw += side * dt * 2.4 * Math.max(0.25, depth) * Math.min(1, held / 0.3); // ease in over 0.3 s
+    }
+  } else mouse.edgeSide = 0;
   if (lm) { // ease the camera round to keep the locked target in view
     const want = Math.atan2(lm.x - state.x, lm.z - state.z);
     state.yaw += Math.atan2(Math.sin(want - state.yaw), Math.cos(want - state.yaw)) * Math.min(1, dt * 3);
