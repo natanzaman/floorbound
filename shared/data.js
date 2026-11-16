@@ -6,6 +6,11 @@ export const PLAYER_RADIUS = 0.5;
 export const MAX_LEVEL = 10;
 export const PARTY_MAX = 6;
 
+// Dodge roll: a short burst of movement with invulnerability frames.
+export const DODGE = { dist: 5.2, time: 0.34, iframes: 0.42, cd: 1.1 };
+// Switch: a "break" hit staggers an enemy; the next hit from a DIFFERENT player is a Switch.
+export const SWITCH = { window: 2.4, bossWindow: 1.8, bossCd: 9, first: 2.5, follow: 1.4 };
+
 export const WORLD = {
   rect: { x0: -70, x1: 70, z0: -35, z1: 158 },
   corridor: { x0: -5, x1: 5, z0: 150, z1: 168 },
@@ -86,7 +91,7 @@ export const CLASSES = {
       { id: 'slash', name: 'Slash', cd: 0.55, lvl: 1, desc: 'Frontal sword arc.' },
       { id: 'rush', name: 'Rush', cd: 6, lvl: 1, desc: 'Dash forward, striking everything in your path.' },
       { id: 'whirl', name: 'Whirl', cd: 8, lvl: 1, desc: 'Spin and hit everything around you.' },
-      { id: 'burst', name: 'Burst Combo', cd: 14, lvl: 3, desc: '4-hit sword skill with a heavy finisher.' },
+      { id: 'burst', name: 'Burst Combo', cd: 14, lvl: 3, desc: '4-hit sword skill. The finisher BREAKS the target, opening a Switch.', brk: true },
     ],
   },
   guardian: {
@@ -96,14 +101,14 @@ export const CLASSES = {
       { id: 'bash', name: 'Bash', cd: 0.7, lvl: 1, desc: 'Frontal strike with extra threat.' },
       { id: 'taunt', name: 'Taunt', cd: 10, lvl: 1, desc: 'Pull nearby enemies onto you; take 30% less damage for 4s.' },
       { id: 'wall', name: 'Shield Wall', cd: 14, lvl: 1, desc: 'Take 60% less damage for 4s.' },
-      { id: 'gslam', name: 'Ground Slam', cd: 12, lvl: 3, desc: 'Area hit that stuns enemies for 1.5s.' },
+      { id: 'gslam', name: 'Ground Slam', cd: 12, lvl: 3, desc: 'Area hit that BREAKS enemies, opening a Switch.', brk: true },
     ],
   },
   cleric: {
     name: 'Cleric', role: 'Healer', hp: 85, atk: 9, color: 0x22c55e,
     blurb: 'Heals and buffs allies, smites from range.',
     skills: [
-      { id: 'smite', name: 'Smite', cd: 0.8, lvl: 1, desc: 'Ranged bolt that hits the first enemy in line.' },
+      { id: 'smite', name: 'Smite', cd: 0.8, lvl: 1, desc: 'Ranged bolt. Hitting an enemy mid wind-up interrupts and BREAKS it.' },
       { id: 'heal', name: 'Heal', cd: 4, lvl: 1, desc: 'Heal the most hurt ally nearby.' },
       { id: 'bless', name: 'Blessing', cd: 20, lvl: 1, desc: 'Allies nearby deal 25% more damage for 8s.' },
       { id: 'sanct', name: 'Sanctuary', cd: 18, lvl: 3, desc: 'Healing circle for 5s.' },

@@ -20,6 +20,7 @@ const MOUNTS = [
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.glb': 'model/gltf-binary' };
 
 const game = new Game();
+const spectators = new Set(); // watch-only clients (?spectate=1)
 
 const server = http.createServer((req, res) => {
   if (res.handled) return;
@@ -47,6 +48,7 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4096 });
 function broadcastRoster() {
   const msg = JSON.stringify({ type: 'roster', players: game.roster() });
   for (const p of game.players.values()) if (p.ws.readyState === 1) p.ws.send(msg);
+  for (const ws of spectators) if (ws.readyState === 1) ws.send(msg);
 }
 
 wss.on('connection', ws => {
@@ -59,6 +61,12 @@ wss.on('connection', ws => {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
     if (!player) {
+      if (msg.type === 'spectate' && !spectators.has(ws)) {
+        spectators.add(ws);
+        ws.send(JSON.stringify({ type: 'welcome', spectator: true }));
+        ws.send(JSON.stringify({ type: 'roster', players: game.roster() }));
+        return;
+      }
       if (msg.type !== 'join') return;
       if (game.players.size >= MAX_PLAYERS) { ws.send(JSON.stringify({ type: 'full' })); return ws.close(); }
       player = game.addPlayer(ws, msg.name, msg.cls);
@@ -71,6 +79,7 @@ wss.on('connection', ws => {
 
   ws.on('close', () => {
     clearInterval(refill);
+    spectators.delete(ws);
     if (player) { game.removePlayer(player); broadcastRoster(); }
   });
 });
@@ -82,6 +91,7 @@ function tick(dt) {
     if (p.ws.readyState !== 1) continue;
     p.ws.send(`{"type":"snap","me":${JSON.stringify(game.meFor(p))},"w":${world}}`);
   }
+  for (const ws of spectators) if (ws.readyState === 1) ws.send(`{"type":"snap","me":null,"w":${world}}`);
 }
 
 if (process.env.LOCKSTEP) {

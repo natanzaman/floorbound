@@ -30,11 +30,18 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Move | WASD / arrows | Left side of the screen (joystick) |
 | Look | Drag the mouse, Q/E, wheel to zoom | Drag the right side |
 | Basic attack | Space or J (hold) | Big round button (hold) |
+| Dodge roll | Shift or K | Dodge button |
 | Skills | 1, 2, 3 | Small buttons |
 | Chat | Enter | Chat button |
 | Party | Players button (P) → Invite | Players button → Invite |
 
 Attacks auto-aim at the nearest enemy in range.
+
+## Combat: Break and Switch
+
+- **Dodge roll** gives a short window of invulnerability; roll through the boss's red circles.
+- **Break** an enemy with Ground Slam (Guardian), the Burst Combo finisher (Swordsman), or a Smite that lands while it's winding up an attack (Cleric). It's stunned for a moment and shows a yellow dizzy ring.
+- **Switch:** the first hit from a *teammate* on a broken enemy does 2.5x damage, and follow-up hits do 1.4x. You can't Switch your own Break.
 
 ## Classes
 
@@ -53,6 +60,7 @@ server/index.js  static file server + WebSocket server (20 ticks/sec)
 public/          Three.js client (no build step): main.js, world.js, style.css
 public/models/   rigged character models (glTF) with shared animations
 test/bots.js     headless bot players for load/gameplay testing
+test/team.js     role-playing party bots (tank / DPS / healer)
 ```
 
 Tuning lives in `shared/data.js` (class HP/ATK, cooldowns, mob stats). New skills are a `case` in `Game.useSkill` plus an entry in `CLASSES`.
@@ -65,6 +73,16 @@ node test/bots.js 6 60 field                # 6 bots grind the field for 60s
 START_LEVEL=6 npm start                     # start players at Lv 6 (testing aid)
 node test/bots.js 6 90 boss                 # bots party up and fight the Warden
 ```
+
+Watch a role-playing party (tank, DPS, healer) clear the floor, with a spectator camera:
+
+```bash
+START_LEVEL=6 SPAWN_AT=-26,116 npm start
+node test/team.js                           # Brann (tank), Kael (DPS), Lyra (healer)
+# open http://localhost:3000/?spectate=1
+```
+
+`?spectate=1` works on any server: it watches without joining and frames the whole group.
 
 Other testing aids: `SPAWN_AT=0,172` spawns players at the chamber gate. `MAX_PLAYERS` caps the server (default 64).
 

@@ -1,12 +1,13 @@
 // Floorbound browser client: networking, input, camera, entities and HUD.
 import * as THREE from 'three';
 import {
-  CLASSES, CLASS_IDS, MOBS, MOB_IDS, PLAYER_SPEED, TICK_RATE, MAX_LEVEL,
+  CLASSES, CLASS_IDS, MOBS, MOB_IDS, PLAYER_SPEED, TICK_RATE, MAX_LEVEL, DODGE,
   walkable, resolveCollision, inTown, inArena, areaName, angleTo,
 } from '/shared/data.js';
 import { createWorld, makePlayerModel, makeMobModel, Effects, loadAssets } from '/world.js';
 
 const $ = id => document.getElementById(id);
+const SPECTATE = new URLSearchParams(location.search).has('spectate');
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 if (isTouch) document.body.classList.add('touch');
 
@@ -33,7 +34,7 @@ addEventListener('resize', resize); resize();
 const state = {
   ws: null, myId: 0, seq: 0, x: 0, z: 0, face: 0, cls: 'swordsman', lvl: 1, hp: 1, maxHp: 1, xp: 0, next: 50,
   dead: false, party: 0, joined: false, yaw: 0, pitch: 0.5, camDist: 11,
-  ready: [0, 0, 0, 0], lastPress: [0, 0, 0, 0], roster: new Map(), area: '', invite: null,
+  ready: [0, 0, 0, 0], lastPress: [0, 0, 0, 0], dodgeReady: 0, dodgePress: 0, roll: null, moveDir: null, roster: new Map(), area: '', invite: null,
 };
 const players = new Map(); // id -> entity
 const mobs = new Map();
@@ -54,7 +55,7 @@ renderClasses();
 $('enter').disabled = true;
 const assetsReady = loadAssets(p => { $('enter').textContent = `Loading characters… ${Math.round(p * 100)}%`; })
   .catch(err => console.error('Model load failed, using block characters', err))
-  .finally(() => { $('enter').textContent = 'Enter the Tower'; $('enter').disabled = false; });
+  .finally(() => { $('enter').textContent = 'Enter the Tower'; $('enter').disabled = false; if (SPECTATE) join(); });
 $('enter').onclick = join;
 $('name').addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
 
@@ -67,7 +68,7 @@ async function join() {
   $('login-msg').textContent = 'Connecting…';
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   state.ws = ws;
-  ws.onopen = () => ws.send(JSON.stringify({ type: 'join', name, cls: chosen }));
+  ws.onopen = () => ws.send(JSON.stringify(SPECTATE ? { type: 'spectate' } : { type: 'join', name, cls: chosen }));
   ws.onmessage = e => onMessage(JSON.parse(e.data));
   ws.onclose = () => {
     if (state.joined) { log('Disconnected from the server. Refresh to reconnect.', 'sys'); banner('DISCONNECTED', 'Refresh the page to reconnect'); }
@@ -79,12 +80,19 @@ const send = o => state.ws?.readyState === 1 && state.ws.send(JSON.stringify(o))
 // ---------------- networking ----------------
 function onMessage(msg) {
   if (msg.type === 'full') { $('login-msg').textContent = 'Server is full.'; return; }
+  if (msg.type === 'welcome' && msg.spectator) {
+    Object.assign(state, { spectator: true, joined: true, myId: -1 });
+    document.body.classList.add('spectator');
+    $('login').classList.add('hidden'); $('hud').classList.remove('hidden');
+    return;
+  }
   if (msg.type === 'welcome') {
     Object.assign(state, { myId: msg.id, x: msg.x, z: msg.z, seq: msg.seq, joined: true });
     $('login').classList.add('hidden'); $('hud').classList.remove('hidden');
     buildSkillBar();
     log('Welcome to Floorbound! Head north through the field and defeat the Horned Warden.', 'sys');
-    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack and skills.' : 'WASD move · drag mouse to look · Space/J attack · 1 2 3 skills · Enter to chat', 'sys');
+    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills and dodge.' : 'WASD move · drag to look · Space/J attack · 1 2 3 skills · Shift dodge · Enter chat', 'sys');
+    log('Break an enemy (Ground Slam, Burst Combo finisher, or Smite during its wind-up), then a teammate hits it for a SWITCH: big bonus damage.', 'sys');
     return;
   }
   if (msg.type === 'roster') {
@@ -97,10 +105,13 @@ function onMessage(msg) {
 }
 
 function onSnapshot({ me, w }) {
-  state.xp = me.xp; state.next = me.next;
-  if (me.lvl !== state.lvl) { state.lvl = me.lvl; buildSkillBar(me.lvl); }
   const now = performance.now();
-  me.cds.forEach((c, i) => { if (now - state.lastPress[i] > 350) state.ready[i] = now + c * 1000; });
+  if (me) {
+    state.xp = me.xp; state.next = me.next;
+    if (me.lvl !== state.lvl) { state.lvl = me.lvl; buildSkillBar(me.lvl); }
+    me.cds.forEach((c, i) => { if (now - state.lastPress[i] > 350) state.ready[i] = now + c * 1000; });
+    if (now - state.dodgePress > 350) state.dodgeReady = now + (me.dodge || 0) * 1000;
+  }
 
   // events first (they may reference mobs that are about to vanish)
   for (const e of w.events) handleEvent(e);
@@ -126,7 +137,7 @@ function onSnapshot({ me, w }) {
     seenM.add(id);
     let e = mobs.get(id);
     if (!e) e = addMobEntity(id, MOB_IDS[ti], x, z, face);
-    Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, moving: flags & 1, engaged: flags & 2, enraged: flags & 4, stunned: flags & 8 });
+    Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, moving: flags & 1, engaged: flags & 2, enraged: flags & 4, stunned: flags & 8, winding: flags & 16, staggered: flags & 32 });
   }
   for (const [id, e] of mobs) if (!seenM.has(id) && !e.dying) { removeEntity(e); mobs.delete(id); if (e === boss) boss = null; }
   renderPlayersThrottled();
@@ -153,6 +164,35 @@ function handleEvent(e) {
       else if (e.k === 'boom') { fx.ring(e.x, e.z, e.r, 0xff7a2f, 0.5); shake(0.35); }
       break;
     }
+    case 'roll': {
+      const p = players.get(e.id);
+      if (p) { p.model.anim?.shot('Dodge_Forward', 1.9); fx.ring(p.model.group.position.x, p.model.group.position.z, 1.2, 0xe5e7eb, 0.3); }
+      break;
+    }
+    case 'evade': { const p = players.get(e.id); if (p && (e.id === me || state.spectator)) floatNum(p.model.group.position, 2.4, 'Dodged!', 'evade'); break; }
+    case 'stagger': {
+      const m = mobs.get(e.id);
+      if (!m) break;
+      m.staggerT = e.d; m.staggerBy = e.by;
+      fx.ring(m.x, m.z, m.def.radius + 2.5, 0xfacc15, 0.5);
+      m.model.anim?.shot('Hit_B', 0.9);
+      const who = players.get(e.by)?.name || 'Someone';
+      if (state.spectator) callout(`${e.i ? 'INTERRUPT' : 'BREAK'}!`, `${who} broke the ${m.def.name} — Switch in!`, e.d);
+      else if (e.by === me) callout(e.i ? 'INTERRUPT!' : 'BREAK!', 'Your teammate can Switch in', 1.2);
+      else callout('SWITCH!', `${who} broke it — hit it now!`, e.d);
+      break;
+    }
+    case 'switch': {
+      const m = mobs.get(e.id);
+      if (m) {
+        floatNum(m.model.group.position, m.model.height * 0.85, `SWITCH! ${e.a}`, 'switch');
+        fx.ring(m.x, m.z, m.def.radius + 4, 0xfde047, 0.6); fx.ring(m.x, m.z, m.def.radius + 1.5, 0xffffff, 0.4);
+        shake(0.3);
+        const a = players.get(e.from)?.name, b = players.get(e.by)?.name;
+        if (a && b) callout('SWITCH!', `${a} ⇄ ${b}`, 1.3);
+      }
+      break;
+    }
     case 'wind': { const m = mobs.get(e.id); if (m) { m.wind = e.d; m.model.anim?.shot('2H_Melee_Attack_Chop', 1.4); } break; }
     case 'tele':
       fx.telegraph(e.x, e.z, e.r, e.d, e.follow ? () => mobs.get(e.follow)?.model.group.position : null);
@@ -168,9 +208,9 @@ function handleEvent(e) {
     }
     case 'hit': {
       const m = mobs.get(e.id);
-      if (m) {
+      if (m && !e.sw) {
         m.flash = 0.08;
-        const mine = e.by === me;
+        const mine = e.by === me || state.spectator;
         floatNum(m.model.group.position, m.model.height * 0.7, e.c ? `${e.a}!` : `${e.a}`, e.c ? 'crit' : '', mine ? 1 : 0.55);
       }
       break;
@@ -178,12 +218,12 @@ function handleEvent(e) {
     case 'hurt': {
       const p = players.get(e.id);
       if (p) { p.flash = 0.15; const a = p.model.anim; if (a && !a.busy() && !a.dead) a.shot('Hit_A', 1.8);
-        if (e.id === me) { floatNum(p.model.group.position, 2.2, `-${e.a}`, 'hurt'); shake(0.15); } }
+        if (e.id === me || state.spectator) floatNum(p.model.group.position, 2.2, `-${e.a}`, 'hurt'); if (e.id === me) shake(0.15); }
       break;
     }
     case 'heal': {
       const p = players.get(e.id);
-      if (p && (e.id === me || (state.party && p.party === state.party))) floatNum(p.model.group.position, 2.4, `+${e.a}`, 'heal');
+      if (p && (state.spectator || e.id === me || (state.party && p.party === state.party))) floatNum(p.model.group.position, 2.4, `+${e.a}`, 'heal');
       break;
     }
     case 'xp': if (e.to === me) { const p = players.get(me); if (p) floatNum(p.model.group.position, 2.9, `+${e.a} XP`, 'xp'); } break;
@@ -299,6 +339,7 @@ addEventListener('keydown', e => {
   keys.add(k);
   if (k === ' ' || k === 'j') { attackHeld = true; e.preventDefault(); }
   if (k === '1' || k === '2' || k === '3') useSkill(+k);
+  if (k === 'shift' || k === 'k') dodge();
   if (k === 'p') $('players-btn').click();
 });
 addEventListener('keyup', e => {
@@ -355,13 +396,37 @@ function buildSkillBar(lvl = state.lvl) {
     const locked = lvl < s.lvl;
     return `<button class="sk s${i} ${i === 0 ? 'basic' : ''} ${locked ? 'locked' : ''}" data-slot="${i}" title="${s.name}: ${s.desc}${locked ? ` (unlocks at Lv ${s.lvl})` : ''}">
       <span class="key">${i === 0 ? (isTouch ? '' : 'SPC') : i}</span>${s.name}${locked ? `<br><small>Lv ${s.lvl}</small>` : ''}<span class="cd"></span><span class="cdt"></span></button>`;
-  }).join('');
+  }).join('') + `<button class="sk sd" data-slot="dodge" title="Dodge roll: dash and avoid damage"><span class="key">${isTouch ? '' : 'SHIFT'}</span>Dodge<span class="cd"></span><span class="cdt"></span></button>`;
   for (const b of $('skills').children) {
+    if (b.dataset.slot === 'dodge') {
+      b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('pressed'); dodge(); });
+      const up = () => b.classList.remove('pressed');
+      b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up); b.addEventListener('pointercancel', up);
+      continue;
+    }
     const slot = +b.dataset.slot;
     b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('pressed'); if (slot === 0) attackHeld = true; else useSkill(slot); });
     const up = () => { b.classList.remove('pressed'); if (slot === 0) attackHeld = false; };
     b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up); b.addEventListener('pointercancel', up);
   }
+}
+
+function dodge() {
+  const now = performance.now();
+  if (state.dead || !state.joined || state.spectator || state.roll || now < state.dodgeReady) return;
+  const dir = state.moveDir ?? state.face;
+  state.roll = { left: DODGE.time, dir };
+  state.face = dir;
+  state.dodgeReady = now + DODGE.cd * 1000; state.dodgePress = now;
+  send({ type: 'dodge', face: dir });
+}
+
+let calloutT = 0;
+function callout(title, sub, secs) {
+  const el = $('callout');
+  el.innerHTML = `${title}<small>${esc(sub)}</small>`;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  clearTimeout(calloutT); calloutT = setTimeout(() => el.classList.remove('show'), Math.max(900, secs * 1000));
 }
 
 function nearestMob(range) {
@@ -457,10 +522,10 @@ function updateHud(now) {
   $('me-buffs').innerHTML = `${b & 1 ? '<span>Guarded</span>' : ''}${b & 2 ? '<span>Blessed</span>' : ''}`;
 
   // party frames
-  const mates = state.party ? [...players.values()].filter(p => p.party === state.party && p.id !== state.myId) : [];
+  const mates = state.spectator ? [...players.values()] : state.party ? [...players.values()].filter(p => p.party === state.party && p.id !== state.myId) : [];
   $('party').innerHTML = mates.map(p => {
     const pc = (p.hp / p.maxHp) * 100;
-    return `<div class="frame ${p.dead ? 'dead' : ''}"><div class="row" style="font-size:12px;margin:0"><span>${esc(p.name)}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div></div>`;
+    return `<div class="frame ${p.dead ? 'dead' : ''}"><div class="row" style="font-size:12px;margin:0"><span>${esc(p.name)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div></div>`;
   }).join('');
 
   // boss bar
@@ -470,10 +535,11 @@ function updateHud(now) {
 
   // cooldowns
   for (const btn of $('skills').children) {
-    const slot = +btn.dataset.slot, sk = CLASSES[state.cls].skills[slot];
-    const left = Math.max(0, state.ready[slot] - now) / 1000;
+    const isDodge = btn.dataset.slot === 'dodge';
+    const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : CLASSES[state.cls].skills[slot];
+    const left = Math.max(0, (isDodge ? state.dodgeReady : state.ready[slot]) - now) / 1000;
     btn.querySelector('.cd').style.setProperty('--p', `${Math.min(100, (left / sk.cd) * 100)}%`);
-    btn.querySelector('.cdt').textContent = left > 0.3 && slot > 0 ? left.toFixed(left < 3 ? 1 : 0) : '';
+    btn.querySelector('.cdt').textContent = left > 0.3 && slot > 0 && !isDodge ? left.toFixed(left < 3 ? 1 : 0) : '';
   }
 
   const a = areaName(state.x, state.z);
@@ -554,6 +620,23 @@ function animateEntity(e, dt) {
     m.body.position.y = e.stunned ? Math.sin(performance.now() / 60) * 0.05 : 0;
   }
   }
+  if (e.kind === 'mob') { // dizzy ring over a broken (staggered) enemy
+    if (e.staggered && !e.dizzy) {
+      e.dizzy = new THREE.Mesh(new THREE.TorusGeometry(e.def.radius * 0.6 + 0.3, 0.07, 6, 24), new THREE.MeshBasicMaterial({ color: 0xfde047 }));
+      e.dizzy.rotation.x = Math.PI / 2;
+      for (let i = 0; i < 4; i++) {
+        const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.16), e.dizzy.material);
+        const a = (i / 4) * Math.PI * 2, r = e.def.radius * 0.6 + 0.3;
+        st.position.set(Math.cos(a) * r, Math.sin(a) * r, 0); e.dizzy.add(st);
+      }
+      g.add(e.dizzy);
+    }
+    if (e.dizzy) {
+      e.dizzy.visible = !!e.staggered;
+      e.dizzy.position.y = m.height + 0.1; e.dizzy.rotation.z += dt * 4;
+      if (!m.anim) m.body.rotation.z = e.staggered ? Math.sin(performance.now() / 90) * 0.15 : 0;
+    }
+  }
   if (e.flash > 0) e.flash -= dt;
   const enr = e.kind === 'mob' && e.enraged ? (m.anim ? 0.12 : 0.3) + Math.sin(performance.now() / 120) * (m.anim ? 0.06 : 0.15) : 0;
   const glow = e.flash > 0 ? (e.type === 'warden' ? 0.18 : 0.35) : enr;
@@ -566,7 +649,7 @@ function animateEntity(e, dt) {
     e.label.el.style.display = '';
     e.label.el.style.transform = `translate(${p[0]}px, ${p[1]}px) translate(-50%, -100%)`;
     e.label.el.style.left = '0'; e.label.el.style.top = '0';
-    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${e.def.name}` : `<span class="lv">Lv${e.lvl}</span>${esc(e.name)}`;
+    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${e.def.name}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}` : `<span class="lv">Lv${e.lvl}</span>${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}`;
     if (txt !== e.label.text) { e.label.text = txt; e.label.nm.innerHTML = txt; }
     const pct = Math.round((e.hp / e.maxHp) * 100);
     if (pct !== e.label.pct) { e.label.pct = pct; e.label.fill.style.width = `${pct}%`; }
@@ -574,11 +657,47 @@ function animateEntity(e, dt) {
   }
 }
 
+// Spectator camera: frame the whole group, side-on to the fight so roles are readable.
+const spec = { x: 0, z: 30, vx: 0, vz: 0, init: false };
+function spectatorCamera(dt) {
+  const alive = [...players.values()].filter(p => !p.dead);
+  if (!alive.length) return [spec.x, spec.z];
+  let ax = 0, az = 0;
+  for (const p of alive) { ax += p.model.group.position.x; az += p.model.group.position.z; }
+  ax /= alive.length; az /= alive.length;
+  let foe = null, fd = 16;
+  for (const m of mobs.values()) { const d = Math.hypot(m.x - ax, m.z - az); if (d < fd + (m.type === 'warden' ? 10 : 0)) { fd = d; foe = m; } }
+  if (foe) { ax = ax * 0.6 + foe.x * 0.4; az = az * 0.6 + foe.z * 0.4; }
+  if (!spec.init) { Object.assign(spec, { x: ax, z: az, init: true }); state.yaw = 0; }
+  const k = Math.min(1, dt * 2.5);
+  const px = spec.x, pz = spec.z;
+  spec.x += (ax - spec.x) * k; spec.z += (az - spec.z) * k;
+  spec.vx += ((spec.x - px) / Math.max(dt, 1e-3) - spec.vx) * Math.min(1, dt * 2);
+  spec.vz += ((spec.z - pz) / Math.max(dt, 1e-3) - spec.vz) * Math.min(1, dt * 2);
+  let want = state.yaw;
+  if (foe) {
+    const tank = alive.find(p => p.cls === 'guardian') || alive[0];
+    want = Math.atan2(foe.x - tank.model.group.position.x, foe.z - tank.model.group.position.z) + 1.1; // three-quarter side view
+    const off = Math.hypot(spec.x - 0, spec.z - 190);
+    if (inArena(spec.x, spec.z) && off > 5) { // near the wall: shoot from the middle of the arena outward
+      const out = Math.atan2(spec.x - 0, spec.z - 190), d = Math.atan2(Math.sin(want - out), Math.cos(want - out));
+      want = out + Math.max(-0.6, Math.min(0.6, d));
+    }
+  } else if (Math.hypot(spec.vx, spec.vz) > 1.5) want = Math.atan2(spec.vx, spec.vz);
+  const dy = Math.atan2(Math.sin(want - state.yaw), Math.cos(want - state.yaw));
+  state.yaw += dy * Math.min(1, dt * 0.9);
+  const big = foe?.type === 'warden';
+  state.camDist += ((big ? 19 : foe ? 14 : 13) - state.camDist) * Math.min(1, dt * 1.5);
+  state.pitch += ((big ? 0.62 : 0.5) - state.pitch) * Math.min(1, dt * 1.5);
+  state.x = spec.x; state.z = spec.z;
+  return [spec.x, spec.z];
+}
+
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
 
-  if (state.joined && !state.dead) {
+  if (state.joined && !state.dead && !state.spectator) {
     // movement input
     let ix = 0, iz = 0;
     const typing = document.activeElement === $('chat-input');
@@ -592,7 +711,19 @@ function frame(now) {
     }
     if (stick.active) { ix += stick.dx; iz -= stick.dy; }
     const mag = Math.min(1, Math.hypot(ix, iz));
+    state.moveDir = null;
     if (mag > 0.08) {
+      const fy = state.yaw;
+      const mx = Math.sin(fy) * iz - Math.cos(fy) * ix, mz = Math.cos(fy) * iz + Math.sin(fy) * ix;
+      state.moveDir = Math.atan2(mx, mz);
+    }
+    if (state.roll) {
+      const step = Math.min(state.roll.left, dt) * (DODGE.dist / DODGE.time);
+      state.roll.left -= dt;
+      let [nx, nz] = resolveCollision(state.x + Math.sin(state.roll.dir) * step, state.z + Math.cos(state.roll.dir) * step);
+      if (walkable(nx, nz)) { state.x = nx; state.z = nz; }
+      if (state.roll.left <= 0) state.roll = null;
+    } else if (mag > 0.08) {
       const fy = state.yaw;
       const fwd = [Math.sin(fy), Math.cos(fy)], right = [-Math.cos(fy), Math.sin(fy)];
       let mx = fwd[0] * iz + right[0] * ix, mz = fwd[1] * iz + right[1] * ix;
@@ -606,10 +737,10 @@ function frame(now) {
       state.x = nx; state.z = nz;
       state.face = Math.atan2(mx, mz);
     }
-    if (attackHeld) useSkill(0);
+    if (attackHeld && !state.roll) useSkill(0);
   }
 
-  if (state.joined && now - sendT >= 1000 / TICK_RATE) {
+  if (state.joined && !state.spectator && now - sendT >= 1000 / TICK_RATE) {
     sendT = now;
     send({ type: 'input', x: +state.x.toFixed(2), z: +state.z.toFixed(2), face: +state.face.toFixed(2), seq: state.seq });
   }
@@ -621,7 +752,8 @@ function frame(now) {
 
   // camera
   const me = players.get(state.myId);
-  const cx = me ? me.model.group.position.x : 0, cz = me ? me.model.group.position.z : 30;
+  let cx = me ? me.model.group.position.x : 0, cz = me ? me.model.group.position.z : 30;
+  if (state.spectator) [cx, cz] = spectatorCamera(dt);
   const cp = state.pitch;
   // pull the camera in when a wall or pillar is between it and the player
   const dir = new THREE.Vector3(-Math.sin(state.yaw) * Math.cos(cp), Math.sin(cp), -Math.cos(state.yaw) * Math.cos(cp));
@@ -659,4 +791,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { state, players, mobs };
+window.__fb = { state, players, mobs, banner };

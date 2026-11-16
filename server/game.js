@@ -1,6 +1,6 @@
 // Authoritative world simulation: players, mobs, the floor boss, combat, XP and parties.
 import {
-  WORLD, CLASSES, CLASS_IDS, MOBS, MOB_IDS, MAX_LEVEL, PARTY_MAX, PLAYER_SPEED,
+  WORLD, CLASSES, CLASS_IDS, MOBS, MOB_IDS, MAX_LEVEL, PARTY_MAX, PLAYER_SPEED, DODGE, SWITCH,
   inTown, inArena, walkable, resolveCollision, rng, angleTo, wrapAngle, xpToNext, statsFor,
 } from '../shared/data.js';
 
@@ -40,6 +40,7 @@ export class Game {
       hp: def.hp, maxHp: def.hp, dead: false, deadUntil: 0, threat: new Map(),
       atkT: 0, windupAt: 0, stunUntil: 0, wanderT: Math.random() * 4, wx: x, wz: z,
       contributors: new Set(), phase: 0, slamT: 0, spinT: 0, moving: false,
+      staggerUntil: 0, staggerBy: 0, staggerCd: 0, switched: false,
     };
     this.mobs.set(m.id, m);
     return m;
@@ -58,7 +59,7 @@ export class Game {
     const p = {
       id: this.id(), ws, name, cls, lvl: 1, xp: 0, x, z, face: 0, dead: false, respawnAt: 0,
       cds: [0, 0, 0, 0], dr: { until: 0, v: 0 }, dmg: { until: 0, v: 0 }, party: null,
-      posSeq: 0, lastMoveT: this.time, lastHurt: -99, invite: null,
+      posSeq: 0, lastMoveT: this.time, lastHurt: -99, invite: null, dodgeCd: 0, rollUntil: 0, iframeUntil: 0,
     };
     p.lvl = Math.min(MAX_LEVEL, Math.max(1, Number(process.env.START_LEVEL) || 1)); // START_LEVEL is a testing aid
     Object.assign(p, statsFor(cls, p.lvl));
@@ -87,6 +88,7 @@ export class Game {
     switch (msg.type) {
       case 'input': return this.onInput(p, msg);
       case 'skill': return this.useSkill(p, msg.slot | 0, msg.face);
+      case 'dodge': return this.dodge(p, msg.face);
       case 'chat': {
         const text = String(msg.text || '').slice(0, 200).trim();
         if (text) this.events.push({ t: 'chat', from: p.name, id: p.id, text });
@@ -106,11 +108,23 @@ export class Game {
     if (!isFinite(x) || !isFinite(z)) return;
     const dt = Math.min(0.5, this.time - p.lastMoveT);
     p.lastMoveT = this.time;
-    const maxD = PLAYER_SPEED * dt * 1.35 + 0.35;
+    const rolling = this.time < p.rollUntil + 0.15;
+    const maxD = (rolling ? DODGE.dist / DODGE.time : PLAYER_SPEED) * dt * 1.35 + 0.35;
     const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
     if (d > maxD) { x = p.x + (dx / d) * maxD; z = p.z + (dz / d) * maxD; }
     if (!walkable(x, z)) return;
     p.x = x; p.z = z;
+  }
+
+  // ---------- dodge roll ----------
+  dodge(p, face) {
+    if (p.dead || this.time < p.dodgeCd) return;
+    if (typeof face !== 'number' || !isFinite(face)) face = p.face;
+    p.dodgeCd = this.time + DODGE.cd;
+    p.rollUntil = this.time + DODGE.time;
+    p.iframeUntil = this.time + DODGE.iframes;
+    p.face = wrapAngle(face);
+    this.events.push({ t: 'roll', id: p.id, f: r2(p.face) });
   }
 
   // ---------- parties ----------
@@ -190,7 +204,7 @@ export class Game {
           this.schedule(i * 0.2, () => {
             if (p.dead || !this.players.has(p.id)) return;
             this.events.push({ t: 'fx', k: 'arc', s: 'burst', n: i, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), r: 3.2, c: i === 3 ? 'gold' : undefined });
-            this.hitArc(p, 3.2, 0.9, p.atk * this.dmgMult(p) * (i === 3 ? 1.6 : 0.9));
+            this.hitArc(p, 3.2, 0.9, p.atk * this.dmgMult(p) * (i === 3 ? 1.6 : 0.9), i === 3 ? { brk: true } : undefined);
           });
         }
         break;
@@ -207,7 +221,7 @@ export class Game {
         break;
       }
       case 'wall': p.dr = { until: t + 4, v: 0.6 }; this.events.push({ t: 'buff', id: p.id, k: 'wall', d: 4 }); fx('shield'); break;
-      case 'gslam': fx('ring', { r: 5, c: 'gold' }); this.hitCircle(p, p.x, p.z, 5, atk * 1.3, { stun: 1.5, threat: 1.5 }); break;
+      case 'gslam': fx('ring', { r: 5, c: 'gold' }); this.hitCircle(p, p.x, p.z, 5, atk * 1.3, { stun: 1.5, threat: 1.5, brk: true }); break;
       case 'smite': {
         const range = 10, dx = Math.sin(p.face), dz = Math.cos(p.face);
         let best = null, bestT = range;
@@ -219,7 +233,7 @@ export class Game {
           if (perp < 1.2 + m.def.radius && along < bestT) { best = m; bestT = Math.max(0, along); }
         }
         fx('bolt', { x2: r2(p.x + dx * bestT), z2: r2(p.z + dz * bestT) });
-        if (best) this.damageMob(best, p, atk * 1.1);
+        if (best) this.damageMob(best, p, atk * 1.1, { brk: best.windupAt > 0, interrupt: true });
         break;
       }
       case 'heal': {
@@ -276,17 +290,36 @@ export class Game {
     }
   }
 
-  damageMob(m, p, base, { threat = 1, stun = 0 } = {}) {
+  damageMob(m, p, base, { threat = 1, stun = 0, brk = false, interrupt = false } = {}) {
     if (m.dead) return;
+    const t = this.time;
     const crit = Math.random() < 0.1;
-    const amount = Math.max(1, Math.round(base * (0.9 + Math.random() * 0.2) * (crit ? 1.5 : 1)));
+    // Switch: a staggered enemy takes extra damage from anyone but the player who broke it
+    let mult = 1, sw = 0;
+    if (t < m.staggerUntil && p.id !== m.staggerBy) {
+      if (!m.switched) { mult = SWITCH.first; sw = 1; m.switched = true; } else mult = SWITCH.follow;
+    }
+    const amount = Math.max(1, Math.round(base * (0.9 + Math.random() * 0.2) * (crit ? 1.5 : 1) * mult));
     m.hp -= amount;
+    if (sw) {
+      this.events.push({ t: 'switch', id: m.id, by: p.id, from: m.staggerBy, a: amount });
+      const from = this.players.get(m.staggerBy);
+      if (from) this.giveXp(from, 5); // a little thank-you for setting it up
+    }
     m.threat.set(p.id, (m.threat.get(p.id) || 0) + amount * threat);
     m.contributors.add(p.id);
-    if (stun && !m.def.boss) m.stunUntil = this.time + stun;
-    if (stun && m.def.boss) m.stunUntil = this.time + stun * 0.3;
-    this.events.push({ t: 'hit', id: m.id, a: amount, c: crit ? 1 : 0, by: p.id });
-    if (m.hp <= 0) this.killMob(m, p);
+    if (stun && !m.def.boss) m.stunUntil = t + stun;
+    if (stun && m.def.boss) m.stunUntil = Math.max(m.stunUntil, t + stun * 0.3);
+    this.events.push({ t: 'hit', id: m.id, a: amount, c: crit ? 1 : 0, by: p.id, sw });
+    if (m.hp <= 0) return this.killMob(m, p);
+    if (brk && t >= m.staggerUntil && (!m.def.boss || t >= m.staggerCd)) {
+      const dur = m.def.boss ? SWITCH.bossWindow : SWITCH.window;
+      m.staggerUntil = t + dur; m.staggerBy = p.id; m.switched = false;
+      m.stunUntil = Math.max(m.stunUntil, t + dur);
+      m.windupAt = 0; // a break cancels the attack it was winding up
+      if (m.def.boss) m.staggerCd = t + SWITCH.bossCd;
+      this.events.push({ t: 'stagger', id: m.id, by: p.id, d: dur, i: interrupt ? 1 : 0 });
+    }
   }
 
   killMob(m, killer) {
@@ -338,6 +371,7 @@ export class Game {
 
   damagePlayer(p, base) {
     if (p.dead || inTown(p.x, p.z)) return;
+    if (this.time < p.iframeUntil) { this.events.push({ t: 'evade', id: p.id }); return; }
     const dr = this.time < p.dr.until ? p.dr.v : 0;
     const amount = Math.max(1, Math.round(base * (0.9 + Math.random() * 0.2) * (1 - dr)));
     p.hp -= amount;
@@ -542,7 +576,7 @@ export class Game {
     const mobs = [];
     for (const m of this.mobs.values()) {
       if (m.dead) continue;
-      mobs.push([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0)]);
+      mobs.push([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0) | (m.windupAt ? 16 : 0) | (this.time < m.staggerUntil ? 32 : 0)]);
     }
     const out = JSON.stringify({ players, mobs, events: this.events });
     this.events = [];
@@ -553,6 +587,7 @@ export class Game {
     return {
       xp: p.xp, next: xpToNext(p.lvl), lvl: p.lvl,
       cds: p.cds.map(c => Math.max(0, r2(c - this.time))),
+      dodge: Math.max(0, r2(p.dodgeCd - this.time)),
     };
   }
 
