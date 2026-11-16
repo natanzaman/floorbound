@@ -174,7 +174,7 @@ async function join(joinMsg) {
 }
 const send = o => state.ws?.readyState === 1 && state.ws.send(JSON.stringify(o));
 const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
-const smith = createSmith({ scene, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
+const smith = createSmith({ scene, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
 
 // ---------------- networking ----------------
 function onMessage(msg) {
@@ -929,7 +929,7 @@ function renderBag() {
   h += `<h4>Consumables</h4>${CONSUMABLE_IDS.map(id => `<div class="it"><span class="slot">${CONSUMABLES[id].key}</span><span class="nm"><b>${CONSUMABLES[id].name} ×${inv.cons[id] || 0}</b><small>${CONSUMABLES[id].desc}</small></span><button data-a="use" data-id="${id}" ${inv.cons[id] ? '' : 'disabled style="opacity:.4"'}>Use</button></div>`).join('')}`;
   h += `<h4>Bag (${inv.bag.length}/24)</h4>`;
   h += inv.bag.length ? inv.bag.map(it => {
-    const cur = inv.eq[it.slot], diff = mainStat(it) - mainStat(cur);
+    const cur = inv.eq[it.slot], diff = Math.round((mainStat(it) - mainStat(cur)) * 10) / 10; // refined stats have one decimal
     const cmp = it.slot !== 'charm' && cur ? (diff > 0 ? ` <span class="up">▲${diff}</span>` : diff < 0 ? ` <span class="down">▼${-diff}</span>` : '') : !cur ? ' <span class="up">new</span>' : '';
     const usable = !it.cls || it.cls === state.cls;
     return `<div class="it"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}</div>`;

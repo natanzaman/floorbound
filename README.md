@@ -38,7 +38,7 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Chat | Enter | Chat button |
 | Party | Players button (P) → Find party, or Invite | Players button → Find party / Invite |
 | Items | 4 potion, 5 tonic, 6 draught; B bag | Potion button; Bag button |
-| Interact (merchant, raid gate) | F | Trade / Ready button |
+| Interact (merchant, Smith, raid gate) | F | Trade / Forge / Ready button |
 | Sound on/off | Sound button | Sound button |
 
 Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 3-hit combos with a heavy, knockback finisher. You sprint automatically after 3 seconds out of combat. All sound effects and music are synthesized in the browser (`public/audio.js`), so there are no audio files.
@@ -72,6 +72,16 @@ Characters keep lifetime stats and earn titles (Warden Slayer, Last Attacker, Sw
 - **Drops are personal:** every party member nearby rolls their own gold, potions and gear. Alphas always drop Uncommon+; the Warden drops two Rare+ items for everyone who fought.
 - **Consumables:** Health Potion (40% health), Battle Tonic (+15% damage, 30 s), Ironbark Draught (−15% damage taken, 30 s). New characters start with 3 potions.
 - **Merchant** in town (press F at the stall): buy consumables and Uncommon gear, sell items.
+
+## Crafting
+
+- **Materials** drop alongside loot (personal rolls, kept in a Materials pouch that doesn't use bag slots): Boar Tusk (boars), Wolf Pelt (wolves), Thorn Resin (spitters), Alpha Fang (alphas), Rare Core (Old Tusk, Ghostfang, Thornmother) and 2–4 Horn Shards from the Warden.
+- **The Smith** works the forge on the south side of the plaza (press F, or tap Forge). Four tabs:
+  - **Refine** a bag or worn item from +1 to +5. Each level adds +10% of its base stats and never fails. Weapons take Tusks and Fangs, armour Pelts and Fangs, charms Resin and Rare Cores; +3 and up also need Essence, +4 and +5 need Horn Shards. Gold cost rises with level and rarity.
+  - **Craft** named gear with fixed, top-of-range stats: Tuskbreaker (weapon for your class) · Pelt Mantle · Resin Charm of Haste · Fang Sigil (Switch) · Keen Fang Charm (Rare), and Hornplate · Warden-Forged weapon · Thornheart Talisman (Epic, need Horn Shards, Rare Cores or a Prism).
+  - **Salvage** a bag item into Dust (Common), Essence (Uncommon, Rare) or Essence + Prism (Epic); refined items return half their main materials. The Last Attack charm can't be salvaged.
+  - **Reforge** an item's stats within its rarity range, or give a charm a different affix, for Essence and gold (Epics also take a Prism). Crafted and Last Attack items are fixed.
+- Everything is validated on the server and saved with the character. Tuning lives in `shared/crafting.js` (drops, costs, recipes); the server side is `server/smith.js`, the forge and panel `public/smith.js`. Tests: `node test/craft.js`.
 
 ## New players and the party finder
 

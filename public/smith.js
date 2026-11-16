@@ -13,7 +13,7 @@ const statsText = st => Object.entries(st || {}).map(([k, v]) => statLabel(k, v)
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // Forge, anvil, quench barrel and a weapon rack, facing the plaza (same style as the merchant's stall).
-function buildSmithy(scene) {
+function buildSmithy(scene, occluders) {
   const g = new THREE.Group();
   const stone = mat(0x6f6a73), dark = mat(0x3d3a42), iron = mat(0x4b5563, { metalness: 0.6, roughness: 0.45 }), wood = mat(0x7a4f2e);
   const coal = mat(0xf97316, { emissive: 0xff5a00, emissiveIntensity: 1.4 });
@@ -21,9 +21,9 @@ function buildSmithy(scene) {
   // forge: brick hearth with glowing coals and a chimney
   const hearth = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.1, 1.6), stone); hearth.position.set(-1.9, 0.55, -0.9); g.add(hearth);
   const coals = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.12, 1.1), coal); coals.position.set(-1.9, 1.14, -0.9); g.add(coals);
-  const hood = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 1.15, 1.0, 4), stone); hood.position.set(-1.9, 2.4, -0.9); hood.rotation.y = Math.PI / 4; g.add(hood);
-  const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.6, 2.2, 0.6), dark); chimney.position.set(-1.9, 3.9, -0.9); g.add(chimney);
-  for (const [x, z] of [[-2.85, -0.25], [-0.95, -0.25], [-2.85, -1.55], [-0.95, -1.55]]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.0, 0.16), dark); p.position.set(x, 1.6, z); g.add(p); }
+  const hood = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 1.05, 0.8, 4), stone); hood.position.set(-1.9, 2.5, -0.9); hood.rotation.y = Math.PI / 4; g.add(hood);
+  const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.2, 0.5), dark); chimney.position.set(-1.9, 3.45, -0.9); g.add(chimney);
+  for (const [x, z] of [[-2.75, -0.25], [-1.05, -0.25], [-2.75, -1.55], [-1.05, -1.55]]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.1, 0.14), dark); p.position.set(x, 1.65, z); g.add(p); }
   // anvil on a stump
   const stump = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 0.6, 10), wood); stump.position.set(0.6, 0.38, 0.9); g.add(stump);
   const anvil = new THREE.Group();
@@ -45,15 +45,15 @@ function buildSmithy(scene) {
   g.position.set(SMITH.x, 0, SMITH.z);
   g.rotation.y = Math.atan2(-SMITH.x, -SMITH.z);
   g.traverse(m => { if (m.isMesh) m.castShadow = true; });
-  scene.add(g);
+  scene.add(g); occluders?.push(g); // the camera pulls in rather than clipping behind the forge
   g.updateMatrixWorld(true);
   const anvilPos = anvil.localToWorld(new THREE.Vector3(0, 0.62, 0));
   const forgePos = coals.localToWorld(new THREE.Vector3(0, 0.1, 0));
   return { g, coals, anvilPos, forgePos };
 }
 
-export function createSmith({ scene, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }) {
-  const world = buildSmithy(scene);
+export function createSmith({ scene, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }) {
+  const world = buildSmithy(scene, occluders);
   const panel = document.createElement('div'); panel.id = 'smith'; panel.className = 'panel hidden';
   $('bag').parentNode.appendChild(panel);
   const lbl = document.createElement('div'); lbl.id = 'smith-lbl'; lbl.className = 'lbl npc smith'; lbl.style.display = 'none';
