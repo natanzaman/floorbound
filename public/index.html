@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Floorbound</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Cpath d=%22M50 5 80 50 50 95 20 50z%22 fill=%22%239cc4ff%22/%3E%3C/svg%3E" />
+  <script type="importmap">{ "imports": { "three": "/vendor/three.module.js" } }</script>
+</head>
+<body>
+  <canvas id="view"></canvas>
+  <div id="labels"></div>
+
+  <!-- Login -->
+  <div id="login">
+    <div class="login-card">
+      <div class="logo">FLOORBOUND</div>
+      <div class="tagline">100 floors. One way out. Clear them together.</div>
+      <label class="field">Name<input id="name" maxlength="16" placeholder="Your name" autocomplete="off" /></label>
+      <div id="classes"></div>
+      <button id="enter" class="primary">Enter the Tower</button>
+      <div id="login-msg"></div>
+      <div class="hint">WASD move · drag to look · Space/J attack · 1 2 3 skills · Enter chat</div>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="me-frame" class="frame">
+      <div class="row"><span id="me-name"></span><span id="me-lvl"></span></div>
+      <div class="bar hp"><div id="me-hp"></div><span id="me-hp-text"></span></div>
+      <div class="bar xp"><div id="me-xp"></div></div>
+      <div id="me-buffs"></div>
+    </div>
+    <div id="party"></div>
+
+    <div id="boss" class="hidden">
+      <div class="boss-name">The Horned Warden</div>
+      <div class="bar boss-hp"><div id="boss-hp"></div></div>
+    </div>
+    <div id="banner"></div>
+    <div id="area"></div>
+
+    <button id="players-btn" class="chip">Players</button>
+    <button id="chat-btn" class="chip">Chat</button>
+    <div id="players" class="panel hidden"></div>
+
+    <div id="invite" class="panel hidden"></div>
+
+    <div id="chat">
+      <div id="log"></div>
+      <input id="chat-input" maxlength="200" placeholder="Press Enter to chat" autocomplete="off" />
+    </div>
+
+    <div id="skills"></div>
+    <div id="stick"><div id="knob"></div></div>
+    <div id="dead" class="hidden"><div>You were defeated</div><small>Returning to town…</small></div>
+  </div>
+
+  <script type="module" src="/main.js"></script>
+</body>
+</html>
