@@ -4,8 +4,9 @@
 // DPS (Swordsman)  waits for the tank to grab aggro, then attacks from behind the target.
 // Healer (Cleric)  hangs back behind the tank, heals whoever is hurt, buffs, smites when idle.
 // Everyone dodge-rolls out of the boss's red circles and plays Break -> Switch.
+// The Warden's perilous Horn Sweep: DPS and healer roll through it at the last moment (a perfect dodge), the tank parries it.
 // A fresh (low-level) party warms up on boars before taking on wolves.
-import { MOBS, MOB_IDS, PLAYER_SPEED, DODGE, walkable, resolveCollision, inGateZone } from './data.js';
+import { MOBS, MOB_IDS, PLAYER_SPEED, DODGE, SWEEP, walkable, resolveCollision, inGateZone } from './data.js';
 
 export const TEAM_NAMES = { guardian: 'Brann', swordsman: 'Kael', cleric: 'Lyra' };
 
@@ -38,6 +39,9 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
         if (e.t === 'invite' && e.to === b.id) send(b, { type: 'accept', from: e.from });
         if (e.t === 'stagger') b.stag[e.id] = { by: e.by, until: b.t + e.d };
         if (b.i === 0 && (e.t === 'switch' || e.t === 'stagger')) log(`[${e.t}] mob ${e.id} by ${e.by}`);
+        if (e.t === 'tele' && e.k === 'sweep') { b.sweep = { at: b.t + e.d, id: e.follow }; if (b.i === 0) log(`[sweep] Horn Sweep incoming`); continue; }
+        if (e.t === 'pcancel') b.sweep = null;
+        if (b.i === 0 && (e.t === 'perfect' || e.t === 'parry')) log(`[${e.t}] by ${e.id}`);
         if (e.t === 'tele') b.tele.push({ x: e.x, z: e.z, r: e.r, until: b.t + e.d + 0.2, follow: e.follow, line: e.k === 'line' ? [e.x2, e.z2, e.w] : null });
         if (b.i === 0 && e.t === 'sys' && !e.to) log(`[sys] ${e.text}`);
       }
@@ -127,6 +131,34 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
       }
     }
     return null;
+  }
+
+  // Horn Sweep (perilous): returns true when it takes over this bot's turn.
+  function perilous(b) {
+    const s = b.sweep;
+    if (!s) return false;
+    const left = s.at - b.t, m = b.mobs.find(m => m.id === s.id);
+    if (left < -0.3 || !m) { // over: let go of the guard
+      b.sweep = null;
+      if (b.guardOn) { b.guardOn = false; send(b, { type: 'guard', on: false }); }
+      return false;
+    }
+    if (left <= 0) return !!b.guardOn;
+    const d = d2(b.x, b.z, m.x, m.z), away = Math.atan2(b.x - m.x, b.z - m.z);
+    if (d > SWEEP.r + 1.5) return left < 1; // outside: don't walk in
+    if (b.cls === 'guardian') { // parry: face it and raise the shield just before it lands
+      if (left > 0.12) return false;
+      b.face = Math.atan2(m.x - b.x, m.z - b.z);
+      if (!b.guardOn) { b.guardOn = true; send(b, { type: 'guard', on: true }); }
+      return true;
+    }
+    if (b.dodgeCd <= left - 0.1) { // roll through it at the last moment
+      if (left > 0.15) return false;
+      evade(b, b.x + Math.sin(away) * 5, b.z + Math.cos(away) * 5);
+      return true;
+    }
+    moveToward(b, m.x + Math.sin(away) * (SWEEP.r + 2.5), m.z + Math.cos(away) * (SWEEP.r + 2.5)); // no roll: run out
+    return true;
   }
 
   // Progression: boars until level 3, wolves until level 5, then the Warden.
@@ -235,9 +267,9 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
     if (!team.every(b => b.fresh || b.closed)) return;
     for (const b of team) b.fresh = false;
     for (const b of team) upkeep(b);
-    if (tank && !tank.dead && !stepRoll(tank)) actTank();
-    if (dps && !dps.dead && !stepRoll(dps)) actDps();
-    if (healer && !healer.dead && !stepRoll(healer)) actHealer();
+    if (tank && !tank.dead && !stepRoll(tank) && !perilous(tank)) actTank();
+    if (dps && !dps.dead && !stepRoll(dps) && !perilous(dps)) actDps();
+    if (healer && !healer.dead && !stepRoll(healer) && !perilous(healer)) actHealer();
     for (const b of team) if (!b.dead) send(b, { type: 'input', x: +b.x.toFixed(2), z: +b.z.toFixed(2), face: +b.face.toFixed(2), seq: b.seq });
   }
 

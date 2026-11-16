@@ -118,6 +118,7 @@ const methods = {
         m.posture = Math.max(0, m.posture - this.postureCap(m) * POSTURE.decay[m.def.boss ? 1 : 0] * dt);
       }
     }
+    for (const p of this.players.values()) if (p.dead && p.guarding) this.guard(p, false); // the guard drops on death
     const b = this.boss;
     if (!b || b.dead || !b.engaged || !b.threat.size) return;
     if (b.sweepFight !== this.fight) { b.sweepFight = this.fight; b.sweepT = t + SWEEP.first; } // a new attempt
