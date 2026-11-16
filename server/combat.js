@@ -40,6 +40,7 @@ const methods = {
     m.posture = 0;
     if (m.sweepPending) { m.sweepPending = false; m.perilTok = (m.perilTok || 0) + 1; this.events.push({ t: 'pcancel', id: m.id }); }
     this.events.push({ t: 'stagger', id: m.id, by: p.id, d: dur, i: interrupt ? 1 : 0 });
+    this.twistAfterHit?.(m); // Warden twists (main): Ironhide lengthens Broken windows; idempotent per break
   },
 
   // Perfect-dodge counter: the next hit (every target struck at that same instant) does +50% damage and double posture.
