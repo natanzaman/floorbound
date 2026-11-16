@@ -51,6 +51,7 @@ shared/data.js   classes, skills, mobs, map, collision — used by server AND cl
 server/game.js   authoritative simulation: combat, AI, boss, XP, parties
 server/index.js  static file server + WebSocket server (20 ticks/sec)
 public/          Three.js client (no build step): main.js, world.js, style.css
+public/models/   rigged character models (glTF) with shared animations
 test/bots.js     headless bot players for load/gameplay testing
 ```
 
@@ -68,6 +69,10 @@ node test/bots.js 6 90 boss                 # bots party up and fight the Warden
 Other testing aids: `SPAWN_AT=0,172` spawns players at the chamber gate. `MAX_PLAYERS` caps the server (default 64).
 
 Measured on the prototype: 40 bots used about 5% of one CPU core, about 50 KB/s down per player.
+
+## Credits
+
+Character models and animations: [KayKit Adventurers Character Pack](https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0) by Kay Lousberg ([kaylousberg.com](https://www.kaylousberg.com)), CC0. The models were trimmed to the animations the game uses.
 
 ## Next steps
 

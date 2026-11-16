@@ -1,5 +1,7 @@
 // Scene construction, character models and visual effects.
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { WORLD, OBSTACLES, CLASSES, rng } from '/shared/data.js';
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
@@ -150,7 +152,7 @@ function part(geo, color, x, y, z, parent) {
   parent.add(m); return m;
 }
 
-export function makePlayerModel(cls) {
+function makeBlockPlayer(cls) {
   const color = CLASSES[cls]?.color ?? 0x888888;
   const g = new THREE.Group();
   const body = new THREE.Group(); g.add(body);
@@ -191,7 +193,7 @@ export function makePlayerModel(cls) {
   return { group: g, body, legL, legR, armR, armL, cursor, height: 2.5 };
 }
 
-export function makeMobModel(type) {
+function makeBlockMob(type) {
   const g = new THREE.Group();
   const body = new THREE.Group(); g.add(body);
   const legs = [];
@@ -246,6 +248,135 @@ export function makeMobModel(type) {
   const mats = [];
   g.traverse(o => { if (o.isMesh && o.material.isMeshStandardMaterial) mats.push(o.material); });
   return { group: g, body, legs, armR, cursor, mats, height };
+}
+
+// ---------- rigged characters (KayKit Adventurers, CC0, by Kay Lousberg) ----------
+const FILES = { knight: '/models/knight.glb', rogue: '/models/rogue.glb', mage: '/models/mage.glb', barbarian: '/models/barbarian.glb' };
+let ASSETS = null;
+
+export async function loadAssets(onProgress) {
+  const loader = new GLTFLoader();
+  const out = {};
+  let done = 0;
+  await Promise.all(Object.entries(FILES).map(async ([k, url]) => {
+    out[k] = await loader.loadAsync(url);
+    onProgress?.(++done / Object.keys(FILES).length);
+  }));
+  const box = new THREE.Box3().setFromObject(out.rogue.scene);
+  ASSETS = { gltf: out, clips: out.knight.animations, baseHeight: box.max.y - box.min.y };
+  return ASSETS;
+}
+
+// Which template, which attachments to keep, and an optional tint per character.
+const RIGS = {
+  swordsman: { file: 'rogue', hide: ['Knife_Offhand', '1H_Crossbow', '2H_Crossbow', 'Knife', 'Throwable'], borrowSword: true, height: 1.95 },
+  guardian: { file: 'knight', hide: ['1H_Sword_Offhand', 'Rectangle_Shield', 'Round_Shield', 'Spike_Shield', '2H_Sword'], height: 2.0 },
+  cleric: { file: 'mage', hide: ['Spellbook', 'Spellbook_open', '1H_Wand'], height: 1.95 },
+  warden: { file: 'barbarian', hide: ['1H_Axe_Offhand', 'Barbarian_Round_Shield', '1H_Axe', 'Mug'], height: 6.6, tint: 0xe6a59a },
+};
+
+function buildRig(kind) {
+  const def = RIGS[kind];
+  const src = ASSETS.gltf[def.file].scene;
+  const root = SkeletonUtils.clone(src);
+  for (const name of def.hide) { const n = root.getObjectByName(name); if (n) n.visible = false; }
+  if (def.borrowSword) { // the rogue has no sword: borrow the knight's, same rig and hand slot
+    const sword = ASSETS.gltf.knight.scene.getObjectByName('1H_Sword');
+    const slot = root.getObjectByName('handslotr');
+    if (sword && slot) {
+      const c = sword.clone();
+      c.position.copy(sword.position); c.quaternion.copy(sword.quaternion); c.scale.copy(sword.scale);
+      slot.add(c);
+    }
+  }
+  const mats = [];
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    o.castShadow = true;
+    o.frustumCulled = false; // skinned bounds don't follow animation
+    o.material = o.material.clone();
+    if (def.tint) o.material.color.setHex(def.tint);
+    mats.push(o.material);
+  });
+  const g = new THREE.Group();
+  root.scale.setScalar(def.height / ASSETS.baseHeight);
+  g.add(root);
+  return { g, root, mats, height: def.height };
+}
+
+class Animator {
+  constructor(root, idle) {
+    this.mixer = new THREE.AnimationMixer(root);
+    this.actions = {};
+    for (const c of ASSETS.clips) this.actions[c.name] = this.mixer.clipAction(c);
+    this.idle = idle;
+    this.cur = null; this.shotAct = null; this.dead = false;
+    this.mixer.addEventListener('finished', e => {
+      if (e.action !== this.shotAct || this.dead) return;
+      this.shotAct.fadeOut(0.15); this.shotAct = null;
+      this.fadeInBase(0.15);
+    });
+    this.base(idle, 0);
+  }
+  fadeInBase(t) {
+    const a = this.actions[this.cur];
+    if (!a) return;
+    a.enabled = true; a.setEffectiveTimeScale(a.timeScale || 1); a.play(); a.fadeIn(t);
+  }
+  base(name, fade = 0.2, speed = 1) {
+    const a = this.actions[name];
+    if (!a || this.dead) return;
+    a.timeScale = speed;
+    if (this.cur === name) return;
+    const prev = this.actions[this.cur];
+    this.cur = name;
+    if (this.shotAct) { if (prev) prev.fadeOut(fade); return; } // swap underneath the one-shot
+    a.reset(); a.enabled = true; a.play();
+    if (prev && fade > 0) a.crossFadeFrom(prev, fade, false);
+  }
+  shot(name, speed = 1, { clamp = false, fade = 0.08 } = {}) {
+    const a = this.actions[name];
+    if (!a) return;
+    if (this.shotAct && this.shotAct !== a) this.shotAct.fadeOut(fade);
+    const base = this.actions[this.cur];
+    if (base && !this.shotAct) base.fadeOut(fade);
+    a.reset(); a.enabled = true;
+    a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = clamp;
+    a.timeScale = speed; a.setEffectiveWeight(1);
+    a.fadeIn(fade).play();
+    this.shotAct = a;
+  }
+  busy() { return !!this.shotAct; }
+  die() { this.shot('Death_A', 1, { clamp: true, fade: 0.1 }); this.dead = true; }
+  revive() {
+    this.dead = false;
+    this.mixer.stopAllAction();
+    this.shotAct = null; this.cur = null;
+    this.base(this.idle, 0);
+  }
+  update(dt) { this.mixer.update(dt); }
+}
+
+function cursorFor(color, h, size = 0.14) {
+  const c = new THREE.Mesh(new THREE.OctahedronGeometry(size), new THREE.MeshBasicMaterial({ color }));
+  c.scale.y = 1.6; c.position.y = h + 0.35;
+  return c;
+}
+
+export function makePlayerModel(cls) {
+  if (!ASSETS) return makeBlockPlayer(cls);
+  const { g, root, mats, height } = buildRig(cls);
+  const cursor = cursorFor(0x4ade80, height);
+  g.add(cursor);
+  return { group: g, root, mats, cursor, height, anim: new Animator(root, 'Idle') };
+}
+
+export function makeMobModel(type) {
+  if (type !== 'warden' || !ASSETS) return makeBlockMob(type);
+  const { g, root, mats, height } = buildRig('warden');
+  const cursor = cursorFor(0xef4444, height, 0.3);
+  g.add(cursor);
+  return { group: g, root, mats, cursor, height, anim: new Animator(root, '2H_Melee_Idle'), legs: [] };
 }
 
 // ---------- effects ----------

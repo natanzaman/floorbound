@@ -12,11 +12,12 @@ const PORT = Number(process.env.PORT) || 3000;
 const MAX_PLAYERS = Number(process.env.MAX_PLAYERS) || 64;
 
 const MOUNTS = [
+  ['/vendor/addons/', path.join(root, 'node_modules/three/examples/jsm')],
   ['/vendor/', path.join(root, 'node_modules/three/build')],
   ['/shared/', path.join(root, 'shared')],
   ['/', path.join(root, 'public')],
 ];
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.glb': 'model/gltf-binary' };
 
 const game = new Game();
 

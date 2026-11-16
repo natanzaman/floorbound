@@ -166,7 +166,7 @@ export class Game {
     if (typeof face === 'number' && isFinite(face)) p.face = wrapAngle(face);
     p.cds[slot] = this.time + sk.cd;
     const atk = p.atk * this.dmgMult(p);
-    const fx = (k, extra = {}) => this.events.push({ t: 'fx', k, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), ...extra });
+    const fx = (k, extra = {}) => this.events.push({ t: 'fx', k, s: sk.id, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), ...extra });
     const t = this.time;
 
     switch (sk.id) {
@@ -189,7 +189,7 @@ export class Game {
         for (let i = 0; i < 4; i++) {
           this.schedule(i * 0.2, () => {
             if (p.dead || !this.players.has(p.id)) return;
-            this.events.push({ t: 'fx', k: 'arc', id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), r: 3.2, c: i === 3 ? 'gold' : undefined });
+            this.events.push({ t: 'fx', k: 'arc', s: 'burst', n: i, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), r: 3.2, c: i === 3 ? 'gold' : undefined });
             this.hitArc(p, 3.2, 0.9, p.atk * this.dmgMult(p) * (i === 3 ? 1.6 : 0.9));
           });
         }
@@ -206,7 +206,7 @@ export class Game {
         this.events.push({ t: 'buff', id: p.id, k: 'dr', d: 4 });
         break;
       }
-      case 'wall': p.dr = { until: t + 4, v: 0.6 }; this.events.push({ t: 'buff', id: p.id, k: 'wall', d: 4 }); break;
+      case 'wall': p.dr = { until: t + 4, v: 0.6 }; this.events.push({ t: 'buff', id: p.id, k: 'wall', d: 4 }); fx('shield'); break;
       case 'gslam': fx('ring', { r: 5, c: 'gold' }); this.hitCircle(p, p.x, p.z, 5, atk * 1.3, { stun: 1.5, threat: 1.5 }); break;
       case 'smite': {
         const range = 10, dx = Math.sin(p.face), dz = Math.cos(p.face);
@@ -230,7 +230,7 @@ export class Game {
           if (f < low) { low = f; target = o; }
         }
         this.healPlayer(target, target.maxHp * 0.3 + 10 + p.lvl * 2, p);
-        this.events.push({ t: 'fx', k: 'heal', id: target.id, x: r2(target.x), z: r2(target.z) });
+        this.events.push({ t: 'fx', k: 'heal', s: 'heal', by: p.id, id: target.id, x: r2(target.x), z: r2(target.z) });
         break;
       }
       case 'bless': {

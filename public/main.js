@@ -4,7 +4,7 @@ import {
   CLASSES, CLASS_IDS, MOBS, MOB_IDS, PLAYER_SPEED, TICK_RATE, MAX_LEVEL,
   walkable, resolveCollision, inTown, inArena, areaName, angleTo,
 } from '/shared/data.js';
-import { createWorld, makePlayerModel, makeMobModel, Effects } from '/world.js';
+import { createWorld, makePlayerModel, makeMobModel, Effects, loadAssets } from '/world.js';
 
 const $ = id => document.getElementById(id);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -51,10 +51,16 @@ function renderClasses() {
   for (const b of document.querySelectorAll('.cls')) b.onclick = () => { chosen = b.dataset.id; renderClasses(); };
 }
 renderClasses();
+$('enter').disabled = true;
+const assetsReady = loadAssets(p => { $('enter').textContent = `Loading characters… ${Math.round(p * 100)}%`; })
+  .catch(err => console.error('Model load failed, using block characters', err))
+  .finally(() => { $('enter').textContent = 'Enter the Tower'; $('enter').disabled = false; });
 $('enter').onclick = join;
 $('name').addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
 
-function join() {
+async function join() {
+  await assetsReady;
+  if (state.ws) return;
   const name = $('name').value.trim() || `Hero${Math.floor(Math.random() * 900 + 100)}`;
   localStorage.setItem('fb_name', name); localStorage.setItem('fb_cls', chosen);
   state.cls = chosen;
@@ -122,7 +128,7 @@ function onSnapshot({ me, w }) {
     if (!e) e = addMobEntity(id, MOB_IDS[ti], x, z, face);
     Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, moving: flags & 1, engaged: flags & 2, enraged: flags & 4, stunned: flags & 8 });
   }
-  for (const [id, e] of mobs) if (!seenM.has(id)) { removeEntity(e); mobs.delete(id); if (e === boss) boss = null; }
+  for (const [id, e] of mobs) if (!seenM.has(id) && !e.dying) { removeEntity(e); mobs.delete(id); if (e === boss) boss = null; }
   renderPlayersThrottled();
 }
 
@@ -135,6 +141,7 @@ function handleEvent(e) {
     case 'fx': {
       const ent = players.get(e.id) || mobs.get(e.id);
       if (ent && players.has(e.id) && ['arc', 'rush', 'ring', 'bolt'].includes(e.k)) ent.swing = 0.3;
+      if (e.s) playSkillAnim(players.get(e.k === 'heal' ? e.by : e.id), e.s, e.n);
       const ox = e.id === me ? state.x : e.x, oz = e.id === me ? state.z : e.z;
       if (e.k === 'arc') fx.arc(ox, oz, e.f, e.r, e.r > 3 ? 0.9 : 1.05, e.c === 'gold' ? 0xfde68a : 0xdbeafe);
       else if (e.k === 'ring') fx.ring(ox, oz, e.r, e.c === 'gold' ? 0xfbbf24 : e.c === 'light' ? 0xfef3c7 : 0xbfdbfe, e.r > 10 ? 0.6 : 0.35);
@@ -146,8 +153,11 @@ function handleEvent(e) {
       else if (e.k === 'boom') { fx.ring(e.x, e.z, e.r, 0xff7a2f, 0.5); shake(0.35); }
       break;
     }
-    case 'wind': { const m = mobs.get(e.id); if (m) m.wind = e.d; break; }
-    case 'tele': fx.telegraph(e.x, e.z, e.r, e.d, e.follow ? () => mobs.get(e.follow)?.model.group.position : null); break;
+    case 'wind': { const m = mobs.get(e.id); if (m) { m.wind = e.d; m.model.anim?.shot('2H_Melee_Attack_Chop', 1.4); } break; }
+    case 'tele':
+      fx.telegraph(e.x, e.z, e.r, e.d, e.follow ? () => mobs.get(e.follow)?.model.group.position : null);
+      if (boss) bossShot(boss.id, e.follow ? '2H_Melee_Attack_Spin' : '2H_Melee_Attack_Slice', 1.2, Math.max(0, e.d - 0.55));
+      break;
     case 'buff': {
       const p = players.get(e.id);
       if (!p) break;
@@ -167,7 +177,8 @@ function handleEvent(e) {
     }
     case 'hurt': {
       const p = players.get(e.id);
-      if (p) { p.flash = 0.15; if (e.id === me) { floatNum(p.model.group.position, 2.2, `-${e.a}`, 'hurt'); shake(0.15); } }
+      if (p) { p.flash = 0.15; const a = p.model.anim; if (a && !a.busy() && !a.dead) a.shot('Hit_A', 1.8);
+        if (e.id === me) { floatNum(p.model.group.position, 2.2, `-${e.a}`, 'hurt'); shake(0.15); } }
       break;
     }
     case 'heal': {
@@ -183,19 +194,52 @@ function handleEvent(e) {
       break;
     }
     case 'die': {
+      const bm = mobs.get(e.id);
+      if (bm?.model.anim && !bm.dying) { // the boss collapses first, then shatters
+        bm.dying = true; bm.model.anim.die();
+        setTimeout(() => {
+          fx.shatter(bm.model.group.position.x, bm.model.group.position.z, true); shake(0.4);
+          if (mobs.get(e.id) === bm) { removeEntity(bm); mobs.delete(e.id); if (boss === bm) boss = null; }
+        }, 1700);
+        break;
+      }
       fx.shatter(e.x, e.z, !!e.b);
       const m = mobs.get(e.id);
       if (m) { removeEntity(m); mobs.delete(e.id); if (m === boss) boss = null; }
       break;
     }
     case 'pdie': { if (e.id === me) $('dead').classList.remove('hidden'); break; }
-    case 'enrage': banner('THE WARDEN IS ENRAGED', 'Watch for the spin — get out of the red circle'); break;
+    case 'enrage': if (boss) bossShot(boss.id, 'Cheer', 1.2); banner('THE WARDEN IS ENRAGED', 'Watch for the spin — get out of the red circle'); break;
     case 'clear': banner('FLOOR 1 CLEARED', e.names.join(' · ')); break;
     case 'invite': if (e.to === me) showInvite(e.from, e.name); break;
     case 'chat': log(`${e.from}: ${e.text}`, e.id === me ? 'me' : ''); break;
     case 'sys': if (!e.to || e.to === me) log(e.text, 'sys'); break;
   }
 }
+
+// ---------------- character animation ----------------
+const SKILL_ANIM = {
+  slash: [['1H_Melee_Attack_Slice_Diagonal', 1.9], ['1H_Melee_Attack_Slice_Horizontal', 1.9], ['1H_Melee_Attack_Chop', 1.9]],
+  rush: [['1H_Melee_Attack_Stab', 1.6]],
+  whirl: [['2H_Melee_Attack_Spin', 1.5]],
+  burst: [['1H_Melee_Attack_Slice_Diagonal', 2.6], ['1H_Melee_Attack_Slice_Horizontal', 2.6], ['1H_Melee_Attack_Chop', 2.6], ['1H_Melee_Attack_Stab', 1.8]],
+  bash: [['1H_Melee_Attack_Chop', 1.7], ['1H_Melee_Attack_Slice_Diagonal', 1.7]],
+  taunt: [['Cheer', 1.6]],
+  wall: [['Block', 1]],
+  gslam: [['2H_Melee_Attack_Chop', 1.6]],
+  smite: [['Spellcast_Shoot', 1.8]],
+  heal: [['Spellcast_Raise', 1.6]],
+  bless: [['Spellcast_Long', 1.4]],
+  sanct: [['Spellcast_Long', 1.4]],
+};
+function playSkillAnim(ent, skill, n) {
+  const list = SKILL_ANIM[skill];
+  if (!ent?.model.anim || !list) return;
+  const i = n ?? (ent.combo = (ent.combo || 0) + 1);
+  const [name, speed] = list[i % list.length];
+  ent.model.anim.shot(name, speed);
+}
+const bossShot = (id, name, speed, delay = 0) => setTimeout(() => mobs.get(id)?.model.anim?.shot(name, speed), delay * 1000);
 
 // ---------------- entities ----------------
 function makeLabel(cls) {
@@ -209,9 +253,12 @@ function makeLabel(cls) {
 function addPlayerEntity(id, cls, x, z) {
   const model = makePlayerModel(cls);
   model.group.position.set(x, 0, z);
-  model.group.traverse(o => { if (o.isMesh && o.material.isMeshStandardMaterial) o.material = o.material.clone(); });
+  let mats = model.mats;
+  if (!mats) {
+    mats = [];
+    model.group.traverse(o => { if (o.isMesh && o.material.isMeshStandardMaterial) { o.material = o.material.clone(); mats.push(o.material); } });
+  }
   scene.add(model.group);
-  const mats = []; model.group.traverse(o => { if (o.isMesh && o.material.isMeshStandardMaterial) mats.push(o.material); });
   const e = { id, kind: 'player', cls, model, mats, label: id === state.myId ? null : makeLabel('ally'), name: state.roster.get(id)?.name || '…', x, z, face: 0, tx: x, tz: z, tface: 0, walk: 0, swing: 0, flash: 0 };
   players.set(id, e);
   return e;
@@ -470,6 +517,19 @@ function animateEntity(e, dt) {
   g.rotation.y += df * Math.min(1, dt * 14);
 
   const m = e.model;
+  e.spd = (e.spd || 0) + (speed - (e.spd || 0)) * Math.min(1, dt * 10);
+  if (m.anim) {
+    const a = m.anim, isP = e.kind === 'player';
+    if (isP && e.dead && !a.dead) a.die();
+    else if (isP && !e.dead && a.dead) a.revive();
+    if (e.spd > (isP ? 3.5 : 4.6)) a.base('Running_A', 0.2, Math.max(0.7, e.spd / (isP ? 6.5 : 5.5)));
+    else if (e.spd > 0.5) a.base('Walking_A', 0.2, isP ? 1.2 : Math.max(0.6, e.spd / 3.5));
+    else a.base(a.idle, 0.25);
+    a.update(dt);
+    if (isP) m.cursor.material.color.setHex(state.party && e.party === state.party && !self ? 0xa78bfa : 0x4ade80);
+    else m.cursor.rotation.y += dt * 2;
+    m.cursor.visible = !(isP && e.dead);
+  } else {
   e.walk += dt * Math.min(speed, 8) * 2.2;
   const swingAmt = speed > 0.5 ? Math.sin(e.walk) : 0;
   if (e.kind === 'player') {
@@ -493,8 +553,9 @@ function animateEntity(e, dt) {
     m.cursor.rotation.y += dt * 2;
     m.body.position.y = e.stunned ? Math.sin(performance.now() / 60) * 0.05 : 0;
   }
+  }
   if (e.flash > 0) e.flash -= dt;
-  const enr = e.kind === 'mob' && e.enraged ? 0.3 + Math.sin(performance.now() / 120) * 0.15 : 0;
+  const enr = e.kind === 'mob' && e.enraged ? (m.anim ? 0.12 : 0.3) + Math.sin(performance.now() / 120) * (m.anim ? 0.06 : 0.15) : 0;
   const glow = e.flash > 0 ? (e.type === 'warden' ? 0.18 : 0.35) : enr;
   for (const mt of e.mats) { mt.emissive.setHex(e.flash > 0 && !enr ? 0xffffff : 0xff2200); mt.emissiveIntensity = glow; }
 
