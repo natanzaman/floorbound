@@ -18,7 +18,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 900);
-const { sun, crystal, occluders } = createWorld(scene);
+const { sun, crystal, occluders, treeFader } = createWorld(scene);
 const ray = new THREE.Raycaster();
 let camCur = 11;
 const fx = new Effects(scene);
@@ -640,6 +640,7 @@ function frame(now) {
     camera.lookAt(0, 2, 30);
   }
   sun.position.set(cx + 30, 60, cz - 20); sun.target.position.set(cx, 0, cz);
+  if (state.joined) treeFader.update(dt, camera.position, cx, cz);
 
   // floating numbers
   for (let i = nums.length - 1; i >= 0; i--) {

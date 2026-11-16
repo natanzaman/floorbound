@@ -95,7 +95,8 @@ export function createWorld(scene) {
     leaves.setColorAt(i, leafColor.setHSL(0.3 + r() * 0.06, 0.45, 0.25 + r() * 0.1));
   });
   trunks.castShadow = leaves.castShadow = true;
-  scene.add(trunks, leaves); occluders.push(trunks, leaves);
+  scene.add(trunks, leaves);
+  const treeFader = new TreeFader(scene, allTrees, trunks, leaves);
   const rockMesh = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), mat(0x8a8d91), rocks.length);
   rocks.forEach((o, i) => {
     m4.compose(p.set(o.x, o.r * 0.5, o.z), q.setFromEuler(new THREE.Euler(r(), r(), r())), s.set(o.r * 1.1, o.r * 0.8, o.r * 1.1));
@@ -140,7 +141,7 @@ export function createWorld(scene) {
   const tower = new THREE.Mesh(new THREE.CylinderGeometry(14, 22, 420, 10), mat(0x8792b0, { fog: false }));
   tower.position.set(60, 200, 420); scene.add(tower);
 
-  return { sun, crystal, occluders };
+  return { sun, crystal, occluders, treeFader };
 }
 
 // ---------- characters ----------
@@ -268,6 +269,7 @@ export async function loadAssets(onProgress) {
 }
 
 // Which template, which attachments to keep, and an optional tint per character.
+const HEAD_SCALE = 0.8; // the pack is chibi-proportioned; shrink heads a little
 const RIGS = {
   swordsman: { file: 'rogue', hide: ['Knife_Offhand', '1H_Crossbow', '2H_Crossbow', 'Knife', 'Throwable'], borrowSword: true, height: 1.95 },
   guardian: { file: 'knight', hide: ['1H_Sword_Offhand', 'Rectangle_Shield', 'Round_Shield', 'Spike_Shield', '2H_Sword'], height: 2.0 },
@@ -307,6 +309,7 @@ function buildRig(kind) {
 class Animator {
   constructor(root, idle) {
     this.mixer = new THREE.AnimationMixer(root);
+    this.head = root.getObjectByName('head');
     this.actions = {};
     for (const c of ASSETS.clips) this.actions[c.name] = this.mixer.clipAction(c);
     this.idle = idle;
@@ -354,7 +357,10 @@ class Animator {
     this.shotAct = null; this.cur = null;
     this.base(this.idle, 0);
   }
-  update(dt) { this.mixer.update(dt); }
+  update(dt) {
+    this.mixer.update(dt);
+    if (this.head) this.head.scale.setScalar(HEAD_SCALE); // applied after the animation pose
+  }
 }
 
 function cursorFor(color, h, size = 0.14) {
@@ -377,6 +383,62 @@ export function makeMobModel(type) {
   const cursor = cursorFor(0xef4444, height, 0.3);
   g.add(cursor);
   return { group: g, root, mats, cursor, height, anim: new Animator(root, '2H_Melee_Idle'), legs: [] };
+}
+
+// ---------- trees between the camera and the player turn see-through ----------
+class TreeFader {
+  constructor(scene, trees, trunks, leaves) {
+    Object.assign(this, { scene, trees, trunks, leaves });
+    this.ghosts = new Map(); // tree index -> { group, mats, alpha }
+    this.m4 = new THREE.Matrix4(); this.zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  }
+  occludes(t, cx, cz, px, pz) {
+    const r = 1.7 * (t.s || 1) + 0.4;
+    if (Math.hypot(t.x - cx, t.z - cz) < r + 1.5) return true; // right next to the camera
+    const lx = px - cx, lz = pz - cz, len2 = lx * lx + lz * lz || 1;
+    const k = ((t.x - cx) * lx + (t.z - cz) * lz) / len2;
+    if (k < 0 || k > 1) return false;
+    return Math.hypot(t.x - (cx + lx * k), t.z - (cz + lz * k)) < r;
+  }
+  setHidden(i, hidden) {
+    for (const im of [this.trunks, this.leaves]) {
+      if (hidden) { im.getMatrixAt(i, this.m4); this.ghosts.get(i)[im === this.trunks ? 'tm' : 'lm'] = this.m4.clone(); im.setMatrixAt(i, this.zero); }
+      else im.setMatrixAt(i, this.ghosts.get(i)[im === this.trunks ? 'tm' : 'lm']);
+      im.instanceMatrix.needsUpdate = true;
+    }
+  }
+  update(dt, cam, px, pz) {
+    const cx = cam.x, cz = cam.z;
+    const want = new Set();
+    this.trees.forEach((t, i) => {
+      if (Math.abs(t.x - px) > 30 || Math.abs(t.z - pz) > 30) return;
+      if (this.occludes(t, cx, cz, px, pz)) want.add(i);
+    });
+    for (const i of want) {
+      if (this.ghosts.has(i)) continue;
+      const g = new THREE.Group(), mats = [];
+      const color = new THREE.Color(); this.leaves.getColorAt(i, color);
+      for (const [im, c] of [[this.trunks, this.trunks.material.color], [this.leaves, color]]) {
+        const mat = new THREE.MeshStandardMaterial({ color: c, flatShading: true, roughness: 0.85, transparent: true, opacity: 1, depthWrite: false });
+        const mesh = new THREE.Mesh(im.geometry, mat);
+        im.getMatrixAt(i, this.m4); this.m4.decompose(mesh.position, mesh.quaternion, mesh.scale);
+        g.add(mesh); mats.push(mat);
+      }
+      this.scene.add(g);
+      this.ghosts.set(i, { group: g, mats, alpha: 1 });
+      this.setHidden(i, true);
+    }
+    for (const [i, gh] of this.ghosts) {
+      const target = want.has(i) ? 0.22 : 1;
+      gh.alpha += (target - gh.alpha) * Math.min(1, dt * 8);
+      for (const m of gh.mats) m.opacity = gh.alpha;
+      if (!want.has(i) && gh.alpha > 0.97) {
+        this.setHidden(i, false);
+        this.scene.remove(gh.group); gh.mats.forEach(m => m.dispose());
+        this.ghosts.delete(i);
+      }
+    }
+  }
 }
 
 // ---------- effects ----------
