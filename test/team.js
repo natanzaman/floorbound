@@ -1,5 +1,6 @@
 // Role-playing bot party: a tank, a DPS and a healer clear the field, then fight the Warden.
 // Usage: node test/team.js [url=ws://localhost:3000/ws]
+//        ROLES=guardian,cleric node test/team.js   (leave a slot open for a human DPS; the tank invites them)
 //
 // Tank (Guardian)  leads, picks targets, opens with Taunt, keeps aggro, Shield Walls when low.
 // DPS (Swordsman)  waits for the tank to grab aggro, then attacks from behind the target.
@@ -9,7 +10,8 @@ import WebSocket from 'ws';
 import { MOBS, MOB_IDS, PLAYER_SPEED, DODGE, walkable, resolveCollision } from '../shared/data.js';
 
 const url = process.argv[2] || 'ws://localhost:3000/ws';
-const ROSTER = [['guardian', 'Brann'], ['swordsman', 'Kael'], ['cleric', 'Lyra']];
+const NAMES = { guardian: 'Brann', swordsman: 'Kael', cleric: 'Lyra' };
+const ROSTER = (process.env.ROLES || 'guardian,swordsman,cleric').split(',').map(c => [c, NAMES[c]]);
 const DT = 0.05;
 const send = (b, o) => b.ws.readyState === 1 && b.ws.send(JSON.stringify(o));
 const d2 = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
@@ -42,14 +44,19 @@ const team = ROSTER.map(([cls, name], i) => {
   });
   return b;
 });
-const [tank, dps, healer] = team;
+const tank = team.find(b => b.cls === 'guardian'), dps = team.find(b => b.cls === 'swordsman'), healer = team.find(b => b.cls === 'cleric');
+const invited = new Set();
 
 // The tank forms the party once everyone is in.
 const formParty = setInterval(() => {
   if (!team.every(b => b.id)) return;
   clearInterval(formParty);
-  for (const b of [dps, healer]) send(tank, { type: 'invite', id: b.id });
+  for (const b of team) if (b !== tank) { send(tank, { type: 'invite', id: b.id }); invited.add(b.id); }
 }, 100);
+// ...and any human who shows up gets an invite too.
+setInterval(() => {
+  for (const p of tank.players) if (!invited.has(p.id) && !team.some(b => b.id === p.id)) { invited.add(p.id); send(tank, { type: 'invite', id: p.id }); }
+}, 1000);
 
 function useSkill(b, slot, face) {
   if (b.cds[slot] > 0 || (slot === 3 && b.me.lvl < 3)) return false;
@@ -199,7 +206,7 @@ setInterval(() => {
   if (!team.every(b => b.fresh)) return;
   for (const b of team) b.fresh = false;
   if (!tank.dead && !stepRoll(tank)) actTank();
-  if (!dps.dead && !stepRoll(dps)) actDps();
-  if (!healer.dead && !stepRoll(healer)) actHealer();
+  if (dps && !dps.dead && !stepRoll(dps)) actDps();
+  if (healer && !healer.dead && !stepRoll(healer)) actHealer();
   for (const b of team) if (!b.dead) send(b, { type: 'input', x: +b.x.toFixed(2), z: +b.z.toFixed(2), face: +b.face.toFixed(2), seq: b.seq });
 }, 3);

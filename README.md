@@ -31,11 +31,13 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Look | Drag the mouse, Q/E, wheel to zoom | Drag the right side |
 | Basic attack | Space or J (hold) | Big round button (hold) |
 | Dodge roll | Shift or K | Dodge button |
+| Lock on / cycle target | Tab (Esc to clear) | Lock on button |
+| Sound on/off | Sound button | Sound button |
 | Skills | 1, 2, 3 | Small buttons |
 | Chat | Enter | Chat button |
 | Party | Players button (P) → Invite | Players button → Invite |
 
-Attacks auto-aim at the nearest enemy in range.
+Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 3-hit combos with a heavy, knockback finisher. You sprint automatically after 3 seconds out of combat. All sound effects and music are synthesized in the browser (`public/audio.js`), so there are no audio files.
 
 ## Combat: Break and Switch
 

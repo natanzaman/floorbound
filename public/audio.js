@@ -9,6 +9,7 @@ export class Sound {
     this.on = localStorage.getItem('fb_sound') !== 'off';
     this.listener = { x: 0, z: 0 };
     this.mood = null; this.nextBar = 0; this.bar = 0;
+    this.offset = 0; // seconds added to every scheduled sound (used for offline rendering)
   }
 
   // Browsers only allow audio after a user gesture; call this from a click/tap.
@@ -16,7 +17,16 @@ export class Sound {
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
-      const c = this.ctx = new AC();
+      this.build(new AC());
+      setInterval(() => this.schedule(), 120);
+    }
+    this.ctx.resume?.();
+  }
+
+  // Wire up the mixer on a context (a live AudioContext, or an OfflineAudioContext for recording).
+  build(c) {
+    {
+      this.ctx = c;
       this.master = c.createGain(); this.master.gain.value = this.on ? 0.7 : 0;
       const comp = c.createDynamicsCompressor();
       this.master.connect(comp).connect(c.destination);
@@ -26,9 +36,7 @@ export class Sound {
       this.noiseBuf = c.createBuffer(1, len, c.sampleRate);
       const d = this.noiseBuf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-      setInterval(() => this.schedule(), 120);
     }
-    this.ctx.resume?.();
   }
 
   toggle() {
@@ -49,7 +57,7 @@ export class Sound {
   }
 
   tone(dest, { f = 440, to, type = 'sine', dur = 0.2, vol = 0.3, at = 0, attack = 0.005 }) {
-    const c = this.ctx, t = c.currentTime + at;
+    const c = this.ctx, t = c.currentTime + this.offset + at;
     const o = c.createOscillator(), g = c.createGain();
     o.type = type; o.frequency.setValueAtTime(f, t);
     if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
@@ -60,7 +68,7 @@ export class Sound {
   }
 
   noise(dest, { dur = 0.2, vol = 0.3, type = 'bandpass', f = 1000, to, q = 1, at = 0, attack = 0.005 }) {
-    const c = this.ctx, t = c.currentTime + at;
+    const c = this.ctx, t = c.currentTime + this.offset + at;
     const s = c.createBufferSource(); s.buffer = this.noiseBuf;
     s.playbackRate.value = 0.8 + Math.random() * 0.4;
     const fl = c.createBiquadFilter(); fl.type = type; fl.Q.value = q;

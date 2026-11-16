@@ -872,4 +872,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { state, players, mobs, banner };
+window.__fb = { state, players, mobs, banner, sfx };
