@@ -4,6 +4,7 @@
 //  - Guardian guard (hold R): frontal hits take much less damage; pressing just before a hit PARRIES it.
 //  - The Warden's perilous Horn Sweep: dodge through it or parry it; shields don't help.
 import { DODGE, SWITCH, POSTURE, PERFECT, GUARD, SWEEP, postureMax, angleTo, wrapAngle, inArena } from '../shared/data.js';
+import { MASTERY } from '../shared/mastery.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r2 = v => Math.round(v * 100) / 100;
@@ -14,7 +15,8 @@ const methods = {
   posturePct(m) { return Math.min(100, Math.round((100 * (m.posture || 0)) / this.postureCap(m))) || 0; },
 
   // Add posture damage from player p. amount = damage dealt; the flags add big chunks.
-  addPosture(m, p, amount, { heavy = false, brk = false, interrupt = false, counter = false, chunk = null } = {}) {
+  // sk: the skill credited with mastery (posture dealt, Breaks); frac: an extra chunk [normal/elite, boss] (evolved skills).
+  addPosture(m, p, amount, { heavy = false, brk = false, interrupt = false, counter = false, chunk = null, sk = null, frac = null } = {}) {
     if (!m || m.dead) return;
     const t = this.time;
     if (counter) this.events.push({ t: 'counter', id: m.id, by: p.id });
@@ -25,16 +27,20 @@ const methods = {
     if (brk) gain += max * POSTURE.brk[bi];
     if (interrupt) gain += max * POSTURE.smite[bi];
     if (chunk) gain += max * POSTURE[chunk][bi];
+    if (frac) gain += max * frac[bi];
     if (counter) gain *= PERFECT.posture;
+    if (sk) this.masteryGain?.(p, sk, Math.min(gain, max - (m.posture || 0)), 'posture');
     m.posture = (m.posture || 0) + gain;
     m.postureAt = t;
-    if (m.posture >= max) this.breakMob(m, p, interrupt);
+    if (m.posture >= max) this.breakMob(m, p, interrupt, sk);
   },
 
   // Posture full: BROKEN. Staggered for the Switch window, wind-ups (and a pending Horn Sweep) are cancelled.
-  breakMob(m, p, interrupt = false) {
+  breakMob(m, p, interrupt = false, sk = null) {
     const t = this.time, dur = m.def.boss ? SWITCH.bossWindow : SWITCH.window;
     m.staggerUntil = t + dur; m.staggerBy = p.id; m.switched = false;
+    m.staggerSk = sk; // the skill that broke it gets mastery when a teammate Switches in
+    if (sk) this.masteryGain?.(p, sk, MASTERY.brk[m.def.boss ? 1 : 0]);
     m.stunUntil = Math.max(m.stunUntil, t + dur);
     m.windupAt = 0;
     m.posture = 0;

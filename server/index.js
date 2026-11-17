@@ -84,7 +84,7 @@ wss.on('connection', ws => {
         other.ws.close();
         c = await accounts.loadCharacter(acct.id, msg.character);
       }
-      return game.addPlayer(ws, c.name, c.cls, { charId: c.id, accountId: acct.id, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats });
+      return game.addPlayer(ws, c.name, c.cls, { charId: c.id, accountId: acct.id, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats, mastery: c.mastery });
     }
     return game.addPlayer(ws, msg.name, msg.cls);
   }
@@ -111,6 +111,7 @@ wss.on('connection', ws => {
         player = p;
         ws.send(JSON.stringify({ type: 'welcome', id: player.id, x: player.x, z: player.z, seq: player.posSeq, lvl: player.lvl, xp: player.xp, charId: player.charId || 0 }));
         ws.send(JSON.stringify(game.invFor(player))); player.invDirty = false;
+        ws.send(JSON.stringify(game.masteryMsg(player))); player.masteryDirty = false; player.mSentT = game.time;
         broadcastRoster();
       }).catch(err => { joining = false; console.error('join failed', err); ws.send(JSON.stringify({ type: 'denied', reason: 'Server error, try again.' })); });
       return;
@@ -136,6 +137,10 @@ function tick(dt) {
     if (p.ws.readyState !== 1) continue;
     p.ws.send(`{"type":"snap","me":${JSON.stringify(game.meFor(p))},"w":${world}}`);
     if (p.invDirty) { p.invDirty = false; p.ws.send(JSON.stringify(game.invFor(p))); }
+    if (p.masteryDirty && (p.masteryNow || game.time - (p.mSentT || 0) >= 1)) { // skill mastery: at most once a second, at once on a level-up/evolve
+      p.masteryDirty = p.masteryNow = false; p.mSentT = game.time;
+      p.ws.send(JSON.stringify(game.masteryMsg(p)));
+    }
   }
   if (game.rosterDirty) { game.rosterDirty = false; broadcastRoster(); } // e.g. someone changed their title
   for (const ws of spectators) if (ws.readyState === 1) ws.send(`{"type":"snap","me":null,"w":${world}}`);
