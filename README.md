@@ -409,6 +409,17 @@ Protocol (WebSocket, validated server-side: ownership, limits, class, skill, nam
 
 Roster entries of owned bots carry `owner` (name) and `mode`. Code: `server/playerbots.js` (on top of `BotManager`'s add / edit / remove), `shared/playerbots.js` (setups, behaviours, loadout table), `public/playerbots.js` (tabs and the Bots tab). Test: `node test/playerbots.js` (own server on port 3641; with `DATABASE_URL` it also checks admin access).
 
+### AI companions (optional, off by default)
+
+An LLM "mind" can sit on top of a bot's rule-based brain.
+- **What it does:** party bots answer when you **name them in chat** ("Rook, hang back and heal me when I'm low") and make the odd call-out.
+- **Intents only:** the model returns one structured intent (a chat line, an order, a stance, a focus player, a memory). The brain still does all the moving and fighting.
+- **Off by default:** it's off unless `AI_PROVIDER` (`anthropic`, `openai`, `gemini` or `mock`) and that provider's key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `GEMINI_API_KEY`) are set in the environment. Then an admin turns it on from **/admin.html → Bots → AI companions**, or it starts on with `AI_ENABLED=1`.
+- **Off means unchanged:** when it's off, bots behave exactly as before.
+- **Caps:** per-bot and global caps (calls, tokens, a daily `$` cap `AI_DAILY_USD`), timeouts and an error breaker keep cost and failures contained. If the model is unavailable, the bot just plays on.
+- **More:** models, prices, costs per hour and the Render setup are in `docs/research/ai-companions.md`.
+- **Code and test:** code in `server/ai/` (adapters in `server/ai/providers/`), the admin card is `public/admin-ai.js`, and the test is `node test/ai-mind.js` (mock provider and fake HTTP, no keys).
+
 ## Testing
 
 ```bash

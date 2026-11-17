@@ -12,6 +12,7 @@ import * as hall from './hall.js';
 import * as admin from './admin.js';
 import { BotManager } from './botmanager.js';
 import { PlayerBots } from './playerbots.js';
+import { installAI } from './ai/index.js'; // AI companions (off unless AI_PROVIDER + key are set), server/ai/
 import { TICK_RATE } from '../shared/data.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -199,6 +200,7 @@ if (process.env.LOCKSTEP) {
 }
 
 admin.init({ game, bots });
+installAI({ game, bots, server });
 server.on('error', err => { console.error('Server error', err); if (err.code === 'EADDRINUSE' || err.code === 'EACCES') process.exit(1); }); // can't listen: don't linger
 db.migrate()
   .then(() => hall.load())
