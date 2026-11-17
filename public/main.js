@@ -717,7 +717,7 @@ let mouseAttack = false;
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse') {
-    if (e.button === 0 && (e.ctrlKey || e.metaKey)) { if (locked()) selectAt(innerWidth / 2, innerHeight / 2); else selectAt(e.clientX, e.clientY); return; } // mouse look: select what's under the crosshair
+    if (e.button === 0 && (e.ctrlKey || e.metaKey)) { if (locked()) selectAim(); else selectAt(e.clientX, e.clientY); return; } // mouse look: select what the crosshair is aimed at
     if (e.button === 0 && mouseLook() && !locked()) { lockCursor(); return; } // the first click captures the cursor
     if (e.button === 0) { mouseAttack = true; attackHeld = true; return; }
     if (locked()) return; // no right-drag needed while the camera follows the mouse
@@ -840,6 +840,34 @@ function selectAt(sx, sy) {
   sfx.play('ui');
   announceTarget();
 }
+// Mouse look: the crosshair sits a little above centre (CROSS_Y), and you don't have to aim it exactly.
+// 1) whatever is under the crosshair; else 2) whoever is closest to the direction the camera faces (within ~18°,
+// up to 45 m), so far-away targets can be picked without tilting the camera up at them.
+const CROSS_Y = 0.42;
+function pickAim() {
+  const direct = pickAt(innerWidth / 2, innerHeight * CROSS_Y);
+  if (direct) return direct;
+  let best = null, bs = Infinity;
+  const consider = (ent, kind) => {
+    const dx = ent.x - state.x, dz = ent.z - state.z, d = Math.hypot(dx, dz);
+    if (d < 1 || d > 45) return;
+    const ang = Math.abs(Math.atan2(Math.sin(Math.atan2(dx, dz) - state.yaw), Math.cos(Math.atan2(dx, dz) - state.yaw)));
+    const cone = 0.32 + Math.min(0.25, 2 / d); // a wider cone for things close by
+    if (ang > cone) return;
+    const score = ang * 40 + d * 0.35 + (kind === 'player' ? 4 : 0); // enemies win ties
+    if (score < bs) { bs = score; best = { ent, kind }; }
+  };
+  for (const m of mobs.values()) if (canTarget(m)) consider(m, 'mob');
+  for (const p of players.values()) if (p.id !== state.myId && !p.dead) consider(p, 'player');
+  return best;
+}
+function selectAim() {
+  const best = pickAim();
+  state.lock = best?.kind === 'mob' ? best.ent.id : 0;
+  state.focus = best?.kind === 'player' ? best.ent.id : 0;
+  sfx.play('ui');
+  announceTarget();
+}
 // What's on screen at (sx, sy)? Used by Ctrl+click and by the mouse-look crosshair preview.
 function pickAt(sx, sy) {
   let best = null, bd = Infinity;
@@ -874,7 +902,7 @@ function focusedAlly() {
 }
 function lockedMob() {
   const m = state.lock && mobs.get(state.lock);
-  if (!canTarget(m) || Math.hypot(m.x - state.x, m.z - state.z) > 35) { state.lock = 0; return null; }
+  if (!canTarget(m) || Math.hypot(m.x - state.x, m.z - state.z) > 45) { state.lock = 0; return null; }
   return m;
 }
 
@@ -1539,7 +1567,7 @@ function frame(now) {
     selArrow.position.set(gp.x, gp.y + sel.model.height + 2.3 + Math.sin(now / 180) * 0.15, gp.z); selArrow.rotation.y += dt * 2.5;
   } else { lockRing.visible = false; selArrow.visible = false; }
   // Mouse look: preview what Ctrl+click would select under the crosshair.
-  hovered = locked() ? pickAt(innerWidth / 2, innerHeight / 2)?.ent || null : null;
+  hovered = locked() ? pickAim()?.ent || null : null;
   $('crosshair').className = hovered ? (hovered.kind === 'mob' ? 'foe' : 'ally') : '';
   updateTargetFrame(sel, !!lm);
 
