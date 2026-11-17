@@ -381,9 +381,8 @@ function handleEvent(e) {
       sfx.play('break', m.model.group.position);
       m.model.anim?.shot('Hit_B', 0.9);
       const who = players.get(e.by)?.name || 'Someone';
-      if (state.spectator) callout(`${e.i ? 'INTERRUPT' : 'BREAK'}!`, `${who} broke the ${m.def.name} — Switch in!`, e.d);
-      else if (e.by === me) callout(e.i ? 'INTERRUPT!' : 'BREAK!', 'Your teammate can Switch in', 1.2);
-      else callout('SWITCH!', `${who} broke it — hit it now!`, e.d);
+      // shown above the enemy only (no full-screen announcement)
+      floatNum(m.model.group.position, m.model.height + 0.6, e.by === me ? (e.i ? 'INTERRUPT!' : 'BREAK!') : `BROKEN · ${who}`, 'switch');
       break;
     }
     case 'switch': {
@@ -393,8 +392,6 @@ function handleEvent(e) {
         floatNum(m.model.group.position, m.model.height * 0.85, `SWITCH! ${e.a}`, 'switch');
         fx.ring(m.x, m.z, m.def.radius + 4, 0xfde047, 0.6); fx.ring(m.x, m.z, m.def.radius + 1.5, 0xffffff, 0.4);
         shake(0.3); sfx.play('switch', m.model.group.position); hitStop = Math.max(hitStop, 0.14);
-        const a = players.get(e.from)?.name, b = players.get(e.by)?.name;
-        if (a && b) callout('SWITCH!', `${a} ⇄ ${b}`, 1.3);
       }
       break;
     }
