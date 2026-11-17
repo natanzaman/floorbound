@@ -81,8 +81,8 @@ try {
   ok(Array.isArray(L.bots) && L.mine === 0 && L.max === 3 && L.cap === 12, 'list: no bots yet, limit 3 of 12');
 
   // ---------- add one bot per setup (the first three) ----------
-  const picks = setups().slice(0, 3);
-  ok(picks.map(s => s.role).join() === 'Tank,Healer,Damage', 'setups are Tank, Healer, Damage first');
+  const picks = ['Tank', 'Healer', 'Damage'].map(role => setups().find(s => s.role === role));
+  ok(picks.every(Boolean) && setups().length === Object.keys(CLASSES).length && setups()[0].role === 'Tank', 'a setup per class, Tank first');
   const added = [];
   for (const [i, s] of picks.entries()) {
     const r = await A.pbot({ op: 'add', cls: s.cls, skill: i === 1 ? 3 : undefined, name: i === 2 ? `Kael${tag}` : undefined });
@@ -212,6 +212,22 @@ try {
   ok(annBots.every(id => B2.roster.some(x => x.id === id)), 'right after Ann leaves her bots wait (grace period)');
   await until(() => annBots.every(id => !B2.roster.some(x => x.id === id)), 6000, 'Ann\'s bots removed');
   ok(true, 'after the grace period Ann\'s bots are removed');
+
+  // ---------- every other class (classes added later) ----------
+  const rest = setups().filter(s => !picks.includes(s));
+  if (rest.length) {
+    const G = client(`Gus${tag}`); clients.push(G);
+    await until(() => G.id, 4000, 'Gus joined');
+    for (let i = 0; i < rest.length; i += 3) {
+      const chunk = rest.slice(i, i + 3), bids = [];
+      for (const s of chunk) { const r = await G.pbot({ op: 'add', cls: s.cls }); ok(r.ok, `add ${s.label}: ${r.msg || r.error}`); bids.push(r.bid); }
+      let got = [];
+      for (let k = 0; k < 40 && !(got.length === bids.length && got.every(b => b.kit?.gear.length === 3)); k++) got = (await G.list()).bots.filter(b => bids.includes(b.bid));
+      ok(got.length === chunk.length && got.every(b => b.lvl === 8 && b.kit.gear.every(g => g.r === 1) && b.kit.mastery.every(m => m.lvl === 2)), `${chunk.map(s => s.label).join(', ')}: Lv 8, Uncommon gear, Mastery 2`);
+      for (const bid of bids) await G.pbot({ op: 'dismiss', bid });
+      await sleep(5200); // (rate limit window)
+    }
+  }
 
   // ---------- rate limit ----------
   const C = client(`Fi${tag}`); clients.push(C);
