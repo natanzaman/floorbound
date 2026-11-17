@@ -16,6 +16,7 @@ import { initCombat } from '/combat.js';
 import { F2, inGateZone2, inArena2, onFloor2, floorOf, WAYSTONES } from '/shared/floor2.js';
 import { initFloor2Client } from '/floor2client.js';
 import { initMastery } from '/mastery.js';
+import { initClassesB } from '/classes-b.js';
 
 const sfx = new Sound();
 
@@ -197,6 +198,8 @@ const mastery = initMastery({
   banner: (a, b) => banner(a, b), shake: a => shake(a), playAnim: (...a) => playSkillAnim(...a),
   rebuildBar: () => { if (state.joined && !state.spectator && mastery.barChanged()) buildSkillBar(); },
 });
+// Lancer and Bard: rigs, skill visuals, songs, Discord marks, Anthem speed/haste, auto-aim (public/classes-b.js)
+const classesB = initClassesB({ state, players, mobs, fx, sfx, mastery, combat, floatNum, shake: a => shake(a) });
 
 // ---------------- networking ----------------
 function onMessage(msg) {
@@ -969,6 +972,7 @@ function useSkill(slot) {
     const t = lm && Math.hypot(lm.x - state.x, lm.z - state.z) < 14 ? lm : nearestMob(sk.id === 'smite' ? 11 : sk.id === 'rush' ? 9 : 6);
     if (t) state.face = angleTo(state.x, state.z, t.x, t.z);
   }
+  classesB.aim(sk.id, lockedMob, nearestMob); // Lancer / Bard skills
   state.ready[slot] = now + mastery.cd(slot) * 1000; // mastery and branch cooldowns (the server corrects it)
   state.lastPress[slot] = now;
   send({ type: 'skill', slot, face: state.face });
