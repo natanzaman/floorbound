@@ -12,6 +12,7 @@ import { TwistClient } from '/twists.js';
 import { Sound } from '/audio.js';
 import { createSmith } from '/smith.js';
 import { initGround } from '/ground.js';
+import { MATS, MAT_IDS } from '/shared/crafting.js';
 import { initCombat } from '/combat.js';
 import { F2, inGateZone2, inArena2, onFloor2, floorOf, WAYSTONES } from '/shared/floor2.js';
 import { initFloor2Client } from '/floor2client.js';
@@ -1073,6 +1074,7 @@ $('skills-btn').onclick = () => mastery.toggle(); // Skills panel (also K, or F 
 
 const statsText = it => Object.entries(it.st).map(([k, v]) => statLabel(k, v)).join(' · ');
 function mainStat(it) { return it ? (it.st.atk ?? it.st.hp ?? Object.values(it.st).reduce((a, b) => a + b, 0)) : 0; }
+const stackBtns = (kind, id) => `<button data-a="dropStack" data-k="${kind}" data-id="${id}" title="Drop 1 on the ground (Shift: the whole stack)">Drop</button><button class="del" data-a="discardStack" data-k="${kind}" data-id="${id}" title="Delete 1 (Shift: the whole stack)">Delete</button>`;
 function renderBag() {
   const el = $('bag');
   if (el.classList.contains('hidden') || !state.inv) return;
@@ -1093,7 +1095,7 @@ function renderBag() {
   h += `<h4>Equipped</h4>${SLOTS.map(sl => row(inv.eq[sl], sl, inv.eq[sl] ? `<button data-a="unequip" data-s="${sl}">Remove</button>` : '')).join('')}`;
   const st = inv.stats;
   h += `<div class="stats"><span>Damage ${st.atk}</span><span>Health ${st.maxHp}</span><span>Crit ${st.crit}%</span><span>Cooldowns −${st.haste}%</span><span>Switch +${st.sw}%</span><span>Damage taken −${st.dr}%</span></div>`;
-  h += `<h4>Consumables</h4>${CONSUMABLE_IDS.map(id => `<div class="it"><span class="slot">${CONSUMABLES[id].key}</span><span class="nm"><b>${CONSUMABLES[id].name} ×${inv.cons[id] || 0}</b><small>${CONSUMABLES[id].desc}</small></span><button data-a="use" data-id="${id}" ${inv.cons[id] ? '' : 'disabled style="opacity:.4"'}>Use</button></div>`).join('')}`;
+  h += `<h4>Consumables</h4>${CONSUMABLE_IDS.map(id => `<div class="it"><span class="slot">${CONSUMABLES[id].key}</span><span class="nm"><b>${CONSUMABLES[id].name} ×${inv.cons[id] || 0}</b><small>${CONSUMABLES[id].desc}</small></span><button data-a="use" data-id="${id}" ${inv.cons[id] ? '' : 'disabled style="opacity:.4"'}>Use</button>${inv.cons[id] ? stackBtns('cons', id) : ''}</div>`).join('')}`;
   h += `<h4>Bag (${inv.bag.length}/24)</h4>`;
   h += inv.bag.length ? inv.bag.map(it => {
     const cur = inv.eq[it.slot], diff = Math.round((mainStat(it) - mainStat(cur)) * 10) / 10; // refined stats have one decimal
@@ -1101,7 +1103,11 @@ function renderBag() {
     const usable = !it.cls || it.cls === state.cls;
     return `<div class="it"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}<button data-a="drop" data-u="${it.u}" title="Drop on the ground for anyone to pick up">Drop</button><button class="del" data-a="discard" data-u="${it.u}" title="Delete for good">Delete</button></div>`;
   }).join('') : '<div class="it empty"><span class="nm"><small>Nothing yet. Enemies drop gear; the Warden always does.</small></span></div>';
-  h += smith.matsHtml(inv);
+  { // materials, each with Drop / Delete
+    const have = inv.mats || {}, ids = MAT_IDS.filter(k => have[k] > 0);
+    h += `<h4>Materials</h4>` + (ids.length ? ids.map(k => `<div class="it"><span class="slot" style="color:${MATS[k].color}">mat</span><span class="nm"><b>${esc(MATS[k].name)} ×${have[k]}</b><small>from ${esc(MATS[k].from)}</small></span>${stackBtns('mat', k)}</div>`).join('') + '<small class="mats-hint">Take them to the Smith in town (F) to refine or craft gear. Shift+click Drop/Delete to do the whole stack.</small>'
+      : '<div class="it empty"><span class="nm"><small>None yet. Monsters drop materials for the Smith in town.</small></span></div>');
+  }
   h += renderTitles(inv.life);
   el.innerHTML = h;
 }
@@ -1125,6 +1131,11 @@ $('bag').addEventListener('click', e => {
   if (a === 'sell') send({ type: 'sell', u: +b.dataset.u });
   if (a === 'equip') send({ type: 'equip', u: +b.dataset.u });
   if (a === 'drop') send({ type: 'drop', u: +b.dataset.u });
+  if (a === 'dropStack') send({ type: 'dropStack', kind: b.dataset.k, id: b.dataset.id, n: e.shiftKey ? 9999 : 1 });
+  if (a === 'discardStack') { // two clicks, like gear
+    if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = e.shiftKey ? 'All?' : 'Sure?'; b.dataset.all = e.shiftKey ? 1 : ''; setTimeout(() => { b.classList.remove('armed'); b.textContent = 'Delete'; }, 3000); return; }
+    send({ type: 'discardStack', kind: b.dataset.k, id: b.dataset.id, n: b.dataset.all || e.shiftKey ? 9999 : 1 });
+  }
   if (a === 'discard') { // two clicks: the first arms it
     if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'Sure?'; setTimeout(() => { b.classList.remove('armed'); b.textContent = 'Delete'; }, 3000); return; }
     send({ type: 'discard', u: +b.dataset.u });

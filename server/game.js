@@ -164,6 +164,8 @@ export class Game {
       case 'discard': return this.discard(p, msg.u | 0);
       case 'drop': return this.dropItem(p, msg.u | 0);
       case 'pickup': return this.pickUp(p, msg.id | 0);
+      case 'dropStack': return this.dropStack(p, String(msg.kind), String(msg.id), msg.n | 0);
+      case 'discardStack': return this.discardStack(p, String(msg.kind), String(msg.id), msg.n | 0);
       case 'title': return this.setTitle(p, msg.id);
       case 'smith': return this.smith(p, msg);
       case 'track': // the client's first-time guide reports progress
