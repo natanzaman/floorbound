@@ -70,6 +70,16 @@ ok(has(/"dolly" isn't one of/, 1, 6) && vb.errors.some(e => e.api && e.cue === 6
 ok(parseCond('warden_hp < 66%')?.v === 0.66 && parseCond('pell_dead')?.kind === 'dead' && parseCond('t > 12')?.v === 12 && parseCond('gate_open')?.kind === 'gate', 'conditions parse');
 ok(Math.abs(sayHold('Every second.') - 2.51) < 0.01 && sayHold('x'.repeat(200)) === 5 && sayHold('') === 2, 'say holds 2-5 s by length');
 
+// the admin routes without a database: localhost only
+{
+  const { directorAuth } = await import('../server/director-admin.js');
+  const db = await import('../server/db.js');
+  if (!db.enabled) {
+    const req = ip => ({ socket: { remoteAddress: ip }, headers: {} });
+    ok(await directorAuth(req('127.0.0.1')) === 0 && await directorAuth(req('::1')) === 0 && await directorAuth(req('10.1.2.3')) === 503, 'no database: the director answers localhost only');
+  }
+}
+
 // ---------- 2. the timeline ----------
 console.log('# Timing rules');
 {
@@ -215,7 +225,10 @@ if (process.env.FULL) {
     ok(c.lastAttack?.id === 'pell', `Pell landed the Last Attack (${c.lastAttack?.name || 'none'})`);
     ok(c.bells === 1, `the bell rang once (${c.bells})`);
     ok((c.unscripted || []).length === 0, `no actor died unscripted (${(c.unscripted || []).join(', ') || 'none'})`);
-    await call('POST', '/api/admin/director/stop');
+    const names = c.clearNames || [];
+    ok(['Corvin', 'Bram', 'Tamsin', 'Juno', 'Pell'].every(x => names.includes(x)), `the clear counts all five, Bram included (${names.join(', ')})`);
+    const sp = await call('POST', '/api/admin/director/stop');
+    ok(sp.body.state === 'stopped' && sp.body.actors.length === 0, 'Stop sends the actors home');
   } finally { srv.kill(); }
 }
 

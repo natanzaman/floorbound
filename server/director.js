@@ -156,7 +156,7 @@ export class Director {
         this.checks.lastAttack = { id: a?.id || null, name: e.name };
         this.log(`Last Attack: ${e.name}.`);
       } else if (e.t === 'bell') { this.checks.bells++; this.log(`The bell rings (floor ${e.floor}).`); }
-      else if (e.t === 'clear') this.checks.clears++;
+      else if (e.t === 'clear') { this.checks.clears++; this.checks.clearNames = e.names || []; }
     }
   }
 

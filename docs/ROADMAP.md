@@ -118,7 +118,7 @@ F2 calls the others through these names, so keep them exactly. Every server meth
 | F4 | `cine(op, data)`; `cineState()` (current shot / light / letterbox / clean, sent to a spectator on join) | `{ t: 'cine', op: 'shot' \| 'slowmo' \| 'title' \| 'fade' \| 'letterbox' \| 'clean' \| 'light', … }` |
 | F5 | `setPose(p, k)` (`'kneel' \| 'sit' \| 'bow' \| null`) | `{ t: 'pose', id, k }` (+ late joiners see current poses) |
 | F6 | `ringBell(floor, { auto })`; `game.bellAuto` (true by default; F2 sets false during a show) | `{ t: 'bell', floor, n }` |
-| F2 | `game.director` (server/director.js): `load(yamlText)`, `validate()`, `run({ from })`, `stop()`, `status()` | none (uses F1/F3–F6) |
+| F2 | `game.director` (server/director.js): `load(yamlText)`, `validate()`, `run({ from, force })`, `stop()`, `status()` | `emote` `{ t, id, a }` (cheer, block, cast, hit, die); otherwise uses F1/F3–F6 |
 
 - **Movement names:** `forceBossMove` takes `horn_sweep`, `slam`, `charge`, `quake`, `rockfall` (Warden) and `tidal_wave`, `geyser`, `trident`, `deluge` (Sovereign).
 - **Merging (several agents at once):** merge into `main` and push under a lock, so two merges never interleave:

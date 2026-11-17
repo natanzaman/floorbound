@@ -65,7 +65,7 @@ function showCheck(r) {
   const api = errs.filter(e => e.api), hard = errs.filter(e => !e.api);
   $('d-check').innerHTML = r.error ? `<b style="color:#fecaca">${esc(r.error)}</b>` : `${esc(r.title || 'Untitled')}: ${r.scenes?.length ?? '?'} scenes · <b>${hard.length}</b> errors · <b>${api.length}</b> need a missing module · ${warns.length} warnings`;
   $('d-probs').innerHTML = [...hard.map(e => `<li class="e">${esc(where(e))}: ${esc(e.msg)}</li>`), ...api.map(e => `<li class="a">${esc(where(e))}: ${esc(e.msg)}</li>`), ...warns.map(w => `<li class="w">${esc(where(w))}: ${esc(w.msg)}</li>`)].join('');
-  if (r.scenes) $('d-from').innerHTML = r.scenes.map((s, i) => `<option value="${i}">${i + 1}. ${esc(s)}</option>`).join('');
+  if (r.scenes) { const keep = $('d-from').value; $('d-from').innerHTML = r.scenes.map((s, i) => `<option value="${i}">${i + 1}. ${esc(s)}</option>`).join(''); if (keep && +keep < r.scenes.length) $('d-from').value = keep; }
   $('d-force').checked = !hard.length && api.length > 0;
 }
 
