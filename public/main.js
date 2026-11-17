@@ -18,6 +18,7 @@ import { F2, inGateZone2, inArena2, onFloor2, floorOf, WAYSTONES } from '/shared
 import { initFloor2Client } from '/floor2client.js';
 import { initMastery } from '/mastery.js';
 import { initClassesB } from '/classes-b.js';
+import { initClassesA } from '/classes-a.js';
 
 const sfx = new Sound();
 
@@ -201,6 +202,8 @@ const mastery = initMastery({
 });
 // Lancer and Bard: rigs, skill visuals, songs, Discord marks, Anthem speed/haste, auto-aim (public/classes-b.js)
 const classesB = initClassesB({ state, players, mobs, fx, sfx, mastery, combat, floatNum, shake: a => shake(a) });
+// Ranger and Berserker: arrows, traps, marks, Rage bars, Bloodrage auras (public/classes-a.js)
+const classesA = initClassesA({ scene, state, players, mobs, fx, sfx, floatNum, shake: a => shake(a), log: (a, b) => log(a, b), $ });
 
 // ---------------- networking ----------------
 function onMessage(msg) {
@@ -302,6 +305,7 @@ function handleEvent(e) {
   f2.onEvent(e);
   if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
   if (mastery.event(e)) return; // evolved skills, mastery level-ups, evolutions
+  if (classesA.event(e)) return; // Ranger / Berserker
   switch (e.t) {
     case 'tp':
       if (e.id === me) { state.x = e.x; state.z = e.z; state.seq = e.s; }
@@ -974,10 +978,12 @@ function useSkill(slot) {
   const now = performance.now();
   if (!sk || state.lvl < sk.lvl || now < state.ready[slot] || combat.guarding) return;
   const auto = ['slash', 'bash', 'rush', 'smite', 'burst'].includes(sk.id) || ['challenge', 'seismic'].includes(mastery.evoId(slot)); // aimed evolutions too
-  if (auto) {
+  const aimA = classesA.aimRange(sk.id, mastery.evoId(slot)); // Ranger / Berserker aimed skills
+  if (auto || aimA) {
     const lm = lockedMob();
-    const t = lm && Math.hypot(lm.x - state.x, lm.z - state.z) < 14 ? lm : nearestMob(sk.id === 'smite' ? 11 : sk.id === 'rush' ? 9 : 6);
+    const t = lm && Math.hypot(lm.x - state.x, lm.z - state.z) < Math.max(14, aimA + 4) ? lm : aimA ? classesA.pick(aimA, canTarget, nearestMob) : nearestMob(sk.id === 'smite' ? 11 : sk.id === 'rush' ? 9 : 6);
     if (t) state.face = angleTo(state.x, state.z, t.x, t.z);
+    else if (aimA > 12) state.face = state.yaw; // nothing to aim at: shoot where the camera looks
   }
   classesB.aim(sk.id, lockedMob, nearestMob); // Lancer / Bard skills
   state.ready[slot] = now + mastery.cd(slot) * 1000; // mastery and branch cooldowns (the server corrects it)
@@ -1273,7 +1279,7 @@ function updateHud(now) {
   const mates = state.spectator ? [...players.values()] : state.party ? [...players.values()].filter(p => p.party === state.party && p.id !== state.myId) : [];
   $('party').innerHTML = mates.map(p => {
     const pc = (p.hp / p.maxHp) * 100;
-    return `<div class="frame ${p.dead ? 'dead' : ''}"><div class="row" style="font-size:12px;margin:0"><span>${esc(p.name)}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div></div>`;
+    return `<div class="frame ${p.dead ? 'dead' : ''}"><div class="row" style="font-size:12px;margin:0"><span>${esc(p.name)}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div>${classesA.frameBar(p)}</div>`;
   }).join('');
 
   // boss bar (the boss of the floor you're on)
@@ -1659,6 +1665,7 @@ function frame(now) {
   smith.frame(vdt);
   ground.frame(vdt, isTouch);
   mastery.frame(vdt, now); // Skill Shrines, evolved-skill auras
+  classesA.frame(vdt, now); // arrows, marks, Rage bars
   if (state.joined && !state.spectator) {
     const ml = $('merchant-lbl'), mp = project(MERCHANT.x, 3.6, MERCHANT.z), md = Math.hypot(state.x - MERCHANT.x, state.z - MERCHANT.z);
     if (mp && md < 20) { ml.style.display = ''; ml.style.left = `${mp[0]}px`; ml.style.top = `${mp[1]}px`; ml.innerHTML = `Merchant${md < MERCHANT.r + 1 ? `<br><small>${isTouch ? 'tap Trade' : 'press F to trade'}</small>` : ''}`; }

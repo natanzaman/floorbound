@@ -8,6 +8,8 @@
 import { CLASSES } from './data.js';
 import { LANCER_BRANCHES } from './classes/lancer.js';
 import { BARD_BRANCHES } from './classes/bard.js';
+import { RANGER_BRANCHES } from './classes/ranger.js';
+import { BERSERKER_BRANCHES } from './classes/berserker.js';
 
 export const MASTERY = {
   max: 5,
@@ -78,6 +80,8 @@ export const BRANCHES = {
   },
 };
 Object.assign(BRANCHES, LANCER_BRANCHES, BARD_BRANCHES); // Lancer, Bard (shared/classes/)
+
+Object.assign(BRANCHES, RANGER_BRANCHES, BERSERKER_BRANCHES); // Ranger and Berserker (shared/classes/)
 
 export const masterySkills = cls => (CLASSES[cls]?.skills || []).slice(1).map(s => s.id);
 

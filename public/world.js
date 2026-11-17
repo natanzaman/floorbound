@@ -7,6 +7,7 @@ import { MERCHANT } from '/shared/items.js';
 import { HALL } from '/shared/titles.js';
 import { MOBS } from '/shared/data.js';
 import { makeF2Mob, decorateSovereign } from '/floor2world.js';
+import { attachClassA } from '/classes-a.js';
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
 
@@ -356,6 +357,7 @@ function makeBlockMob(type) {
 
 // ---------- rigged characters (KayKit Adventurers, CC0, by Kay Lousberg) ----------
 const FILES = { knight: '/models/knight.glb', rogue: '/models/rogue.glb', mage: '/models/mage.glb', barbarian: '/models/barbarian.glb' };
+FILES.ranger = '/models/ranger.glb'; // KayKit Rogue_Hooded (+ a few ranged clips) for the Ranger
 let ASSETS = null;
 
 export async function loadAssets(onProgress) {
@@ -368,6 +370,7 @@ export async function loadAssets(onProgress) {
   }));
   const box = new THREE.Box3().setFromObject(out.rogue.scene);
   ASSETS = { gltf: out, clips: out.knight.animations, baseHeight: box.max.y - box.min.y };
+  ASSETS.clips = [...ASSETS.clips, ...(out.ranger?.animations || []).filter(c => !ASSETS.clips.some(k => k.name === c.name))]; // ranged clips (Ranger)
   return ASSETS;
 }
 
@@ -380,6 +383,12 @@ export const RIGS = {
   cleric: { file: 'mage', hide: ['Spellbook', 'Spellbook_open', '1H_Wand'], height: 1.95 },
   warden: { file: 'barbarian', hide: ['1H_Axe_Offhand', 'Barbarian_Round_Shield', '1H_Axe', 'Mug'], height: 6.6, tint: 0xe6a59a },
 };
+// Ranger: the hooded rogue with a bow (public/classes-a.js). Berserker: the barbarian at player scale, bare-headed, with
+// its two-handed axe and a cooler tint than the (huge, red) Warden.
+Object.assign(RIGS, {
+  ranger: { file: 'ranger', hide: [], attach: 'bow', height: 1.95 },
+  berserker: { file: 'barbarian', hide: ['1H_Axe_Offhand', 'Barbarian_Round_Shield', '1H_Axe', 'Mug', 'Barbarian_Hat'], height: 2.05, tint: 0xe8ddd0, idle: '2H_Melee_Idle' },
+});
 
 function buildRig(kind) {
   const def = RIGS[kind];
@@ -395,6 +404,7 @@ function buildRig(kind) {
       slot.add(c);
     }
   }
+  if (def.attach) attachClassA(def.attach, root); // the Ranger's bow (public/classes-a.js)
   const mats = [];
   root.traverse(o => {
     if (!o.isMesh) return;
@@ -479,7 +489,7 @@ export function makePlayerModel(cls) {
   const { g, root, mats, height } = buildRig(cls);
   const cursor = cursorFor(0x4ade80, height);
   g.add(cursor);
-  return { group: g, root, mats, cursor, height, anim: new Animator(root, 'Idle') };
+  return { group: g, root, mats, cursor, height, anim: new Animator(root, RIGS[cls]?.idle || 'Idle') };
 }
 
 export function makeMobModel(type) {

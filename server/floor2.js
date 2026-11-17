@@ -70,6 +70,7 @@ export const F2Methods = {
   f2Move(m, tx, tz, speed, dt, stopAt, keepFace = false) {
     const dx = tx - m.x, dz = tz - m.z, d = Math.hypot(dx, dz);
     if (d <= stopAt) return false;
+    speed *= this.mobSlowA?.(m) ?? 1; // caltrops (server/classes-a.js)
     const step = Math.min(d - stopAt, speed * dt);
     let nx = m.x + (dx / d) * step, nz = m.z + (dz / d) * step;
     [nx, nz] = resolveCollision(nx, nz, m.def.radius * 0.8);

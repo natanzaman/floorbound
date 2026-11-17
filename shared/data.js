@@ -2,6 +2,8 @@
 import { F2, F2_MOB_IDS, F2_MOBS, F2_BITE, inCamp2, walkable2, areaName2, floor2Obstacles } from './floor2.js';
 import { LANCER } from './classes/lancer.js';
 import { BARD } from './classes/bard.js';
+import { RANGER } from './classes/ranger.js';
+import { BERSERKER } from './classes/berserker.js';
 
 export const TICK_RATE = 20;
 export const PLAYER_SPEED = 7;
@@ -133,6 +135,9 @@ export const CLASSES = {
     ],
   },
 };
+// Ranger and Berserker (shared/classes/), appended so existing class indices never move.
+CLASS_IDS.push('ranger', 'berserker');
+Object.assign(CLASSES, { ranger: RANGER, berserker: BERSERKER });
 
 // Lancer and Bard (shared/classes/), appended so existing class indices never move. Resolve indices via CLASS_IDS.
 CLASS_IDS.push('lancer', 'bard');

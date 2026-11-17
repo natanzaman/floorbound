@@ -183,6 +183,10 @@ BRANCH=B node test/team.js                  # every skill evolved into branch B
 | Cleric | Healer | Smite (ranged), Heal, Blessing (+25% damage), Sanctuary (Lv 3) |
 | Lancer | Damage | Thrust (3-hit spear combo along a 4.6 m line; +30% near the tip of your reach), Lance Charge (9 m dash through a line, stops short of walls and trees), Sweep (trips everything within 4.5 m: stagger + posture), Sky Lance (Lv 3: leap onto a spot up to 10 m away, marked for allies; airborne in flight; Breaks) |
 | Bard | Support | Sonic Bolt (11 m projectile; each hit adds a Discord stack, max 5: +10% posture damage per stack), Anthem (8 s aura: you and allies within 12 m move 20% faster, attack 20% faster, skills recharge 15% faster), Dissonance (7 m cone: slows 40% for 4 s and INTERRUPTS wind-ups), Crescendo (Lv 3: builds 3 s, then allies get a 20% shield and +15% damage for 6 s, and enemies within 8 m with 3+ Discord (bosses 5) are BROKEN) |
+| Ranger | Damage | Shot (bow; real arrows, every 3rd hits harder, weak point-blank), Piercing Shot (charged, pierces a line, big posture), Disengage (leap back + slowing caltrops), Hunter's Mark (Lv 3; party +15% damage, Switches +30% on the target) |
+| Berserker | Damage | Axe Chop (heavy 2H combo, big posture), Cleave (wide arc, up to 2x at full Rage), Leap Slam (telegraphed landing, stagger), Bloodrage (Lv 3; spends Rage + 10% health: lifesteal, faster swings, cuts through wind-ups) |
+
+**Rage** (Berserker): 0-100, built by dealing and taking damage, drains after 4 s out of combat; shown as a red bar under your health, in party frames and on nameplates. The Berserker has no guard and takes 10% more damage. Each Ranger / Berserker skill has two evolutions like the others (Rain of Arrows / Sniper Shot, Snare Trap / Tumble Volley, Pack Hunter / Deadeye; Whirling Axe / Executioner, Earthshatter / Pounce, Frenzy / Warblood). Data and tuning: `shared/classes/ranger.js`, `shared/classes/berserker.js`; server `server/classes-a.js`; client `public/classes-a.js`; bot brains `shared/classes/bots-a.js`; tests `node test/classes-a.js`.
 
 ## Project layout
 

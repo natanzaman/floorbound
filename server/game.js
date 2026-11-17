@@ -18,6 +18,7 @@ import { installCombat } from './combat.js';
 import { MasteryMethods } from './mastery.js';
 import { MASTERY } from '../shared/mastery.js';
 import { installClassesB } from './classes-b.js';
+import { ClassesAMethods } from './classes-a.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
@@ -514,6 +515,7 @@ export class Game {
     const sk = CLASSES[p.cls].skills[slot];
     if (!sk || p.lvl < sk.lvl || this.time < p.cds[slot]) return;
     if (typeof face === 'number' && isFinite(face)) p.face = wrapAngle(face);
+    if (this.classSkillA?.(p, slot, sk)) return; // Ranger / Berserker skills (server/classes-a.js)
     // Skill mastery (server/mastery.js): S = the skill credited with mastery (not the basic attack), pow = Mastery 4's +10%,
     // and from Mastery 3 an evolved branch replaces the skill entirely.
     const S = slot > 0 ? sk.id : undefined, pow = slot > 0 ? this.skillPow(p, sk.id) : 1, br = slot > 0 ? this.branchOf(p, sk.id) : null;
@@ -656,6 +658,7 @@ export class Game {
       mult *= 1 + (p.swPow || 0);
     }
     mult *= this.twistTaken(m); // Warden twist (Ironhide)
+    mult *= this.hitMultA?.(m, p, sw) ?? 1; // Hunter's Mark (server/classes-a.js)
     const counter = this.counterHit(p); // perfect-dodge counter window
     if (counter) mult *= PERFECT.dmg;
     const amount = Math.max(1, Math.round(base * (0.9 + Math.random() * 0.2) * (crit ? 1.5 : 1) * mult));
@@ -663,6 +666,7 @@ export class Game {
     m.hp -= amount;
     if (sk) this.masteryGain(p, sk, dealt, 'dmg');
     this.bookBuffs(p, dealt); // Blessing / Zeal / War Cry mastery
+    this.afterHitA?.(m, p, dealt, sw); // Rage, lifesteal, Mark mastery (server/classes-a.js)
     if (sw) {
       this.events.push({ t: 'switch', id: m.id, by: p.id, from: m.staggerBy, a: amount });
       const from = this.players.get(m.staggerBy);
@@ -799,6 +803,7 @@ export class Game {
       const dr = Math.min(0.8, skDr + haven + (p.gearDr || 0) + (this.time < p.draughtUntil ? 0.15 : 0));
       const pre = raw * mod.mult;
       amount = Math.max(1, Math.round(pre * (1 - dr)));
+      amount = this.hurtModA?.(p, amount) ?? amount; // Berserker: thin armour (server/classes-a.js)
       this.bookDr(p, pre, skDr, mod.haven, dr); // mastery for the damage Taunt / Shield Wall / Haven prevented
       if (mod.reflect) this.reflectHit(p, mod.attacker, raw);
     }
@@ -807,6 +812,7 @@ export class Game {
     if (amount <= 0) { p.lastHurt = this.time; p.lastCombat = this.time; return; }
     p.hp -= amount;
     p.lastHurt = this.time; p.lastCombat = this.time;
+    this.onHurtA?.(p, amount); // Berserker Rage (server/classes-a.js)
     this.events.push({ t: 'hurt', id: p.id, a: amount });
     if (p.hp <= 0) {
       p.hp = 0; p.dead = true; p.respawnAt = this.time + 4;
@@ -857,6 +863,7 @@ export class Game {
     for (const m of [...this.mobs.values()]) this.updateMob(m, dt);
     this.updateCombat(dt); // posture decay, Horn Sweep
     this.updateProjectiles(dt);
+    this.updateClassesA?.(dt); // arrows, traps, Rage (server/classes-a.js)
     this.updateGate();
     this.updateGround();
     this.updateFloor2(dt);
@@ -1217,6 +1224,7 @@ export class Game {
   moveMob(m, tx, tz, speed, dt, stopAt) {
     const dx = tx - m.x, dz = tz - m.z, d = Math.hypot(dx, dz);
     if (d <= stopAt) return;
+    speed *= this.mobSlowA?.(m) ?? 1; // caltrops (server/classes-a.js)
     const step = Math.min(d - stopAt, speed * dt);
     let nx = m.x + (dx / d) * step, nz = m.z + (dz / d) * step;
     [nx, nz] = resolveCollision(nx, nz, m.def.radius * 0.8);
@@ -1274,3 +1282,4 @@ installCombat(Game); // posture, perfect dodge, guard/parry, Horn Sweep (server/
 Object.assign(Game.prototype, MasteryMethods); // skill mastery + evolutions (server/mastery.js)
 Object.assign(Game.prototype, F2Methods); // Floor 2 (server/floor2.js)
 installClassesB(Game); // Lancer, Bard skills + their hooks (server/classes-b.js)
+Object.assign(Game.prototype, ClassesAMethods); // Ranger and Berserker (server/classes-a.js)
