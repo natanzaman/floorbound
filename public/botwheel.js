@@ -17,7 +17,7 @@ export function initBotWheel({ send, state, players, log }) {
   function render() {
     const bots = partyBots();
     if (who && !bots.some(b => b.name === who)) who = '';
-    const cmds = Object.entries(BOT_COMMANDS).filter(([, c]) => c.wheel !== false), n = cmds.length, R = 128;
+    const cmds = Object.entries(BOT_COMMANDS).filter(([, c]) => c.wheel !== false), n = cmds.length, R = 158;
     el.innerHTML = `<div class="ring">${cmds.map(([id, c], i) => {
       const a = (i / n) * Math.PI * 2 - Math.PI / 2;
       return `<button class="wcmd" data-c="${id}" style="left:${Math.round(Math.cos(a) * R)}px;top:${Math.round(Math.sin(a) * R)}px" ${bots.length ? '' : 'disabled'}><span class="ic">${c.icon}</span>${esc(c.label)}</button>`;

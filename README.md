@@ -37,8 +37,9 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Guard / parry (Guardian) | Hold R to guard; tap R just before a hit to parry | — |
 | Select a character (enemy or ally) | Hold Ctrl (Cmd on Mac) to preview, Ctrl+click to select; Ctrl+right-click to deselect | Lock on button (enemies) |
 | Lock on / cycle enemies | Tab (Esc to clear) | Lock on button |
-| Chat | Enter | Chat button |
+| Chat | Enter (`/p` party, `/s` nearby) | Chat button |
 | Party | Players button (P) → Find party, or Invite | Players button → Find party / Invite |
+| Order your party's bots | Hold V (command wheel), or chat ("all stay", "Lyra heal me") | ⌘ Bot orders under the party frames |
 | Items | 4 potion, 5 tonic, 6 draught; B bag | Potion button; Bag button |
 | Skills panel (mastery, evolutions) | K, or the Skills button | Skills button |
 | Interact (merchant, Smith, Skill Shrine, raid gate) | F | Trade / Forge / Skills / Ready button |
@@ -190,7 +191,9 @@ public/          Three.js client (no build step): main.js, world.js, style.css
 public/models/   rigged character models (glTF) with shared animations
 test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
-shared/teambots.js  bot brains: role-playing party (tank / DPS / healer) and single bots; used by test/team.js, public/bots.html and server/botmanager.js
+shared/bots/     one brain per bot: brain.js (decision loop, party teamwork, orders), motor.js (moving, dodging), registry.js (per-class plug-ins), classes.js (Guardian, Swordsman, Cleric), social.js (orders, chatter)
+shared/teambots.js  startTeam(): a few bots in one party; used by test/team.js, public/bots.html and server/botmanager.js
+public/botwheel.js  the bot command wheel (V)
 shared/mastery.js, server/mastery.js, public/mastery.js  skill mastery and evolutions; test/evolve.js
 server/admin.js  admin API (/api/admin/*) and /api/lobby; server/botmanager.js runs bots inside the server; public/admin.html the admin page
 ```
@@ -222,8 +225,8 @@ A summary strip sits on top: players online (signed in / anonymous), bots runnin
 
 The page has three tabs:
 
-- **Bots:** bots that run inside the server (no browser tab needed), shown as cards with class-colour accents. **Presets** add common setups in one click: *Party of 3 for me* (a Guardian, Swordsman and Cleric that follow your online character at its level), *Warden test team* (Lv 10, straight to the Warden), *Field farmers* (one of each class, Lv 3), *Novice crowd* (four Lv 1 newcomers at capability 1-2). Or add one bot (class, optional name, starting level, **capability**, behaviour: *follow* an online player, fighting alongside them in their party; *farm the field* near town; *go fight the Warden*; *Floor 2*; or the classic *level up, then the Warden*), or a whole team (one bot per role). Bots are anonymous (never saved), marked as bots in the roster (BOT tag in the game), left out of play tracking, and capped at 30 (`MAX_BOTS`). A follower that falls far behind (or is on another floor) appears next to its player.
-  - **Edit live** on each card: rename (click the name, Enter; names are unique), level stepper (stats recomputed, healed to full), capability 1-5, behaviour and follow target (a team member's behaviour applies to its whole team: they share one brain). Actions: **Heal** to full, **Kill** (stays down until **Revive**d), **Teleport** to town, the Warden gate or any player, **Respawn as…** another class (removes the bot and re-adds it with the same name, level, capability and behaviour; a team member comes back as a single bot), Remove. *Remove all* clears them.
+- **Bots:** bots that run inside the server (no browser tab needed), shown as cards with class-colour accents. **Presets** add common setups in one click: *Party of 3 for me* (a Guardian, Swordsman and Cleric that follow your online character at its level), *Warden test team* (Lv 10, straight to the Warden), *Field farmers* (one of each class, Lv 3), *Novice crowd* (four Lv 1 newcomers at capability 1-2). Or add one bot (class, optional name, starting level, **capability**, behaviour: *follow* an online player, fighting alongside them in their party; *farm the field* near town; *go fight the Warden*; *Floor 2*; or *level up, then the Warden*), or a whole team (three bots, one per role, put into one party: each still has its own brain). Bots are anonymous (never saved), marked as bots in the roster (BOT tag in the game), left out of play tracking, and capped at 30 (`MAX_BOTS`). A follower that falls far behind (or is on another floor) appears next to its player.
+  - **Edit live** on each card: rename (click the name, Enter; names are unique), level stepper (stats recomputed, healed to full), capability 1-5, behaviour and follow target (only that bot: every bot has its own brain). Each card shows the bot's role, current goal (*Following Natan*, *Fighting The Horned Warden with Brann*, *Waiting at the raid gate*…), the order it is on and its party. Actions: **⌘ Order…** (follow / regroup on a player, hold here, ready up, use a potion, go farm, do the boss, status, leave party: the same orders a party gives), **Heal** to full, **Kill** (stays down until **Revive**d), **Teleport** to town, the Warden gate or any player, **Respawn as…** another class (removes the bot and re-adds it with the same name, level, capability and behaviour; it stays in its party), Remove. *Remove all* clears them.
   - **Capability levels** (`shared/botskill.js`, default 4) make bots play like people of different skill, for boss tuning and for a livelier world. The bot brain stays the same; capability adds reaction delays to everything it *sees* (telegraphs, charge lanes, Tidal Waves, the Horn Sweep, a teammate's Break), misjudged or missed dodges, Horn Sweep roll/parry timing error, slower skill rotations, a minimum gap between presses, positioning error in fights, a lower potion threshold (and forgetting potions), and missing Switch windows:
 
     | Level | Name | Reaction | Misjudged telegraphs (half missed outright) | Horn Sweep perfect / safe | Skills pressed after | Notes |
@@ -238,11 +241,42 @@ The page has three tabs:
 - **Players:** every saved character merged with the live game: class (icon and colour), level, account (Discord name or `guest #id`), online/offline, current floor and area, last seen and created. Search, filter by status, class and level range, and sort (click a column).
 - **Edit** (click a character), in sections with a jump bar and a sticky *Save changes* bar: level and XP, gold, consumables, materials, equipped and bag items (remove, equip, add any slot/rarity/class, add the Last Attack items), titles earned and worn, lifetime stats, skill mastery (level/points and evolution branch per skill), the Floor 2 unlock, rename, class change (offline only; a weapon for the old class goes back to the bag), delete (type the name to confirm), and an **Advanced: raw JSON** editor for the stored inventory, stats and mastery (validated; unknown stats keys are kept). If the character is online, the edit is applied to the live player straight away (they get "An admin updated your character") and saved.
 
-Bot API (admin only): `GET/POST/DELETE /api/admin/bots`, `POST /api/admin/bots/team` (both take `skill` 1-5), `PATCH /api/admin/bots/:bid` (`name`, `lvl`, `skill`, `behaviour`, `follow`), `POST /api/admin/bots/:bid/{teleport|kill|revive|heal|respawn}` (`teleport`: `{ to: 'town' | 'gate' | 'player', name }`; `respawn`: `{ cls }`), `DELETE /api/admin/bots/:bid`; `GET /api/admin/summary` for the strip.
+Bot API (admin only): `GET/POST/DELETE /api/admin/bots`, `POST /api/admin/bots/team` (both take `skill` 1-5), `PATCH /api/admin/bots/:bid` (`name`, `lvl`, `skill`, `behaviour`, `follow`), `POST /api/admin/bots/:bid/{teleport|kill|revive|heal|respawn|command}` (`teleport`: `{ to: 'town' | 'gate' | 'player', name }`; `respawn`: `{ cls }`; `command`: `{ cmd, name }`, an order as below, `name` the player for follow / come / heal), `DELETE /api/admin/bots/:bid`; `GET /api/admin/summary` for the strip.
 
 The in-game **Players** panel (P) lists real players online, the bots (collapsed), and characters seen in the last 30 days (`GET /api/lobby`: name, class, level, last seen, no account details).
 
-Code: `server/admin.js` (routes), `server/botmanager.js` (bots), `server/botedit.js` (live bot edits and actions), `shared/botskill.js` (capability levels), `public/admin.html` + `public/admin.js`. Tests: `DATABASE_URL=... node test/admin.js` (own server on port 3572), `DATABASE_URL=... node test/adminbots.js` (bot edits/actions, port 3624), `node test/botskill.js` (capability profile).
+Code: `server/admin.js` (routes), `server/botmanager.js` (bots; brains in `shared/bots/`), `server/botedit.js` (live bot edits and actions), `shared/botskill.js` (capability levels), `public/admin.html` + `public/admin.js`. Tests: `DATABASE_URL=... node test/admin.js` (own server on port 3572), `DATABASE_URL=... node test/adminbots.js` (bot edits/actions, port 3624), `node test/botskill.js` (capability profile), `DATABASE_URL=... node test/botbrain.js` (party teamwork and orders, port 3632).
+
+### Bots: one brain each, party teamwork, orders
+
+Every bot (admin page, `/bots.html`, `test/team.js`) is its own connection with its **own brain** (`shared/bots/brain.js`): its own role from its class (tank / DPS / healer / support), behaviour, capability level and goal, decided on every snapshot. There is no shared team brain: *Add team* just adds three bots and puts them into one party, and editing one bot never changes another.
+
+Teamwork comes from the party as each bot sees it, **real players included**:
+
+- **Cohesion:** a bot sticks with its party's leader: a human in the party (the one who last gave an order, else the first), otherwise the party's tank bot (else the first bot). Followers fan out behind the leader, sprint to catch up, drop a fight more than 24 m from the leader (never a boss fight) and regroup after deaths; a bot leader waits for bots that fell behind. At the raid gate they wait until the whole party is there, then ready up (with a human in the party: once someone has readied, or when told to). A bot far behind its human (or on another floor) appears next to them.
+- **Assist:** bots fight what the party fights: whatever is attacking a party member, what the leader or a human is hitting, the target a human has **locked** (the client reports it to the server, which tells the party), Broken enemies (Switch on anyone's Break, humans' included), marked enemies, the Thorn Totem in the Warden fight. They don't pull extra packs on their own.
+- **Roles:** the tank taunts whatever is on a non-tank and keeps threat (Ground Slam to Break, Bash to Switch); the healer heals the most hurt party member (a "heal me" first) from behind the tank, interrupts with Smite, blesses once the fight is on; DPS wait for the tank to hold the target, flank it and Switch in.
+- **Social (scripted, rate-limited, party chat only; say chat when not in a party):** greetings on joining a human's party ("Hey! Lyra here, I'll keep you alive."), call-outs (pulling the Warden, low HP, out of potions, Breaks, "Nice Switch!"), thanks for heals, wipes, boss kills, level-ups and grats. Lower capability bots chat less. Bots accept party invites from players (not when already partied with someone else) and form their own parties.
+
+**Orders.** Party members order the bots in their party (admins: any bot, by name), in chat (any channel; `/p` for party chat) or with the **command wheel**: hold **V** (or press *⌘ Bot orders* under the party frames), point at an order and release V, or click it; the chips under the wheel pick all bots or one. Chat is matched on keywords, case-insensitive, addressed to everyone or by name ("Brann follow me", "all stay", "bots attack my target", "Lyra heal me"):
+
+| Order | Says (examples) | What the bot does |
+|---|---|---|
+| follow | follow me, with me, on me | follows you (and fights with you) |
+| stay | stay, hold here, wait, stop | holds its spot, fights only what comes to it |
+| come | come here, regroup, rally | runs to you, then follows |
+| attack | attack my target, kill that, focus | attacks the target you have locked (Tab) |
+| heal | heal me, need heals | healers keep you topped up for 45 s (others say they can't) |
+| farm | go farm, grind | farms the field (the tank leads the bots told) |
+| boss | let's do the boss, go to the Warden | heads to the Warden, waits for the party at the gate, readies |
+| ready | ready up | readies at the raid gate |
+| potion | use potion, pot up | drinks a potion (or says it's out) |
+| leave | leave party, dismiss | leaves the party |
+| status | status, report | answers with HP, level, potions and what it is doing |
+
+Chat channels: plain text goes to everyone, `/p text` to your party, `/s text` to players within 40 m.
+
+**Class plug-ins** (`shared/bots/registry.js`): a class's bot logic is `registerClassBrain(cls, { role, name, parry, combat(b, tgt, ctx), idle(b, ctx), onEvent(b, e), onLevel(b, lvl, ctx) })`; the brain handles perception, dodging, party, targets, orders and chatter, the plug-in only plays its kit against the target it is given (`ctx`: `useSkill`, `moveToward`, `switchOpen`, `dodge`, `ready`, `anchor`, `tank`, `hurt`, `healFocus`, `party`, `say`...). Systems that run on level-up (talents, weapon styles) hook in with `registerBotHook('onLevel', (b, lvl, ctx) => ...)`.
 
 ## Testing
 
@@ -257,7 +291,7 @@ Watch a role-playing party (tank, DPS, healer) clear the floor, with a spectator
 
 ```bash
 START_LEVEL=6 SPAWN_AT=-26,116 npm start
-node test/team.js                           # Brann (tank), Kael (DPS), Lyra (healer)
+node test/team.js                           # Brann (tank), Kael (DPS), Lyra (healer): three bots, one party
 # open http://localhost:3000/?spectate=1
 ```
 
@@ -265,7 +299,7 @@ node test/team.js                           # Brann (tank), Kael (DPS), Lyra (he
 
 `?spectate=1` works on any server: it watches without joining and frames the whole group.
 
-Other testing aids: `SPAWN_AT=0,172` spawns players at the chamber gate. `WARDEN_TWIST=<id>` forces a Warden twist (see above). `MAX_PLAYERS` caps the server (default 64).
+Other testing aids: `SPAWN_AT=0,172` spawns players at the chamber gate. `TEST_HOOKS=1` lets a client set its own health (`{ type: 'test', hurt: 0.4 }`, for test/botbrain.js). `WARDEN_TWIST=<id>` forces a Warden twist (see above). `MAX_PLAYERS` caps the server (default 64).
 
 Floor 2: `SPAWN_AT=600,150` spawns at the Sunken Gate (spawning on Floor 2 also unlocks it; deaths respawn there too). The bot party goes to Floor 2 with `FLOOR=2`: from Floor 1 they kill the Warden and take the Stairway (or use the town waystone if already unlocked), farm the Mire until level 15, then fight the Sovereign.
 
