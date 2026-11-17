@@ -12,6 +12,7 @@ import { F2, crossesGate2, floorOf, inArena2 } from '../shared/floor2.js';
 import { F2Methods } from './floor2.js';
 import crypto from 'node:crypto';
 import { SmithMethods } from './smith.js';
+import { GroundMethods } from './ground.js';
 import { TwistMethods } from './twists.js';
 import { installCombat } from './combat.js';
 
@@ -158,6 +159,8 @@ export class Game {
       case 'buy': return this.buy(p, msg.i | 0);
       case 'sell': return this.sell(p, msg.u | 0);
       case 'discard': return this.discard(p, msg.u | 0);
+      case 'drop': return this.dropItem(p, msg.u | 0);
+      case 'pickup': return this.pickUp(p, msg.id | 0);
       case 'title': return this.setTitle(p, msg.id);
       case 'smith': return this.smith(p, msg);
       case 'track': // the client's first-time guide reports progress
@@ -824,6 +827,7 @@ export class Game {
     this.updateCombat(dt); // posture decay, Horn Sweep
     this.updateProjectiles(dt);
     this.updateGate();
+    this.updateGround();
     this.updateFloor2(dt);
     this.updateRare();
     if (t >= this.lfgT) { this.lfgT = t + 1; this.matchParties(); }
@@ -1208,7 +1212,7 @@ export class Game {
     const g = this.gate;
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
     const gate = [g.open ? 1 : 0, waiting, g.ready.size, g.countAt ? r1(Math.max(0, g.countAt - this.time)) : 0];
-    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap() });
+    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), gi: this.groundSnap() });
     this.events = [];
     return out;
   }
@@ -1231,6 +1235,7 @@ export class Game {
 
 // Town Smith: refine, salvage, reforge, recipes (server/smith.js)
 Object.assign(Game.prototype, SmithMethods);
+Object.assign(Game.prototype, GroundMethods); // items on the ground (server/ground.js)
 Object.assign(Game.prototype, TwistMethods); // Warden twists (server/twists.js)
 installCombat(Game); // posture, perfect dodge, guard/parry, Horn Sweep (server/combat.js)
 Object.assign(Game.prototype, F2Methods); // Floor 2 (server/floor2.js)

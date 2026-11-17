@@ -11,6 +11,7 @@ import { createWorld, makePlayerModel, makeMobModel, Effects, loadAssets } from 
 import { TwistClient } from '/twists.js';
 import { Sound } from '/audio.js';
 import { createSmith } from '/smith.js';
+import { initGround } from '/ground.js';
 import { initCombat } from '/combat.js';
 import { F2, inGateZone2, inArena2, onFloor2, floorOf, WAYSTONES } from '/shared/floor2.js';
 import { initFloor2Client } from '/floor2client.js';
@@ -185,6 +186,7 @@ async function join(joinMsg) {
 }
 const send = o => state.ws?.readyState === 1 && state.ws.send(JSON.stringify(o));
 const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
+const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
 const combat = initCombat({ state, players, mobs, fx, sfx, guide, send, floatNum, slowMotion, shake: a => shake(a), bossShot: (...a) => bossShot(...a), lockedMob: () => lockedMob(), nearestMob: r => nearestMob(r) });
@@ -246,6 +248,7 @@ function onSnapshot({ me, w }) {
     state.gold = me.gold; state.meReady = me.ready; state.tonic = me.tonic; state.draught = me.draught;
     for (const id of CONSUMABLE_IDS) if (now - (state.ccdPress?.[id] || 0) > 350) state.ccdReady[id] = now + (me.ccd?.[id] || 0) * 1000;
   }
+  if (w.gi) ground.set(w.gi);
   if (w.gate) { state.gate = w.gate; state.gateOpen = !!w.gate[0]; gateMesh.set(state.gateOpen); }
   if (w.f2) f2.snap(w.f2); // on Floor 2, state.gate/gateOpen become Floor 2's gate
   state.phase = w.phase || 0;
@@ -525,6 +528,8 @@ function handleEvent(e) {
       break;
     }
     case 'coin': if (e.id === me) sfx.play('coin'); break;
+    case 'gdrop': if (e.id === me) sfx.play('ui'); break;
+    case 'gpick': if (e.id === me) sfx.play('coin', null, 0.6); break;
     case 'equip': if (e.id === me) sfx.play('shield', null, 0.5); break;
     case 'pjoin': if (e.id === me) { guide.did('party'); sfx.play('ui'); } break;
     case 'gate':
@@ -672,7 +677,7 @@ const endDrag = e => {
 };
 addEventListener('pointerup', e => { if (e.pointerType === 'mouse' && e.button === 0 && mouseAttack) { mouseAttack = false; attackHeld = false; } });
 // screen-edge turning: park the cursor at the left/right edge to turn the camera that way
-const EDGE_DELAY = 0.5; // seconds the cursor must rest at a screen edge before the camera turns
+const EDGE_DELAY = 0.1; // seconds the cursor must rest at a screen edge before the camera turns
 const mouse = { x: 0, y: 0, inside: false, onCanvas: false, edgeSide: 0, edgeSince: 0 };
 addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.inside = true; mouse.onCanvas = e.target === canvas || e.target.closest?.('#labels'); });
 document.documentElement.addEventListener('mouseleave', () => { mouse.inside = false; });
@@ -863,6 +868,7 @@ function interactKind() {
   if (nearMerchant()) return 'shop';
   if (nearHall()) return 'hall';
   if (smith.near()) return 'smith';
+  if (ground.near()) return 'pickup';
   if (!state.gateOpen && (inGateZone(state.x, state.z) || inGateZone2(state.x, state.z))) return 'gate';
   return f2.interactKind(); // waystones and the Stairway
 
@@ -872,6 +878,7 @@ function interact() {
   if (k === 'shop') { state.shopOpen = true; $('bag').classList.remove('hidden'); renderBag(); sfx.play('ui'); }
   else if (k === 'hall') { toggleHall(); sfx.play('ui'); }
   else if (k === 'smith') { smith.toggle(); sfx.play('ui'); }
+  else if (k === 'pickup') { send({ type: 'pickup', id: ground.near() }); }
   else if (k === 'gate') { send({ type: 'ready' }); sfx.play('ui'); state.meReady = state.meReady ? 0 : 1; updateGateBox(true); }
   else f2.interact(k);
 }
@@ -970,7 +977,7 @@ function renderBag() {
     const cur = inv.eq[it.slot], diff = Math.round((mainStat(it) - mainStat(cur)) * 10) / 10; // refined stats have one decimal
     const cmp = it.slot !== 'charm' && cur ? (diff > 0 ? ` <span class="up">▲${diff}</span>` : diff < 0 ? ` <span class="down">▼${-diff}</span>` : '') : !cur ? ' <span class="up">new</span>' : '';
     const usable = !it.cls || it.cls === state.cls;
-    return `<div class="it"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}<button class="del" data-a="discard" data-u="${it.u}" title="Discard">✕</button></div>`;
+    return `<div class="it"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}<button data-a="drop" data-u="${it.u}" title="Drop on the ground for anyone to pick up">Drop</button><button class="del" data-a="discard" data-u="${it.u}" title="Delete for good">Delete</button></div>`;
   }).join('') : '<div class="it empty"><span class="nm"><small>Nothing yet. Enemies drop gear; the Warden always does.</small></span></div>';
   h += smith.matsHtml(inv);
   h += renderTitles(inv.life);
@@ -995,8 +1002,9 @@ $('bag').addEventListener('click', e => {
   if (a === 'buy') send({ type: 'buy', i: +b.dataset.i });
   if (a === 'sell') send({ type: 'sell', u: +b.dataset.u });
   if (a === 'equip') send({ type: 'equip', u: +b.dataset.u });
+  if (a === 'drop') send({ type: 'drop', u: +b.dataset.u });
   if (a === 'discard') { // two clicks: the first arms it
-    if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'Discard?'; setTimeout(() => { b.classList.remove('armed'); b.textContent = '✕'; }, 3000); return; }
+    if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'Sure?'; setTimeout(() => { b.classList.remove('armed'); b.textContent = 'Delete'; }, 3000); return; }
     send({ type: 'discard', u: +b.dataset.u });
   }
   if (a === 'unequip') send({ type: 'unequip', slot: b.dataset.s });
@@ -1152,7 +1160,7 @@ function updateHud(now) {
       continue;
     }
     if (btn.dataset.slot === 'guard') { btn.classList.toggle('on', combat.guarding); continue; }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); btn.textContent = a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'warp' || a === 'stair' ? 'Warp' : state.meReady ? 'Unready' : 'Ready'; continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); btn.textContent = a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : state.meReady ? 'Unready' : 'Ready'; continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : CLASSES[state.cls].skills[slot];
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
@@ -1484,6 +1492,7 @@ function frame(now) {
   f2.update(vdt);
   if (merchantNpc?.anim) merchantNpc.anim.update(vdt);
   smith.frame(vdt);
+  ground.frame(vdt, isTouch);
   if (state.joined && !state.spectator) {
     const ml = $('merchant-lbl'), mp = project(MERCHANT.x, 3.6, MERCHANT.z), md = Math.hypot(state.x - MERCHANT.x, state.z - MERCHANT.z);
     if (mp && md < 20) { ml.style.display = ''; ml.style.left = `${mp[0]}px`; ml.style.top = `${mp[1]}px`; ml.innerHTML = `Merchant${md < MERCHANT.r + 1 ? `<br><small>${isTouch ? 'tap Trade' : 'press F to trade'}</small>` : ''}`; }
