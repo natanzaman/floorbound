@@ -392,7 +392,7 @@ export const TalentMethodsNew = {
       if (mods.dur) {
         if (p.song && evs.some(e => e.k === 'cb' && e.ev === 'song' && e.id === p.id)) p.song.until = ext(p.song.until); // (the fx's d is scaled by afterSkill)
         for (const e of evs) {
-          if (e.t === 'markA' && e.by === p.id) { const m = this.mobs.get(e.id); if (m?.markA) { m.markA.until = ext(m.markA.until); e.d = r2(e.d * k); } }
+          if (e.t === 'markA' && e.by === p.id) { const m = this.mobs.get(e.id); if (m?.markA) { m.markA.until = ext(m.markA.until); m.markA.dur = (m.markA.dur || e.d) * k; e.d = r2(e.d * k); } }
           if (e.t === 'brA' && !e.end && e.d) {
             const o = this.players.get(e.id);
             if (o === p && p.brA) p.brA.until = ext(p.brA.until);
