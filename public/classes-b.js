@@ -93,6 +93,7 @@ export function initClassesB(ctx) {
   const shake = a => ctx.shake?.(a);
   const me = () => state.myId;
   const buffs = new Map(); // player id -> { k: until (ms) }
+  const buffBy = new Map(); // player id -> { k: the bard whose song gave it } (Maestro stretches that bard's buffs)
   const marks = new Map(); // mob id -> Discord mark entry
   const shots = new Map(); // bolt id -> effect entry
   const auras = new Map(); // `${id}:${kind}` -> effect entry
@@ -281,6 +282,13 @@ export function initClassesB(ctx) {
         break;
       }
       case 'songEnd': fx.end(auras.get(`${e.id}:song`)); auras.delete(`${e.id}:song`); break;
+      case 'songExt': { // Maestro: the bard's hits stretch its song; e.d = seconds left now
+        const a = auras.get(`${e.id}:song`);
+        if (a) a.life = a.age + e.d;
+        const key = e.kind === 'warmarch' ? 'march' : e.kind === 'anthem' ? 'anthem' : null, now = performance.now();
+        if (key) for (const [pid, b] of buffs) if ((b[key] || 0) > now && buffBy.get(pid)?.[key] === e.id) b[key] = Math.max(b[key], now + e.d * 1000);
+        break;
+      }
       case 'dissonance': case 'shatter':
         cone(ox, oz, e.f, e.r, e.h, e.ev === 'shatter' ? 0xf0abfc : 0xa855f7);
         sfx.play('discord', at, mine);
@@ -320,6 +328,7 @@ export function initClassesB(ctx) {
     const b = buffs.get(e.id) || {};
     if (e.end) delete b[e.k]; else b[e.k] = performance.now() + e.d * 1000;
     buffs.set(e.id, b);
+    if (e.by && !e.end) (buffBy.get(e.id) || buffBy.set(e.id, {}).get(e.id))[e.k] = e.by;
     const p = players.get(e.id);
     if (p && !e.end) {
       const g = p.model.group.position, color = e.k === 'march' ? 0xf97316 : e.k === 'cresc' ? 0xfde68a : 0xfbbf24;

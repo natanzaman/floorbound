@@ -22,6 +22,8 @@ import { TREES, spendBlock } from '../talents.js';
 import { perceive, potionAt, setSkill, clampSkill } from '../botskill.js';
 import { DT, d2, useSkill, moveToward, evade, stepRoll, waveDodge, dodgeSpot, perilous, switchOpen, travelToBoss } from './motor.js';
 import { brainFor, roleOf, runHooks } from './registry.js';
+import { basicProfile } from './style.js';
+import { STYLE_IDS } from '../styles.js';
 import { parseCommand, say } from './social.js';
 import './classes.js'; // built-in class plug-ins (Guardian, Swordsman, Cleric, generic)
 import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
@@ -111,12 +113,12 @@ function onSnap(b, msg) {
   b.gateOpen = onF2 ? !!f2?.gate?.[0] : !!msg.w.gate?.[0];
   b.gateReady = (onF2 ? f2?.gate?.[2] : msg.w.gate?.[2]) || 0;
   b.orbs = f2?.orbs || []; b.pools = f2?.pools || []; b.deluge = !!f2?.del;
-  b.players = msg.w.players.map(p => ({ id: p[0], x: p[1], z: p[2], face: p[3], hp: p[4], maxHp: p[5], lvl: p[6], cls: CLASS_IDS[p[7]], party: p[8], dead: !!p[9] }));
+  b.players = msg.w.players.map(p => ({ id: p[0], x: p[1], z: p[2], face: p[3], hp: p[4], maxHp: p[5], lvl: p[6], cls: CLASS_IDS[p[7]], party: p[8], dead: !!p[9], style: STYLE_IDS[p[11]] || null }));
   const mine = b.players.find(p => p.id === b.id);
   if (mine) {
     if (mine.party !== b.party) onPartyChange(b, mine.party);
     if (b.dead && !mine.dead) { b.tele = []; b.sweep = null; b.roll = null; } // respawned: regroup from town
-    Object.assign(b, { hp: mine.hp, maxHp: mine.maxHp, dead: mine.dead, party: mine.party });
+    Object.assign(b, { hp: mine.hp, maxHp: mine.maxHp, dead: mine.dead, party: mine.party, style: mine.style }); // style: the equipped weapon's (shared/styles.js)
   }
   for (const e of perceive(b, msg.w.events)) onEvent(b, e); // (reaction delays / misses below capability 5)
   if (b.t - (b.pruneT || 0) > 5) prune(b);
@@ -425,7 +427,7 @@ function travel(b, M) {
 
 // Context handed to class plug-ins (see shared/bots/registry.js).
 function ctxBase(b) {
-  return { useSkill, moveToward, switchOpen, d2, dodge: null, ready: true, anchor: null, tank: null, leader: null, party: { mates: [], humans: [], all: [] }, hurt: [], healFocus: null, engaged: null, mayBreak: true, peel: false, say: (k, v, o) => say(b, k, v, o) };
+  return { basic: basicProfile(b.cls, b.style), useSkill, moveToward, switchOpen, d2, dodge: null, ready: true, anchor: null, tank: null, leader: null, party: { mates: [], humans: [], all: [] }, hurt: [], healFocus: null, engaged: null, mayBreak: true, peel: false, say: (k, v, o) => say(b, k, v, o) };
 }
 
 function act(b, P, M) {
