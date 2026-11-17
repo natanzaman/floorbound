@@ -992,15 +992,16 @@ function useSkill(slot) {
   const now = performance.now();
   if (!sk || state.lvl < sk.lvl || now < state.ready[slot] || combat.guarding) return;
   const auto = ['slash', 'bash', 'rush', 'smite', 'burst'].includes(sk.id) || ['challenge', 'seismic'].includes(mastery.evoId(slot)); // aimed evolutions too
-  const aimA = classesA.aimRange(sk.id, mastery.evoId(slot)); // Ranger / Berserker aimed skills
-  if (auto || aimA) {
+  const styAim = slot === 0 && styles.aim(); // a weapon style's own reach (Twin Daggers, Flute, ...)
+  const aimA = slot === 0 && styles.ownsBasic() ? 0 : classesA.aimRange(sk.id, mastery.evoId(slot)); // Ranger / Berserker aimed skills
+  if (auto || aimA || styAim) {
     const lm = lockedMob();
     const t = lm && Math.hypot(lm.x - state.x, lm.z - state.z) < Math.max(14, aimA + 4) ? lm : aimA ? classesA.pick(aimA, canTarget, nearestMob) : nearestMob((slot === 0 && styles.aim()) || (sk.id === 'smite' ? 11 : sk.id === 'rush' ? 9 : 6)); // (Ranger/Berserker aim; weapon styles: reach)
     if (t) state.face = angleTo(state.x, state.z, t.x, t.z);
     else if (aimA > 12) state.face = state.yaw; // nothing to aim at: shoot where the camera looks
   }
   classesB.aim(sk.id, lockedMob, nearestMob); // Lancer / Bard skills
-  state.ready[slot] = now + ((slot === 0 && styles.basicCd()) || mastery.cd(slot)) * 1000; // mastery and branch cooldowns, weapon styles (the server corrects it)
+  state.ready[slot] = now + ((slot === 0 && styles.basicCd(mastery.cd(0))) || mastery.cd(slot)) * 1000; // mastery and branch cooldowns, weapon styles (the server corrects it)
   state.lastPress[slot] = now;
   send({ type: 'skill', slot, face: state.face });
 }

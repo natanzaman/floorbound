@@ -260,8 +260,14 @@ export function initTalents(ctx) {
     if (e.t === 'tproc') {
       const p = players.get(e.id), mine = e.id === me || e.by === me;
       const pos = p?.model.group.position;
-      const say = { flow: 'Flow', relay: 'Relay Strike', spirit: 'Saved', unbreak: 'Unbreakable', exec: 'Rush ready', rally: 'Rally' }[e.k];
-      if (e.k === 'relay' || e.k === 'rally') { fx.ring(e.x, e.z, e.r, e.k === 'relay' ? 0xfbbf24 : 0x34d399, 0.6); fx.ring(e.x, e.z, e.r * 0.5, 0xfef3c7, 0.4); }
+      const say = { flow: 'Flow', relay: 'Relay Strike', spirit: 'Saved', unbreak: 'Unbreakable', exec: 'Rush ready', rally: 'Rally',
+        minefield: 'Boom', packlead: 'Pack Leader', massacre: 'Massacre', sanguine: 'Sanguine', warcry: 'Warcry', fade: 'Charge ready',
+        phalanx: 'Phalanx', symphony: 'Symphony' }[e.k];
+      const notes = q => fx.sparks(q.x, 2.2, q.z, 3, 0xfbbf24, 0.12, 2);
+      const RING = { relay: 0xfbbf24, rally: 0x34d399, packlead: 0xfbbf24, warcry: 0xf59e0b, phalanx: 0xfbbf24 }; // co-op keystones: their reach
+      if (RING[e.k]) { fx.ring(e.x, e.z, e.r, RING[e.k], 0.6); fx.ring(e.x, e.z, e.r * 0.5, 0xfef3c7, 0.4); }
+      else if (e.k === 'minefield') { fx.ring(e.x, e.z, e.r, 0xa3e635, 0.45); fx.sparks(e.x, 0.4, e.z, 16, 0xd9f99d, 0.25, 7); sfx.play('boom', { x: e.x, z: e.z }, mine ? 0.6 : 0.3); }
+      else if (e.k === 'maestro') { if (pos) notes(pos); return true; } // frequent: a small flourish only
       else if (e.k === 'spirit') fx.beam(e.x, e.z, 0xc4b5fd, 1.6);
       else if (pos) fx.ring(pos.x, pos.z, 2, e.k === 'flow' ? 0x22d3ee : 0x60a5fa, 0.45);
       if (pos && (mine || e.k === 'spirit')) floatNum(pos, 3.1, say, 'talent');

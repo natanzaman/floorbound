@@ -78,7 +78,7 @@ RIGS.bard ||= { file: 'rogue', hide: ['Knife_Offhand', '1H_Crossbow', '2H_Crossb
 // ---------- skills: auto-aim ranges and animations ----------
 const AIM = { lthrust: 6.5, lcharge: 10, skylance: 11, sonic: 11, dissonance: 8 };
 const ANIM = {
-  thrust: n => (n === 2 ? ['1H_Melee_Attack_Stab', 1.5] : ['1H_Melee_Attack_Stab', 2.3]),
+  thrust: (n, sty) => (sty === 'glaive' ? ['2H_Melee_Attack_Stab', n === 2 ? 1.3 : 1.9] : n === 2 ? ['1H_Melee_Attack_Stab', 1.5] : ['1H_Melee_Attack_Stab', 2.3]),
   charge: () => ['1H_Melee_Attack_Stab', 1.4], comet: () => ['1H_Melee_Attack_Stab', 1.3], hitrun: () => ['1H_Melee_Attack_Stab', 1.8],
   sweep: () => ['2H_Melee_Attack_Spin', 1.7], cyclone: () => ['2H_Melee_Attack_Spinning', 1.6], hamstring: () => ['2H_Melee_Attack_Slice', 1.6],
   skyland: () => ['2H_Melee_Attack_Chop', 1.8], meteorLand: () => ['2H_Melee_Attack_Chop', 1.6], pinLand: () => ['1H_Melee_Attack_Stab', 1.6],
@@ -109,6 +109,7 @@ export function initClassesB(ctx) {
     rise: o => { for (let i = 0; i < 8; i++) sfx.tone(o, { f: NOTE(60 + i * 2), dur: 0.35, vol: 0.06 + i * 0.008, type: 'triangle', at: i * 0.17 }); },
     burst: o => { [48, 60, 64, 67, 72, 79].forEach(n => sfx.tone(o, { f: NOTE(n), dur: 1.2, vol: 0.1, type: 'triangle', attack: 0.01 })); sfx.noise(o, { dur: 0.6, vol: 0.25, type: 'highpass', f: 1500, to: 6000 }); },
     spear: o => { sfx.noise(o, { dur: 0.13, vol: 0.32, type: 'bandpass', f: 3200, to: 900, q: 2.2 }); },
+    flute: o => { const n = 79 + [0, 2, 4, 7][Math.floor(Math.random() * 4)]; sfx.tone(o, { f: NOTE(n), dur: 0.18, vol: 0.1, type: 'sine', attack: 0.02 }); sfx.noise(o, { dur: 0.12, vol: 0.05, type: 'bandpass', f: 3000, q: 3 }); },
   };
   sfx.play = (name, pos, vol = 1) => {
     if (!EXTRA[name]) return basePlay(name, pos, vol);
@@ -186,8 +187,8 @@ export function initClassesB(ctx) {
   }
 
   // ---------- events ----------
-  function playAnim(id, key, n) {
-    const p = players.get(id), a = ANIM[key]?.(n);
+  function playAnim(id, key, n, sty) {
+    const p = players.get(id), a = ANIM[key]?.(n, sty);
     if (!p?.model.anim || !a) return;
     p.model.anim.shot(a[0], a[1]);
     p.swing = 0.3;
@@ -195,15 +196,17 @@ export function initClassesB(ctx) {
   function onFx(e) {
     const p = players.get(e.id), mine = e.id === me() ? 1 : 0.6, at = { x: e.x, z: e.z };
     const ox = e.id === me() ? state.x : e.x, oz = e.id === me() ? state.z : e.z;
-    playAnim(e.id, e.ev, e.n);
+    playAnim(e.id, e.ev, e.n, e.sty);
     if (p && e.id === me() && e.ev !== 'discord') state.lastCombat = performance.now();
     switch (e.ev) {
       // ----- Lancer -----
       case 'thrust': {
         const x1 = ox + Math.sin(e.f) * e.r, z1 = oz + Math.cos(e.f) * e.r;
-        streak(ox + Math.sin(e.f) * 0.6, oz + Math.cos(e.f) * 0.6, x1, z1, e.n === 2 ? 0xfde68a : 0x99f6e4, e.n === 2 ? 0.3 : 0.2);
-        if (e.n === 2) fx.ring(x1, z1, 1.3, 0xfde68a, 0.3);
-        for (const id of e.tip || []) { const m = mobs.get(id); if (m) { fx.sparks(m.x, 1.4, m.z, 6, 0x5eead4, 0.26, 6); if (e.id === me()) floatNum(m.model.group.position, m.model.height + 0.2, 'REACH', 'evade', 0.9); } }
+        const gl = e.sty === 'glaive'; // Glaive (weapon style): longer violet streaks, a crescent at the tip
+        streak(ox + Math.sin(e.f) * 0.6, oz + Math.cos(e.f) * 0.6, x1, z1, gl ? (e.n === 2 ? 0xe9d5ff : 0xc4b5fd) : e.n === 2 ? 0xfde68a : 0x99f6e4, e.n === 2 ? 0.3 : 0.2);
+        if (e.n === 2) fx.ring(x1, z1, 1.3, gl ? 0xa78bfa : 0xfde68a, 0.3);
+        if (gl) fx.arc(x1 - Math.sin(e.f) * 0.8, z1 - Math.cos(e.f) * 0.8, e.f, 1.1, 0.9, 0xddd6fe);
+        for (const id of e.tip || []) { const m = mobs.get(id); if (m) { fx.sparks(m.x, 1.4, m.z, 6, gl ? 0xa78bfa : 0x5eead4, 0.26, 6); if (e.id === me()) floatNum(m.model.group.position, m.model.height + 0.2, 'REACH', 'evade', 0.9); } }
         sfx.play(e.n === 2 ? 'swingHeavy' : 'spear', at, mine);
         break;
       }
@@ -242,17 +245,22 @@ export function initClassesB(ctx) {
       }
       // ----- Bard -----
       case 'sonic': {
+        const fl = e.sty === 'flute'; // Flute (weapon style): a smaller, faster green-gold note
         const g = new THREE.Group();
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.06, 6, 16), glass(0xe879f9, 0.95));
-        const core = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), glass(0xffffff, 0.9));
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(fl ? 0.18 : 0.28, fl ? 0.04 : 0.06, 6, 16), glass(fl ? 0x86efac : 0xe879f9, 0.95));
+        const core = new THREE.Mesh(new THREE.SphereGeometry(fl ? 0.09 : 0.13, 8, 6), glass(fl ? 0xfef08a : 0xffffff, 0.9));
         g.add(ring, core); g.position.set(e.x, 1.3, e.z); g.rotation.y = Math.atan2(e.vx, e.vz);
         const entry = { mesh: g, life: e.ttl, age: 0, update: (mesh, k, dt) => { mesh.position.x += e.vx * dt; mesh.position.z += e.vz * dt; ring.scale.setScalar(1 + Math.sin(k * 30) * 0.2); } };
         fx.scene.add(g); fx.list.push(entry);
-        shots.set(e.pid, entry);
-        sfx.play('pluck', at, mine);
+        shots.set(e.pid, { entry, fl });
+        sfx.play(fl ? 'flute' : 'pluck', at, mine);
         break;
       }
-      case 'sonicEnd': fx.end(shots.get(e.pid)); shots.delete(e.pid); fx.ring(e.x, e.z, e.m ? 1.1 : 0.6, 0xe879f9, 0.25); if (e.m) notes(e.x, e.z, 0xe879f9, 2, 0.4); break;
+      case 'sonicEnd': {
+        const sh = shots.get(e.pid), c = sh?.fl ? 0x86efac : 0xe879f9;
+        fx.end(sh?.entry); shots.delete(e.pid); fx.ring(e.x, e.z, e.m ? 1.1 : 0.6, c, 0.25); if (e.m) notes(e.x, e.z, c, 2, 0.4);
+        break;
+      }
       case 'discord': discordMark(e.m, e.n, e.d || SONG.discord.dur); break;
       case 'interrupt': { const m = mobs.get(e.m); if (m) { floatNum(m.model.group.position, m.model.height + 0.5, 'INTERRUPTED', 'counter', e.id === me() ? 1 : 0.7); fx.ring(m.x, m.z, m.def.radius + 1.4, 0xe879f9, 0.4); } break; }
       case 'song': {

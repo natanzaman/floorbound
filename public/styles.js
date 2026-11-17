@@ -20,6 +20,10 @@ const ANIM = {
   spear: [['1H_Melee_Attack_Stab', 1.9], ['1H_Melee_Attack_Stab', 1.7], ['1H_Melee_Attack_Stab', 1.3]],
   tome: [['1H_Melee_Attack_Chop', 1.9], ['1H_Melee_Attack_Slice_Horizontal', 1.9], ['2H_Melee_Attack_Chop', 1.6]],
   wand: [['Spellcast_Shoot', 2.6]],
+  // newer classes: styles with their own basic attack (the others animate in public/classes-a.js / classes-b.js)
+  daggers: [['1H_Melee_Attack_Slice_Diagonal', 2.8], ['1H_Melee_Attack_Stab', 2.8], ['1H_Melee_Attack_Slice_Horizontal', 2.8], ['1H_Melee_Attack_Stab', 2.3]],
+  halberd: [['2H_Melee_Attack_Slice', 1.9], ['1H_Melee_Attack_Slice_Horizontal', 1.8], ['2H_Melee_Attack_Spin', 1.6]],
+  drum: [['Spellcast_Raise', 2.2], ['Spellcast_Raise', 2.2], ['2H_Melee_Attack_Chop', 1.7]],
 };
 
 // ---------- low-poly weapons (Three.js geometry, flat-shaded like the KayKit pack) ----------
@@ -63,6 +67,71 @@ const BUILD = {
     g.add(part(new THREE.ConeGeometry(0.06, 0.16, 5), steel, 0, -1.12, 0, Math.PI));         // butt spike
     return g;
   },
+  // ---------- newer classes ----------
+  crossbow() { // a stocked crossbow held like a sword: the stock along +y, the prod across near the top
+    const g = new THREE.Group(), wood = mat(0x6b4226), steel = mat(0x9ca3af, { metalness: 0.6, roughness: 0.4 }), str = mat(0xe7e5e4);
+    g.add(part(new THREE.BoxGeometry(0.13, 1.25, 0.16), wood, 0, 0.35, 0));                  // stock
+    g.add(part(new THREE.BoxGeometry(1.1, 0.07, 0.08), steel, 0, 0.88, 0));                 // prod
+    g.add(part(new THREE.BoxGeometry(0.02, 0.02, 0.02), str, 0, 0.88, 0));
+    const string = part(new THREE.CylinderGeometry(0.008, 0.008, 1.08, 3), str, 0, 0.62, 0, 0, Math.PI / 2); g.add(string);
+    g.add(part(new THREE.CylinderGeometry(0.025, 0.025, 0.7, 4), steel, 0, 0.75, 0.09));    // a loaded bolt
+    g.add(part(new THREE.ConeGeometry(0.05, 0.12, 4), steel, 0, 1.15, 0.09));
+    return g;
+  },
+  dagger(tint = 0xd1d5db) {
+    const g = new THREE.Group(), steel = mat(tint, { metalness: 0.65, roughness: 0.3 }), grip = mat(0x3f2a1d), brass = mat(0xb8860b, { metalness: 0.6 });
+    const blade = part(new THREE.ConeGeometry(0.08, 0.75, 4), steel, 0, 0.62, 0); blade.scale.z = 0.35; g.add(blade);
+    g.add(part(new THREE.BoxGeometry(0.3, 0.05, 0.07), brass, 0, 0.24, 0));
+    g.add(part(new THREE.CylinderGeometry(0.04, 0.045, 0.3, 6), grip, 0, 0.06, 0));
+    return g;
+  },
+  warhammer() {
+    const g = new THREE.Group(), steel = mat(0x78716c, { metalness: 0.55, roughness: 0.45 }), wood = mat(0x5b3a24), band = mat(0xb45309, { metalness: 0.5 });
+    g.add(part(new THREE.CylinderGeometry(0.06, 0.07, 2.0, 6), wood, 0, 0.6, 0));            // haft
+    g.add(part(new THREE.BoxGeometry(0.75, 0.42, 0.42), steel, 0, 1.65, 0));                // head
+    g.add(part(new THREE.BoxGeometry(0.12, 0.5, 0.5), band, 0.38, 1.65, 0));                // striking faces
+    g.add(part(new THREE.BoxGeometry(0.12, 0.5, 0.5), band, -0.38, 1.65, 0));
+    g.add(part(new THREE.ConeGeometry(0.1, 0.3, 4), steel, 0, 2.0, 0));                      // top spike
+    g.add(part(new THREE.CylinderGeometry(0.09, 0.09, 0.14, 6), band, 0, -0.35, 0));         // pommel band
+    return g;
+  },
+  polearm(kind) { // Halberd: an axe blade and a back hook; Glaive: a long curved blade on an even longer haft
+    const g = new THREE.Group(), wood = mat(0x6b4a2b), steel = mat(0xe2e8f0, { metalness: 0.65, roughness: 0.3 }), trim = mat(kind === 'glaive' ? 0x7c3aed : 0xb91c1c);
+    const len = kind === 'glaive' ? 4.2 : 3.6, top = len - 1.1;
+    g.add(part(new THREE.CylinderGeometry(0.05, 0.06, len, 6), wood, 0, len / 2 - 1.1, 0));
+    g.add(part(new THREE.CylinderGeometry(0.08, 0.08, 0.14, 6), trim, 0, top - 0.1, 0));
+    if (kind === 'glaive') {
+      const blade = part(new THREE.CylinderGeometry(0.02, 0.14, 1.1, 4, 1), steel, 0.08, top + 0.55, 0, 0, -0.18); blade.scale.z = 0.25; g.add(blade);
+      g.add(part(new THREE.ConeGeometry(0.06, 0.25, 4), steel, 0.2, top + 1.15, 0, 0, -0.3));
+    } else {
+      g.add(part(new THREE.ConeGeometry(0.09, 0.6, 4), steel, 0, top + 0.35, 0));          // spike
+      const axe = part(new THREE.BoxGeometry(0.55, 0.5, 0.04), steel, 0.3, top + 0.0, 0); g.add(axe); // axe blade
+      g.add(part(new THREE.ConeGeometry(0.06, 0.3, 4), steel, -0.2, top - 0.02, 0, 0, Math.PI / 2)); // back hook
+    }
+    g.add(part(new THREE.ConeGeometry(0.06, 0.18, 5), steel, 0, -1.18, 0, Math.PI));
+    return g;
+  },
+  drum() { // a frame drum on the off arm, a beater in the hand (built here: the beater)
+    const g = new THREE.Group(), wood = mat(0x7c2d12), head = mat(0xf5deb3, { roughness: 0.9, metalness: 0 });
+    g.add(part(new THREE.CylinderGeometry(0.035, 0.04, 0.9, 6), wood, 0, 0.35, 0));
+    g.add(part(new THREE.SphereGeometry(0.11, 8, 6), head, 0, 0.85, 0));
+    return g;
+  },
+  drumBody() {
+    const g = new THREE.Group(), wood = mat(0x9a3412), skin = mat(0xfde9c4, { roughness: 0.95, metalness: 0 }), gold = mat(0xe8b04a, { metalness: 0.6 });
+    g.add(part(new THREE.CylinderGeometry(0.42, 0.42, 0.34, 16, 1, true), wood, 0, 0, 0, Math.PI / 2));
+    g.add(part(new THREE.CircleGeometry(0.42, 16), skin, 0, 0, 0.171));
+    g.add(part(new THREE.CircleGeometry(0.42, 16), skin, 0, 0, -0.171, Math.PI));
+    for (const z of [-0.15, 0.15]) g.add(part(new THREE.TorusGeometry(0.43, 0.025, 4, 18), gold, 0, 0, z));
+    return g;
+  },
+  flute() {
+    const g = new THREE.Group(), wood = mat(0xc08a4b, { metalness: 0.1 }), dark = mat(0x3b2412);
+    g.add(part(new THREE.CylinderGeometry(0.04, 0.045, 1.25, 8), wood, 0, 0.45, 0));
+    for (let i = 0; i < 5; i++) g.add(part(new THREE.CylinderGeometry(0.018, 0.018, 0.02, 6), dark, 0, 0.35 + i * 0.13, 0.04, Math.PI / 2));
+    g.add(part(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 8), dark, 0, 1.06, 0));
+    return g;
+  },
 };
 // Same frame as the KayKit 1H_Sword in handslot.r (turned 180 degrees about y).
 function inHand(slot, obj) {
@@ -85,6 +154,22 @@ const MODEL = {
   spear(r) { r.hideR(); r.show('Badge_Shield', false); r.show('Rectangle_Shield', true); r.extra.push(inHand(r.R, BUILD.spear())); },
   tome(r) { r.hideR(); r.show('Spellbook', true); r.extra.push(inHand(r.R, BUILD.mace(0xe7c66a, 0.8))); },
   wand(r) { r.hideR(); r.show('1H_Wand', true); },
+  // newer classes (their default weapons: the bow from public/classes-a.js, the axe of the barbarian rig, the spear and
+  // lyre from public/classes-b.js)
+  crossbow(r) { r.hideL(); r.extra.push(inHand(r.R, BUILD.crossbow())); },
+  daggers(r) {
+    r.hideL(); r.extra.push(inHand(r.R, BUILD.dagger()));
+    if (r.L) { const off = BUILD.dagger(0xa7f3d0); off.position.set(0, 0.017, 0); off.userData.style = 1; r.L.add(off); r.extra.push(off); }
+  },
+  twinaxes(r) { r.hideR(); r.show('1H_Axe', true); r.show('1H_Axe_Offhand', true); },
+  warhammer(r) { r.hideR(); r.extra.push(inHand(r.R, BUILD.warhammer())); },
+  halberd(r) { r.hideR(); r.extra.push(inHand(r.R, BUILD.polearm('halberd'))); },
+  glaive(r) { r.hideR(); r.extra.push(inHand(r.R, BUILD.polearm('glaive'))); },
+  drum(r) {
+    r.hideR(); r.extra.push(inHand(r.R, BUILD.drum()));
+    if (r.L) { const d = BUILD.drumBody(); d.position.set(0, 0.25, 0.1); d.userData.style = 1; r.L.add(d); r.extra.push(d); }
+  },
+  flute(r) { r.hideR(); r.extra.push(inHand(r.R, BUILD.flute())); },
 };
 
 export function initStyles(ctx) {
@@ -103,6 +188,7 @@ export function initStyles(ctx) {
     const r = {
       R, L, extra: [],
       hideR() { for (const o of R.children) if (!o.isBone && !o.userData.style) o.visible = false; },
+      hideL() { for (const o of L?.children || []) if (!o.isBone && !o.userData.style) o.visible = false; },
       show(name, on) { const o = root.getObjectByName(name); if (o) o.visible = on; },
     };
     MODEL[id]?.(r);
@@ -131,6 +217,16 @@ export function initStyles(ctx) {
       fx.sparks(x, 1.4, z, e.ev === 'aid' ? 12 : 7, e.ev === 'aid' ? 0xa5f3fc : 0x86efac, 0.2, 4);
       fx.ring(x, z, e.ev === 'aid' ? 1.4 : 0.9, e.ev === 'aid' ? 0x67e8f9 : 0x4ade80, 0.35);
       if (e.ev === 'aid') sfx.play('heal', { x, z }, mine * 0.6);
+      return true;
+    }
+    if (e.ev === 'mark') { // Twin Daggers: a hit marked the enemy
+      fx.sparks(e.x, 1.4, e.z, 8, 0x2dd4bf, 0.2, 4);
+      if (e.id === me) sfx.play('ui', { x: e.x, z: e.z }, 0.8);
+      return true;
+    }
+    if (e.ev === 'reset') { // Twin Daggers: a kill readied Disengage
+      if (ent) floatNum(ent.model.group.position, 2.6, 'Disengage ready', 'cdr');
+      if (e.id === me) state.ready[2] = performance.now();
       return true;
     }
     if (e.ev === 'cdr') { // Dual Blades: a Switch cut the cooldowns
@@ -190,6 +286,28 @@ export function initStyles(ctx) {
         sfx.play(e.fin ? 'swingHeavy' : 'swing', at, mine);
         break;
       }
+      case 'daggers': { // quick crossing teal slashes; the 4th is a pair of stabs
+        const off = e.tw ? 0.35 : e.n % 2 ? -0.25 : 0.25;
+        fx.arc(ox, oz, e.f + off, e.r, e.h * 0.8, e.fin ? 0x5eead4 : 0xccfbf1);
+        if (e.fin) fx.sparks(ox + dx * e.r * 0.8, 1.1, oz + dz * e.r * 0.8, 6, 0x99f6e4, 0.16, 5);
+        sfx.play('swing', at, mine * (e.tw ? 0.7 : 0.9));
+        break;
+      }
+      case 'halberd': { // a wide sweeping arc with a steel edge; the third is a broad spin
+        fx.arc(ox, oz, e.f, e.r, e.h, e.fin ? 0xfca5a5 : 0xe2e8f0);
+        fx.arc(ox, oz, e.f, e.r * 0.75, e.h, 0xb91c1c);
+        for (const id of e.tip || []) { fx.sparks(ox + dx * e.r * 0.85, 1.2, oz + dz * e.r * 0.85, 4, 0xfecaca, 0.2, 5); break; }
+        sfx.play(e.fin ? 'swingHeavy' : 'swing', at, mine);
+        break;
+      }
+      case 'drum': { // a ring of sound around the drummer; the third beat is a big boom
+        fx.ring(ox, oz, e.r, e.fin ? 0xf59e0b : 0xfdba74, e.fin ? 0.45 : 0.3);
+        fx.ring(ox, oz, e.r * 0.55, 0xfde68a, 0.25);
+        fx.sparks(ox, 0.3, oz, e.fin ? 14 : 6, 0xfcd34d, 0.2, 6);
+        if (e.fin && e.id === me) shake(0.12);
+        sfx.play(e.fin ? 'boom' : 'hitHeavy', at, mine * (e.fin ? 0.6 : 0.7));
+        break;
+      }
       case 'wand': { // a quick thin violet bolt
         fx.line(ox + dx * 0.7, oz + dz * 0.7, e.x2, e.z2, 0xc4b5fd, 0.12, 0.2, 1.3);
         fx.ring(e.x2, e.z2, 0.8, 0xa78bfa, 0.22);
@@ -203,8 +321,9 @@ export function initStyles(ctx) {
 
   // ---------- the local player's basic attack ----------
   const myBasic = () => STYLES[state.style]?.basic || null;
-  const basicCd = () => myBasic()?.cd ?? null;   // null: the class default
-  const aim = () => myBasic()?.aim ?? null;
+  // null: the class default. base: the class basic's cooldown now (styles that only scale it: Crossbow, Twin Axes, ...)
+  const basicCd = base => myBasic()?.cd ?? (base && STYLES[state.style]?.mods?.basicCd ? base * STYLES[state.style].mods.basicCd : null);
+  const aim = () => myBasic()?.aim ?? STYLES[state.style]?.mods?.aim ?? null;
 
   // ---------- text ----------
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -223,5 +342,7 @@ export function initStyles(ctx) {
   }
   const barNote = () => { const s = STYLES[state.style]; return s ? ` [${s.name}] ${s.def ? '' : s.desc}` : ''; };
 
-  return { snap, event, basicCd, aim, tag, title, shopName, barNote };
+  const ownsBasic = () => !!myBasic(); // the style replaces the class's basic attack (Twin Daggers, Halberd, War Drum, ...)
+
+  return { snap, event, basicCd, aim, ownsBasic, tag, title, shopName, barNote };
 }

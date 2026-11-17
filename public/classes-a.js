@@ -44,6 +44,7 @@ export function attachClassA(kind, root) {
 }
 
 function arrowMesh(kind) {
+  if (kind === 'xbolt' || kind === 'xheavy') return boltMesh(kind === 'xheavy');
   const big = kind === 'pierce' || kind === 'sniper', heavy = kind === 'heavy';
   const g = new THREE.Group();
   const s = big ? 1.6 : heavy ? 1.2 : 1;
@@ -64,6 +65,21 @@ function arrowMesh(kind) {
   return g;
 }
 
+// Crossbow bolt (weapon style): short, thick, iron-headed, with stubby vanes and an amber glint.
+function boltMesh(heavy) {
+  const g = new THREE.Group(), s = heavy ? 1.3 : 1;
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035 * s, 0.035 * s, 0.55 * s, 5), new THREE.MeshStandardMaterial({ color: 0x4b3621 }));
+  shaft.rotation.x = Math.PI / 2; g.add(shaft);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.08 * s, 0.16 * s, 4), new THREE.MeshStandardMaterial({ color: 0x6b7280, metalness: 0.7, emissive: 0xf59e0b, emissiveIntensity: heavy ? 0.6 : 0.25 }));
+  head.rotation.x = Math.PI / 2; head.position.z = 0.33 * s; g.add(head);
+  for (const r of [0, Math.PI / 2]) {
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(0.12 * s, 0.1 * s), new THREE.MeshBasicMaterial({ color: 0x92400e, side: THREE.DoubleSide }));
+    f.rotation.set(Math.PI / 2, r, 0); f.position.z = -0.24 * s;
+    const h = new THREE.Group(); h.rotation.z = r; h.add(f); g.add(h);
+  }
+  return g;
+}
+
 // ---------- animation per skill (clips from knight.glb, plus the Ranger's extra ranged clips) ----------
 const ANIM = {
   shot: [['2H_Ranged_Shoot', 2.4], ['2H_Ranged_Shoot', 2.6], ['1H_Ranged_Shoot', 2]],
@@ -74,6 +90,10 @@ const ANIM = {
   cleave: [['2H_Melee_Attack_Spin', 1.6]], whirl: [['2H_Melee_Attack_Spinning', 1.6]], execute: [['2H_Melee_Attack_Chop', 1.3]],
   leap: [['Jump_Full_Long', 2.2]], slam: [['2H_Melee_Attack_Chop', 2.2]], pounce: [['2H_Melee_Attack_Chop', 1.8]],
   roar: [['Cheer', 1.6]], warblood: [['Cheer', 1.6]],
+  // weapon styles (shared/styles.js)
+  crossbow: [['1H_Ranged_Shoot', 1.5], ['1H_Ranged_Shoot', 1.5], ['2H_Ranged_Shoot', 1.3]],
+  twinaxes: [['1H_Melee_Attack_Slice_Diagonal', 2.4], ['1H_Melee_Attack_Slice_Horizontal', 2.4], ['2H_Melee_Attack_Spin', 2.0]],
+  warhammer: [['2H_Melee_Attack_Chop', 1.1], ['2H_Melee_Attack_Slice', 1.05], ['2H_Melee_Attack_Chop', 0.95]],
 };
 
 const CSS = `
@@ -108,6 +128,9 @@ export function initClassesA(ctx) {
     mark: o => { [79, 86].forEach((n, i) => sfx.tone(o, { f: NOTE(n), dur: 0.35, vol: 0.12, type: 'triangle', at: i * 0.08 })); },
     trap: o => { sfx.noise(o, { dur: 0.08, vol: 0.4, type: 'highpass', f: 3000 }); sfx.tone(o, { f: 700, to: 300, dur: 0.15, vol: 0.2, type: 'square' }); },
     axe: o => { sfx.noise(o, { dur: 0.32, vol: 0.55, f: 1100, to: 180, q: 1.1 }); sfx.tone(o, { f: 90, to: 50, dur: 0.2, vol: 0.25 }); },
+    xbow: o => { sfx.noise(o, { dur: 0.08, vol: 0.45, type: 'highpass', f: 2200 }); sfx.tone(o, { f: 140, to: 60, dur: 0.18, vol: 0.32, type: 'square' }); }, // the crossbow's clack-thump
+    hatchet: o => { sfx.noise(o, { dur: 0.16, vol: 0.4, f: 2200, to: 500, q: 1.4 }); },
+    hammer: o => { sfx.noise(o, { dur: 0.4, vol: 0.6, type: 'lowpass', f: 700, to: 120 }); sfx.tone(o, { f: 70, to: 38, dur: 0.35, vol: 0.4 }); },
   };
   sfx.play = (name, pos, vol = 1) => {
     if (!EXTRA[name]) return basePlay(name, pos, vol);
@@ -206,7 +229,9 @@ export function initClassesA(ctx) {
     const mine = e.id === me() ? 1 : 0.6, at = { x: e.x, z: e.z };
     const ox = e.id === me() ? state.x : e.x, oz = e.id === me() ? state.z : e.z;
     switch (e.v) {
-      case 'shot': anim(e.id, 'shot', e.n); sfx.play(e.fin ? 'bowHeavy' : 'bow', at, mine); break;
+      case 'shot':
+        if (e.sty === 'crossbow') { anim(e.id, 'crossbow', e.n); sfx.play('xbow', at, mine * (e.fin ? 1.3 : 1)); if (e.fin && e.id === me()) shake(0.05); break; }
+        anim(e.id, 'shot', e.n); sfx.play(e.fin ? 'bowHeavy' : 'bow', at, mine); break;
       case 'draw': anim(e.id, 'draw'); drawLine(e.id, e.f, e.r, e.d, e.big); sfx.play('draw', at, mine); break;
       case 'loose': anim(e.id, 'loose'); sfx.play('bowHeavy', at, mine * (e.big ? 1.4 : 1)); if (e.big && e.id === me()) shake(0.12); break;
       case 'rain': anim(e.id, 'rain'); rain(e.x2, e.z2, e.r, e.d); sfx.play('bowHeavy', at, mine); break;
@@ -220,7 +245,20 @@ export function initClassesA(ctx) {
       }
       case 'tumble': anim(e.id, 'tumble'); fx.line(e.x0, e.z0, e.x2, e.z2, 0x99f6e4, 0.7, 0.4, 0.6); sfx.play('roll', at, mine); sfx.play('bow', at, mine); break;
       case 'mark': anim(e.id, 'mark'); fx.line(ox, oz, e.x2, e.z2, e.dead ? 0xfbbf24 : 0x2dd4bf, 0.12, 0.35, 1.4); sfx.play('mark', at, mine); break;
-      case 'chop': anim(e.id, 'chop', e.n); fx.arc(ox, oz, e.f, e.r, 1.1, e.fin ? 0xfca5a5 : 0xfee2e2); sfx.play('axe', at, mine * (e.fin ? 1.3 : 1)); if (e.fin && e.id === me()) shake(0.08); break;
+      case 'chop':
+        if (e.sty === 'twinaxes') { // two quick crossing hatchet arcs
+          anim(e.id, 'twinaxes', e.n);
+          fx.arc(ox, oz, e.f + (e.n % 2 ? 0.3 : -0.3), e.r, 1.0, e.fin ? 0xfdba74 : 0xffedd5);
+          if (e.fin) fx.arc(ox, oz, e.f - 0.3, e.r * 0.9, 1.0, 0xfb923c);
+          sfx.play('hatchet', at, mine); break;
+        }
+        if (e.sty === 'warhammer') { // a heavy dull arc and dust; the third blow cracks the ground all around
+          anim(e.id, 'warhammer', e.n);
+          if (e.fin) { fx.ring(ox, oz, e.r, 0xa16207, 0.55); fx.ring(ox, oz, e.r * 0.55, 0xfde68a, 0.4); fx.sparks(ox, 0.3, oz, 20, 0xa8a29e, 0.3, 8); sfx.play('boom', at, mine * 0.8); if (e.id === me()) shake(0.25); }
+          else { fx.arc(ox, oz, e.f, e.r, 1.2, 0xd6d3d1); fx.sparks(ox + Math.sin(e.f) * e.r * 0.7, 0.4, oz + Math.cos(e.f) * e.r * 0.7, 8, 0xa8a29e, 0.22, 4); }
+          sfx.play('hammer', at, mine); break;
+        }
+        anim(e.id, 'chop', e.n); fx.arc(ox, oz, e.f, e.r, 1.1, e.fin ? 0xfca5a5 : 0xfee2e2); sfx.play('axe', at, mine * (e.fin ? 1.3 : 1)); if (e.fin && e.id === me()) shake(0.08); break;
       case 'cleave': anim(e.id, 'cleave'); fx.arc(ox, oz, e.f, e.r, e.h, e.rage > 60 ? 0xef4444 : e.rage > 25 ? 0xf87171 : 0xfecaca); fx.arc(ox, oz, e.f, e.r * 0.7, e.h, 0xfff1f2); sfx.play('axe', at, mine * 1.3); if (e.id === me()) shake(0.1); break;
       case 'whirl': if (!e.n) anim(e.id, 'whirl'); fx.ring(ox, oz, e.r, 0xf87171, 0.35); fx.arc(ox, oz, e.f + e.n * 2, e.r, Math.PI, 0xfecaca); sfx.play('axe', at, mine); break;
       case 'execute': anim(e.id, 'execute'); fx.arc(ox, oz, e.f, e.r, e.h, 0x7f1d1d); fx.arc(ox, oz, e.f, e.r * 0.8, e.h * 0.6, 0xef4444); sfx.play('axe', at, mine * 1.4); if (e.id === me()) shake(0.15); break;
@@ -240,13 +278,15 @@ export function initClassesA(ctx) {
         const g = arrowMesh(e.k), p = e.by === me() ? state : null;
         const x = p ? p.x : e.x, z = p ? p.z : e.z;
         g.position.set(x, 1.3, z); g.rotation.y = e.a; scene.add(g);
-        arrows.set(e.id, { g, x, z, a: e.a, sp: e.sp, range: e.r, trav: 0, tg: e.tg });
+        arrows.set(e.id, { g, x, z, a: e.a, sp: e.sp, range: e.r, trav: 0, tg: e.tg, k: e.k });
         return true;
       }
       case 'apend': {
         const a = arrows.get(e.id);
         if (a) { scene.remove(a.g); a.g.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); }); arrows.delete(e.id); }
-        if (e.h) fx.sparks(e.x, 1.2, e.z, 6, 0xfef3c7, 0.18, 5); else if (a) sfx.play('thunk', { x: e.x, z: e.z }, 0.4);
+        const xb = a?.k === 'xbolt' || a?.k === 'xheavy'; // crossbow bolts: an amber burst and a ring
+        if (e.h) { fx.sparks(e.x, 1.2, e.z, xb ? 10 : 6, xb ? 0xfbbf24 : 0xfef3c7, xb ? 0.24 : 0.18, 5); if (xb) fx.ring(e.x, e.z, 0.9, 0xf59e0b, 0.25); }
+        else if (a) sfx.play('thunk', { x: e.x, z: e.z }, 0.4);
         return true;
       }
       case 'rageA': {
