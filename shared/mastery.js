@@ -12,8 +12,9 @@ export const MASTERY = {
   evolveAt: 3,
   // Cumulative points to REACH each level (index = level). One point ~ one "attack's worth" of value:
   // the amount divided by the user's attack power, so the pace doesn't change with level or gear.
-  // Measured with the bot party (BOTS: ~10-14 points/min of fighting for a skill used on cooldown), a skill you
-  // use often reaches Mastery 3 after ~30-45 min of normal play, Mastery 5 after ~4 hours.
+  // Measured with the bot party from level 1 (test/team.js, MASTERY_LOG=60), which fights non-stop and uses skills on
+  // cooldown: Ground Slam ~26 pts/min, Heal and Blessing ~17, Burst Combo ~15. With the downtime of normal play a skill
+  // you use often reaches Mastery 3 (600) after roughly 30-45 min, Mastery 5 (4000) after a few hours.
   need: [0, 0, 150, 600, 1800, 4000],
   cd2: 0.9,  // Mastery 2+: cooldown x0.9
   pow4: 1.1, // Mastery 4+: damage, healing, shields and buffs x1.1
