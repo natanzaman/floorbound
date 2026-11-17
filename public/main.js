@@ -22,9 +22,11 @@ import { initClassesB } from '/classes-b.js';
 import { initClassesA } from '/classes-a.js';
 import { initStyles } from '/styles.js';
 import { initPlayerBots } from '/playerbots.js';
+import { snapPoses, poseFrame } from '/poses.js'; // kneel / sit / bow (F5)
 import { initTalents } from '/talents.js';
 import { initBotWheel } from '/botwheel.js';
 import { initCine } from '/cine.js'; // film view camera, titles, fades, letterbox, light (F4)
+import { initBubbles } from '/bubbles.js';
 
 const sfx = new Sound();
 
@@ -226,6 +228,7 @@ function reconnect(joinMsg) {
 }
 const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
 const wheel = initBotWheel({ send, state, players, log }); // orders for the bots in your party: hold V (public/botwheel.js)
+const bubbles = initBubbles({ state, players, project, camera, layer: $('labels'), enabled: () => settings.bubbles !== false }); // speech bubbles over heads (public/bubbles.js)
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
@@ -333,6 +336,7 @@ function onSnapshot({ me, w }) {
     }
   }
   for (const [id, e] of players) if (!seen.has(id)) { removeEntity(e); players.delete(id); }
+  if (snapPoses(w.poses, players).has(state.myId)) guide.tip('poses'); // held poses (public/poses.js)
 
   const seenM = new Set();
   for (const a of w.mobs) {
@@ -615,6 +619,7 @@ function handleEvent(e) {
       break;
     case 'invite': if (e.to === me) showInvite(e.from, e.name); break;
     case 'chat': // ch 'p': party chat (only your party sees it), 's': say (heard within 40 m)
+      if (bubbles.chat(e) && e.id !== me && !state.spectator) guide.tip('bubbles'); // a bubble over the speaker's head (same rules as the log)
       if (e.ch === 'p') { if (state.party && e.party === state.party) log(`[Party] ${e.from}: ${e.text}`, e.id === me ? 'me party' : 'party'); break; }
       if (e.ch === 's') { if (state.spectator || Math.hypot(e.x - state.x, e.z - state.z) < 40) log(`${e.from} says: ${e.text}`, e.id === me ? 'me' : 'say'); break; }
       log(`${e.from}: ${e.text}`, e.id === me ? 'me' : ''); break;
@@ -739,7 +744,7 @@ addEventListener('blur', () => { keys.clear(); attackHeld = false; combat.guard(
 // ---------- settings: camera control ----------
 // 'mouse' (default): the camera follows the mouse (pointer lock; click the game to capture the cursor, Esc to free it).
 // 'classic': right-drag to look, or rest the cursor at a screen edge to turn.
-const settings = Object.assign({ camera: 'mouse', sens: 1, invertY: false }, (() => { try { return JSON.parse(localStorage.getItem('fb_settings') || '{}'); } catch { return {}; } })());
+const settings = Object.assign({ camera: 'mouse', sens: 1, invertY: false, bubbles: true }, (() => { try { return JSON.parse(localStorage.getItem('fb_settings') || '{}'); } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem('fb_settings', JSON.stringify(settings)); } catch {} };
 const mouseLook = () => settings.camera === 'mouse' && !isTouch;
 const locked = () => document.pointerLockElement === canvas;
@@ -774,7 +779,9 @@ function renderSettings() {
     <label class="opt"><input type="radio" name="cam" value="classic" ${settings.camera === 'classic' ? 'checked' : ''}> Classic <small>right-drag to look · rest the cursor at a screen edge to turn</small></label>
     <h4>Mouse sensitivity <span id="sens-v">${settings.sens.toFixed(1)}×</span></h4>
     <input type="range" min="0.3" max="3" step="0.1" value="${settings.sens}" data-a="sens">
-    <label class="opt"><input type="checkbox" data-a="inv" ${settings.invertY ? 'checked' : ''}> Invert vertical look</label>`;
+    <label class="opt"><input type="checkbox" data-a="inv" ${settings.invertY ? 'checked' : ''}> Invert vertical look</label>
+    <h4>Chat</h4>
+    <label class="opt"><input type="checkbox" data-a="bub" ${settings.bubbles !== false ? 'checked' : ''}> Speech bubbles <small>chat lines over the speaker's head (the chat log keeps everything)</small></label>`;
 }
 $('settings-btn').onclick = () => { const el = $('settings'); el.classList.toggle('hidden'); if (!el.classList.contains('hidden')) renderSettings(); sfx.play('ui'); };
 $('settings').addEventListener('click', e => { if (e.target.closest('[data-a=close]')) $('settings').classList.add('hidden'); });
@@ -783,6 +790,7 @@ $('settings').addEventListener('input', e => {
   if (t.name === 'cam') { settings.camera = t.value; if (t.value === 'classic') freeCursor(); }
   if (t.dataset.a === 'sens') { settings.sens = +t.value; $('sens-v').textContent = `${settings.sens.toFixed(1)}×`; }
   if (t.dataset.a === 'inv') settings.invertY = t.checked;
+  if (t.dataset.a === 'bub') { settings.bubbles = t.checked; if (!t.checked) bubbles.clear(); }
   saveSettings();
 });
 
@@ -1294,7 +1302,7 @@ $('sound-btn').textContent = sfx.on ? 'Sound on' : 'Sound off';
 $('sound-btn').onclick = () => { sfx.unlock(); $('sound-btn').textContent = sfx.toggle() ? 'Sound on' : 'Sound off'; };
 $('lock-btn').onpointerdown = e => { e.preventDefault(); cycleLock(); };
 canvas.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
-$('chat-btn').onclick = () => { const t = prompt('Say something (/p party, /s nearby, /b bot orders: /b help)'); if (t) sendChat(t); };
+$('chat-btn').onclick = () => { const t = prompt('Say something (/p party, /s nearby, /b bot orders: /b help, /sit /kneel /bow /stand)'); if (t) sendChat(t); };
 // Chat channels: "/p text" party, "/s text" say (nearby); anything else goes to everyone ("/b ..." bot orders: the server
 // reads them, shared/bots/social.js parseBotChat; they never show as chat).
 function sendChat(raw) {
@@ -1604,7 +1612,8 @@ function animateEntity(e, dt) {
     const dirSign = isP && e.back > 0.5 ? -1 : 1;
     if (e.spd > (isP ? 3.5 : 4.6)) a.base(dirSign < 0 ? 'Walking_A' : 'Running_A', 0.2, dirSign * Math.max(0.7, e.spd / (isP ? (dirSign < 0 ? 4.5 : 6.5) : 5.5)));
     else if (e.spd > 0.5) a.base('Walking_A', 0.2, dirSign * (isP ? 1.2 : Math.max(0.6, e.spd / 3.5)));
-    else a.base(a.idle, 0.25);
+    else a.base(a.posed ? 'Idle' : a.idle, 0.25); // a held pose is tuned over the plain Idle
+    if (isP) poseFrame(e, a);
     a.update(hitStop > 0 ? dt * 0.08 : dt);
     if (isP) m.cursor.material.color.setHex(state.party && e.party === state.party && !self ? 0xa78bfa : 0x4ade80);
     else m.cursor.rotation.y += dt * 2;
@@ -1882,6 +1891,7 @@ function frame(now) {
   sfx.listener.x = cx; sfx.listener.z = cz;
 
   drawFloats(dt, vdt);
+  bubbles.frame();
 
   if (state.joined) updateHud(now);
   updateRareHint(now);
@@ -1890,4 +1900,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { state, players, mobs, banner, sfx, project, floatLog, cine, camera };
+window.__fb = { state, players, mobs, banner, sfx, project, floatLog, cine, camera, bubbles };

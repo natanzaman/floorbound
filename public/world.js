@@ -465,9 +465,20 @@ class Animator {
     this.shotAct = a;
   }
   busy() { return !!this.shotAct; }
-  die() { this.wind = null; this.shot('Death_A', 1, { clamp: true, fade: 0.1 }); this.dead = true; }
+  // A held pose (F5: kneel / sit / bow, POSES): eased in and out over POSE_T s, layered over the plain Idle clip while
+  // held (main.js plays 'Idle' when `posed`). A new pose eases in while the old one eases out.
+  setPose(k) {
+    k = POSES[k] && STANCES.includes(k) ? k : null;
+    const P = this.ps ||= { k: null, w: 0, out: null, ow: 0 };
+    if (P.k === k) return;
+    if (P.k && P.w > P.ow) { P.out = P.k; P.ow = P.w; }
+    P.k = k; P.w = 0;
+    if (k) this.pz ||= new PoseLayer(this.mixer.getRoot());
+  }
+  get posed() { return !!this.ps?.k; }
+  die() { this.ps = null; this.wind = null; this.shot('Death_A', 1, { clamp: true, fade: 0.1 }); this.dead = true; }
   revive() {
-    this.dead = false; this.wind = null;
+    this.dead = false; this.wind = null; this.ps = null;
     this.mixer.stopAllAction();
     this.shotAct = null; this.cur = null;
     this.base(this.idle, 0);
@@ -498,6 +509,12 @@ class Animator {
       } else up *= 1 - Math.max(0, Math.min(1, (w.t - hitAt - (W.hold ?? 0)) / 0.3));
       if (up <= 0 && hit <= 0 && w.t > hitAt) this.wind = null;
       else this.pz.apply(W.up, up, W.hit && POSES[W.hit], hit, tremble);
+    } else if (this.ps) { // held pose (setPose)
+      const P = this.ps, step = dt / POSE_T, ez = x => x * x * (3 - 2 * x);
+      P.w = P.k ? Math.min(1, P.w + step) : 0; P.ow = Math.max(0, P.ow - step);
+      if (!P.ow) P.out = null;
+      if (!P.k && !P.out) this.ps = null;
+      else this.pz.apply(P.k, ez(P.w), P.out && POSES[P.out], ez(P.ow));
     }
     if (this.head) this.head.scale.setScalar(HEAD_SCALE); // applied after the animation pose
   }
@@ -523,7 +540,18 @@ export const POSES = {
     'upperarm.l': [-20, 0, -45], 'upperarm.r': [-20, 0, 45], 'lowerarm.l': [-25, 0, 0], 'lowerarm.r': [-25, 0, 0],
     'upperleg.l': [-40, 0, 0], 'upperleg.r': [-35, 0, 0], 'lowerleg.l': [55, 0, 0], 'lowerleg.r': [40, 0, 0] },
   cock: { spine: [-3, 15, 0], chest: [-4, 18, 0], 'upperarm.r': [-95, 0, 15], 'upperarm.l': [-85, 0, -10], 'lowerarm.r': [-20, 0, 0] },
+  // Held poses for players and actors (F5, Animator.setPose), tuned over the plain Idle clip.
+  kneel: { drop: 0.105, spine: [8, 0, 0], chest: [6, 0, 0], head: [24, 0, 0], // right knee down, left foot planted, head lowered
+    'upperleg.l': [-88, 0, 0], 'lowerleg.l': [88, 0, 0], 'upperleg.r': [5, 0, 0], 'lowerleg.r': [85, 0, 0], 'foot.r': [-20, 0, 0],
+    'upperarm.l': [-45, 0, 10], 'lowerarm.l': [-35, 0, 0], 'upperarm.r': [-10, 0, -5], 'lowerarm.r': [-15, 0, 0], 'hand.r': [70, 0, 0] }, // weapon tip down
+  sit: { drop: 0.125, hips: [-8, 0, 0], spine: [12, 0, 0], chest: [6, 0, 0], head: [6, 0, 0], // on the ground, knees up, arms on knees
+    'upperleg.l': [-100, 0, -8], 'lowerleg.l': [60, 0, 0], 'upperleg.r': [-100, 0, 8], 'lowerleg.r': [60, 0, 0], 'foot.l': [20, 0, 0], 'foot.r': [20, 0, 0],
+    'upperarm.l': [-55, 0, 10], 'lowerarm.l': [-30, 0, 0], 'upperarm.r': [-55, 0, -10], 'lowerarm.r': [-30, 0, 0], 'hand.r': [105, 0, 0] },
+  bow: { spine: [14, 0, 0], chest: [14, 0, 0], head: [26, 0, 0], // standing, head and shoulders bowed
+    'upperarm.l': [-12, 0, 8], 'upperarm.r': [-12, 0, -8], 'lowerarm.l': [-20, 0, 0], 'lowerarm.r': [-20, 0, 0], 'hand.r': [0, 0, 70] },
 };
+export const STANCES = ['kneel', 'sit', 'bow']; // the held poses (server/poses.js POSE_KINDS)
+const POSE_T = 0.4; // ease in / out, seconds
 // Wind-up per attack: up = the pose it builds into; then either clip [name, speed, s before impact] or hit (an impact
 // pose held `hold` s). hold without hit keeps `up` past the impact (the charge keeps its horns down down the lane).
 export const WINDUPS = {
@@ -534,7 +562,7 @@ export const WINDUPS = {
   quake: { up: 'stompUp', hit: 'stomp', hold: 0.3 },
   cleave: { up: 'cock', clip: ['2H_Melee_Attack_Chop', 1.6, 0.4] },
 };
-const ORDER = ['hips', 'spine', 'chest', 'head', 'upperarm.l', 'lowerarm.l', 'upperarm.r', 'lowerarm.r', 'upperleg.l', 'lowerleg.l', 'upperleg.r', 'lowerleg.r'];
+const ORDER = ['hips', 'spine', 'chest', 'head', 'upperarm.l', 'lowerarm.l', 'upperarm.r', 'lowerarm.r', 'hand.r', 'upperleg.l', 'lowerleg.l', 'foot.l', 'upperleg.r', 'lowerleg.r', 'foot.r'];
 const D2R = Math.PI / 180, _e = new THREE.Euler(), _r = new THREE.Quaternion(), _g = new THREE.Quaternion(), _gi = new THREE.Quaternion(),
   _p = new THREE.Quaternion(), _x = new THREE.Quaternion(), _v = new THREE.Vector3(), _s = new THREE.Vector3();
 class PoseLayer {

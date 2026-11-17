@@ -38,7 +38,8 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Guard / parry (Guardian) | Hold R to guard; tap R just before a hit to parry | — |
 | Select a character (enemy or ally) | Hold Ctrl (Cmd on Mac) to preview, Ctrl+click to select; Ctrl+right-click to deselect | Lock on button (enemies) |
 | Lock on / cycle enemies | Tab (Esc to clear) | Lock on button |
-| Chat | Enter (`/p` party, `/s` nearby, `/b` bot orders) | Chat button |
+| Chat | Enter (`/p` party, `/s` nearby, `/b` bot orders); lines also show as speech bubbles over the speaker's head (Settings → Speech bubbles turns them off) | Chat button |
+| Pose | Chat `/kneel`, `/sit`, `/bow`; `/stand`, moving, attacking, a skill, dodging, jumping or guarding stands you up | Chat button |
 | Party | Players button (P) → Find party, or Invite | Players button → Find party / Invite |
 | Order your party's bots | Hold V (command wheel), or chat `/b stay`, `/b Lyra: heal` (`/b help` lists them) | ⌘ Bot orders under the party frames |
 | Items | 4 potion, 5 tonic, 6 draught; B bag | Potion button; Bag button |
@@ -282,12 +283,14 @@ server/floor2.js Floor 2 AI (Shieldback, Wisp, Lurker, Matron, Sovereign), Sunke
 public/floor2world.js, public/floor2client.js  Floor 2 scene, models, effects, waystone UI
 server/game.js   authoritative simulation: combat, AI, boss, XP, parties
 server/combat.js posture/Break, perfect dodge, guard/parry, Horn Sweep, Quake Rings (mixed into Game)
+server/poses.js  kneel / sit / bow: setPose, /kneel /sit /bow /stand chat, cleared by moving or acting (public/poses.js on the client)
 server/index.js  static file server + WebSocket server (20 ticks/sec)
 server/shutdown.js  deploy drain on SIGTERM: "Update incoming", waits out a boss fight (4 min max), saves, exits
 public/          Three.js client (no build step): main.js, world.js, style.css
 public/models/   rigged character models (glTF) with shared animations
 test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
+test/bubbles.js  speech bubble logic: duration, one per speaker, who sees which line (public/bubbles.js)
 test/feeltext.js in-process checks for who sees combat text (`to` tags on reactions) and which boss hits hit-stop their victim
 test/warden3.js  in-process checks for the Quake Ring (jump / roll / out of reach), Warden scaling and bot jump timing per capability
 test/aircontrol.js  jump air control: the shared air step, client prediction vs the server's movement check while airborne, bots steering mid-jump
@@ -380,7 +383,11 @@ Teamwork comes from the party as each bot sees it, **real players included**:
 | leave | leave, dismiss | leaves the party (a bot a player added goes home: it's dismissed) |
 | status | status, report | answers with HP, level, potions and what it is doing |
 
-Chat channels: plain text goes to everyone, `/p text` to your party, `/s text` to players within 40 m.
+Chat channels: plain text goes to everyone, `/p text` to your party, `/s text` to players within 40 m. `/kneel`, `/sit`, `/bow` and `/stand` set a pose instead (never shown as chat).
+
+**Poses** (`server/poses.js`, `public/poses.js`): `setPose(p, 'kneel' | 'sit' | 'bow' | null)` stores `p.pose` and sends `{ t: 'pose', id, k }`; every snapshot lists held poses as `w.poses = [[id, k], ...]` (left out when nobody is posed; the player rows are unchanged), so late joiners and spectators see them. Moving, a used skill or attack, a dodge, a jump, guarding, a teleport or death clears the pose. The client eases the rig into a procedural pose over 0.4 s (bone rotations layered over the plain Idle clip, `POSES` in `public/world.js`, like the Warden's wind-ups) and drops it the moment your own character moves.
+
+**Speech bubbles** (`public/bubbles.js`): every chat line also pops up over the speaker's head, bots' chatter included, to whoever would see it in the log (say within 40 m, party chat to the party, global to everyone; spectators see all of it; `/b` orders never). A rounded panel above the nameplate (max ~260 px, word-wrapped), it fades in, holds ≈ 1.6 s + 0.07 s per character (2–5 s; a `hold` in seconds on the chat event wins, for the scene director), and fades out; a new line from the same speaker replaces the old one. Hidden when the speaker is off screen, a little smaller far away. Settings → Speech bubbles turns them off (the chat log still has everything). Test: `node test/bubbles.js`.
 
 **Class plug-ins** (`shared/bots/registry.js`): a class's bot logic is `registerClassBrain(cls, { role, name, parry, combat(b, tgt, ctx), idle(b, ctx), onEvent(b, e), onLevel(b, lvl, ctx) })`; the brain handles perception, dodging, party, targets, orders and chatter, the plug-in only plays its kit against the target it is given (`ctx`: `useSkill`, `moveToward`, `switchOpen`, `dodge`, `ready`, `anchor`, `tank`, `hurt`, `healFocus`, `party`, `say`...). Systems that run on level-up (talents, weapon styles) hook in with `registerBotHook('onLevel', (b, lvl, ctx) => ...)`.
 
