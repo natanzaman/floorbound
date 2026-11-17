@@ -218,5 +218,32 @@ g.time = 10; clear();
   assert.equal(row.length, 9); assert.equal(row[8], 50);
   ok('snapshot mob rows carry posture (0-100) as the 9th field');
 }
+
+// ---------- burrowed Bog Lurkers (m.hidden) can't be targeted ----------
+{
+  clear();
+  const cl = g.addPlayer(null, 'Lyra', 'cleric'), gd = g.addPlayer(null, 'Tor', 'guardian'), sw = g.addPlayer(null, 'Ash', 'swordsman');
+  const lur = g.f2Init(g.addMob('lurker', 600, 60));
+  const shb = g.f2Init(g.addMob('shieldback', 600, 66)); // visible, behind the lurker on the Smite line
+  shb.face = 0; // facing away from the cleric (+z), so the shell doesn't block
+  assert.equal(lur.hidden, true);
+  for (const p of [cl, gd, sw]) { p.x = 600; p.z = 57; p.face = 0; p.cds = [0, 0, 0, 0]; p.lvl = 10; }
+  lur.x = 600; lur.z = 60;
+  g.useSkill(cl, 0, 0); // Smite straight down +z: flies over the lurker into the shieldback
+  assert.equal(lur.hp, lur.maxHp, 'smite skips a burrowed lurker');
+  assert.ok(shb.hp < shb.maxHp, 'smite hits the enemy behind it');
+  const bolt = ev('fx').find(e => e.s === 'smite');
+  assert.ok(bolt.z2 > 63, 'the bolt is drawn to the shieldback, not stopped at the lurker');
+  g.useSkill(gd, 1, 0); // Taunt
+  assert.equal(lur.threat.has(gd.id), false, 'taunt does not pull a burrowed lurker');
+  assert.ok(shb.threat.has(gd.id));
+  g.useSkill(sw, 2, 0); g.useSkill(sw, 0, 0); g.useSkill(sw, 1, 0); // Whirl, Slash, Rush
+  g.hitCircle(sw, lur.x, lur.z, 5, 50, { stun: 2 });
+  assert.equal(lur.hp, lur.maxHp); assert.equal(lur.contributors.size, 0); assert.equal(lur.stunUntil, 0);
+  lur.hidden = false; // surfaced: fair game again
+  g.hitCircle(sw, lur.x, lur.z, 2, 50);
+  assert.ok(lur.hp < lur.maxHp);
+  ok('burrowed Bog Lurkers are skipped by Smite, Taunt, arcs, circles and lines; surfaced ones can be hit');
+}
 console.log(`all ${n} checks passed`);
 process.exit(0);

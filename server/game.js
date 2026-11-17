@@ -8,7 +8,7 @@ import {
   CONSUMABLES, SHOP, MERCHANT, BAG_SIZE, SLOTS, DROPS, makeItem, lastAttackItem, rollRarity, gearStats, sellPrice, newInventory,
 } from '../shared/items.js';
 import { TITLES, newStats, meetsTitle } from '../shared/titles.js';
-import { F2, crossesGate2 } from '../shared/floor2.js';
+import { F2, crossesGate2, floorOf, inArena2 } from '../shared/floor2.js';
 import { F2Methods } from './floor2.js';
 import crypto from 'node:crypto';
 import { SmithMethods } from './smith.js';
@@ -103,6 +103,7 @@ export class Game {
     this.players.set(p.id, p);
     this.sys(`${p.name} the ${CLASSES[cls].name} entered the tower.`);
     this.track(p, 'session_start', { cls, lvl: p.lvl, anon: !saved, fresh: !!saved && p.lvl === 1 && p.xp === 0 });
+    this.announceRareTo(p); // a late joiner still gets the banner/beam for a rare that's already out
     return p;
   }
 
@@ -532,7 +533,7 @@ export class Game {
       case 'taunt': {
         fx('ring', { r: 8, c: 'gold' });
         for (const m of this.mobs.values()) {
-          if (m.dead || dist(m, p) > 8 + m.def.radius) continue;
+          if (!this.targetable(m) || dist(m, p) > 8 + m.def.radius) continue; // burrowed lurkers can't be taunted
           let top = 0; for (const v of m.threat.values()) top = Math.max(top, v);
           m.threat.set(p.id, top + 100);
         }
@@ -547,7 +548,7 @@ export class Game {
         const range = 10, dx = Math.sin(p.face), dz = Math.cos(p.face);
         let best = null, bestT = range;
         for (const m of this.mobs.values()) {
-          if (m.dead) continue;
+          if (!this.targetable(m)) continue; // the bolt flies over burrowed lurkers
           const vx = m.x - p.x, vz = m.z - p.z, along = vx * dx + vz * dz;
           if (along < 0 || along > range + m.def.radius) continue;
           const perp = Math.abs(vx * dz - vz * dx);
@@ -585,6 +586,9 @@ export class Game {
     }
   }
 
+  // Can a player's attack touch this mob? Not when dead or burrowed (Floor 2's Bog Lurkers: m.hidden).
+  targetable(m) { return !!m && !m.dead && !m.hidden; }
+
   inArc(p, m, range, half) {
     const d = dist(p, m);
     if (d > range + m.def.radius) return false;
@@ -593,26 +597,26 @@ export class Game {
   }
 
   hitArc(p, range, half, amount, opts) {
-    for (const m of this.mobs.values()) if (!m.dead && this.inArc(p, m, range, half)) this.damageMob(m, p, amount, opts);
+    for (const m of this.mobs.values()) if (this.targetable(m) && this.inArc(p, m, range, half)) this.damageMob(m, p, amount, opts);
   }
 
   hitCircle(p, x, z, r, amount, opts) {
     for (const m of this.mobs.values()) {
-      if (!m.dead && Math.hypot(m.x - x, m.z - z) <= r + m.def.radius) this.damageMob(m, p, amount, opts);
+      if (this.targetable(m) && Math.hypot(m.x - x, m.z - z) <= r + m.def.radius) this.damageMob(m, p, amount, opts);
     }
   }
 
   hitLine(p, x0, z0, x1, z1, width, amount, opts) {
     const lx = x1 - x0, lz = z1 - z0, len2 = lx * lx + lz * lz || 1;
     for (const m of this.mobs.values()) {
-      if (m.dead) continue;
+      if (!this.targetable(m)) continue;
       const tt = Math.max(0, Math.min(1, ((m.x - x0) * lx + (m.z - z0) * lz) / len2));
       if (Math.hypot(m.x - (x0 + lx * tt), m.z - (z0 + lz * tt)) <= width + m.def.radius) this.damageMob(m, p, amount, opts);
     }
   }
 
   damageMob(m, p, base, { threat = 1, stun = 0, brk = false, interrupt = false, knock = 0, heavy = false } = {}) {
-    if (m.dead) return;
+    if (!this.targetable(m)) return;
     if (m.def.f2 && (base = this.f2DamageMod(m, p, base)) <= 0) return; // Floor 2: shells, burrowed lurkers
     const t = this.time;
     p.lastCombat = t;
@@ -762,8 +766,9 @@ export class Game {
       if (this.fight?.ids.has(p.id)) this.fight.deaths++;
       if (this.fight && (this.fight.ids.has(p.id) || inArena(p.x, p.z))) (this.fight.pd ||= new Map()).set(p.id, (this.fight.pd.get(p.id) || 0) + 1); // for "Undying"
       this.bumpStat(p, 'deaths');
-      this.track(p, 'death', { cause: src, lvl: p.lvl, area: inArena(p.x, p.z) ? 'arena' : p.z > 95 ? 'woods' : 'field' });
-      this.events.push({ t: 'pdie', id: p.id, src });
+      const floor = floorOf(p.x); // the respawn point (and the stats page) depend on the floor you died on
+      this.track(p, 'death', { cause: src, lvl: p.lvl, floor, area: (floor === 2 ? inArena2(p.x, p.z) : inArena(p.x, p.z)) ? 'arena' : p.z > 95 ? 'woods' : 'field' });
+      this.events.push({ t: 'pdie', id: p.id, src, f: floor });
       this.sys(`${p.name} was defeated.`);
     }
   }
@@ -1017,6 +1022,14 @@ export class Game {
     this.events.push({ t: 'rare', id: m.id, type, name: m.def.name, x: r2(m.x), z: r2(m.z) });
     this.sys(`${m.def.name} has been sighted in ${RARE.spawns[type].where}!`);
     return m;
+  }
+
+  // Re-send the current rare's announcement to one player (e.g. someone who joined after it spawned).
+  announceRareTo(p) {
+    const m = this.rare.mob;
+    if (!m || m.dead || !this.mobs.has(m.id)) return;
+    this.events.push({ t: 'rare', to: p.id, late: 1, id: m.id, type: m.type, name: m.def.name, x: r2(m.x), z: r2(m.z) });
+    this.sys(`${m.def.name} is roaming ${RARE.spawns[m.type].where}!`, p.id);
   }
 
   // Everyone who damaged a rare gets XP and their own loot roll, party or not.

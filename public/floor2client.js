@@ -99,9 +99,13 @@ export function initFloor2Client(ctx) {
         else if (e.k === 'orb') sfx.play('bolt', at, 0.6);
         else if (e.k === 'opop') { fx.ring(e.x, e.z, 1.3, 0x5eead4, 0.35); fx.sparks(e.x, 1.2, e.z, 10, 0xa5f3fc, 0.2, 5); }
         else if (e.k === 'erupt') {
+          const lm = mobs.get(e.id); if (lm) lm.hidden = false;
           fx.ring(e.x, e.z, e.r + 0.5, 0x8b6b3a, 0.6); fx.sparks(e.x, 0.4, e.z, 26, 0x7a5a32, 0.4, 10);
           sfx.play('boom', at, 0.9); if (near(e.x, e.z, 10)) ctx.shake(0.3);
-        } else if (e.k === 'burrow') { fx.ring(e.x, e.z, 1.8, 0x8b6b3a, 0.5); fx.sparks(e.x, 0.3, e.z, 14, 0x7a5a32, 0.3, 6); }
+        } else if (e.k === 'burrow') {
+          const m = mobs.get(e.id); if (m) m.hidden = true; // untargetable until it erupts (the next snapshot drops it)
+          if (state.lock === e.id) state.lock = 0;
+          fx.ring(e.x, e.z, 1.8, 0x8b6b3a, 0.5); fx.sparks(e.x, 0.3, e.z, 14, 0x7a5a32, 0.3, 6); }
         else if (e.k === 'call') {
           fx.ring(e.x, e.z, e.r, 0xa78bfa, 1.0); fx.ring(e.x, e.z, e.r * 0.5, 0xe879f9, 0.7);
           const m = mobs.get(e.id); if (m) ctx.floatNum(m.model.group.position, m.model.height + 0.6, e.n ? `CALL OF THE MIRE ×${e.n}` : 'CALL OF THE MIRE', 'crit');

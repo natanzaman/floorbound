@@ -127,7 +127,7 @@ New characters get a short step-by-step guide card (move, hit, dodge, kill, bag,
 
 ## Play tracking
 
-With a database, the server records play events (session start/end, first kill, deaths and their cause, party joins, guide steps, boss attempts, rare drops) in `play_events`. See the aggregates at **/stats.html** (raw JSON at `/api/stats?days=7`).
+With a database, the server records play events (session start/end, first kill, deaths and their cause, party joins, guide steps, boss attempts, rare drops) in `play_events`. See the aggregates at **/stats.html** (raw JSON at `/api/stats?days=7`): boss kills, wipes, median kill time and sessions that reached the boss for each floor side by side, and what kills players on each floor.
 
 ## Combat: posture, Break and Switch
 

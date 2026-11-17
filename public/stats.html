@@ -19,6 +19,15 @@
   .row .bar { flex: 1; height: 12px; background: rgba(255,255,255,.08); border-radius: 6px; overflow: hidden; }
   .row .bar div { height: 100%; background: #60a5fa; }
   .row .n { width: 40px; text-align: right; opacity: .8; }
+  table.floors { width: 100%; border-collapse: separate; border-spacing: 0; background: rgba(255,255,255,.05); border: 1px solid rgba(160,200,255,.18); border-radius: 12px; overflow: hidden; font-size: 14px; }
+  table.floors th, table.floors td { padding: 9px 14px; text-align: right; border-bottom: 1px solid rgba(255,255,255,.06); }
+  table.floors th:first-child, table.floors td:first-child { text-align: left; opacity: .75; font-weight: 400; }
+  table.floors thead th { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; opacity: .85; }
+  table.floors thead th small { display: block; font-size: 11px; letter-spacing: 0; text-transform: none; opacity: .6; font-weight: 400; }
+  table.floors td b { font-size: 18px; }
+  table.floors tr:last-child td { border-bottom: 0; }
+  .fl { font-size: 10px; padding: 1px 5px; border-radius: 4px; background: rgba(96,165,250,.25); margin-right: 6px; }
+  .fl.f2 { background: rgba(45,212,191,.28); }
   select { background: #1b2340; color: #fff; border: 1px solid #334; border-radius: 6px; padding: 4px 8px; }
 </style>
 </head>
@@ -30,6 +39,7 @@
 </main>
 <script>
 const GUIDE = ['Moved', 'First hit', 'Dodged', 'First kill', 'Opened bag / potion', 'Joined a party', 'First Switch', 'Reached the Warden', 'Beat the Warden'];
+const FLOORS = { 1: ['Floor 1', 'The Horned Warden'], 2: ['Floor 2', 'The Drowned Sovereign'] };
 const RAR = ['Common', 'Uncommon', 'Rare', 'Epic', 'Last Attack'];
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0) + '%';
 const mins = s => (s == null ? '–' : s < 90 ? `${Math.round(s)} s` : `${(s / 60).toFixed(1)} min`);
@@ -39,16 +49,26 @@ async function load() {
   const d = await fetch(`/api/stats?days=${document.getElementById('days').value}`).then(r => r.json());
   const out = document.getElementById('out');
   if (!d.enabled) { out.textContent = d.error || 'Tracking is off (no database).'; return; }
-  const s = d.sessions, f = d.firsts, b = d.boss, r = d.retention, l = d.lengths;
+  const s = d.sessions, f = d.firsts, r = d.retention, l = d.lengths;
+  const fl = d.floors || { 1: { ...d.boss, sessions_reached_boss: f.sessions_reached_boss } }; // older servers: Floor 1 only
+  const ids = Object.keys(fl);
+  const row = (label, v) => `<tr><td>${label}</td>${ids.map(k => `<td><b>${v(fl[k])}</b></td>`).join('')}</tr>`;
+  const bossTable = `<table class="floors"><thead><tr><th></th>${ids.map(k => `<th>${(FLOORS[k] || [`Floor ${k}`])[0]}<small>${(FLOORS[k] || ['', 'Boss'])[1]}</small></th>`).join('')}</tr></thead><tbody>
+    ${row('Sessions that reached the boss', x => `${x.sessions_reached_boss} <small style="opacity:.6">(${pct(x.sessions_reached_boss, s.sessions)})</small>`)}
+    ${row('Boss kills', x => x.kills)}${row('Boss wipes', x => x.wipes)}
+    ${row('Kill rate (kills / attempts)', x => pct(x.kills, x.kills + x.wipes))}
+    ${row('Median kill time', x => mins(x.kill_secs))}
+    ${row('Player deaths on the floor', x => x.deaths ?? '–')}
+  </tbody></table>`;
+  const floorTag = n => `<span class="fl ${n === 2 ? 'f2' : ''}">F${n || 1}</span>`;
   out.innerHTML = `<div class="grid">
     ${card(s.sessions, 'sessions')}${card(s.characters, 'characters played')}
     ${card(mins(l.median_secs), 'median session length')}${card(mins(f.first_kill_secs), 'median time to first kill')}
     ${card(pct(f.sessions_with_party, s.sessions), `sessions that joined a party (${f.via_finder} via finder)`)}
-    ${card(pct(f.sessions_reached_boss, s.sessions), 'sessions that reached the Warden')}
-    ${card(`${b.kills} / ${b.wipes}`, 'Warden kills / wipes')}${card(mins(b.kill_secs), 'median Warden kill time')}
     ${card(pct(r.came_back, r.characters), 'characters that came back on another day')}
   </div>
-  <h2>What kills players</h2>${bars(d.deaths, x => x.cause, x => x.n) || '<div class="sub">No deaths yet.</div>'}
+  <h2>Floor bosses</h2>${bossTable}
+  <h2>What kills players</h2>${bars(d.deaths, x => `${floorTag(x.floor)}${x.cause}`, x => x.n) || '<div class="sub">No deaths yet.</div>'}
   <h2>New-player guide: furthest step reached</h2>${bars(d.guide, x => GUIDE[x.step - 1] || `Step ${x.step}`, x => x.n) || '<div class="sub">No data yet.</div>'}
   <h2>Rare+ drops</h2>${bars(d.loot, x => RAR[x.rarity], x => x.n) || '<div class="sub">No data yet.</div>'}`;
 }
