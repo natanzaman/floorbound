@@ -25,6 +25,8 @@ const CSS = `
   border: 1px solid color-mix(in srgb, var(--cc) 40%, #2a3550); border-radius: 14px; color: var(--ink);
   box-shadow: 0 24px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.03) inset; font-size: 13px; overflow: hidden; user-select: none; }
 #talentsp.hidden { display: none; }
+#tflash { position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%); max-width: 70%; padding: 8px 14px; border-radius: 10px; background: #2a1414; border: 1px solid #f87171; color: #fecaca; font: 600 13px system-ui; pointer-events: none; opacity: 0; transition: opacity .2s; z-index: 60; }
+#tflash.on { opacity: 1; } #tflash.off { opacity: 0; }
 body.tree-open #rare-hint { display: none !important; } /* the rare-enemy pointer sits over the window's tabs */
 #talentsp h3, #talentsp .serif { font-family: ${SERIF}; font-weight: 600; letter-spacing: .01em; }
 #talentsp .hd { display: flex; align-items: center; gap: 14px; padding: 12px 16px 10px; border-bottom: 1px solid rgba(255,255,255,.06); }
@@ -217,6 +219,7 @@ export function initTalents(ctx) {
     if (msg.type === 'mastery') { S.m = msg.m; if (isOpen() && S.tab === 'abilities') render(); return false; } // mastery.js handles it too
     if (msg.type !== 'talents') return false;
     S.r = msg.r || {}; S.pts = msg.pts | 0;
+    clearTimeout(S.waitT);
     badge();
     if (free() > 0) firstTip();
     if (isOpen()) render();
@@ -519,8 +522,17 @@ export function initTalents(ctx) {
   });
   function spend(id) {
     const why = spendBlock(cls(), S.r, state.lvl, id);
-    if (why) { sfx.play('ui'); return; }
-    send({ type: 'talent', op: 'spend', id });
+    if (why) { sfx.play('ui'); return flash(why); } // say why (tier gate, missing line, no points, max rank)
+    if (!send({ type: 'talent', op: 'spend', id })) return flash('Not connected to the server.');
+    clearTimeout(S.waitT);
+    S.waitT = setTimeout(() => flash('No answer from the server. If this keeps happening, reload the page.'), 2500);
+  }
+  // A short message over the bottom of the window (blocked clicks, server replies).
+  function flash(text) {
+    let el = document.getElementById('tflash');
+    if (!el) { el = document.createElement('div'); el.id = 'tflash'; document.body.appendChild(el); }
+    el.textContent = text; el.classList.remove('off'); void el.offsetWidth; el.classList.add('on');
+    clearTimeout(S.flashT); S.flashT = setTimeout(() => el.classList.replace('on', 'off'), 2600);
   }
   panel.addEventListener('keydown', ev => { const nd = ev.target.closest?.('.tn'); if (nd && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); spend(nd.dataset.id); } });
   panel.addEventListener('contextmenu', ev => {

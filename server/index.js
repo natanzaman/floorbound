@@ -199,6 +199,7 @@ if (process.env.LOCKSTEP) {
 }
 
 admin.init({ game, bots });
+server.on('error', err => { console.error('Server error', err); if (err.code === 'EADDRINUSE' || err.code === 'EACCES') process.exit(1); }); // can't listen: don't linger
 db.migrate()
   .then(() => hall.load())
   .then(() => { game.hadFirstClear = hall.hasFirst(); game.hadFirstClear2 = hall.hasFirst(2); })

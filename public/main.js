@@ -113,9 +113,18 @@ async function initLogin() {
   if (h.get('signin')) loginMsg(h.get('signin') === 'cancelled' ? 'Discord sign-in was cancelled.' : 'Discord sign-in failed. Try again?');
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
   try { acct.cfg = await fetch('/api/config').then(r => r.json()); } catch {}
-  if (!acct.cfg.accounts) { $('enter').textContent = 'Enter the Tower'; return showPanel('create'); } // anonymous mode
+  let rejoin = null;
+  try { rejoin = JSON.parse(sessionStorage.getItem('fb_rejoin') || 'null'); sessionStorage.removeItem('fb_rejoin'); } catch {}
+  if (rejoin && Date.now() - rejoin.t > 10 * 60e3) rejoin = null;
+  if (!acct.cfg.accounts) {
+    $('enter').textContent = 'Enter the Tower'; showPanel('create'); // anonymous mode
+    if (rejoin?.msg?.cls) { state.cls = rejoin.msg.cls; join(rejoin.msg); }
+    return;
+  }
   if (!acct.token) return showAuth();
   await loadMe();
+  const c = rejoin?.msg?.session === acct.token && acct.me?.characters?.find(x => x.id === rejoin.msg.character);
+  if (c) { state.cls = c.cls; join({ type: 'join', session: acct.token, character: c.id }); } // back in after a server restart
 }
 function showAuth() { $('discord-btn').classList.toggle('hidden', !acct.cfg.discord); showPanel('auth'); }
 async function loadMe() {
@@ -188,11 +197,30 @@ async function join(joinMsg) {
   ws.onmessage = e => onMessage(JSON.parse(e.data));
   ws.onclose = () => {
     if (state.ws !== ws) return; // replaced or denied
-    if (state.joined) { log('Disconnected from the server. Refresh to reconnect.', 'sys'); banner('DISCONNECTED', 'Refresh the page to reconnect'); }
+    if (state.joined) reconnect(joinMsg);
     else { state.ws = null; loginMsg('Could not connect to the server.'); }
   };
 }
 const send = o => state.ws?.readyState === 1 && state.ws.send(JSON.stringify(o));
+// Lost the server (usually a deploy restarting it): cover the screen, wait until it answers again, then reload and
+// rejoin with the same character (sessionStorage 'fb_rejoin', picked up by initLogin; good for 10 minutes).
+function reconnect(joinMsg) {
+  try { sessionStorage.setItem('fb_rejoin', JSON.stringify({ msg: joinMsg, t: Date.now() })); } catch {}
+  let el = $('reconnect');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'reconnect';
+    el.innerHTML = '<div><b>Connection lost</b><span>The server is restarting (usually an update). Reconnecting…</span><button>Reload now</button></div>';
+    el.querySelector('button').onclick = () => location.reload();
+    document.body.appendChild(el);
+  }
+  document.exitPointerLock?.();
+  const t0 = Date.now();
+  const poll = async () => {
+    try { const r = await fetch('/api/config', { cache: 'no-store' }); if (r.ok && Date.now() - t0 > 1500) return location.reload(); } catch {}
+    setTimeout(poll, 2000);
+  };
+  setTimeout(poll, 1500);
+}
 const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
 const wheel = initBotWheel({ send, state, players, log }); // orders for the bots in your party: hold V (public/botwheel.js)
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
