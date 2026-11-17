@@ -33,7 +33,7 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Basic attack | Left click or J (hold) | Big round button (hold) |
 | Skills | 1, 2, 3 | Small buttons |
 | Dodge roll | Shift | Dodge button |
-| Jump | Space (hop over the boss's slams and Quake Rings) | Jump button |
+| Jump | Space (hop over the boss's slams and Quake Rings; you keep your momentum and can steer in the air, a little less sharply than on the ground) | Jump button |
 | Guard / parry (Guardian) | Hold R to guard; tap R just before a hit to parry | — |
 | Select a character (enemy or ally) | Hold Ctrl (Cmd on Mac) to preview, Ctrl+click to select; Ctrl+right-click to deselect | Lock on button (enemies) |
 | Lock on / cycle enemies | Tab (Esc to clear) | Lock on button |
@@ -56,7 +56,7 @@ Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 
 | Bramble Spitter | 4 | Rooted plant. Draws a red line, then fires a thorn along it: sidestep or roll. |
 | Alpha Wolf (elite) | 7 | Leads a pack: nearby wolves hit 25% harder. Howls to send the pack into a frenzy. |
 | Warden's Hound | 8 | Summoned by the Warden in phase 2. Stays in the chamber. |
-| The Horned Warden (boss) | 10 | Three phases. 100–66%: cleaves and ground slams. 66–33%: adds hounds and a horn charge down a red lane. Below 33%: enraged spin and rockfall circles under everyone. In every phase (more often later): the perilous **Horn Sweep** and the **Quake Ring**: it rears up and stomps (an amber circle marks how far the rings reach), then a low shockwave rolls out across the floor; **jump** as the wavefront reaches you (airborne = no damage, "Jumped!"), roll through it, or stand outside the amber circle. One ring per stomp in phase 1, two in phase 2, three in phase 3. |
+| The Horned Warden (boss) | 10 | Three phases. 100–66%: cleaves and ground slams. 66–33%: adds hounds and a horn charge down a red lane. Below 33%: enraged spin and rockfall circles under everyone. Every big attack has its own wind-up pose, held long enough to read and get ready: it rears up with the axe overhead (ground slam), crouches with its horns lowered (horn charge), coils round with the axe wound back (Horn Sweep, spin), or lifts a knee high (Quake Ring stomp). In every phase (more often later): the perilous **Horn Sweep** and the **Quake Ring**: it rears up on one leg and stomps (an amber circle marks how far the rings reach), then a low shockwave rolls out across the floor; **jump** as the wavefront reaches you (airborne = no damage, "Jumped!"), roll through it, or stand outside the amber circle. One ring per stomp in phase 1, two in phase 2, three in phase 3. |
 
 ## Floor 2 — The Glimmering Mire
 
@@ -140,7 +140,7 @@ With a database, the server records play events (session start/end, first kill, 
 - **Switch:** the first hit from a *teammate* on a broken enemy does 2.5x damage, and follow-up hits do 1.4x. You can't Switch your own Break. Charms of the Switch boost this further.
 - **Perfect dodge:** start a roll at most ~0.2 s before a hit lands and it's PERFECT: a brief slow-motion flash, heavy posture damage to the attacker, and for 1.5 s your next hit does +50% damage and double posture damage.
 - **Guard and parry (Guardian, R):** hold R to guard: hits from the front (±70°) take 70% less damage, but you can't attack and you move at half speed. Press R at most ~0.2 s before a frontal hit lands to **parry** it: no damage at all, and big posture damage to the attacker. Mashing R doesn't parry.
-- **Perilous attacks:** the Warden's **Horn Sweep** shows an orange/gold circle around it with a "!" glint and its own warning horn (about 0.9 s). Anyone inside takes about 80% of their max health: Shield Wall, Taunt, guarding, gear and jumping don't reduce it. Roll through it (i-frames) or parry it. Breaking the Warden during the wind-up cancels it. It comes every ~15 s in phase 1, more often later (never while a Quake Ring is still rolling out near the Warden).
+- **Perilous attacks:** the Warden's **Horn Sweep** shows an orange/gold circle around it with a "!" glint and its own warning horn (about 1.2 s). Anyone inside takes about 80% of their max health: Shield Wall, Taunt, guarding, gear and jumping don't reduce it. Roll through it (i-frames) or parry it. Breaking the Warden during the wind-up cancels it. It comes every ~12 s in phase 1, more often later (never while a Quake Ring is still rolling out near the Warden).
 
 ## Skill mastery and evolutions
 
@@ -283,6 +283,7 @@ public/models/   rigged character models (glTF) with shared animations
 test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
 test/warden3.js  in-process checks for the Quake Ring (jump / roll / out of reach), Warden scaling and bot jump timing per capability
+test/aircontrol.js  jump air control: the shared air step, client prediction vs the server's movement check while airborne, bots steering mid-jump
 shared/bots/     one brain per bot: brain.js (decision loop, party teamwork, orders), motor.js (moving, dodging), registry.js (per-class plug-ins), classes.js (Guardian, Swordsman, Cleric), social.js (orders, chatter)
 shared/teambots.js  startTeam(): a few bots in one party; used by test/team.js, public/bots.html and server/botmanager.js
 public/botwheel.js  the bot command wheel (V)

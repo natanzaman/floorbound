@@ -22,6 +22,7 @@ export function moveToward(b, tx, tz, stop = 0.4, speed = PLAYER_SPEED) {
   [tx, tz] = aimNoise(b, tx, tz); // capability: positioning error in fights
   const dx = tx - b.x, dz = tz - b.z, d = Math.hypot(dx, dz);
   if (d <= stop) return false;
+  if (b.airUntil > clock(b)) speed *= JUMP.air; // jumping: air control is a little weaker (shared/data.js airStep)
   const step = Math.min(d - stop, speed * DT);
   let nx = b.x + (dx / d) * step, nz = b.z + (dz / d) * step;
   [nx, nz] = resolveCollision(nx, nz);
@@ -93,29 +94,40 @@ export function quakeEta(b, now = clock(b)) {
   }
   return best;
 }
-// Jump the wavefront (airborne from JUMP.airFrom to JUMP.airTo after the press: press ~0.27 s before it reaches us,
-// then hold still until it has passed, so walking doesn't change when it arrives), or roll through it when the jump
-// isn't ready. Capability adds timing error (quakeError). Returns true while it takes over the bot's turn.
+// Jump the wavefront (airborne from JUMP.airFrom to JUMP.airTo after the press: press ~0.27 s before it reaches us),
+// or roll through it when the jump isn't ready. In the air it steers out of any telegraph it's standing in (a slam or
+// rockfall circle), sideways to the ring so the wavefront still passes under it on time; otherwise it holds still.
+// Capability adds timing error (quakeError). Returns true while it takes over the bot's turn.
 export function quakeDodge(b) {
   if (!b.quakes?.length) return false;
   const now = clock(b);
   b.quakes = b.quakes.filter(q => (now - q.start) * q.sp < q.max + q.w);
-  if (b.qHold && b.qHold.until > now) return true; // airborne: let it pass under us
+  if (b.qHold && b.qHold.until > now) { airSteer(b, b.qHold.q); return true; } // airborne: let it pass under us
   b.qHold = null;
   const e = quakeEta(b, now);
   if (!e || b.roll || e.q.jumped) return false;
   const lead = JUMP.airFrom + (JUMP.airTo - JUMP.airFrom - (e.tOut - e.tIn)) / 2 + quakeError(b, e.q); // ~0.27 s
   if (e.tIn > lead || e.tIn < -0.1) return false;
   if ((b.jumpT ?? -9) + JUMP.cd <= now) {
-    e.q.jumped = true; b.jumpT = now;
+    e.q.jumped = true; b.jumpT = now; b.airUntil = now + JUMP.time;
     b.send({ type: 'jump' });
-    b.qHold = { until: now + Math.min(JUMP.airTo, e.tOut + 0.1) };
+    b.qHold = { until: now + Math.min(JUMP.airTo, e.tOut + 0.1), q: e.q };
     return true;
   }
   if (e.tIn > 0.15 || b.dodgeCd > 0) return false; // jump on cooldown: roll through it instead
   e.q.jumped = true;
   roll(b, Math.atan2(e.q.x - b.x, e.q.z - b.z));
   return true;
+}
+
+// Mid-jump over a Quake Ring: if we're standing in a telegraph, drift out of it along the ring (tangentially).
+function airSteer(b, q) {
+  const spot = b.tele && dodgeSpot(b);
+  if (!spot) return;
+  const rx = b.x - q.x, rz = b.z - q.z, rl = Math.hypot(rx, rz) || 1, ux = rx / rl, uz = rz / rl;
+  const dx = spot[0] - b.x, dz = spot[1] - b.z, along = dx * ux + dz * uz; // drop the part toward / away from the ring
+  const tx = dx - ux * along, tz = dz - uz * along;
+  if (Math.hypot(tx, tz) > 0.3) moveToward(b, b.x + tx * 3, b.z + tz * 3, 0.2);
 }
 
 // Point just outside any active telegraph we're standing in (or Floor 2 hazard), or null.
@@ -145,15 +157,24 @@ export function dodgeSpot(b) {
       }
       continue;
     }
-    let cx = t.x, cz = t.z;
-    if (t.follow) { const m = b.mobs.find(m => m.id === t.follow); if (m) { cx = m.x; cz = m.z; } }
-    const d = d2(b.x, b.z, cx, cz);
-    if (d < t.r + 1.2) {
-      const ux = d > 0.1 ? (b.x - cx) / d : 1, uz = d > 0.1 ? (b.z - cz) / d : 0;
-      return [cx + ux * (t.r + 2.2), cz + uz * (t.r + 2.2)];
+    const [cx, cz] = teleAt(b, t), d = d2(b.x, b.z, cx, cz);
+    if (d < t.r + 1.2) { // straight out, unless that lands in another circle: then the nearest way out that doesn't
+      const a = d > 0.1 ? Math.atan2(b.x - cx, b.z - cz) : 0;
+      let first = null;
+      for (const off of [0, 0.7, -0.7, 1.4, -1.4, 2.1, -2.1, Math.PI]) {
+        const x = cx + Math.sin(a + off) * (t.r + 2.2), z = cz + Math.cos(a + off) * (t.r + 2.2);
+        if (!walkable(x, z, !b.gateOpen)) continue;
+        first ||= [x, z];
+        if (!b.tele.some(o => o !== t && !o.line && d2(x, z, ...teleAt(b, o)) < o.r + 0.8)) return [x, z];
+      }
+      return first || [cx + Math.sin(a) * (t.r + 2.2), cz + Math.cos(a) * (t.r + 2.2)];
     }
   }
   return null;
+}
+function teleAt(b, t) { // a circle's centre (a Warden spin follows the Warden)
+  const m = t.follow && b.mobs.find(m => m.id === t.follow);
+  return m ? [m.x, m.z] : [t.x, t.z];
 }
 
 // Horn Sweep (perilous): roll through it at the last moment (a perfect dodge), or parry it (classes with parry: true).

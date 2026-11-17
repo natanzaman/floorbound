@@ -16,7 +16,19 @@ export const PARTY_MAX = 6;
 // Dodge roll: a short burst of movement with invulnerability frames.
 export const DODGE = { dist: 5.2, time: 0.34, iframes: 0.42, cd: 0.825 };
 // Jump: cosmetic hop, but you're airborne (and safe from ground slams) for most of it.
-export const JUMP = { time: 0.65, height: 1.1, airFrom: 0.08, airTo: 0.58, cd: 0.75 };
+// air: in the air you can steer at up to this fraction of your ground speed (more if you took off faster); steer: how
+// quickly (per s) your air velocity turns toward where you're steering (on the ground it's instant). See airStep.
+export const JUMP = { time: 0.65, height: 1.1, airFrom: 0.08, airTo: 0.58, cd: 0.75, air: 0.8, steer: 5 };
+// Air control, shared by client prediction and the bots: v ({ x, z }, m/s) keeps its momentum and eases toward the
+// input direction (dx, dz: unit vector, or 0, 0 for none) at the speed you took off with, at least JUMP.air x `want`
+// (your ground speed now) and never above it. No input = keep drifting. Never faster than on the ground, so the
+// server's movement check (onInput) accepts every airborne step.
+export function airStep(v, dx, dz, want, dt) {
+  if (!dx && !dz) return v;
+  const sp = Math.min(want, Math.max(want * JUMP.air, Math.hypot(v.x, v.z))), k = Math.min(1, dt * JUMP.steer);
+  v.x += (dx * sp - v.x) * k; v.z += (dz * sp - v.z) * k;
+  return v;
+}
 // Switch: a "break" hit staggers an enemy; the next hit from a DIFFERENT player is a Switch.
 export const SWITCH = { window: 2.4, bossWindow: 1.8, bossCd: 9, first: 2.5, follow: 1.4 };
 
@@ -174,17 +186,19 @@ export const WARDEN = {
   // Scaled to the fighters in the chamber when it engages (server/game.js scaleWarden). Party weight = the sum of each
   // fighter's role weight (hpRole: a damage dealer counts more than a healer); health = (hpBase + hpPer * weight^hpExp)
   // * (1 + hpLvl * levels above 10); damage = atk * (1 + atkLvl * levels above 10) * (1 + atkPer * fighters above 3).
-  phases: [0.66, 0.33], hpBase: 2400, hpPer: 800, hpExp: 1.8, hpLvl: 0.12, atkLvl: 0.06, atkPer: 0.12,
+  phases: [0.66, 0.33], hpBase: 2000, hpPer: 680, hpExp: 1.8, hpLvl: 0.12, atkLvl: 0.06, atkPer: 0.12,
   hpRole: { Tank: 0.6, Healer: 0.5, Support: 0.8, Damage: 1.2 },
-  slam: { every: [7, 5.5, 4], r: 5.5, wind: 1.2, mult: 2.4, per: 3 }, // one slam circle per `per` fighters (on different ones)
-  charge: { every: 9.5, len: 15, width: 2.4, wind: 1.1, mult: 2.4 },
+  slam: { every: [6.5, 5, 3.75], r: 5.5, wind: 1.6, mult: 3.0, per: 3 }, // one slam circle per `per` fighters (on different ones)
+  charge: { every: 9.5, len: 15, width: 2.4, wind: 1.5, mult: 3.0 },
+  cleave: { wind: 0.75 }, // its basic axe swing (a wedge in front of it)
   hounds: { every: 24, n: 2, max: 3 },
-  spin: { every: 8, r: 8, wind: 1.4, mult: 1.7 },
-  rock: { every: 6, r: 3.2, wind: 1.3, extra: 3, mult: 1.8 },
+  spin: { every: 8, r: 8, wind: 1.85, mult: 2.2 },
+  rock: { every: 6, r: 3.2, wind: 1.6, extra: 3, mult: 2.3 },
+  // Wind-ups (`wind`, s) are long enough to read the pose and the telegraph and get ready: each big attack has its own wind-up pose (public/world.js WINDUPS).
   // Quake Ring: the Warden rears up and stomps; shockwave rings roll out along the floor from where it stands.
   // Jump over the wavefront (airborne as it passes you), roll through it (i-frames), or be beyond `max` m.
   // rings per phase, `gap` s apart; `w`: half-thickness of the wavefront (m); speed in m/s.
-  quake: { every: [15, 12, 9.5], first: [9, 5, 4], wind: 1.5, speed: 9, w: 0.55, max: 15, mult: 2.2, rings: [1, 2, 3], gap: 0.95 },
+  quake: { every: [15, 12, 9.5], first: [9, 5, 4], wind: 2.0, speed: 9, w: 0.55, max: 15, mult: 2.7, rings: [1, 2, 3], gap: 0.95 },
 };
 export const THORN = { speed: 16, radius: 0.6, wind: 0.75 };
 // Rare named spawns: at most one alive; first after `first` s, then `every` s after the last one is gone.
@@ -226,4 +240,4 @@ export const PERFECT = { window: 0.2, counter: 1.5, dmg: 1.5, posture: 2 };
 // Guardian guard (hold R): frontal hits (within `arc` rad of facing) take `dr` less damage; a press <= `parry` s before a hit negates it.
 export const GUARD = { arc: (70 * Math.PI) / 180, dr: 0.7, parry: 0.2, speed: 0.5, repress: 0.6 };
 // The Warden's perilous Horn Sweep: dodge (i-frames) or parry it; shields, guard, gear and jumping don't help.
-export const SWEEP = { r: 9, wind: 0.9, frac: 0.8, every: [15, 11, 8.5], first: 10 };
+export const SWEEP = { r: 9, wind: 1.2, frac: 0.8, every: [12.5, 9.5, 7.5], first: 9 };

@@ -1004,7 +1004,7 @@ export class Game {
     if (d > def.range + 0.4) {
       this.moveMob(m, target.x, target.z, def.speed * (enraged ? 1.25 : 1) * (frenzy ? 1.3 : 1), dt, def.range);
     } else if (t >= m.atkT) {
-      const wind = def.boss ? 0.6 : def.ranged ? THORN.wind : 0.45;
+      const wind = def.boss ? (this.twistW || WARDEN).cleave.wind : def.ranged ? THORN.wind : 0.45;
       m.windupAt = t + wind;
       m.atkT = t + def.atkCd * (enraged ? 0.7 : 1) * (frenzy ? 0.7 : 1);
       const ev = { t: 'wind', id: m.id, d: wind, f: r2(m.face) };

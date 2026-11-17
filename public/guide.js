@@ -18,7 +18,7 @@ const STEPS = [
 const TIPS = {
   wedge: 'Red wedge: a bite is coming. Step out of it or roll.',
   aim: 'Something is aiming down that red line. Sidestep it.',
-  slam: 'Red circle: a ground slam. Roll out, or jump just as it lands.',
+  slam: 'Red circle: a ground slam (the Warden rears up, axe overhead). Roll out, or jump just as it lands: you can steer in the air.',
   lane: 'Charge lane! Get out sideways, fast.',
   rock: 'Rockfall: a circle drops under everyone. Keep moving.',
   quake: 'Quake Ring! A shockwave rolls out from the Warden: jump just as it reaches you, roll through it, or stand outside the amber circle.',
