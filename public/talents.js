@@ -20,8 +20,8 @@ const SERIF = '"Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif';
 const CSS = `
 #talentsp { --cc: #60a5fa; --ink: #e8e2d0; --ember: #e9b949; --line: #33405c; --slate: #0f1626; --raised: #172036;
   position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 48px); left: 50%; transform: translateX(-50%);
-  width: min(1180px, 97vw); height: min(780px, calc(100vh - 70px)); z-index: 7; display: flex; flex-direction: column;
-  background: radial-gradient(120% 60% at 50% -10%, color-mix(in srgb, var(--cc) 16%, transparent), transparent 60%), rgba(12,18,32,.96);
+  width: min(1180px, 97vw); height: min(780px, calc(100vh - 70px)); z-index: 20; display: flex; flex-direction: column;
+  background-color: #0d1322; background-image: radial-gradient(120% 60% at 50% -10%, color-mix(in srgb, var(--cc) 14%, transparent), transparent 60%);
   border: 1px solid color-mix(in srgb, var(--cc) 40%, #2a3550); border-radius: 14px; color: var(--ink);
   box-shadow: 0 24px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.03) inset; font-size: 13px; overflow: hidden; user-select: none; }
 #talentsp.hidden { display: none; }
@@ -93,7 +93,6 @@ const CSS = `
 #talentsp .btn:disabled { opacity: .4; cursor: default; border-color: var(--line); background: transparent; }
 #talentsp .btn.warn { border-color: #f59e0b; background: rgba(245,158,11,.18); }
 #talentsp .legend { display: grid; grid-template-columns: auto 1fr; gap: 5px 8px; align-items: center; font-size: 11.5px; opacity: .8; }
-#talentsp .legend i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid; display: inline-block; }
 #talentsp .tt { position: absolute; z-index: 3; width: 290px; pointer-events: none; padding: 10px 12px; border-radius: 10px;
   background: rgba(8,12,24,.97); border: 1px solid color-mix(in srgb, var(--bc) 60%, transparent); box-shadow: 0 10px 30px rgba(0,0,0,.5); font-size: 12.5px; line-height: 1.4; }
 #talentsp .tt h3 { margin: 0; font-size: 17px; color: var(--bc); }
@@ -154,7 +153,7 @@ const CSS = `
 #talentsp .step.done { opacity: 1; }
 #talentsp .step.done i { border-color: var(--cc); background: var(--cc); box-shadow: 0 0 8px var(--cc); }
 #talentsp .step.done::before { background: var(--cc); }
-#talentsp .step.evo i { border-radius: 4px; transform: rotate(45deg); }
+#talentsp .step.evostep i { border-radius: 3px; transform: rotate(45deg) scale(.9); }
 #talentsp .step.now { opacity: 1; }
 #talentsp .step.now i { border-color: var(--ember); }
 #talentsp .mbar { height: 5px; border-radius: 3px; background: rgba(0,0,0,.4); overflow: hidden; margin: 0 0 3px; }
@@ -299,7 +298,7 @@ export function initTalents(ctx) {
   }
 
   // ----- Talents pane -----
-  const W = 960, GUT = 56, COLW = (W - GUT) / 3, DX = 80, Y0 = 46, DY = 102;
+  const W = 960, GUT = 56, COLW = (W - GUT) / 3, DX = 80, Y0 = 46, DY = 110;
   const pos = (bi, nd) => [GUT + COLW * bi + COLW / 2 + nd.x * DX, Y0 + nd.tier * DY];
   function nodeState(nd) {
     const r = S.r[nd.id] | 0;
@@ -357,14 +356,18 @@ export function initTalents(ctx) {
     for (const nd of nodesOf(cls())) if (S.r[nd.id] && nd.fx.some(e => e.key)) lines.push(`<li class="k"><b>${esc(nd.name)}</b>: ${esc(nd.desc)}</li>`);
     const confirm = performance.now() - S.confirmT < 4000;
     return `<aside class="side">
-      <div class="big ${n ? '' : 'zero'}">${n}</div><div class="note">point${n === 1 ? '' : 's'} to spend · ${spent} of ${S.pts} spent. ${next}</div>
+      <div class="big ${n ? '' : 'zero'}">${n}</div><div class="note">point${n === 1 ? '' : 's'} to spend. ${spent} of ${S.pts} spent. ${next}</div>
       <button class="btn ${confirm ? 'warn' : ''}" data-a="respec" ${S.near && spent ? '' : 'disabled'}>${confirm ? 'Click again to refund every point' : 'Respec: refund all points'}</button>
       <div class="note ${S.near ? 'shrine-on' : ''}" style="margin-top:6px">${S.near ? 'You are at a Skill Shrine: respec and right-click refunds are free here.' : 'Learning works anywhere. Refunds are free at a Skill Shrine in town (by the Hall of Clearers, or in Mirelight Camp).'}</div>
       <h4>Your bonuses</h4>${lines.length ? `<ul class="bon">${lines.join('')}</ul>` : '<div class="note">Nothing learned yet. Click a glowing node in tier 1 to start.</div>'}
       <h4>Reading the tree</h4>
-      <div class="legend"><i style="border-color:var(--cc);box-shadow:0 0 8px var(--cc)"></i>Can learn now<i style="border-color:var(--cc)"></i>Learned, more ranks left<i style="border-color:var(--ember)"></i>Max rank<i style="border-color:#2b3550"></i>Locked: tier or a line above</div>
+      <div class="legend">${legendDot('#9fb4d8', 'glow')}Can learn now${legendDot('#9fb4d8', 'arc')}Learned, more ranks to go${legendDot('#e9b949', 'max')}Max rank${legendDot('#2b3550', '')}Locked by its tier or a line above</div>
       <p class="note" style="margin-top:8px">Each tier opens after ${TALENTS.tiers.slice(1).join(', ')} points in the tiers above. A line means the node needs a point in a node it hangs from. The diamond at the bottom of each branch is its keystone.</p>
     </aside>`;
+  }
+
+  function legendDot(c, k) {
+    return `<svg width="22" height="22" viewBox="-11 -11 22 22" aria-hidden="true">${k === 'glow' ? `<circle r="10" fill="${c}" opacity=".45" filter="url(#tglow2)"/>` : ''}<circle r="7" fill="#111a2d" stroke="${c}" stroke-width="2"/>${k === 'arc' ? `<circle r="9.5" fill="none" stroke="${c}" stroke-width="2" stroke-dasharray="20 60" transform="rotate(-90)"/>` : ''}${k === 'max' ? `<circle r="9.5" fill="none" stroke="${c}" stroke-width="2"/>` : ''}<defs><filter id="tglow2"><feGaussianBlur stdDeviation="2"/></filter></defs></svg>`;
   }
 
   // ----- tooltip -----
@@ -431,22 +434,22 @@ export function initTalents(ctx) {
   function growth() { // base health and attack per level, with the talent points as steps
     const Wd = 520, Hd = 170, P = 26, xs = l => P + ((l - 1) / (MAX_LEVEL - 1)) * (Wd - P * 2);
     const hp = l => statsFor(cls(), l).maxHp, atk = l => statsFor(cls(), l).atk;
-    const hpMax = hp(MAX_LEVEL), atkMax = atk(MAX_LEVEL);
+    const hpMax = hp(MAX_LEVEL);
     const ys = (v, mx) => Hd - 24 - (v / mx) * (Hd - 44);
-    let ph = '', pa = '', bars = '';
+    let ph = '', bars = '';
     for (let l = 1; l <= MAX_LEVEL; l++) {
       ph += `${l === 1 ? 'M' : 'L'}${xs(l).toFixed(1)},${ys(hp(l), hpMax).toFixed(1)}`;
-      pa += `${l === 1 ? 'M' : 'L'}${xs(l).toFixed(1)},${ys(atk(l), atkMax).toFixed(1)}`;
       const n = pointsAt(l), bh = (n / pointsAt(MAX_LEVEL)) * 34;
       bars += `<rect x="${xs(l) - 4}" y="${Hd - 24 - bh}" width="8" height="${bh}" rx="2" fill="#e9b949" opacity="${l <= state.lvl ? 0.45 : 0.15}"/>`;
     }
     const cx = xs(state.lvl), col = hex(CLASSES[cls()].color);
     return `<svg class="growth" viewBox="0 0 ${Wd} ${Hd}" aria-label="Health and attack by level">${bars}
-      <path d="${ph}" fill="none" stroke="${col}" stroke-width="2.5"/><path d="${pa}" fill="none" stroke="#f5e7c0" stroke-width="2" stroke-dasharray="5 4"/>
-      <line x1="${cx}" x2="${cx}" y1="10" y2="${Hd - 22}" stroke="#fff" stroke-opacity=".35"/>
-      <circle cx="${cx}" cy="${ys(hp(state.lvl), hpMax)}" r="4" fill="${col}"/><circle cx="${cx}" cy="${ys(atk(state.lvl), atkMax)}" r="3.5" fill="#f5e7c0"/>
+      <path d="${ph}" fill="none" stroke="${col}" stroke-width="2.5"/>
+      <line x1="${cx}" x2="${cx}" y1="22" y2="${Hd - 22}" stroke="#fff" stroke-opacity=".3"/>
+      <circle cx="${cx}" cy="${ys(hp(state.lvl), hpMax)}" r="4.5" fill="${col}" stroke="#fff" stroke-width="1.5"/>
+      <text x="${Math.min(cx + 8, Wd - 150)}" y="${ys(hp(state.lvl), hpMax) - 10}" style="opacity:.95">${hp(state.lvl)} health, ${atk(state.lvl).toFixed(1)} attack</text>
       <text x="${P}" y="${Hd - 6}">Lv 1</text><text x="${Wd - P - 26}" y="${Hd - 6}">Lv ${MAX_LEVEL}</text>
-      <text x="${P}" y="14" style="fill:${col};opacity:1">health ${hp(1)} to ${hpMax}</text><text x="${P + 150}" y="14" style="fill:#f5e7c0;opacity:1">attack ${atk(1).toFixed(0)} to ${atkMax.toFixed(0)}</text><text x="${P + 285}" y="14" style="fill:#e9b949;opacity:.9">talent points</text></svg>`;
+      <text x="${P}" y="12" style="fill:${col};opacity:1">base health ${hp(1)} to ${hpMax}</text><text x="${P + 170}" y="12" style="fill:#e9b949;opacity:.9">talent points 0 to ${pointsAt(MAX_LEVEL)}</text></svg>`;
   }
 
   // ----- Abilities pane -----
@@ -466,7 +469,7 @@ export function initTalents(ctx) {
       if (slot) {
         const [ml, into, span] = masteryProgress(e.pts), br = activeBranch(e);
         const steps = [[0, `Level ${s.lvl}`, 'Unlocked', state.lvl >= s.lvl], [2, 'Mastery 2', '-10% cooldown', l >= 2], [3, 'Mastery 3', br ? BRANCHES[s.id][br].name : 'Evolves', l >= 3], [4, 'Mastery 4', '+10% effect', l >= 4], [5, 'Mastery 5', 'Mastered', l >= 5]];
-        h += `<div class="path">${steps.map(([n, a, b, done]) => `<div class="step ${done ? 'done' : ''} ${n === 3 ? 'evo' : ''} ${!done && (n === ml + 1 || (n === 0 && locked)) ? 'now' : ''}"><i></i>${esc(a)}<br><span style="opacity:.75">${esc(b)}</span></div>`).join('')}</div>
+        h += `<div class="path">${steps.map(([n, a, b, done]) => `<div class="step ${done ? 'done' : ''} ${n === 3 ? 'evostep' : ''} ${!done && (n === ml + 1 || (n === 0 && locked)) ? 'now' : ''}"><i></i>${esc(a)}<br><span style="opacity:.75">${esc(b)}</span></div>`).join('')}</div>
           <div class="mbar"><i style="width:${span ? Math.min(100, (100 * into) / span) : 100}%"></i></div>
           <div class="mprog"><span>${span ? `${Math.floor(into)} / ${span} to Mastery ${ml + 1}` : 'Mastered'}</span><span>${Math.floor(e.pts)} mastery points</span></div>`;
         if (BRANCHES[s.id]) h += `<div class="evos">${['A', 'B'].map(k => evoCard(s, e, k, locked ? 0 : l)).join('')}</div>`;

@@ -272,7 +272,7 @@ export function installTalents(Game) {
     if (T?.keys.overflow && !tg.dead) { // Overflow: the overheal becomes a shield
       const over = Math.round(amount) - got;
       if (over > 0) {
-        const cap = tg.maxHp * KEYS.overflow.cap, s = tg.shield, now = this.time;
+        const cap = Math.round(tg.maxHp * KEYS.overflow.cap), s = tg.shield, now = this.time;
         if (s && now < s.until && s.hp > 0) { s.hp = Math.min(Math.max(s.max, cap), s.hp + over); s.max = Math.max(s.max, s.hp); s.until = Math.max(s.until, now + KEYS.overflow.d); }
         else this.talentShield(tg, Math.min(cap, over), KEYS.overflow.d);
       }

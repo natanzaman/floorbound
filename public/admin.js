@@ -4,6 +4,7 @@ import { RARITY, SLOTS, CONSUMABLES, CONSUMABLE_IDS, statLabel } from '/shared/i
 import { MATS, MAT_IDS } from '/shared/crafting.js';
 import { TITLES, STAT_KEYS } from '/shared/titles.js';
 import { MASTERY, BRANCHES, masteryLevel } from '/shared/mastery.js';
+import { TREES, pointsAt, spentOf } from '/shared/talents.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -206,6 +207,10 @@ function renderEditor() {
     </tbody></table>
     <div class="dim" style="font-size:12px;margin-top:6px">Picking a mastery level sets the points to that level's threshold (${MASTERY.need.slice(1).join(' / ')}); or type exact points.</div>
   </div>
+  <div class="card" style="margin-top:16px"><h2>Talents <span class="dim" style="font-size:12px;font-weight:400">${spentOf(c.talents || {})} of ${pointsAt(c.lvl)} points spent (1 per level from 2)</span></h2>
+    ${TREES[c.cls] ? `<div class="grid">${TREES[c.cls].branches.map(b => `<div><b style="color:${b.color}">${esc(b.name)}</b>${b.nodes.map(nd => `<label class="f" style="display:flex;justify-content:space-between;gap:8px;align-items:center">${esc(nd.name)}${nd.keystone ? ' ★' : ''} <span class="dim" style="font-size:11px">T${nd.tier + 1}</span><input type="number" data-tal="${nd.id}" value="${c.talents?.[nd.id] || 0}" min="0" max="${nd.max}" style="width:60px" /></label>`).join('')}</div>`).join('')}</div>
+    <div class="row" style="margin-top:8px"><button id="t-save" class="primary">Save talents</button><button id="t-reset">Reset talents (refund all)</button><span class="dim" style="font-size:12px">Checked against the tree: tier gates, prerequisites, max ranks and the level's points.</span></div>` : '<div class="dim">No talent tree for this class.</div>'}
+  </div>
   <div class="sticky-save"><button class="primary" id="e-save">Save changes</button><span class="dim" style="font-size:12px">Saves level, XP, gold, consumables, materials, titles, stats, mastery and the Floor 2 flag.</span></div>
   <div class="grid">
     <div class="card items"><h2>Equipped</h2>
@@ -225,8 +230,8 @@ function renderEditor() {
     </div>
   </div>
   <div class="card"><h2>Advanced: raw JSON</h2>
-    <div class="dim" style="font-size:12px;margin-bottom:8px">Edit the stored inventory, stats and skill mastery directly (validated on the server; unknown stats keys are kept).</div>
-    <div class="grid"><div><b>inv</b><textarea id="r-inv" spellcheck="false"></textarea></div><div><b>stats</b><textarea id="r-stats" spellcheck="false"></textarea></div><div><b>mastery</b><textarea id="r-mastery" spellcheck="false"></textarea></div></div>
+    <div class="dim" style="font-size:12px;margin-bottom:8px">Edit the stored inventory, stats, skill mastery and talents directly (validated on the server; unknown stats keys are kept).</div>
+    <div class="grid"><div><b>inv</b><textarea id="r-inv" spellcheck="false"></textarea></div><div><b>stats</b><textarea id="r-stats" spellcheck="false"></textarea></div><div><b>mastery</b><textarea id="r-mastery" spellcheck="false"></textarea></div><div><b>talents</b><textarea id="r-talents" spellcheck="false"></textarea></div></div>
     <div class="row" style="margin-top:8px"><button id="r-apply" class="primary">Apply raw JSON</button><span id="r-err" class="dim"></span></div>
   </div>
   <div class="card" style="border-color:rgba(248,113,113,.35)"><h2 style="color:#fca5a5">Delete character</h2>
@@ -235,6 +240,7 @@ function renderEditor() {
   $('r-inv').value = JSON.stringify(inv, null, 2);
   $('r-stats').value = JSON.stringify(st, null, 2);
   $('r-mastery').value = JSON.stringify(c.mastery, null, 2);
+  $('r-talents').value = JSON.stringify(c.talents || {}, null, 2);
   wireEditor();
 }
 
@@ -275,9 +281,15 @@ function wireEditor() {
     try { rawStats = JSON.parse($('r-stats').value); } catch (e) { $('r-err').textContent = `stats: ${e.message}`; return; }
     let rawMastery;
     try { rawMastery = JSON.parse($('r-mastery').value); } catch (e) { $('r-err').textContent = `mastery: ${e.message}`; return; }
+    let rawTalents;
+    try { rawTalents = JSON.parse($('r-talents').value); } catch (e) { $('r-err').textContent = `talents: ${e.message}`; return; }
     $('r-err').textContent = '';
-    patch({ rawInv, rawStats, rawMastery }, 'Raw JSON applied.');
+    patch({ rawInv, rawStats, rawMastery, rawTalents }, 'Raw JSON applied.');
   };
+  if ($('t-save')) {
+    $('t-save').onclick = () => patch({ talents: Object.fromEntries([...document.querySelectorAll('[data-tal]')].map(x => [x.dataset.tal, +x.value]).filter(([, v]) => v > 0)) }, 'Talents saved.');
+    $('t-reset').onclick = () => patch({ talents: {} }, 'Talents reset.');
+  }
   $('d-go').onclick = async () => {
     if ($('d-name').value !== c.name) return flash('Type the exact character name to delete it.');
     try {

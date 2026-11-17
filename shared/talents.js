@@ -212,7 +212,7 @@ for (const [cls, tree] of Object.entries(TREES)) {
 }
 export const nodeDef = id => NODE.get(id) || null;
 export const treeOf = cls => TREES[cls] || null;
-export const nodesOf = cls => (TREES[cls]?.branches || []).flatMap(b => b.nodes);
+export const nodesOf = cls => (TREES[cls]?.branches || []).flatMap(b => b.nodes.map(n => NODE.get(n.id))); // with .cls and .branch
 export const spentOf = alloc => Object.values(alloc || {}).reduce((a, r) => a + (r | 0), 0);
 export const branchSpent = (alloc, cls, bid) => (TREES[cls]?.branches.find(b => b.id === bid)?.nodes || []).reduce((a, n) => a + (alloc?.[n.id] | 0), 0);
 // Points spent in the tiers above tier k.
@@ -318,7 +318,6 @@ export function nodesForSkill(cls, key) {
 
 // Level milestones for the Progression track (besides skills, points and tiers, which come from the data).
 export const MILESTONES = [
-  { lvl: 3, text: 'Break skill unlocked: Break an enemy, a teammate Switches it' },
   { lvl: 5, text: 'Wolf Woods and the Raid Gate' },
   { lvl: 10, text: 'The Horned Warden (boss, Lv 10): beat it to unlock Floor 2' },
   { lvl: 11, text: 'Floor 2: the Glimmering Mire (Lv 11-18)' },
