@@ -37,7 +37,7 @@ const methods = {
 
   // Posture full: BROKEN. Staggered for the Switch window, wind-ups (and a pending Horn Sweep) are cancelled.
   breakMob(m, p, interrupt = false, sk = null) {
-    const t = this.time, dur = m.def.boss ? SWITCH.bossWindow : SWITCH.window;
+    const t = this.time, dur = (m.def.boss ? SWITCH.bossWindow : SWITCH.window) + (this.styleBreakBonus?.(p, m) || 0); // Mace: longer
     m.staggerUntil = t + dur; m.staggerBy = p.id; m.switched = false;
     m.staggerSk = sk; // the skill that broke it gets mastery when a teammate Switches in
     if (sk) this.masteryGain?.(p, sk, MASTERY.brk[m.def.boss ? 1 : 0]);

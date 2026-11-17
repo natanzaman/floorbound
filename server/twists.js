@@ -177,7 +177,7 @@ export const TwistMethods = {
       const items = [];
       for (let i = 0; i < (R.loot || 0); i++) {
         const slot = SLOTS[Math.floor(Math.random() * SLOTS.length)];
-        const it = makeItem(slot, rollRarity(D.table), p.cls);
+        const it = makeItem(slot, rollRarity(D.table), p.cls, Math.random, undefined, 'roll'); // weapons roll a style
         if (this.giveItem(p, it)) items.push({ name: it.name, r: it.r });
         if (it.r >= 2) this.track(p, 'loot', { r: it.r, slot, mob: 'warden', twist: id });
       }

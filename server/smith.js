@@ -1,6 +1,7 @@
 // The town Smith: materials, refine, salvage, reforge and recipes. Mixed into Game (see the end of game.js).
 import { CLASSES } from '../shared/data.js';
 import { BAG_SIZE, RARITY, makeItem } from '../shared/items.js';
+import { STYLES } from '../shared/styles.js';
 import {
   SMITH, MATS, rollMats, nearSmithAt, refineCost, applyRefine, salvageYield, reforgeCost, charmAffix, CHARM_AFFIXES,
   RECIPE_BY_ID, recipeName, canAfford,
@@ -120,6 +121,7 @@ export const SmithMethods = {
     if (!this.nearSmith(p)) return false;
     const rc = RECIPE_BY_ID[id];
     if (!rc) return false;
+    if (rc.style && STYLES[rc.style]?.cls !== p.cls) { this.sys(`Only a ${CLASSES[STYLES[rc.style]?.cls]?.name || 'different class'} could wield that.`, p.id); return false; } // weapon styles
     if (rc.cls && cls && cls !== p.cls) { this.sys(`Only a ${CLASSES[cls]?.name || 'different class'} could wield that. The Smith forges for your class.`, p.id); return false; }
     if (p.inv.bag.length >= BAG_SIZE) { this.sys('Your bag is full.', p.id); return false; }
     const cost = { gold: rc.gold, mats: rc.mats };
@@ -129,6 +131,7 @@ export const SmithMethods = {
     it.name = recipeName(rc, p.cls);
     it.st = { ...rc.st };
     it.cr = rc.id;
+    if (rc.style) it.style = rc.style;
     if (!rc.cls) delete it.cls;
     p.inv.bag.push(it);
     this.sys(`Forged: ${it.name} (${RARITY[it.r].name})`, p.id);

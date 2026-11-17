@@ -1,5 +1,6 @@
 // Items: gear (weapon, armour, charm), consumables, drops and the town shop.
 // Shared by the server (rolls, stats) and the client (names, colours, tooltips).
+import { applyStyleTo } from './styles.js'; // weapon styles (shared/styles.js)
 
 export const RARITY = [
   { id: 'common', name: 'Common', color: '#e5e7eb', sell: 5 },
@@ -45,20 +46,22 @@ export const CONSUMABLE_IDS = Object.keys(CONSUMABLES);
 export const SHOP = [
   { kind: 'cons', id: 'potion' }, { kind: 'cons', id: 'tonic' }, { kind: 'cons', id: 'draught' },
   { kind: 'gear', slot: 'weapon', price: 140 }, { kind: 'gear', slot: 'armor', price: 140 },
+  { kind: 'gear', slot: 'weapon', price: 170, alt: 1 }, // an Uncommon weapon in your class's alternate style (shared/styles.js altStyle)
 ];
 export const MERCHANT = { x: 9, z: 3, r: 4 };
 
 let uid = Date.now() % 1e6;
 const vary = (base, rnd) => Math.max(1, Math.round(base * (0.85 + rnd() * 0.3)));
 
-// Build a gear item. rarity: 0..4. charmKind optional.
-export function makeItem(slot, rarity, cls, rnd = Math.random, charmKind) {
+// Build a gear item. rarity: 0..4. charmKind optional. style (weapons): undefined = class default, 'roll' = random, or a style id.
+export function makeItem(slot, rarity, cls, rnd = Math.random, charmKind, style) {
   const it = { u: ++uid, slot, r: rarity, st: {} };
   if (slot === 'weapon') {
     it.cls = cls;
     it.name = WEAPON_NAMES[cls][Math.min(3, rarity)];
     it.st.atk = vary(WEAPON_ATK[rarity], rnd);
     if (rarity >= 3) it.st.crit = vary(3, rnd);
+    applyStyleTo(it, cls, rnd, style);
   } else if (slot === 'armor') {
     it.name = ARMOR_NAMES[Math.min(3, rarity)];
     it.st.hp = vary(ARMOR_HP[rarity], rnd);

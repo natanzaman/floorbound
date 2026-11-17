@@ -4,6 +4,7 @@ import { RARITY, SLOTS, CONSUMABLES, CONSUMABLE_IDS, statLabel } from '/shared/i
 import { MATS, MAT_IDS } from '/shared/crafting.js';
 import { TITLES, STAT_KEYS } from '/shared/titles.js';
 import { MASTERY, BRANCHES, masteryLevel } from '/shared/mastery.js';
+import { STYLES, CLASS_STYLES, styleLine } from '/shared/styles.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -163,7 +164,7 @@ async function patch(body, okText = 'Saved.') {
     flash(okText + (ch.online ? ' Applied live to the online player.' : ''), true);
   } catch (e) { flash(e.message); }
 }
-const itemLine = it => `<span class="nm" style="color:${RARITY[it.r]?.color || '#fff'}">${esc(it.name)}${it.la ? ' ★' : ''}</span><span class="st">${Object.entries(it.st || {}).map(([k, v]) => statLabel(k, v)).join(', ')}${it.cls ? ` · ${clsName(it.cls)}` : ''}</span>`;
+const itemLine = it => `<span class="nm" style="color:${RARITY[it.r]?.color || '#fff'}">${esc(it.name)}${it.la ? ' ★' : ''}</span><span class="st">${Object.entries(it.st || {}).map(([k, v]) => statLabel(k, v)).join(', ')}${it.cls ? ` · ${clsName(it.cls)}` : ''}${it.slot === 'weapon' && it.cls ? ` · ${esc(styleLine(it).split(':')[0])}` : ''}</span>`;
 
 function renderEditor() {
   const c = ch, inv = c.inv, st = c.stats;
@@ -218,6 +219,7 @@ function renderEditor() {
         <label class="f">Slot<select id="a-slot">${SLOTS.map(s => `<option>${s}</option>`).join('')}</select></label>
         <label class="f">Rarity<select id="a-r">${RARITY.slice(0, 4).map((r, i) => `<option value="${i}" style="color:${r.color}">${r.name}</option>`).join('')}</select></label>
         <label class="f" id="a-cls-w">Weapon class<select id="a-cls">${CLASS_IDS.map(k => `<option value="${k}" ${k === c.cls ? 'selected' : ''}>${clsName(k)}</option>`).join('')}</select></label>
+        <label class="f" id="a-style-w">Weapon style<select id="a-style"></select></label>
         <label class="f hidden" id="a-charm-w">Charm affix<select id="a-charm"><option value="">random</option><option value="crit">Keenness (crit)</option><option value="haste">Haste</option><option value="sw">the Switch</option></select></label>
         <button id="a-add" style="margin-bottom:10px">Add to bag</button>
       </div>
@@ -264,9 +266,11 @@ function wireEditor() {
   for (const b of document.querySelectorAll('[data-rmu]')) b.onclick = () => patch({ ops: [{ op: 'removeItem', u: +b.dataset.rmu }] }, 'Item removed.');
   for (const b of document.querySelectorAll('[data-eq]')) b.onclick = () => patch({ ops: [{ op: 'equip', u: +b.dataset.eq }] }, 'Equipped.');
   for (const b of document.querySelectorAll('[data-uneq]')) b.onclick = () => patch({ ops: [{ op: 'unequip', slot: b.dataset.uneq }] }, 'Moved to the bag.');
-  const slotVis = () => { $('a-cls-w').classList.toggle('hidden', $('a-slot').value !== 'weapon'); $('a-charm-w').classList.toggle('hidden', $('a-slot').value !== 'charm'); };
+  const slotVis = () => { $('a-cls-w').classList.toggle('hidden', $('a-slot').value !== 'weapon'); $('a-style-w').classList.toggle('hidden', $('a-slot').value !== 'weapon'); $('a-charm-w').classList.toggle('hidden', $('a-slot').value !== 'charm'); };
+  const styleOpts = () => { $('a-style').innerHTML = (CLASS_STYLES[$('a-cls').value] || []).map(id => `<option value="${id}">${esc(STYLES[id].name)}${STYLES[id].def ? ' (default)' : ''}</option>`).join(''); }; // weapon styles
+  $('a-cls').onchange = styleOpts; styleOpts();
   $('a-slot').onchange = slotVis; slotVis();
-  $('a-add').onclick = () => patch({ ops: [{ op: 'addItem', slot: $('a-slot').value, r: +$('a-r').value, cls: $('a-cls').value, charm: $('a-charm').value }] }, 'Item added.');
+  $('a-add').onclick = () => patch({ ops: [{ op: 'addItem', slot: $('a-slot').value, r: +$('a-r').value, cls: $('a-cls').value, style: $('a-style').value, charm: $('a-charm').value }] }, 'Item added.');
   $('a-la1').onclick = () => patch({ ops: [{ op: 'addLastAttack', which: 1 }] }, 'Item added.');
   $('a-la2').onclick = () => patch({ ops: [{ op: 'addLastAttack', which: 2 }] }, 'Item added.');
   $('r-apply').onclick = () => {

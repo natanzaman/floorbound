@@ -17,6 +17,8 @@ import { TwistMethods } from './twists.js';
 import { installCombat } from './combat.js';
 import { MasteryMethods } from './mastery.js';
 import { MASTERY } from '../shared/mastery.js';
+import { installStyles } from './styles.js';
+import { altStyle } from '../shared/styles.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
@@ -357,7 +359,7 @@ export class Game {
     if (s.kind === 'gear' && p.inv.bag.length >= BAG_SIZE) return this.sys('Your bag is full.', p.id);
     p.gold -= price;
     if (s.kind === 'cons') p.inv.cons[s.id] = (p.inv.cons[s.id] || 0) + 1;
-    else p.inv.bag.push(makeItem(s.slot, 1, p.cls));
+    else p.inv.bag.push(makeItem(s.slot, 1, p.cls, Math.random, undefined, s.alt ? altStyle(p.cls) : undefined)); // alt: weapon styles
     this.events.push({ t: 'coin', id: p.id });
     this.invChanged(p);
   }
@@ -392,7 +394,7 @@ export class Game {
     const n = d.item >= 1 ? d.item : Math.random() < d.item ? 1 : 0;
     for (let i = 0; i < n; i++) {
       const slot = SLOTS[Math.floor(Math.random() * SLOTS.length)];
-      const it = makeItem(slot, rollRarity(d.table), p.cls);
+      const it = makeItem(slot, rollRarity(d.table), p.cls, Math.random, undefined, 'roll'); // weapons roll a style
       if (this.giveItem(p, it)) items.push({ name: it.name, r: it.r });
       if (it.r >= 2) this.track(p, 'loot', { r: it.r, slot, mob: m.type });
     }
@@ -520,6 +522,7 @@ export class Game {
     const atk = p.atk * this.dmgMult(p) * pow;
     const fx = (k, extra = {}) => this.events.push({ t: 'fx', k, s: sk.id, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), ...extra });
     const t = this.time;
+    if (this.styleSkill(p, sk, slot, atk)) return; // weapon styles: the styled basic attack (server/styles.js)
 
     switch (sk.id) {
       case 'slash':
@@ -533,7 +536,7 @@ export class Game {
       }
       case 'rush': {
         let tx = p.x, tz = p.z;
-        for (let i = 1; i <= 16; i++) {
+        for (let i = 1, n = this.styleNum(p, 'rushSteps', 16); i <= n; i++) { // Rapier: a longer lunge
           const nx = p.x + Math.sin(p.face) * i * 0.5, nz = p.z + Math.cos(p.face) * i * 0.5;
           if (!this.walk(nx, nz)) break;
           [tx, tz] = resolveCollision(nx, nz);
@@ -545,28 +548,29 @@ export class Game {
       }
       case 'whirl': fx('ring', { r: 4 }); this.hitCircle(p, p.x, p.z, 4, atk * 1.4, { knock: 1.2, sk: S }); break;
       case 'burst':
-        for (let i = 0; i < 4; i++) {
+        for (let i = 0, nb = this.styleNum(p, 'burstHits', 4); i < nb; i++) { // Dual Blades: +2 hits
           this.schedule(i * 0.2, () => {
             if (p.dead || !this.players.has(p.id)) return;
-            this.events.push({ t: 'fx', k: 'arc', s: 'burst', n: i, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), r: 3.2, c: i === 3 ? 'gold' : undefined });
-            this.hitArc(p, 3.2, 0.9, p.atk * this.dmgMult(p) * pow * (i === 3 ? 1.6 : 0.9), i === 3 ? { brk: true, knock: 2.5, heavy: true, sk: S } : { knock: 0.3, sk: S });
+            this.events.push({ t: 'fx', k: 'arc', s: 'burst', n: i, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), r: 3.2, c: i === nb - 1 ? 'gold' : undefined });
+            this.hitArc(p, 3.2, 0.9, p.atk * this.dmgMult(p) * pow * (i === nb - 1 ? 1.6 : 0.9), i === nb - 1 ? { brk: true, knock: 2.5, heavy: true, sk: S } : { knock: 0.3, sk: S });
           });
         }
         break;
       case 'taunt': {
-        fx('ring', { r: 8, c: 'gold' });
+        const R = 8 * this.styleNum(p, 'tauntR', 1); // Spear & Shield: +30%
+        fx('ring', { r: R, c: 'gold' });
         for (const m of this.mobs.values()) {
-          if (!this.targetable(m) || dist(m, p) > 8 + m.def.radius) continue; // burrowed lurkers can't be taunted
+          if (!this.targetable(m) || dist(m, p) > R + m.def.radius) continue; // burrowed lurkers can't be taunted
           let top = 0; for (const v of m.threat.values()) top = Math.max(top, v);
           m.threat.set(p.id, top + 100);
         }
-        this.hitCircle(p, p.x, p.z, 8, atk * 0.5, { sk: S });
+        this.hitCircle(p, p.x, p.z, R, atk * 0.5, { sk: S });
         p.dr = { until: t + 4, v: 0.3 * pow, by: p.id, sk: S };
         this.events.push({ t: 'buff', id: p.id, k: 'dr', d: 4 });
         break;
       }
       case 'wall': p.dr = { until: t + 4, v: Math.min(0.7, 0.6 * pow), by: p.id, sk: S }; this.events.push({ t: 'buff', id: p.id, k: 'wall', d: 4 }); fx('shield'); break;
-      case 'gslam': fx('ring', { r: 5, c: 'gold' }); this.hitCircle(p, p.x, p.z, 5, atk * 1.3, { stun: 1.5, threat: 1.5, brk: true, knock: 2, heavy: true, sk: S }); break;
+      case 'gslam': { const R = 5 * this.styleNum(p, 'slamR', 1); fx('ring', { r: R, c: 'gold' }); this.hitCircle(p, p.x, p.z, R, atk * 1.3, { stun: 1.5, threat: 1.5, brk: true, knock: 2, heavy: true, sk: S }); break; } // Mace & Shield: +20% radius
       case 'smite': {
         const range = 10, dx = Math.sin(p.face), dz = Math.cos(p.face);
         let best = null, bestT = range;
@@ -584,7 +588,7 @@ export class Game {
       case 'heal': {
         let target = p, low = p.hp / p.maxHp;
         for (const o of this.players.values()) {
-          if (o.dead || dist(o, p) > 15) continue;
+          if (o.dead || dist(o, p) > 15 * this.styleNum(p, 'healR', 1)) continue; // Wand: +50% range
           const f = o.hp / o.maxHp;
           if (f < low) { low = f; target = o; }
         }
@@ -653,7 +657,7 @@ export class Game {
     }
     mult *= this.twistTaken(m); // Warden twist (Ironhide)
     const counter = this.counterHit(p); // perfect-dodge counter window
-    if (counter) mult *= PERFECT.dmg;
+    if (counter) mult *= PERFECT.dmg * this.styleNum(p, 'counterDmg', 1); // Rapier: stronger counters
     const amount = Math.max(1, Math.round(base * (0.9 + Math.random() * 0.2) * (crit ? 1.5 : 1) * mult));
     const dealt = Math.min(amount, Math.max(0, m.hp)); // overkill doesn't count toward mastery
     m.hp -= amount;
@@ -667,8 +671,9 @@ export class Game {
       if (sk) this.masteryGain(p, sk, MASTERY.sw);
       p.switches++;
       this.bumpStat(p, 'switches');
+      this.styleOnSwitch(p); // Dual Blades: cooldowns
     }
-    m.threat.set(p.id, (m.threat.get(p.id) || 0) + amount * threat);
+    m.threat.set(p.id, (m.threat.get(p.id) || 0) + amount * threat * (p.threatMult || 1)); // Spear & Shield: +threat
     m.contributors.add(p.id);
     if (stun && !m.def.boss) m.stunUntil = t + stun;
     if (stun && m.def.boss) m.stunUntil = Math.max(m.stunUntil, t + stun * 0.3);
@@ -1231,7 +1236,7 @@ export class Game {
       const t = this.time, zeal = p.dmg.zeal && t < p.dmg.until;
       const buffs = (t < p.dr.until ? 1 : 0) | (t < p.dmg.until && !zeal ? 2 : 0) | (p.lfg || party?.open ? 4 : 0) | (t < p.tonicUntil ? 8 : 0) | (t < p.draughtUntil ? 16 : 0)
         | (p.shield ? 32 : 0) | (p.bulwark ? 64 : 0) | (t < (p.iron?.until || 0) ? 128 : 0) | (p.renew ? 256 : 0) | (t < p.cry.until ? 512 : 0) | (zeal ? 1024 : 0) | (t < (p.purifyUntil || 0) ? 2048 : 0);
-      players.push([p.id, r2(p.x), r2(p.z), r2(p.face), p.hp, p.maxHp, p.lvl, CLASS_IDS.indexOf(p.cls), p.party || 0, p.dead ? 1 : 0, buffs]);
+      players.push([p.id, r2(p.x), r2(p.z), r2(p.face), p.hp, p.maxHp, p.lvl, CLASS_IDS.indexOf(p.cls), p.party || 0, p.dead ? 1 : 0, buffs, this.styleIdx(p)]); // [11]: weapon style (shared/styles.js STYLE_IDS, -1 none)
     }
     const mobs = [];
     for (const m of this.mobs.values()) {
@@ -1269,3 +1274,4 @@ Object.assign(Game.prototype, TwistMethods); // Warden twists (server/twists.js)
 installCombat(Game); // posture, perfect dodge, guard/parry, Horn Sweep (server/combat.js)
 Object.assign(Game.prototype, MasteryMethods); // skill mastery + evolutions (server/mastery.js)
 Object.assign(Game.prototype, F2Methods); // Floor 2 (server/floor2.js)
+installStyles(Game); // weapon styles (server/styles.js)

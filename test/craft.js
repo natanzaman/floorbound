@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Game } from '../server/game.js';
 import { makeItem, lastAttackItem, BAG_SIZE } from '../shared/items.js';
 import { SMITH, refineCost, RECIPES, RECIPE_BY_ID, MAT_DROPS, REFINE_MAX } from '../shared/crafting.js';
+import { STYLES } from '../shared/styles.js';
 
 const ws = { readyState: 1, send() {} };
 const g = new Game();
@@ -145,7 +146,7 @@ t('reforge: charm affix changes, stats reroll in range, keeps refine level', () 
 t('recipes: every recipe crafts with fixed stats; class weapons; costs deducted; bag full rejected', () => {
   for (const cls of ['swordsman', 'guardian', 'cleric']) {
     const p = fresh(cls);
-    for (const rc of RECIPES) {
+    for (const rc of RECIPES.filter(rc => !rc.style || STYLES[rc.style].cls === cls)) { // weapon-style recipes: their class only (test/styles.js)
       const gold = p.gold;
       assert.equal(g.craft(p, rc.id), true, rc.id);
       const it = p.inv.bag.at(-1);
