@@ -25,6 +25,16 @@ const MOUNTS = [
 ];
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json; charset=utf-8', '.glb': 'model/gltf-binary' };
 
+// A bug in one bot or one event shouldn't take the whole world down (and wipe everyone's bots). Log it and keep going.
+let crashes = 0;
+for (const ev of ['uncaughtException', 'unhandledRejection']) {
+  process.on(ev, err => {
+    console.error(`[${ev}]`, err?.stack || err);
+    if (++crashes > 50) process.exit(1); // something is badly wrong: let the host restart us
+  });
+}
+setInterval(() => { crashes = Math.max(0, crashes - 5); }, 60000).unref();
+
 const game = new Game();
 game.track = track.record;
 game.onClear = rec => hall.add(rec); // Hall of Clearers (DB insert + in-memory cache)
