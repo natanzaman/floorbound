@@ -12,8 +12,12 @@
 //
 // Rules: up to PLAYER_BOT_MAX bots per player (default 3), counted against the global MAX_BOTS; a new bot is made at
 // the owner's level with a premade loadout (shared/playerbots.js), joins the owner's party (made if needed, never past
-// PARTY_MAX) and follows them. Only the owner (or an admin: accounts.is_admin / ADMIN_DISCORD_IDS) can edit or dismiss
-// it. When the owner leaves, their bots wait PLAYER_BOT_GRACE seconds (default 60) for a reconnect, then go.
+// PARTY_MAX) and follows them. It levels with its owner (no XP of its own: on join and whenever the owner levels it
+// takes the owner's level and that level's premade gear, mastery and talents). Only the owner (or an admin:
+// accounts.is_admin / ADMIN_DISCORD_IDS) can edit or dismiss it. When the owner leaves, their bots wait
+// PLAYER_BOT_GRACE seconds (default 60) for a reconnect, then go. A bot is linked to the party it serves: one that
+// leaves that party (a "leave" order) goes home, and the owner hears about any bot of theirs an admin removes.
+// Admin "Respawn as…" keeps the bot id (BotManager), so the owner link and slot survive it.
 import { CLASSES, MAX_LEVEL, PARTY_MAX } from '../shared/data.js';
 import { makeItem, SLOTS } from '../shared/items.js';
 import { MASTERY, masteryLevel } from '../shared/mastery.js';
@@ -29,7 +33,11 @@ const OTHER_DOING = { follow: 'Following', field: 'Farming the field', warden: '
 export class PlayerBots {
   constructor(game, mgr, { max = Number(process.env.PLAYER_BOT_MAX) || 3, grace = Number(process.env.PLAYER_BOT_GRACE) || 60 } = {}) {
     this.game = game; this.mgr = mgr; this.max = max; this.grace = grace;
-    this.owned = new Map(); // bid -> { bid, ownerId, charId, anonName, ownerName, mode, outfitted, wantParty, lastParty, goneAt, goneT }
+    this.owned = new Map(); // bid -> { bid, ownerId, charId, anonName, ownerName, name, mode, pid, wantParty, lastParty, seenIn, goneAt, goneT }
+    mgr.ownedRec = bid => this.owned.get(bid) || null; // BotManager / admin edits know a bot was player-added
+    // Player-added bots get no XP of their own: they level with their owner (syncLevel).
+    const giveXp = game.giveXp.bind(game);
+    game.giveXp = (p, amount) => (p?.bot && p.pbOwned ? undefined : giveXp(p, amount));
     // Hook: owned bots carry their owner's name (and what they were told to do) in the roster.
     const roster = game.roster.bind(game);
     game.roster = () => {
@@ -119,7 +127,7 @@ export class PlayerBots {
     if (e) e.partied = true; // party joining is ours (upkeep), not BotManager's
     this.owned.set(view.bid, {
       bid: view.bid, ownerId: p.id, charId: p.charId || 0, anonName: p.charId ? '' : p.name.toLowerCase(), ownerName: p.name,
-      mode: 'follow', outfitted: false, wantParty: true, lastParty: 0, goneAt: 0, goneT: 0,
+      name: view.name, mode: 'follow', pid: 0, wantParty: true, lastParty: 0, seenIn: 0, goneAt: 0, goneT: 0,
     });
     g.rosterDirty = true;
     g.track(p, 'pbot_add', { cls, skill, lvl }); // stats dashboard: bot vs player share
@@ -237,7 +245,8 @@ export class PlayerBots {
     g.autoSpendTalents?.(b); // talent tree, if there is one
     g.recompute(b); b.hp = b.maxHp;
     b.invDirty = true; b.masteryDirty = true; b.masteryNow = true;
-    rec.outfitted = true;
+    b.pbOwned = true; // (no XP of its own)
+    rec.pid = b.id;
     rec.loadout = { rarity: L.rarityName, mastery: L.mastery, evolved: L.evolved };
   }
 
@@ -246,10 +255,21 @@ export class PlayerBots {
     const g = this.game, now = Date.now();
     for (const rec of [...this.owned.values()]) {
       const e = this.entry(rec.bid);
-      if (!e) { this.owned.delete(rec.bid); g.rosterDirty = true; continue; } // removed elsewhere (admin page)
+      if (!e) { // removed elsewhere (admin page): still accounted for, and the owner hears about it
+        this.owned.delete(rec.bid); g.rosterDirty = true;
+        const o = this.ownerOf(rec);
+        if (o) g.sys(`Your bot ${rec.name} was removed by an admin.`, o.id);
+        continue;
+      }
       const b = this.mgr.livePlayer(e);
-      if (b && !rec.outfitted) this.outfit(b, rec);
+      if (b) rec.name = b.name;
       const owner = this.ownerOf(rec);
+      if (b && owner && b.lvl !== owner.lvl) this.mgr.setLevel(e, owner.lvl); // on join, and as the owner levels
+      if (b && (rec.pid !== b.id || rec.loadoutLvl !== b.lvl)) { // a new bot (added, or respawned as another class), or a new level
+        if (rec.pid !== b.id) { rec.wantParty = true; rec.lastParty = 0; rec.seenIn = 0; g.rosterDirty = true; } // (roster: its owner tag)
+        this.outfit(b, rec);
+        rec.loadoutLvl = b.lvl;
+      }
       if (!owner) {
         if (!rec.goneAt) { rec.goneAt = now; rec.goneT = g.time; }
         if (now - rec.goneAt >= this.grace * 1000) { this.mgr.remove(rec.bid); this.owned.delete(rec.bid); g.rosterDirty = true; }
@@ -261,7 +281,10 @@ export class PlayerBots {
         g.rosterDirty = true;
       }
       if (!b) continue;
-      this.syncParty(b, owner, rec);
+      if (this.syncParty(b, owner, rec) === 'left') { // it left the party it served: it goes home (never wanders off detached)
+        this.mgr.remove(rec.bid); this.owned.delete(rec.bid); g.rosterDirty = true;
+        g.sys(`${b.name} left your party and went home (dismissed).`, owner.id);
+      }
     }
   }
 
@@ -269,7 +292,9 @@ export class PlayerBots {
   // Leaving the party yourself is respected (the bots don't drag you back into one).
   syncParty(b, owner, rec) {
     const g = this.game, party = g.partyOf(owner);
-    if (party && b.party === party.id) { rec.wantParty = false; rec.lastParty = party.id; return; }
+    if (party && b.party === party.id) { rec.wantParty = false; rec.lastParty = rec.seenIn = party.id; return; }
+    if (party && rec.seenIn === party.id) return 'left'; // was in this party with its owner, and left it
+    rec.seenIn = 0;
     if (!(party ? party.id !== rec.lastParty : rec.wantParty)) return;
     rec.wantParty = false; rec.lastParty = party?.id || 0;
     if (party && party.members.length >= PARTY_MAX) { g.sys(`Your party is full: ${b.name} stays out of it.`, owner.id); return; }

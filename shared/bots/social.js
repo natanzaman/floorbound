@@ -1,4 +1,4 @@
-// Level-1 social layer for bots: party commands (chat keywords + the command wheel) and rate-limited chatter.
+// Level-1 social layer for bots: party orders (/b chat orders + the command wheel) and rate-limited chatter.
 // Shared by the bot brain (shared/bots/brain.js), the server (validates `botcmd`) and the client's command wheel.
 
 // Command ids, in command-wheel order. `wheel: false` ones are chat / menu only.
@@ -17,36 +17,56 @@ export const BOT_COMMANDS = {
 };
 export const BOT_COMMAND_IDS = Object.keys(BOT_COMMANDS);
 
-// Keyword rules, first match wins (so "stop following" is a stay, "come follow me" a follow).
-const RULES = [
-  ['status', /\b(status|report|how are (you|u)|sitrep|hp\?)/],
-  ['heal', /\bheal (me|us|pls|please)\b|\bneed (a )?heals?\b|\bheal\b.*\bme\b/],
-  ['potion', /\b(use|drink|take) (a |your )?(potion|pot)s?\b|\bpot up\b|\bpotion\b/],
-  ['leave', /\b(leave|disband|dismiss(ed)?|go away|kick)( the)?( party| group)?\b/],
-  ['ready', /\bready( up)?\b|\bready check\b/],
-  ['boss', /\b(warden|boss|sovereign|raid)\b/],
-  ['attack', /\b(attack|kill|focus|assist|hit) (my|that|this|the|it)\b|\bmy target\b|\battack\b/],
-  ['farm', /\b(farm|grind|go hunt(ing)?|level up)\b/],
-  ['stay', /\b(stay|hold( here| position)?|wait( here)?|stop|halt|stand still|don'?t move)\b/],
-  ['follow', /\b(follow( me)?|with me|stick with|on me|come with)\b/],
-  ['come', /\b(come( here| back)?|regroup|to me|group up|rally|get over here)\b/],
-];
-const ALL = /\b(all|bots|everyone|everybody|team|guys|party|y'?all)\b/;
+// Chat orders: only lines starting with /b (or /bot, /bots) are orders; ordinary chat never is.
+//   /b <order>          every bot in your party        /b <name>: <order>   one bot (also "/b <name> <order>")
+//   /b help             lists the orders               aliases below: the first word of the order picks it
+export const BOT_ALIASES = {
+  follow: ['follow', 'f'],
+  stay: ['stay', 'hold', 'wait', 'stop', 'halt'],
+  come: ['come', 'regroup', 'rally', 'here'],
+  attack: ['attack', 'kill', 'focus', 'assist', 'hit'],
+  heal: ['heal', 'heals'],
+  farm: ['farm', 'grind', 'hunt'],
+  boss: ['boss', 'warden', 'sovereign', 'raid'],
+  ready: ['ready'],
+  potion: ['potion', 'pot', 'drink'],
+  status: ['status', 'report', 'sitrep'],
+  leave: ['leave', 'dismiss'],
+};
+const ALIAS = new Map(Object.entries(BOT_ALIASES).flatMap(([cmd, words]) => words.map(w => [w, cmd])));
+const ALL_WORDS = new Set(['all', 'bots', 'everyone', 'team', 'party']);
+const PREFIX = /^\/(?:b|bot|bots)(?=\s|$)\s*([\s\S]*)$/i;
+const word = s => s.toLowerCase().replace(/[^\w']/g, '');
+const cleanName = s => String(s || '').replace(/[^\w \-.]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
 
-// Parse a chat line into a command for the bots it addresses.
-//   text: the chat line; botNames: names of the bots in the speaker's party.
-// Returns null (not a command) or { cmd, all, names: [lower-case bot names addressed] }.
-export function parseCommand(text, botNames = []) {
-  const s = ` ${String(text || '').toLowerCase().replace(/[^\w' ?]/g, ' ').replace(/\s+/g, ' ').trim()} `;
-  if (s.length < 3) return null;
-  const rule = RULES.find(([, re]) => re.test(s));
-  if (!rule) return null;
-  const names = [];
-  for (const n of botNames) {
-    const ln = n.toLowerCase(), first = ln.split(' ')[0];
-    if (s.includes(` ${ln} `) || s.includes(` ${ln},`) || new RegExp(`\\b${first.replace(/[^\w]/g, '')}\\b`).test(s)) names.push(ln);
+// Parse a chat line. Returns null when it isn't a /b line (ordinary chat: never an order), else one of
+// { help: true } | { cmd, name } (name '' = every bot in your party) | { error }.
+export function parseBotChat(text) {
+  const m = String(text || '').trim().match(PREFIX);
+  if (!m) return null;
+  const rest = m[1].trim();
+  if (!rest || /^(help|\?|h)$/i.test(rest)) return { help: true };
+  let name = '', order = rest;
+  const colon = rest.indexOf(':');
+  if (colon >= 0) { name = rest.slice(0, colon); order = rest.slice(colon + 1); }
+  else { // "/b Lyra heal": the words before the first order word are a name
+    const words = rest.split(/\s+/);
+    const i = words.findIndex(w => ALIAS.has(word(w)));
+    if (i > 0) { name = words.slice(0, i).join(' '); order = words.slice(i).join(' '); }
   }
-  return { cmd: rule[0], all: !names.length || ALL.test(s), names };
+  const cmd = ALIAS.get(word(order.trim().split(/\s+/)[0] || ''));
+  if (!cmd) return { error: `"${order.trim().slice(0, 24) || rest.slice(0, 24)}" isn't a bot order. Type /b help for the list.` };
+  name = cleanName(name);
+  if (ALL_WORDS.has(name.toLowerCase())) name = '';
+  return { cmd, name };
+}
+
+// The /b help listing (system lines for the player who asked).
+export function botHelp() {
+  return [
+    'Bot orders: /b <order> for every bot in your party, /b <name>: <order> for one (also V, the command wheel).',
+    ...Object.entries(BOT_COMMANDS).map(([id, c]) => `  /b ${id}: ${c.label}${BOT_ALIASES[id].length > 1 ? ` (also ${BOT_ALIASES[id].slice(1, 3).join(', ')})` : ''}`),
+  ];
 }
 
 // ---------- chatter ----------

@@ -9,7 +9,7 @@
 //             has locked (`ptgt` events), Broken mobs to Switch, marked ones; it doesn't pull extra packs
 //   roles     tank: peels and keeps threat; healer: heals the most hurt member (a "heal me" first) from behind the tank;
 //             DPS: waits for the tank, flanks, Switches on anyone's Break; support: plays its kit near allies
-//   commands  party members (and admins) order bots by chat keywords or the command wheel (`botcmd` events):
+//   commands  party members (and admins) order bots with /b chat lines or the command wheel (`botcmd` events):
 //             follow, stay, come, attack (my target), farm, boss, ready, heal (me), potion, leave, status
 //   social    greetings, call-outs, thanks, wipes, kills, level-ups, rate-limited, party chat only (shared/bots/social.js)
 //
@@ -24,7 +24,7 @@ import { DT, d2, useSkill, moveToward, evade, stepRoll, waveDodge, dodgeSpot, pe
 import { brainFor, roleOf, runHooks } from './registry.js';
 import { basicProfile } from './style.js';
 import { STYLE_IDS } from '../styles.js';
-import { parseCommand, say } from './social.js';
+import { say } from './social.js';
 import './classes.js'; // built-in class plug-ins (Guardian, Swordsman, Cleric, generic)
 import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
 
@@ -228,20 +228,10 @@ function partyBots(b) {
   return ids.length ? ids.sort((x, y) => x - y) : [b.id];
 }
 
+// Chat is never an order (orders arrive as `botcmd` events: the wheel, or a /b line the server turned into one).
 function onChat(b, e) {
   if (e.id === b.id) return;
-  if (e.ch === 'p' && e.party === b.party) b.partyChatT = b.t;
-  if (isBot(b, e.id) || !b.names.has(e.id)) return; // humans give the orders
-  if (e.ch === 'p' && e.party !== b.party) return;   // another party's chat
-  const mate = mateOf(b, e.id);
-  if (!mate && !e.adm) return;
-  const ids = mate ? partyBots(b) : [b.id];
-  const c = parseCommand(e.text, ids.map(id => (id === b.id ? b.name : nameOf(b, id))));
-  if (!c) return;
-  const named = c.names.includes(b.name.toLowerCase());
-  if (!named && !(c.all && mate)) return;
-  const group = c.all && mate ? ids : ids.filter(id => c.names.includes((id === b.id ? b.name : nameOf(b, id)).toLowerCase()));
-  command(b, { k: c.cmd, by: e.id, byName: e.from, tgt: b.locks.get(e.id) || 0, group, all: group.length > 1, adm: !mate });
+  if (e.ch === 'p' && e.party === b.party) b.partyChatT = b.t; // someone just spoke: don't talk over them
 }
 
 function onBotCmd(b, e) {

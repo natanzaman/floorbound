@@ -101,8 +101,9 @@ try {
   await until(() => pos(aid)?.party && pos(aid).party === pos(w.id)?.party, 5000, 'follower in party');
   ok(true, "the follower joined the watcher's party");
   r = await call('PATCH', `/api/admin/bots/${a.bid}`, adminTok, { behaviour: 'field' });
-  await until(() => !pos(aid)?.party, 3000, 'left party');
-  ok(r.body.bot.behaviour === 'field' && r.body.bot.follow === '', 'behaviour back to field: leaves the party');
+  await sleep(1200);
+  ok(r.body.bot.behaviour === 'field' && r.body.bot.follow === '' && pos(aid)?.party && pos(aid).party === pos(w.id)?.party, 'behaviour back to field: it stays in its party (bots are never left detached)');
+  ok((await bots()).bots.find(b => b.bid === a.bid)?.order?.cmd === 'farm', '...with a "go farm" order, so the new behaviour holds next to a player');
   r = await call('PATCH', `/api/admin/bots/${team[0].bid}`, adminTok, { behaviour: 'warden' });
   const tb = (await bots()).bots.filter(b => team.some(t => t.bid === b.bid));
   ok(r.status === 200 && tb.find(b => b.bid === team[0].bid).behaviour === 'warden' && tb.filter(b => b.bid !== team[0].bid).every(b => b.behaviour === 'field'),
@@ -136,12 +137,12 @@ try {
 
   // ---------- respawn as another class ----------
   r = await call('POST', `/api/admin/bots/${a.bid}/respawn`, adminTok, { cls: 'guardian' });
-  ok(r.status === 200 && r.body.bot.cls === 'guardian' && r.body.bot.name === `Ren${tag}` && r.body.bot.skill === 1 && r.body.bot.lvl === 12 && r.body.bot.bid !== a.bid, 'respawn as Guardian: same name, level, capability; new bot id');
+  ok(r.status === 200 && r.body.bot.cls === 'guardian' && r.body.bot.name === `Ren${tag}` && r.body.bot.skill === 1 && r.body.bot.lvl === 12 && r.body.bot.bid === a.bid, 'respawn as Guardian: same name, level, capability; same bot id');
   const nb = r.body.bot.bid;
   await until(() => w.roster.some(p => p.name === `Ren${tag}` && p.cls === 'guardian') && !w.roster.some(p => p.id === aid), 5000, 'respawned in roster');
   ok(true, 'the roster has the Guardian and not the old Swordsman');
   const after = (await bots()).bots;
-  ok(!after.some(b => b.bid === a.bid) && after.find(b => b.bid === nb)?.status !== 'gone', 'the bot list swapped the entry');
+  ok(after.filter(b => b.bid === a.bid).length === 1 && after.find(b => b.bid === nb)?.cls === 'guardian' && after.find(b => b.bid === nb)?.status !== 'gone', 'the bot list swapped the entry in place');
   ok((await call('POST', `/api/admin/bots/${nb}/respawn`, adminTok, { cls: 'wizard' })).status === 400, 'respawn as an unknown class: 400');
 
   // ---------- summary strip ----------

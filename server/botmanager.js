@@ -3,7 +3,9 @@
 // Each bot is a real WebSocket connection to this server's own /ws (the `ws` package) with its OWN brain
 // (shared/bots/brain.js via shared/teambots.js): its own class role, behaviour, capability level and goal. "Add team"
 // adds three such bots put into one party; editing one bot never changes another. Party members command their bots
-// in chat or with the command wheel; admins also through POST /api/admin/bots/:bid/command.
+// with /b chat orders or the command wheel; admins also through POST /api/admin/bots/:bid/command.
+// A bot is linked to the party it serves: no admin action leaves it detached (Respawn as… rejoins the same party with
+// the same id, owner link and orders; see reattach). Player-added bots (server/playerbots.js) set this.ownedRec.
 // Bots join with a secret key generated at startup, so only this module can create them: the server marks them
 // p.bot = true (shown in the roster, left out of the real-player lists), gives them their starting level, and never
 // saves them (they're anonymous players).
@@ -90,7 +92,8 @@ export class BotManager {
     return this.start(ROLES, ROLES.map(c => this.uniqueName(TEAM[c] + suffix)), { lvl, behaviour, follow: String(follow || ''), skill }, n);
   }
 
-  start(roles, names, { lvl, behaviour, follow, skill }, team = 0) {
+  // bid: reuse a bot id (Respawn as…: the same bot to its party, its owner and the admin page)
+  start(roles, names, { lvl, behaviour, follow, skill }, team = 0, bid = 0) {
     lvl = Math.min(MAX_LEVEL, Math.max(1, lvl | 0 || 1));
     skill = clampSkill(skill); // (default 4: Skilled)
     const url = typeof this.url === 'function' ? this.url() : this.url;
@@ -98,7 +101,7 @@ export class BotManager {
       url, WebSocket, roles, names, behaviour, follow, skill,
       join: { bot: this.key, lvl, f2: behaviour === 'floor2' || behaviour === 'follow' ? 1 : 0 },
     });
-    const out = group.team.map(b => ({ bid: this.nextBid++, b, group, behaviour, follow, team, lvl, at: Date.now() }));
+    const out = group.team.map(b => ({ bid: bid || this.nextBid++, b, group, behaviour, follow, team, lvl, at: Date.now() }));
     this.bots.push(...out);
     return out.map(e => this.view(e));
   }
@@ -127,7 +130,7 @@ export class BotManager {
       bid: e.bid, id: e.b.id || 0, name: p?.name || e.b.name, cls: e.b.cls, lvl: p?.lvl ?? e.lvl, hp: p?.hp ?? 0, maxHp: p?.maxHp ?? 0,
       dead: !!p?.dead, area: p ? areaName(p.x, p.z) : 'joining…', floor: p ? floorOf(p.x) : 0,
       party: party ? party.members.filter(id => id !== p.id).map(id => g.players.get(id)?.name).filter(Boolean) : [],
-      behaviour: e.behaviour, follow: e.follow, team: e.team, skill: e.b.skill, skillName: skillName(e.b.skill), status: e.b.closed ? 'gone' : p ? 'online' : 'joining', since: e.at,
+      behaviour: e.behaviour, follow: e.follow, team: e.team, owner: this.ownedRec?.(e.bid)?.ownerName || '', skill: e.b.skill, skillName: skillName(e.b.skill), status: e.b.closed ? 'gone' : p ? 'online' : 'joining', since: e.at,
       goal: p?.dead ? 'Down' : e.b.goal || '', role: e.b.role, order: e.b.cmd ? { cmd: e.b.cmd.k, by: e.b.cmd.byName || '' } : null, partyLead: e.b.anchor?.name || '',
     };
   }
@@ -139,6 +142,7 @@ export class BotManager {
     this.bots = this.bots.filter(e => !(e.b.closed && Date.now() - e.at > 3000));
     for (const e of this.bots) {
       const p = this.livePlayer(e);
+      if (e.carry) this.reattach(e, p); // a respawned bot: back into its party, with its orders
       if (!p || p.dead) continue;
       let t = null;
       if (e.behaviour === 'follow') {

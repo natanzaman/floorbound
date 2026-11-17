@@ -240,7 +240,7 @@ function buildCard(b) {
       <button class="small" data-a="heal" title="Heal to full">✚ Heal</button>
       <button class="small" data-a="kill" data-k="killbtn"></button>
       <select data-k="tp" title="Teleport"></select>
-      <select data-k="respawn" title="Remove and re-add as another class (same name, level, capability, behaviour)"></select>
+      <select data-k="respawn" title="Re-add as another class: same bot, name, level, capability, behaviour, party and orders"></select>
       <select data-k="order" title="Give this bot an order, as its party would"></select>
       <span class="grow"></span>
       <button class="small danger icon" data-a="remove" title="Remove this bot"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
@@ -307,7 +307,7 @@ function updateCard(el, b, force = false) {
   q('skilltag').innerHTML = skillTag(b.skill);
   if (q('seg').dataset.v !== String(b.skill)) { q('seg').innerHTML = segHtml(b.skill); q('seg').dataset.v = b.skill; }
   q('where').textContent = b.status === 'online' ? `${b.floor ? `F${b.floor} · ` : ''}${b.area}` : b.status;
-  q('party').innerHTML = b.party.length ? `<span class="sep">·</span> party: ${esc(b.party.join(', '))}` : '';
+  q('party').innerHTML = (b.party.length ? `<span class="sep">·</span> party: ${esc(b.party.join(', '))}` : '') + (b.owner ? ` <span class="sep">·</span> added by ${esc(b.owner)} (levels with them)` : '');
   const pct = b.maxHp ? Math.round((b.hp / b.maxHp) * 100) : 0;
   q('hpbar').style.width = `${pct}%`;
   el.querySelector('.hp').classList.toggle('low', pct < 35);

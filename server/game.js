@@ -23,7 +23,7 @@ import { installStyles } from './styles.js';
 import { altStyle } from '../shared/styles.js';
 import { installTalents } from './talents.js';
 import { installTracking } from './trackgame.js';
-import { BOT_COMMANDS } from '../shared/bots/social.js'; // party orders for bots (botCommand)
+import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
@@ -160,6 +160,8 @@ export class Game {
       case 'chat': { // ch: 'p' party chat, 's' say (heard nearby); otherwise everyone
         const text = String(msg.text || '').slice(0, 200).trim();
         if (!text) return;
+        const order = parseBotChat(text); // "/b <order>": a bot order, never chat (ordinary chat never orders bots)
+        if (order) return this.botChat(p, order);
         const ch = msg.ch === 'p' && p.party ? { ch: 'p', party: p.party } : msg.ch === 's' ? { ch: 's', x: r2(p.x), z: r2(p.z) } : {};
         this.events.push({ t: 'chat', from: p.name, id: p.id, text, ...ch, ...(p.admin ? { adm: 1 } : {}) });
         return;
@@ -170,8 +172,9 @@ export class Game {
         return;
       }
       case 'botcmd': return this.botCommand(p, msg);
-      case 'test': // testing aid (TEST_HOOKS=1 only): { hurt: fraction } sets your health, for the bot tests
+      case 'test': // testing aid (TEST_HOOKS=1 only): { hurt: fraction } sets your health, { xp } gives XP, for the bot tests
         if (process.env.TEST_HOOKS && msg.hurt > 0 && msg.hurt <= 1 && !p.dead) p.hp = Math.max(1, Math.round(p.maxHp * msg.hurt));
+        if (process.env.TEST_HOOKS && msg.xp > 0) this.giveXp(p, Math.min(1e6, msg.xp | 0)); // { xp }: level up (bot level sync tests)
         return;
       case 'invite': return this.invite(p, msg.id);
       case 'ready': return this.toggleReady(p);
@@ -493,10 +496,26 @@ export class Game {
   // An order for the bots in the sender's party (the command wheel). Admins can also order any bot by name.
   // Bots read it from the snapshot's events (shared/bots/brain.js) and check the party themselves.
   botCommand(p, msg) {
-    const cmd = String(msg.cmd || ''), name = msg.name ? String(msg.name).slice(0, 16) : '';
-    if (!BOT_COMMANDS[cmd]) return;
-    if (!p.party && !(p.admin && name)) return this.sys('Invite some bots into your party first.', p.id);
+    const cmd = String(msg.cmd || '');
+    let name = msg.name ? String(msg.name).slice(0, 16) : '';
+    if (!BOT_COMMANDS[cmd]) return false;
+    if (!p.party && !(p.admin && name)) { this.sys('Invite some bots into your party first.', p.id); return false; }
+    if (name && p.party) { // a party member by full name, else by a unique start of it ("/b ly: heal" is Lyra)
+      const lower = name.toLowerCase(), mates = this.partyOf(p).members.filter(id => id !== p.id).map(id => this.players.get(id)).filter(Boolean);
+      const hit = mates.find(o => o.name.toLowerCase() === lower) || (c => (c.length === 1 ? c[0] : null))(mates.filter(o => o.name.toLowerCase().startsWith(lower)));
+      if (hit) name = hit.name;
+      else if (!p.admin) { this.sys(`No bot called "${name}" in your party.`, p.id); return false; }
+    }
     this.events.push({ t: 'botcmd', by: p.id, byName: p.name, party: p.party || 0, cmd, ...(name ? { name } : {}), tgt: p.target || 0, ...(p.admin ? { adm: 1 } : {}) });
+    return name || true;
+  }
+
+  // A /b chat line (shared/bots/social.js parseBotChat): help, an error, or an order. Never shown as chat.
+  botChat(p, o) {
+    if (o.help) { for (const line of botHelp()) this.sys(line, p.id); return; }
+    if (o.error) return this.sys(o.error, p.id);
+    const to = this.botCommand(p, o);
+    if (to) this.sys(`Order to ${to === true ? 'your bots' : to}: ${BOT_COMMANDS[o.cmd].label}.`, p.id);
   }
 
   invite(p, targetId) {
@@ -1293,9 +1312,12 @@ export class Game {
     const players = [];
     for (const p of this.players.values()) {
       const party = this.partyOf(p);
-      const t = this.time, zeal = p.dmg.zeal && t < p.dmg.until;
-      const buffs = (t < p.dr.until ? 1 : 0) | (t < p.dmg.until && !zeal ? 2 : 0) | (p.lfg || party?.open ? 4 : 0) | (t < p.tonicUntil ? 8 : 0) | (t < p.draughtUntil ? 16 : 0)
-        | (p.shield ? 32 : 0) | (p.bulwark ? 64 : 0) | (t < (p.iron?.until || 0) ? 128 : 0) | (p.renew ? 256 : 0) | (t < p.cry.until ? 512 : 0) | (zeal ? 1024 : 0) | (t < (p.purifyUntil || 0) ? 2048 : 0);
+      // Buff bits (HUD labels: public/main.js, public/mastery.js buffTags, public/classes-b.js): each buff has its own bit,
+      // so a +damage or shield from another skill never shows under the wrong name (Crescendo isn't "Blessed").
+      const t = this.time, dmgOn = t < p.dmg.until, zeal = p.dmg.zeal && dmgOn, cresc = p.dmg.cresc && dmgOn, sk = p.shield?.k;
+      const buffs = (t < p.dr.until ? 1 : 0) | (dmgOn && !zeal && !cresc ? 2 : 0) | (p.lfg || party?.open ? 4 : 0) | (t < p.tonicUntil ? 8 : 0) | (t < p.draughtUntil ? 16 : 0)
+        | (p.shield && !sk ? 32 : 0) | (p.bulwark ? 64 : 0) | (t < (p.iron?.until || 0) ? 128 : 0) | (p.renew ? 256 : 0) | (t < p.cry.until ? 512 : 0) | (zeal ? 1024 : 0) | (t < (p.purifyUntil || 0) ? 2048 : 0)
+        | (cresc ? 4096 : 0) | (sk === 'cresc' ? 8192 : 0) | (sk === 'talent' ? 16384 : 0);
       players.push([p.id, r2(p.x), r2(p.z), r2(p.face), p.hp, p.maxHp, p.lvl, CLASS_IDS.indexOf(p.cls), p.party || 0, p.dead ? 1 : 0, buffs, this.styleIdx(p)]); // [11]: weapon style (shared/styles.js STYLE_IDS, -1 none)
     }
     const mobs = [];

@@ -163,9 +163,9 @@ const methods = {
       for (const o of this.players.values()) {
         if (o.dead || dist(o, p) > C.r) continue;
         const hp = Math.round(o.maxHp * C.shield * c.pow);
-        if (!(o.shield && t < o.shield.until && o.shield.hp > hp)) o.shield = { hp, max: hp, until: t + C.dur, by: p.id, sk: c.S };
+        if (!(o.shield && t < o.shield.until && o.shield.hp > hp)) o.shield = { hp, max: hp, until: t + C.dur, by: p.id, sk: c.S, k: 'cresc' }; // k: its own HUD label
         const v = C.dmg * c.pow;
-        if (!(t < o.dmg.until && o.dmg.v > v)) o.dmg = { until: t + C.dur, v, by: p.id, sk: c.S };
+        if (!(t < o.dmg.until && o.dmg.v > v)) o.dmg = { until: t + C.dur, v, by: p.id, sk: c.S, cresc: true }; // (not Blessed: own HUD bit)
         if (kind === 'encore') this.healPlayer(o, o.maxHp * C.heal * c.pow, p, c.S);
         this.events.push({ t: 'buff', id: o.id, k: 'cresc', d: C.dur, by: p.id });
       }
