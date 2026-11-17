@@ -104,7 +104,7 @@ One row per task. Whoever picks a task sets **Status** and **Owner** here first 
 | F2 Scene director | `feat/director` | todo | | |
 | F3 Staging hooks | `feat/staging` | in progress | agent staging | |
 | F4 Cinematic camera | `feat/cinecam` | todo | | |
-| F5 Poses | `feat/poses` | todo | | |
+| F5 Poses | `feat/poses` | in progress | agent poses | |
 | F6 The Tower Bell and the engraved Hall | `feat/bell` | todo | | |
 | F7 Episode 1 dress rehearsal | (on `main`) | todo (after F1–F6) | | |
 
