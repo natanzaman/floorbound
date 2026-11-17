@@ -1283,10 +1283,18 @@ function renderPlayers() {
   if ($('players').classList.contains('hidden')) return;
   const nBots = [...state.roster.values()].filter(r => r.bot).length, nReal = state.roster.size - nBots;
   if (pbots.tab === 'bots') return pbots.render($('players'), nReal, nBots); // Bots tab (public/playerbots.js)
-  const rows = [];
+  const rows = [], botRows = [];
   let online = 0;
+  // A bot that's in a party with a real player declines invites, so say so instead of offering a button.
+  const humanParty = pid => pid && [...state.roster].some(([i, x]) => !x.bot && players.get(i)?.party === pid);
   for (const [id, r] of state.roster) {
-    if (r.bot) continue; // bots: the Bots tab
+    if (r.bot) { // bots get their own section (managing them is on the Bots tab)
+      const p = players.get(id);
+      const inParty = state.party && p?.party === state.party;
+      const right = inParty ? '<small>Party</small>' : humanParty(p?.party) ? '<small style="opacity:.6">In a party</small>' : `<button data-inv="${id}">Invite</button>`;
+      botRows.push(`<div class="p"><span>${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small><span class="tag">BOT</span></span>${right}</div>`);
+      continue;
+    }
     online++;
     if (id === state.myId) continue;
     const p = players.get(id);
@@ -1302,11 +1310,12 @@ function renderPlayers() {
   const onlineNames = new Set([...state.roster.values()].map(r => r.name.toLowerCase()));
   const offline = (lobby.offline || []).filter(o => !onlineNames.has(o.name.toLowerCase()));
   const offHtml = offline.length ? `<details class="sect" ${lobby.offOpen !== false ? 'open' : ''} data-sect="off"><summary><b>Offline (${offline.length})</b> <small style="opacity:.6">last 30 days</small></summary>${offline.map(o => `<div class="p off"><span>${esc(o.name)} <small style="opacity:.6">Lv ${o.lvl} ${CLASSES[o.cls]?.name || ''}</small></span><small style="opacity:.55">${seenAgo(o.seen)}</small></div>`).join('')}</details>` : '';
-  const html = `${pbots.tabsHtml(nReal, nBots)}${lfgBtn}<b>Online (${online})</b>${rows.join('') || '<div style="opacity:.6;font-size:13px;padding:6px 0">Nobody else yet. Share the link with friends!</div>'}${offHtml}${state.party ? '<button class="leave">Leave party</button>' : ''}`;
+  const botHtml = botRows.length ? `<details class="sect" ${lobby.botOpen !== false ? 'open' : ''} data-sect="bots"><summary><b>Bots (${botRows.length})</b> <small style="opacity:.6">invite to your party</small></summary>${botRows.join('')}</details>` : '';
+  const html = `${pbots.tabsHtml(nReal, nBots)}${lfgBtn}<b>Online (${online})</b>${rows.join('') || '<div style="opacity:.6;font-size:13px;padding:6px 0">Nobody else yet. Share the link with friends!</div>'}${botHtml}${offHtml}${state.party ? '<button class="leave">Leave party</button>' : ''}`;
   if (html === lobby.html) return; // unchanged: keep the DOM (buttons stay clickable)
   $('players').innerHTML = lobby.html = html;
   pbots.bindTabs($('players'));
-  for (const d of $('players').querySelectorAll('details[data-sect]')) d.ontoggle = () => { lobby.offOpen = d.open; };
+  for (const d of $('players').querySelectorAll('details[data-sect]')) d.ontoggle = () => { if (d.dataset.sect === 'bots') lobby.botOpen = d.open; else lobby.offOpen = d.open; };
   $('players').querySelector('.lfg').onclick = () => { send({ type: 'lfg' }); sfx.play('ui'); setTimeout(renderPlayers, 150); };
   for (const b of $('players').querySelectorAll('[data-inv]')) b.onclick = () => { send({ type: 'invite', id: +b.dataset.inv }); b.textContent = 'Sent'; b.disabled = true; };
   const lv = $('players').querySelector('.leave'); if (lv) lv.onclick = () => send({ type: 'leave' });
