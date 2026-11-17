@@ -2,6 +2,7 @@
 // Shared by the server (validation, costs, results) and the client (names, costs, the Smith panel).
 import { RANGER_CRAFT } from './classes/ranger.js';
 import { BERSERKER_CRAFT } from './classes/berserker.js';
+import { STYLE_RECIPES } from './styles.js';
 
 // Materials live in inv.mats { id: count }, not in bag slots.
 export const MATS = {
@@ -126,8 +127,9 @@ export const RECIPES = [
   { id: 'thornheart', name: 'Thornheart Talisman', slot: 'charm', r: 3, st: { haste: 12, sw: 25 },
     gold: 400, mats: { core: 2, resin: 8, prism: 1 }, desc: 'A rare core wrapped in living thorn.' },
 ];
+RECIPES.push(...STYLE_RECIPES); // weapon-style recipes (shared/styles.js): rc.style, for that style's class only
 export const RECIPE_BY_ID = Object.fromEntries(RECIPES.map(r => [r.id, r]));
-export const recipeName = (rc, cls) => (rc.cls ? `${rc.name} ${CLASS_WEAPON[cls] || 'Blade'}` : rc.name);
+export const recipeName = (rc, cls) => (rc.style ? rc.name : rc.cls ? `${rc.name} ${CLASS_WEAPON[cls] || 'Blade'}` : rc.name);
 
 // ---------- helpers ----------
 export const hasMats = (have, need) => Object.entries(need || {}).every(([k, v]) => (have?.[k] || 0) >= v);

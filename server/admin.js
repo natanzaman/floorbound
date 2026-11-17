@@ -9,6 +9,7 @@ import * as db from './db.js';
 import * as accounts from './accounts.js';
 import { CLASSES, MAX_LEVEL, xpToNext, areaName } from '../shared/data.js';
 import { SLOTS, BAG_SIZE, RARITY, CONSUMABLE_IDS, makeItem, lastAttackItem, lastAttackItem2, newInventory } from '../shared/items.js';
+import { STYLES } from '../shared/styles.js';
 import { MAT_IDS } from '../shared/crafting.js';
 import { STAT_KEYS, TITLE_BY_ID, newStats } from '../shared/titles.js';
 import { floorOf } from '../shared/floor2.js';
@@ -86,6 +87,7 @@ function cleanItem(it, where) {
   if (typeof it.name !== 'string' || !it.name) throw new Bad(`${where}: needs a name.`);
   if (!it.st || typeof it.st !== 'object' || Object.values(it.st).some(v => typeof v !== 'number' || !isFinite(v))) throw new Bad(`${where}: st must be an object of numbers.`);
   if (it.cls !== undefined && !CLASSES[it.cls]) throw new Bad(`${where}: unknown class ${it.cls}.`);
+  if (it.style !== undefined && (STYLES[it.style]?.cls !== it.cls || it.slot !== 'weapon')) throw new Bad(`${where}: style ${it.style} isn't a ${CLASSES[it.cls]?.name || '?'} weapon style.`);
   return clone(it);
 }
 
@@ -210,7 +212,8 @@ function applyOp(c, op) {
       const r = int(op.r, 0, 3, 'Rarity');
       const cls = op.slot === 'weapon' ? (CLASSES[op.cls] ? op.cls : c.cls) : undefined;
       const charm = ['crit', 'haste', 'sw'].includes(op.charm) ? op.charm : undefined;
-      return giveToBag(c, makeItem(op.slot, r, cls, Math.random, charm));
+      const style = cls && STYLES[op.style]?.cls === cls ? op.style : undefined; // weapon style (shared/styles.js)
+      return giveToBag(c, makeItem(op.slot, r, cls, Math.random, charm, style));
     }
     case 'addLastAttack': return giveToBag(c, op.which === 2 ? lastAttackItem2() : lastAttackItem());
     case 'removeItem': {

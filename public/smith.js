@@ -6,6 +6,7 @@ import { RARITY, SLOTS, statLabel } from '/shared/items.js';
 import {
   MATS, MAT_IDS, SMITH, nearSmithAt, refineCost, applyRefine, salvageYield, reforgeCost, RECIPES, recipeName, canAfford, REFINE_MAX,
 } from '/shared/crafting.js';
+import { STYLES } from '/shared/styles.js';
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
 const TABS = [['refine', 'Refine'], ['craft', 'Craft'], ['salvage', 'Salvage'], ['reforge', 'Reforge']];
@@ -115,7 +116,7 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
   }
 
   function tabCraft() {
-    return '<p class="hint">Named gear with fixed, top-of-range stats. Weapons are forged for your class.</p>' + RECIPES.map(rc => {
+    return '<p class="hint">Named gear with fixed, top-of-range stats. Weapons are forged for your class.</p>' + RECIPES.filter(rc => !rc.style || STYLES[rc.style]?.cls === state.cls).map(rc => { // weapon-style recipes: your class only
       const cost = { gold: rc.gold, mats: rc.mats }, can = canAfford(gold(), mats(), cost) && state.inv && state.inv.bag.length < 24;
       return `<div class="it recipe"><span class="slot">${rc.slot}<br><em class="r${rc.r}">${RARITY[rc.r].name}</em></span><span class="nm"><b class="r${rc.r}">${esc(recipeName(rc, state.cls))}</b><small>${statsText(rc.st)}</small><small class="desc">${esc(rc.desc)}</small>${costHtml(cost)}</span>${btn('craft', 'Forge', can, `data-id="${rc.id}"`)}</div>`;
     }).join('');

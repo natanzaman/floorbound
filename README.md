@@ -108,10 +108,10 @@ Characters keep lifetime stats and earn titles (Warden Slayer, Last Attacker, Sw
 
 ## Items
 
-- **Gear:** weapon (+damage), armour (+health, and less damage taken at Rare+), charm (crit, cooldowns or Switch damage). Rarities: Common, Uncommon, Rare, Epic, plus the gold Last Attack item. Weapons are class-specific.
+- **Gear:** weapon (+damage), armour (+health, and less damage taken at Rare+), charm (crit, cooldowns or Switch damage). Rarities: Common, Uncommon, Rare, Epic, plus the gold Last Attack item. Weapons are class-specific and come in three **weapon styles** per class (see below).
 - **Drops are personal:** every party member nearby rolls their own gold, potions and gear. Alphas always drop Uncommon+; the Warden drops two Rare+ items for everyone who fought.
 - **Consumables:** Health Potion (40% health), Battle Tonic (+15% damage, 30 s), Ironbark Draught (−15% damage taken, 30 s). New characters start with 3 potions.
-- **Merchant** in town (press F at the stall): buy consumables and Uncommon gear, sell items.
+- **Merchant** in town (press F at the stall): buy consumables and Uncommon gear (including a weapon in your class's alternate style), sell items.
 
 ## Crafting
 
@@ -174,6 +174,33 @@ MASTERY=3 START_LEVEL=10 SPAWN_AT=0,150 npm start
 BRANCH=B node test/team.js                  # every skill evolved into branch B
 ```
 
+## Weapon styles
+
+Every class fights in one of three **weapon styles**, set by the weapon you wear (no weapon, or a weapon without a style, is the class default). A style changes how the basic attack plays, adds one passive and tweaks one skill. You see it on the character (the weapon in their hands, for everyone), in the bag and tooltips (style name, passive, skill tweak), and on the basic-attack button's tooltip.
+
+| Class | Style | Basic attack | Passive | Skill tweak |
+| --- | --- | --- | --- | --- |
+| Swordsman | **One-Handed Sword** (default) | 3-hit combo, knockback finisher | — | — |
+| | **Dual Blades** | Faster 4-hit combo (0.4 s), lighter hits; the 4th is a double strike with extra posture | Each Switch you land cuts your skill cooldowns by 0.5 s | Burst Combo strikes 6 times |
+| | **Rapier** | Thrusts that reach 4.6–5.4 m and pierce everything in a line; +10% crit | Perfect-dodge counters deal 40% more | Rush lunges 12 m (8 m) |
+| Guardian | **Sword & Shield** (default) | 3-hit combo with extra threat | — | — |
+| | **Mace & Shield** | Slow (0.95 s), heavy blunt blows, double posture; the 3rd sends a shockwave with a big posture chunk | Breaks you cause last 1.2 s longer (0.6 s on bosses) | Ground Slam radius +20% |
+| | **Spear & Shield** | Long pokes (4.8–5.6 m) through everything in a line | +50% threat from everything you do | Taunt range +30% |
+| Cleric | **Staff** (default) | Smite: a 10 m bolt that interrupts wind-ups | — | — |
+| | **Mace & Tome** | Melee 3-hit combo; the 3rd blow is Smite as a shockwave all around you (interrupts) | Every press that lands heals the most hurt ally within 12 m (3% of their health + 2) | Smite becomes the melee shockwave |
+| | **Wand** | Faster (0.5 s), longer (12 m), weaker bolts; still interrupt | Bolts on an enemy a teammate Broke heal that teammate (5% of their health) | Heal reaches 22.5 m (15 m) |
+
+- **Getting one:** weapon drops roll a style (the class default half the time, otherwise one of the other two); the merchant sells the default Uncommon weapon plus one in your class's alternate style (Dual Blades, Mace & Shield, Mace & Tome); the Smith has a recipe per non-default style (Twinfang Dual Blades, Thornneedle Rapier, Tuskmaul and Hornmaul Mace & Shield, Packpike Spear & Shield, Hymnal Mace & Tome, Resinlight Wand), shown only to that style's class; the admin editor's *Add item* has a style picker. Names follow the style ("Tempered Dual Blades", "Duskglass Rapier", "Iron Mace & Shield", "Ash Wand"). Weapons stay class-locked; refining and reforging keep the style.
+- **Server-authoritative:** the server resolves the style from the equipped weapon on every equip/recompute and sends it as the 12th field of each snapshot player row (an index into `STYLE_IDS`, -1 for none), so everyone renders the right weapon. Style skill tweaks apply to the base skills, not to their Mastery 3 evolutions.
+- **Visuals:** each style has its own held weapon, animations and hit effects: two swords (the KayKit knight's sword mirrored into the off hand) with crossing arcs; a needle-thin rapier with white thrust lines; a flanged mace with the round shield and an orange shockwave ring; a long spear with the square shield and amber thrust lines; a gold mace with the spellbook and a golden shockwave; the KayKit wand with quick violet bolts. The rapier, maces and spear are built from Three.js geometry (`public/styles.js`); the swords, shields, spellbook and wand come from the KayKit Adventurers models already in `public/models` (CC0).
+- **Code:** data and tuning `shared/styles.js`; server `server/styles.js` (mixed into Game; game.js reads the skill tweaks through `styleNum`); client `public/styles.js`. Test: `node test/styles.js` (add `DATABASE_URL=... PORT=3583` for the save/load round trip).
+- **Testing aids:** `START_STYLE=<id>` (`sword`, `dual`, `rapier`, `shield`, `mace`, `spear`, `staff`, `tome`, `wand`) equips that style's weapon on everyone of that class who joins; `START_STYLE=random` a random style for everyone. `BOT_STYLES=1` gives every anonymous player (bots included: `test/team.js` and the admin page's server bots) a random style:
+
+```bash
+BOT_STYLES=1 START_LEVEL=10 SPAWN_AT=0,150 npm start
+node test/team.js
+```
+
 ## Classes
 
 | Class | Role | Skills |
@@ -206,6 +233,7 @@ shared/teambots.js  bot brains: role-playing party (tank / DPS / healer) and sin
 shared/mastery.js, server/mastery.js, public/mastery.js  skill mastery and evolutions; test/evolve.js
 shared/classes/   Lancer and Bard data, tuning, evolutions (lancer.js, bard.js) and bot brains (bots-b.js)
 server/classes-b.js, public/classes-b.js  Lancer / Bard skills (mixed into Game) and their rigs + visuals; test/classes-b.js
+shared/styles.js, server/styles.js, public/styles.js  weapon styles; test/styles.js
 server/admin.js  admin API (/api/admin/*) and /api/lobby; server/botmanager.js runs bots inside the server; public/admin.html the admin page
 ```
 
