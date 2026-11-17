@@ -15,11 +15,12 @@
 import { MOBS, MOB_IDS, PLAYER_SPEED, SPRINT_SPEED, DODGE, SWEEP, walkable, resolveCollision, inGateZone, inArena } from './data.js';
 import { F2, WAYSTONES, STAIRWAY, SOVEREIGN, inGateZone2, inArena2, onFloor2, floorUnlocked } from './floor2.js';
 import { MASTERY, BRANCHES, masteryLevel } from './mastery.js';
+import { perceive, skillReady, pressed, aimNoise, sweepError, potionAt, setSkill, clampSkill } from './botskill.js'; // capability levels 1-5
 
 export const TEAM_NAMES = { guardian: 'Brann', swordsman: 'Kael', cleric: 'Lyra' };
 
 // names: optional name per role; join: extra fields for the join message (e.g. the server's bot key and a level).
-export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = ['guardian', 'swordsman', 'cleric'], suffix = '', inviteHumans = false, log = () => {}, floor = 1, branch = null, names = null, join = {}, behaviour = 'auto', follow = '' }) {
+export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = ['guardian', 'swordsman', 'cleric'], suffix = '', inviteHumans = false, log = () => {}, floor = 1, branch = null, names = null, join = {}, behaviour = 'auto', follow = '', skill = 5 }) {
   if (behaviour === 'floor2') floor = 2;
   const ROSTER = roles.map((c, i) => [c, names?.[i] || TEAM_NAMES[c] + suffix]);
   const DT = 0.05;
@@ -28,6 +29,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
 
   const team = ROSTER.map(([cls, name], i) => {
     const b = { i, cls, name, id: 0, x: 0, z: 0, seq: 0, face: 0, t: 0, mobs: [], players: [], me: null, dead: false, hp: 1, maxHp: 1, tele: [], fresh: false, cds: [0, 0, 0, 0], dodgeCd: 0, roll: null, stag: {}, waves: [], orbs: [], pools: [], life: null };
+    b.skill = clampSkill(Array.isArray(skill) ? skill[i] : skill); // capability level (shared/botskill.js); 5 = perfect
     b.ws = new WS(url);
     b.ws.addEventListener('open', () => send(b, { type: 'join', name, cls, ...join }));
     b.ws.addEventListener('close', () => { b.closed = true; if (team.every(x => x.closed)) { clearInterval(formParty); clearInterval(inviteLoop); } });
@@ -59,7 +61,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
       b.players = msg.w.players.map(p => ({ id: p[0], x: p[1], z: p[2], hp: p[4], maxHp: p[5], party: p[8], dead: !!p[9] }));
       const mine = b.players.find(p => p.id === b.id);
       if (mine) Object.assign(b, { hp: mine.hp, maxHp: mine.maxHp, dead: mine.dead, party: mine.party });
-      for (const e of msg.w.events) {
+      for (const e of perceive(b, msg.w.events)) { // (reaction delays / misses below capability 5)
         if (e.t === 'tp' && e.id === b.id) { b.x = e.x; b.z = e.z; b.seq = e.s; }
         if (e.t === 'invite' && e.to === b.id) send(b, { type: 'accept', from: e.from });
         if (e.t === 'stagger') b.stag[e.id] = { by: e.by, until: b.t + e.d };
@@ -95,7 +97,9 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
 
   function useSkill(b, slot, face) {
     if (b.cds[slot] > 0 || (slot === 3 && b.me.lvl < 3)) return false;
+    if (!skillReady(b, slot)) return false; // capability: slower rotations
     send(b, { type: 'skill', slot, face: face ?? b.face });
+    pressed(b, slot);
     b.cds[slot] = 1; (b.pressed ||= [])[slot] = b.t;
     return true;
   }
@@ -125,6 +129,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
   const switchOpen = (b, m) => m?.staggered && b.stag[m.id] && b.stag[m.id].by !== b.id && b.stag[m.id].until > b.t;
 
   function moveToward(b, tx, tz, stop = 0.4, speed = PLAYER_SPEED) {
+    [tx, tz] = aimNoise(b, tx, tz); // capability: positioning error in fights
     const dx = tx - b.x, dz = tz - b.z, d = Math.hypot(dx, dz);
     if (d <= stop) return false;
     const step = Math.min(d - stop, speed * DT);
@@ -211,13 +216,13 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
     const d = d2(b.x, b.z, m.x, m.z), away = Math.atan2(b.x - m.x, b.z - m.z);
     if (d > SWEEP.r + 1.5) return left < 1; // outside: don't walk in
     if (b.cls === 'guardian') { // parry: face it and raise the shield just before it lands
-      if (left > 0.12) return false;
+      if (left > 0.12 + sweepError(b, s)) return false;
       b.face = Math.atan2(m.x - b.x, m.z - b.z);
       if (!b.guardOn) { b.guardOn = true; send(b, { type: 'guard', on: true }); }
       return true;
     }
     if (b.dodgeCd <= left - 0.1) { // roll through it at the last moment
-      if (left > 0.15) return false;
+      if (left > 0.15 + sweepError(b, s)) return false;
       evade(b, b.x + Math.sin(away) * 5, b.z + Math.cos(away) * 5);
       return true;
     }
@@ -335,7 +340,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
   function upkeep(b) {
     if (b.dead || !b.me) return;
     if (!b.gateOpen && (inGateZone(b.x, b.z) || inGateZone2(b.x, b.z)) && !b.me.ready && b.t - (b.readyT || -9) > 1) { b.readyT = b.t; send(b, { type: 'ready' }); }
-    if (b.hp / b.maxHp < 0.35 && b.t - (b.potT || -99) > 10) { b.potT = b.t; send(b, { type: 'use', id: 'potion' }); }
+    if (b.hp / b.maxHp < potionAt(b) && b.t - (b.potT || -99) > 10) { b.potT = b.t; send(b, { type: 'use', id: 'potion' }); }
   }
 
   // Getting to Floor 2: the Stairway right after a Warden kill, otherwise the town waystone (once unlocked).
@@ -354,7 +359,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
   }
 
   // ---------- single-bot brain (any class) ----------
-  const classic = behaviour === 'auto' || behaviour === 'floor2'; // the role-playing party brain (needs a tank)
+  let classic = behaviour === 'auto' || behaviour === 'floor2'; // the role-playing party brain (needs a tank)
   function followed(b) { // the player we follow (from the roster by name), as seen in the last snapshot
     if (!follow) return null;
     const want = follow.toLowerCase(), r = (b.roster || []).find(r => !r.bot && r.name.toLowerCase() === want);
@@ -473,6 +478,12 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
     team,
     stop() { clearInterval(formParty); clearInterval(inviteLoop); for (const b of team) b.ws.close(); },
     drop(b) { b.ws.close(); }, // disconnect one bot; the rest carry on
+    setSkill(b, v) { setSkill(b, v); }, // change one bot's capability level live
+    configure(o = {}) { // change the group's behaviour / follow target live (botmanager admin edits)
+      if (o.behaviour) { behaviour = o.behaviour; floor = behaviour === 'floor2' ? 2 : 1; classic = behaviour === 'auto' || behaviour === 'floor2'; }
+      if (o.follow !== undefined) follow = String(o.follow);
+      for (const b of team) { b.tgtId = null; b.home = null; }
+    },
   };
 
 }

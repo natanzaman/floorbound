@@ -10,6 +10,8 @@ import WebSocket from 'ws';
 import { startTeam } from '../shared/teambots.js';
 import { CLASSES, MAX_LEVEL, PARTY_MAX, areaName, walkable, resolveCollision } from '../shared/data.js';
 import { floorOf } from '../shared/floor2.js';
+import { clampSkill, skillName } from '../shared/botskill.js'; // capability levels 1-5
+import { BotEditMethods } from './botedit.js'; // live edits + actions (admin page)
 
 export const BEHAVIOURS = {
   follow: 'Follow a player (fight alongside, join their party)',
@@ -68,29 +70,30 @@ export class BotManager {
     for (let i = 2; ; i++) { const n = `${NAMES[i % NAMES.length]} ${i}`; if (!taken.has(n.toLowerCase())) return n; }
   }
 
-  // opts: { cls, name, lvl, behaviour, follow }
-  add({ cls, name, lvl, behaviour = 'field', follow = '' } = {}) {
+  // opts: { cls, name, lvl, behaviour, follow, skill (capability 1-5, default 4) }
+  add({ cls, name, lvl, behaviour = 'field', follow = '', skill } = {}) {
     if (!CLASSES[cls]) throw new Error('Pick a class.');
     if (!BEHAVIOURS[behaviour]) throw new Error('Unknown behaviour.');
     if (behaviour === 'follow' && !this.realPlayers().some(p => p.name.toLowerCase() === String(follow).toLowerCase())) throw new Error('Pick an online player to follow.');
     if (this.count() + 1 > this.max) throw new Error(`Bot limit reached (${this.max}).`);
     name = String(name || '').replace(/[^\w \-.]/g, '').trim().slice(0, 16);
-    return this.start([cls], [this.uniqueName(name)], { lvl, behaviour, follow: String(follow || '') })[0];
+    return this.start([cls], [this.uniqueName(name)], { lvl, behaviour, follow: String(follow || ''), skill })[0];
   }
 
-  addTeam({ lvl, behaviour = 'auto', follow = '' } = {}) {
+  addTeam({ lvl, behaviour = 'auto', follow = '', skill } = {}) {
     if (!BEHAVIOURS[behaviour]) throw new Error('Unknown behaviour.');
     if (behaviour === 'follow' && !this.realPlayers().some(p => p.name.toLowerCase() === String(follow).toLowerCase())) throw new Error('Pick an online player to follow.');
     if (this.count() + 3 > this.max) throw new Error(`Bot limit reached (${this.max}).`);
     const n = this.nextTeam++, suffix = n > 1 ? ` ${n}` : '';
-    return this.start(ROLES, ROLES.map(c => this.uniqueName(TEAM[c] + suffix)), { lvl, behaviour, follow: String(follow || '') }, n);
+    return this.start(ROLES, ROLES.map(c => this.uniqueName(TEAM[c] + suffix)), { lvl, behaviour, follow: String(follow || ''), skill }, n);
   }
 
-  start(roles, names, { lvl, behaviour, follow }, team = 0) {
+  start(roles, names, { lvl, behaviour, follow, skill }, team = 0) {
     lvl = Math.min(MAX_LEVEL, Math.max(1, lvl | 0 || 1));
+    skill = clampSkill(skill); // (default 4: Skilled)
     const url = typeof this.url === 'function' ? this.url() : this.url;
     const group = startTeam({
-      url, WebSocket, roles, names, behaviour, follow,
+      url, WebSocket, roles, names, behaviour, follow, skill,
       join: { bot: this.key, lvl, f2: behaviour === 'floor2' || behaviour === 'follow' ? 1 : 0 },
     });
     const out = group.team.map(b => ({ bid: this.nextBid++, b, group, behaviour, follow, team, lvl, at: Date.now() }));
@@ -122,7 +125,7 @@ export class BotManager {
       bid: e.bid, id: e.b.id || 0, name: p?.name || e.b.name, cls: e.b.cls, lvl: p?.lvl ?? e.lvl, hp: p?.hp ?? 0, maxHp: p?.maxHp ?? 0,
       dead: !!p?.dead, area: p ? areaName(p.x, p.z) : 'joining…', floor: p ? floorOf(p.x) : 0,
       party: party ? party.members.filter(id => id !== p.id).map(id => g.players.get(id)?.name).filter(Boolean) : [],
-      behaviour: e.behaviour, follow: e.follow, team: e.team, status: e.b.closed ? 'gone' : p ? 'online' : 'joining', since: e.at,
+      behaviour: e.behaviour, follow: e.follow, team: e.team, skill: e.b.skill, skillName: skillName(e.b.skill), status: e.b.closed ? 'gone' : p ? 'online' : 'joining', since: e.at,
     };
   }
 
@@ -165,3 +168,4 @@ export class BotManager {
     this.game.teleport(p, t.x, t.z);
   }
 }
+Object.assign(BotManager.prototype, BotEditMethods); // edit(bid, ...), action(bid, act, ...) (server/botedit.js)
