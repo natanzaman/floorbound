@@ -16,8 +16,10 @@ import { MOBS, MOB_IDS, PLAYER_SPEED, SPRINT_SPEED, DODGE, SWEEP, walkable, reso
 import { F2, WAYSTONES, STAIRWAY, SOVEREIGN, inGateZone2, inArena2, onFloor2, floorUnlocked } from './floor2.js';
 import { MASTERY, BRANCHES, masteryLevel } from './mastery.js';
 import { perceive, skillReady, pressed, aimNoise, sweepError, potionAt, setSkill, clampSkill } from './botskill.js'; // capability levels 1-5
+import { CLASS_BRAINS_B, TEAM_NAMES_B, botEventB } from './classes/bots-b.js';
 
 export const TEAM_NAMES = { guardian: 'Brann', swordsman: 'Kael', cleric: 'Lyra' };
+Object.assign(TEAM_NAMES, TEAM_NAMES_B); // Lancer, Bard (shared/classes/bots-b.js)
 
 // names: optional name per role; join: extra fields for the join message (e.g. the server's bot key and a level).
 export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = ['guardian', 'swordsman', 'cleric'], suffix = '', inviteHumans = false, log = () => {}, floor = 1, branch = null, names = null, join = {}, behaviour = 'auto', follow = '', skill = 5 }) {
@@ -73,6 +75,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
         if (b.i === 0 && e.t === 'sys' && !e.to) log(`[sys] ${e.text}`);
         if (e.t === 'f2wave') b.waves.push({ x: e.x, z: e.z, start: b.t + e.d, sp: e.sp, w: e.w, max: e.max });
         if (e.t === 'stair') b.stair = { x: e.x, z: e.z, until: b.t + e.d };
+        botEventB(b, e); // Lancer / Bard bots (Discord stacks)
       }
       b.fresh = true;
       tick();
@@ -432,6 +435,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
     if (dodge) evade(b, ...dodge);
     if (b.cls === 'cleric' && soloHeal(b)) return;
     if (!tgt) { if (!dodge) soloIdle(b); return; }
+    if (CLASS_BRAINS_B[b.cls]) return CLASS_BRAINS_B[b.cls](brainCtx, b, tgt, dodge); // Lancer, Bard
     const ranged = b.cls === 'cleric', reach = ranged ? 8 : tgt.def.radius + 1.5;
     if (!dodge) moveToward(b, tgt.x, tgt.z, reach - 0.4);
     const face = Math.atan2(tgt.x - b.x, tgt.z - b.z), d = d2(b.x, b.z, tgt.x, tgt.z);
@@ -461,6 +465,16 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
     useSkill(b, 0, face);                                                      // Slash
   }
 
+  // Lancer / Bard brains (shared/classes/bots-b.js), and party members beyond tank / DPS / healer in the classic run.
+  const brainCtx = { useSkill, moveToward, switchOpen, d2, anchor: b => (classic && tank && tank !== b && !tank.dead ? tank : followed(b)) };
+  function actExtra(b) {
+    if (!CLASS_BRAINS_B[b.cls]) return actSolo(b);
+    const tgt = engagedAt !== null ? currentTarget(b) : null, dodge = dodgeSpot(b);
+    if (dodge) evade(b, ...dodge);
+    if (!tgt) { if (!dodge) moveToward(b, tank.x - 3, tank.z - 3.5, 1.2); return; }
+    CLASS_BRAINS_B[b.cls](brainCtx, b, tgt, dodge);
+  }
+
   function tick() {
     if (!team.every(b => b.fresh || b.closed)) return;
     for (const b of team) b.fresh = false;
@@ -470,6 +484,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
       if (turn(tank)) actTank();
       if (dps && turn(dps)) actDps();
       if (healer && turn(healer)) actHealer();
+      for (const b of team) if (b !== tank && b !== dps && b !== healer && turn(b)) actExtra(b);
     } else for (const b of team) if (turn(b)) actSolo(b);
     for (const b of team) if (!b.dead) send(b, { type: 'input', x: +b.x.toFixed(2), z: +b.z.toFixed(2), face: +b.face.toFixed(2), seq: b.seq });
   }

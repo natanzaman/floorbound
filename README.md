@@ -2,7 +2,7 @@
 
 A co-op 3D action RPG that runs in the browser. You and your friends are stuck in a 100-floor tower: fight through the field, beat the floor boss together, clear the floor.
 
-This is the **Floors 1–2 prototype**: town hub, open field with mobs, the Horned Warden boss, a second floor (the Glimmering Mire and the Drowned Sovereign), 3 classes, parties, levels 1–20, and a real-time authoritative server.
+This is the **Floors 1–2 prototype**: town hub, open field with mobs, the Horned Warden boss, a second floor (the Glimmering Mire and the Drowned Sovereign), 5 classes, parties, levels 1–20, and a real-time authoritative server.
 
 ## Run it
 
@@ -160,6 +160,12 @@ Each class skill on 1, 2 and 3 (not the basic attack) has its own **Mastery** le
 | Heal | **Renew**: smaller heal over 6 s on the two most hurt allies | **Miracle**: big heal + purify (immune to mire pools, cracked ground, the Deluge for 4 s), 2.5x cooldown |
 | Blessing | **Zeal**: allies +15% damage, cooldowns 25% faster for 8 s (co-op) | **Aegis**: shields absorbing 25% of each ally's health for 8 s |
 | Sanctuary | **Haven**: allies inside take 25% less damage, smaller heal | **Consecrate**: burns enemies inside and fills their posture for a Switch, no heal (co-op) |
+| Lance Charge | **Comet Charge**: 13 m, ends in a posture shockwave (co-op) | **Hit & Run**: 6 m, harder, then you spring back to where you started |
+| Sweep (Lancer) | **Cyclone Sweep**: two wide spins (5.5 m), more damage, no stagger | **Hamstring**: frontal half-circle, longer knockdown, 50% slow, more posture (co-op) |
+| Sky Lance | **Meteor Lance**: wider (5.5 m), more damage, no Break posture | **Pinning Lance**: lands on one enemy: instant BREAK + rooted (a boss: a huge posture chunk) (co-op) |
+| Anthem | **War March**: allies near you +12% damage instead of speed/haste (co-op) | **Lullaby**: enemies within 10 m 35% slower, a Discord stack every 2 s; no ally buff |
+| Dissonance | **Shattering Chord**: a narrow 10 m beam, more damage, 2 Discord stacks, no slow (co-op) | **Feedback**: a 5 m blast all around that hurls enemies away and slows them |
+| Crescendo | **Grand Finale**: builds in 1.5 s, big damage within 10 m, Breaks at 3+ stacks (bosses 4); no shield/buff (co-op) | **Encore**: 30% shields, +20% damage for 10 s and a 15% heal; no damage or Break |
 
 Mastery and branches are saved with the character (a `mastery` JSONB column); anonymous players keep them until they leave. Tuning (thresholds, weights, branch names) lives in `shared/mastery.js`; the server side is `server/mastery.js` (`useEvolved` runs the 18 evolutions), the Skills panel, shrines and visuals `public/mastery.js`. Tests: `node test/evolve.js` (add `DATABASE_URL=...` for the save/load round trip). Testing aids: `MASTERY=3` (or 5) starts every skill at that mastery; the bot party picks random branches, or `BRANCH=A` / `BRANCH=B`:
 
@@ -175,6 +181,8 @@ BRANCH=B node test/team.js                  # every skill evolved into branch B
 | Swordsman | Damage | Slash, Rush (dash strike), Whirl (spin), Burst Combo (Lv 3) |
 | Guardian | Tank | Bash, Taunt, Shield Wall, Ground Slam (Lv 3, stuns) |
 | Cleric | Healer | Smite (ranged), Heal, Blessing (+25% damage), Sanctuary (Lv 3) |
+| Lancer | Damage | Thrust (3-hit spear combo along a 4.6 m line; +30% near the tip of your reach), Lance Charge (9 m dash through a line, stops short of walls and trees), Sweep (trips everything within 4.5 m: stagger + posture), Sky Lance (Lv 3: leap onto a spot up to 10 m away, marked for allies; airborne in flight; Breaks) |
+| Bard | Support | Sonic Bolt (11 m projectile; each hit adds a Discord stack, max 5: +10% posture damage per stack), Anthem (8 s aura: you and allies within 12 m move 20% faster, attack 20% faster, skills recharge 15% faster), Dissonance (7 m cone: slows 40% for 4 s and INTERRUPTS wind-ups), Crescendo (Lv 3: builds 3 s, then allies get a 20% shield and +15% damage for 6 s, and enemies within 8 m with 3+ Discord (bosses 5) are BROKEN) |
 
 ## Project layout
 
@@ -192,6 +200,8 @@ test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
 shared/teambots.js  bot brains: role-playing party (tank / DPS / healer) and single bots; used by test/team.js, public/bots.html and server/botmanager.js
 shared/mastery.js, server/mastery.js, public/mastery.js  skill mastery and evolutions; test/evolve.js
+shared/classes/   Lancer and Bard data, tuning, evolutions (lancer.js, bard.js) and bot brains (bots-b.js)
+server/classes-b.js, public/classes-b.js  Lancer / Bard skills (mixed into Game) and their rigs + visuals; test/classes-b.js
 server/admin.js  admin API (/api/admin/*) and /api/lobby; server/botmanager.js runs bots inside the server; public/admin.html the admin page
 ```
 
@@ -279,6 +289,7 @@ Measured on the prototype: 40 bots used about 5% of one CPU core, about 50 KB/s 
 ## Credits
 
 Character models and animations: [KayKit Adventurers Character Pack](https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0) by Kay Lousberg ([kaylousberg.com](https://www.kaylousberg.com)), CC0. The models were trimmed to the animations the game uses.
+The Lancer (knight rig) and the Bard (rogue rig) are tinted versions of the same models; their spear, lyre and beret are simple geometry built in `public/classes-b.js`.
 
 ## Next steps
 

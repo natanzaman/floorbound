@@ -104,6 +104,7 @@ export const charmAffix = it => CHARM_AFFIXES.find(k => (it.b || it.st)[k] !== u
 
 // ---------- recipes ----------
 const CLASS_WEAPON = { swordsman: 'Blade', guardian: 'Longsword', cleric: 'Staff' };
+Object.assign(CLASS_WEAPON, { lancer: 'Spear', bard: 'Lyre' }); // Lancer, Bard (shared/classes/)
 export const RECIPES = [
   { id: 'tuskbreaker', name: 'Tuskbreaker', slot: 'weapon', r: 2, cls: true, st: { atk: 15, crit: 3 },
     gold: 150, mats: { tusk: 12, dust: 4, ess: 1 }, desc: 'Boar-ivory edge. Your class.' },

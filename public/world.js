@@ -372,8 +372,9 @@ export async function loadAssets(onProgress) {
 }
 
 // Which template, which attachments to keep, and an optional tint per character.
+// decorate(root, ASSETS): optional, adds meshes (e.g. a weapon) and returns their materials (public/classes-b.js).
 const HEAD_SCALE = 0.8; // the pack is chibi-proportioned; shrink heads a little
-const RIGS = {
+export const RIGS = {
   swordsman: { file: 'rogue', hide: ['Knife_Offhand', '1H_Crossbow', '2H_Crossbow', 'Knife', 'Throwable'], borrowSword: true, height: 1.95 },
   guardian: { file: 'knight', hide: ['1H_Sword_Offhand', 'Rectangle_Shield', 'Round_Shield', 'Spike_Shield', '2H_Sword'], height: 2.0 },
   cleric: { file: 'mage', hide: ['Spellbook', 'Spellbook_open', '1H_Wand'], height: 1.95 },
@@ -403,6 +404,7 @@ function buildRig(kind) {
     if (def.tint) o.material.color.setHex(def.tint);
     mats.push(o.material);
   });
+  if (def.decorate) mats.push(...def.decorate(root, ASSETS)); // added after tinting, so it keeps its own colours
   const g = new THREE.Group();
   root.scale.setScalar(def.height / ASSETS.baseHeight);
   g.add(root);
