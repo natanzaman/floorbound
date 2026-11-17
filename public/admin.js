@@ -8,6 +8,7 @@ import { MASTERY, BRANCHES, masteryLevel } from '/shared/mastery.js';
 import { TWISTS } from '/shared/twists.js';
 import { BOT_SKILLS, BOT_SKILL_DEFAULT } from '/shared/botskill.js';
 import { STYLES, CLASS_STYLES, styleLine } from '/shared/styles.js';
+import { TREES, pointsAt, spentOf } from '/shared/talents.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -435,6 +436,10 @@ function renderEditor() {
     </tbody></table>
     <div class="dim" style="font-size:12px;margin-top:6px">Picking a mastery level sets the points to that level's threshold (${MASTERY.need.slice(1).join(' / ')}); or type exact points.</div>
   </section>
+  <section class="card esec" id="e-sec-talents"><h2>Talents <span class="dim" style="font-size:12px;font-weight:400">${spentOf(c.talents || {})} of ${pointsAt(c.lvl)} points spent (1 per level from 2)</span></h2>
+    ${TREES[c.cls] ? `<div class="grid">${TREES[c.cls].branches.map(b => `<div><b style="color:${b.color}">${esc(b.name)}</b>${b.nodes.map(nd => `<label class="f" style="display:flex;justify-content:space-between;gap:8px;align-items:center">${esc(nd.name)}${nd.keystone ? ' ★' : ''} <span class="dim" style="font-size:11px">T${nd.tier + 1}</span><input type="number" data-tal="${nd.id}" value="${c.talents?.[nd.id] || 0}" min="0" max="${nd.max}" style="width:60px" /></label>`).join('')}</div>`).join('')}</div>
+    <div class="row" style="margin-top:8px"><button id="t-save" class="primary">Save talents</button><button id="t-reset">Reset talents (refund all)</button><span class="dim" style="font-size:12px">Checked against the tree: tier gates, prerequisites, max ranks and the level's points.</span></div>` : '<div class="dim">No talent tree for this class.</div>'}
+  </section>
   <div class="grid" id="e-sec-items">
     <section class="card items esec"><h2>Equipped</h2>
       ${SLOTS.map(s => `<div class="it"><span class="slot">${s}</span>${inv.eq[s] ? `${itemLine(inv.eq[s])}<button class="small" data-uneq="${s}">To bag</button><button class="small danger" data-rmu="${inv.eq[s].u}">Remove</button>` : '<span class="nm faint">—</span>'}</div>`).join('')}
@@ -454,8 +459,8 @@ function renderEditor() {
     </section>
   </div>
   <section class="card esec" id="e-sec-raw"><h2>Advanced: raw JSON</h2>
-    <div class="dim" style="font-size:12px;margin-bottom:8px">Edit the stored inventory, stats and skill mastery directly (validated on the server; unknown stats keys are kept).</div>
-    <div class="grid" style="margin:0"><div><b>inv</b><textarea id="r-inv" spellcheck="false"></textarea></div><div><b>stats</b><textarea id="r-stats" spellcheck="false"></textarea></div><div><b>mastery</b><textarea id="r-mastery" spellcheck="false"></textarea></div></div>
+    <div class="dim" style="font-size:12px;margin-bottom:8px">Edit the stored inventory, stats, skill mastery and talents directly (validated on the server; unknown stats keys are kept).</div>
+    <div class="grid" style="margin:0"><div><b>inv</b><textarea id="r-inv" spellcheck="false"></textarea></div><div><b>stats</b><textarea id="r-stats" spellcheck="false"></textarea></div><div><b>mastery</b><textarea id="r-mastery" spellcheck="false"></textarea></div><div><b>talents</b><textarea id="r-talents" spellcheck="false"></textarea></div></div>
     <div class="row c" style="margin-top:8px"><button id="r-apply" class="primary">Apply raw JSON</button><span id="r-err" style="color:var(--bad)"></span></div>
   </section>
   <section class="card esec danger-zone" id="e-sec-danger"><h2>Delete character</h2>
@@ -466,6 +471,7 @@ function renderEditor() {
   $('r-inv').value = JSON.stringify(inv, null, 2);
   $('r-stats').value = JSON.stringify(st, null, 2);
   $('r-mastery').value = JSON.stringify(c.mastery, null, 2);
+  $('r-talents').value = JSON.stringify(c.talents || {}, null, 2);
   wireEditor();
 }
 
@@ -508,9 +514,15 @@ function wireEditor() {
     try { rawInv = JSON.parse($('r-inv').value); } catch (e) { $('r-err').textContent = `inv: ${e.message}`; return; }
     try { rawStats = JSON.parse($('r-stats').value); } catch (e) { $('r-err').textContent = `stats: ${e.message}`; return; }
     try { rawMastery = JSON.parse($('r-mastery').value); } catch (e) { $('r-err').textContent = `mastery: ${e.message}`; return; }
+    let rawTalents;
+    try { rawTalents = JSON.parse($('r-talents').value); } catch (e) { $('r-err').textContent = `talents: ${e.message}`; return; }
     $('r-err').textContent = '';
-    patch({ rawInv, rawStats, rawMastery }, 'Raw JSON applied.');
+    patch({ rawInv, rawStats, rawMastery, rawTalents }, 'Raw JSON applied.');
   };
+  if ($('t-save')) {
+    $('t-save').onclick = () => patch({ talents: Object.fromEntries([...document.querySelectorAll('[data-tal]')].map(x => [x.dataset.tal, +x.value]).filter(([, v]) => v > 0)) }, 'Talents saved.');
+    $('t-reset').onclick = () => patch({ talents: {} }, 'Talents reset.');
+  }
   $('d-go').onclick = async () => {
     if ($('d-name').value !== c.name) return flash('Type the exact character name to delete it.');
     try {

@@ -100,6 +100,18 @@ try {
   ok(r.status === 200 && db.mastery[sw2].pts === 2000 && db.mastery[sw2].br === 'A' && db.mastery[sw1].br === 'B', 'raw mastery JSON saved');
   r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { mastery: { [sw1]: { br: 'C' } } });
   ok(r.status === 400, 'bad branch rejected');
+  // talents (shared/talents.js): the section and the raw editor, validated against the tree and the level
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { lvl: 10, talents: { sw_edge: 3, sw_precision: 1, sw_finale: 1 } });
+  [db] = await sql('SELECT talents FROM characters WHERE id = $1', [off.id]);
+  ok(r.status === 200 && db.talents?.sw_finale === 1 && r.body.character.talents.sw_edge === 3, 'talents: set ranks (DB)');
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { talents: { sw_exec: 1 } });
+  ok(r.status === 400 && /talents/.test(r.body.error), 'an illegal talent tree is rejected (400)');
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { rawTalents: { sw_edge: 2 } });
+  [db] = await sql('SELECT talents FROM characters WHERE id = $1', [off.id]);
+  ok(r.status === 200 && JSON.stringify(db.talents) === '{"sw_edge":2}', 'raw talents JSON saved');
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { lvl: 2 });
+  [db] = await sql('SELECT talents FROM characters WHERE id = $1', [off.id]);
+  ok(r.status === 200 && JSON.stringify(db.talents) === '{}', 'lowering the level below the points spent refunds the talents');
   r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { rawInv: { bag: 'nope' } });
   ok(r.status === 400, 'invalid raw inventory rejected (400)');
   r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { lvl: 99 });
@@ -116,7 +128,7 @@ try {
   r = await call('GET', '/api/admin/players', adminTok);
   ok(r.body.players.find(p => p.id === on.id)?.online === true, 'online character shows as online with an area');
   const clSk = masterySkills('cleric')[0];
-  r = await call('PATCH', `/api/admin/characters/${on.id}`, adminTok, { lvl: 9, gold: 1234, floor2: true, mastery: { [clSk]: { lvl: 4, br: 'A' } }, ops: [{ op: 'addLastAttack', which: 2 }] });
+  r = await call('PATCH', `/api/admin/characters/${on.id}`, adminTok, { lvl: 9, gold: 1234, floor2: true, mastery: { [clSk]: { lvl: 4, br: 'A' } }, talents: { cl_hands: 2 }, ops: [{ op: 'addLastAttack', which: 2 }] });
   ok(r.status === 200 && r.body.character.online, 'edit an online character');
   await until(() => pc.last.inv?.gold === 1234 && pc.last.inv.bag.some(it => it.la === 2), 3000, 'live inv');
   ok(true, 'the player received the updated inventory (gold, Tidecloak)');
@@ -124,11 +136,13 @@ try {
   ok(pc.last.inv.life.floor2 === 1, 'the player sees level 9 and Floor 2 unlocked');
   await until(() => pc.last.mastery?.m?.[clSk]?.pts === MASTERY.need[4] && pc.last.mastery.m[clSk].br === 'A', 3000, 'live mastery');
   ok(true, 'the player received the updated skill mastery');
+  await until(() => pc.last.talents?.r?.cl_hands === 2 && pc.last.talents.pts === 8, 3000, 'live talents');
+  ok(true, 'the player received the updated talents');
   await until(() => pc.sys.some(t => /admin updated your character/.test(t)), 3000, 'sys message');
   ok(true, 'the player got "An admin updated your character"');
   pc.ws.close(); await pc.closed; await sleep(400);
-  [db] = await sql('SELECT lvl, gold, inv, stats, mastery FROM characters WHERE id = $1', [on.id]);
-  ok(db.lvl === 9 && db.gold === 1234 && db.inv.bag.some(it => it.la === 2) && db.stats.floor2 === 1 && db.mastery[clSk].pts === MASTERY.need[4], 'after disconnect the DB keeps the admin values (incl. mastery)');
+  [db] = await sql('SELECT lvl, gold, inv, stats, mastery, talents FROM characters WHERE id = $1', [on.id]);
+  ok(db.lvl === 9 && db.gold === 1234 && db.inv.bag.some(it => it.la === 2) && db.stats.floor2 === 1 && db.mastery[clSk].pts === MASTERY.need[4] && db.talents?.cl_hands === 2, 'after disconnect the DB keeps the admin values (incl. mastery, talents)');
 
   // ---------- bots ----------
   const watcher = client({ type: 'join', name: `Watch${tag}`, cls: 'guardian' });

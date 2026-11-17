@@ -28,6 +28,7 @@ const methods = {
     if (interrupt) gain += max * POSTURE.smite[bi];
     if (chunk) gain += max * POSTURE[chunk][bi];
     if (frac) gain += max * frac[bi];
+    gain *= this.postureMul?.(p, m) ?? 1; // talents: posture damage, Juggernaut (server/talents.js)
     if (counter) gain *= PERFECT.posture;
     if (sk) this.masteryGain?.(p, sk, Math.min(gain, max - (m.posture || 0)), 'posture');
     m.posture = (m.posture || 0) + gain;

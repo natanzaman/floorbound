@@ -7,6 +7,7 @@
 // The Warden's perilous Horn Sweep: DPS and healer roll through it at the last moment (a perfect dodge), the tank parries it.
 // A fresh (low-level) party warms up on boars before taking on wolves.
 // Skill evolutions: when a skill reaches Mastery 3 the bot picks a branch (`branch`: 'A' / 'B', or random when unset).
+// Talents: every unspent point goes along the class's `bot` path in shared/talents.js (one rank per message round trip).
 // floor: 2 sends the party to Floor 2 (via a waystone once unlocked, or the Stairway after a Warden kill): they farm the
 // Glimmering Mire until level 15, then take on the Drowned Sovereign (rolling through its Tidal Waves).
 // Any set of roles works, including a single bot. Without a tank, or with a behaviour other than the classic
@@ -18,6 +19,7 @@ import { MASTERY, BRANCHES, masteryLevel } from './mastery.js';
 import { perceive, skillReady, pressed, aimNoise, sweepError, potionAt, setSkill, clampSkill } from './botskill.js'; // capability levels 1-5
 import { CLASS_BRAINS_B, TEAM_NAMES_B, botEventB } from './classes/bots-b.js';
 import { TEAM_NAMES_A, isDpsA, onEventA, brainA } from './classes/bots-a.js';
+import { TREES, spendBlock } from './talents.js';
 
 export const TEAM_NAMES = { guardian: 'Brann', swordsman: 'Kael', cleric: 'Lyra' };
 Object.assign(TEAM_NAMES, TEAM_NAMES_B); // Lancer, Bard (shared/classes/bots-b.js)
@@ -50,6 +52,15 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
           (b.asked ||= {})[sk] = br;
           send(b, { type: 'evolve', sk, br });
           log(`[evolve] ${b.name}: ${sk} -> ${BRANCHES[sk][br].name}`);
+        }
+      }
+      if (msg.type === 'talents') { // spend the next point along the role's path (the server answers with a new 'talents')
+        const r = msg.r || {}, path = TREES[cls]?.bot || [], want = {};
+        for (const id of path) {
+          want[id] = (want[id] || 0) + 1;
+          if ((r[id] | 0) >= want[id]) continue;
+          if (!spendBlock(cls, r, (msg.pts | 0) + 1, id)) { send(b, { type: 'talent', op: 'spend', id }); log(`[talent] ${b.name}: ${id}`); }
+          break;
         }
       }
       if (msg.type === 'roster') b.roster = msg.players;

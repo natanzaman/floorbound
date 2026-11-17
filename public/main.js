@@ -21,6 +21,7 @@ import { initClassesB } from '/classes-b.js';
 import { initClassesA } from '/classes-a.js';
 import { initStyles } from '/styles.js';
 import { initPlayerBots } from '/playerbots.js';
+import { initTalents } from '/talents.js';
 
 const sfx = new Sound();
 
@@ -210,6 +211,8 @@ const classesA = initClassesA({ scene, state, players, mobs, fx, sfx, floatNum, 
 const styles = initStyles({ state, players, fx, sfx, shake: a => shake(a), floatNum, rebuildBar: () => { if (state.joined && !state.spectator) buildSkillBar(); } });
 // Players panel tabs + player-owned bots (public/playerbots.js)
 const pbots = initPlayerBots({ $, send, state, players, log: (a, b) => log(a, b), sfx, rerender: () => { lobby.html = ''; renderPlayers(); } });
+// talent trees + the Skill Tree window (K): progression track, talents, abilities (public/talents.js)
+const talents = initTalents({ state, players, fx, sfx, send, floatNum, mastery, guide, isTouch, $ });
 
 // ---------------- networking ----------------
 function onMessage(msg) {
@@ -237,7 +240,7 @@ function onMessage(msg) {
     buildSkillBar();
     guide.start(msg.charId ? `c${msg.charId}` : `anon_${state.cls}`, msg.lvl);
     log('Welcome to Floorbound! Head north through the field and defeat the Horned Warden.', 'sys');
-    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion.' : `WASD move (S back, A/D strafe) · mouse to look (click to capture, Esc frees it; Settings for classic) · Left click (or J) attack · 1 2 3 skills · K skill mastery · Shift dodge · Space jump${state.cls === 'guardian' ? ' · R guard / parry' : ''} · 4 5 6 items · B bag · F interact · P party · Ctrl+click select`, 'sys');
+    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion.' : `WASD move (S back, A/D strafe) · mouse to look (click to capture, Esc frees it; Settings for classic) · Left click (or J) attack · 1 2 3 skills · K skill tree · Shift dodge · Space jump${state.cls === 'guardian' ? ' · R guard / parry' : ''} · 4 5 6 items · B bag · F interact · P party · Ctrl+click select`, 'sys');
     log('Fill an enemy\'s yellow posture bar (heavy hits, Break skills, perfect dodges, parries) to BREAK it, then a teammate hits it for a SWITCH: big bonus damage.', 'sys');
     return;
   }
@@ -247,6 +250,7 @@ function onMessage(msg) {
     renderPlayers();
     return;
   }
+  if (talents.onMessage(msg)) return; // talent tree (also keeps a copy of the mastery data)
   if (mastery.onMessage(msg)) return; // skill mastery
   if (pbots.onMessage(msg)) return; // player-owned bots (Players panel → Bots tab)
   if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); smith.render(); return; }
@@ -312,6 +316,7 @@ function handleEvent(e) {
   const me = state.myId;
   f2.onEvent(e);
   if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
+  if (talents.event(e)) return; // talent points, learned talents, talent procs
   if (mastery.event(e)) return; // evolved skills, mastery level-ups, evolutions
   if (classesA.event(e)) return; // Ranger / Berserker
   if (styles.event(e)) return; // weapon styles: styled basic attacks
@@ -657,7 +662,7 @@ addEventListener('keydown', e => {
   if (k === ' ') { e.preventDefault(); if (!e.repeat) jump(); }
   if (k === '1' || k === '2' || k === '3') useSkill(+k);
   if (k === 'shift') dodge();
-  if (k === 'k' && !e.repeat) mastery.toggle(); // Skills panel
+  if (k === 'k' && !e.repeat) talents.toggle(); // Skill Tree window (public/talents.js)
   if (k === 'r' && !e.repeat) combat.guard(true);
   if (k === 'tab') { e.preventDefault(); cycleLock(); }
   if (k === 'escape') { state.lock = 0; state.focus = 0; }
@@ -693,7 +698,7 @@ addEventListener('mousemove', e => {
   state.pitch = Math.min(1.25, Math.max(0.12, state.pitch + e.movementY * s * (settings.invertY ? -1 : 1)));
 });
 // Panels need the cursor: free it whenever one is open.
-const CURSOR_PANELS = ['players', 'bag', 'hall', 'warp', 'smith', 'skillsp', 'settings'];
+const CURSOR_PANELS = ['players', 'bag', 'hall', 'warp', 'smith', 'skillsp', 'settings', 'talentsp'];
 function cursorPanelOpen() { return CURSOR_PANELS.some(id => { const el = $(id); return el && !el.classList.contains('hidden'); }); }
 // Top-right chips: lay them out right-to-left by their real widths, so a long gold count never overlaps a neighbour.
 function layoutChips() {
@@ -1018,7 +1023,7 @@ function interact() {
   if (k === 'shop') { state.shopOpen = true; $('bag').classList.remove('hidden'); renderBag(); sfx.play('ui'); }
   else if (k === 'hall') { toggleHall(); sfx.play('ui'); }
   else if (k === 'smith') { smith.toggle(); sfx.play('ui'); }
-  else if (k === 'shrine') mastery.toggle();
+  else if (k === 'shrine') talents.toggle();
   else if (k === 'pickup') { send({ type: 'pickup', id: ground.near() }); }
   else if (k === 'gate') { send({ type: 'ready' }); sfx.play('ui'); state.meReady = state.meReady ? 0 : 1; updateGateBox(true); }
   else f2.interact(k);
@@ -1089,7 +1094,7 @@ function toggleBag() {
   if (!el.classList.contains('hidden')) { state.shopOpen = nearMerchant(); renderBag(); guide.did('bag'); sfx.play('ui'); }
 }
 $('bag-btn').onclick = toggleBag;
-$('skills-btn').onclick = () => mastery.toggle(); // Skills panel (also K, or F at a Skill Shrine)
+$('skills-btn').onclick = () => talents.toggle(); // Skill Tree window (also K, or F at a Skill Shrine)
 
 const statsText = it => Object.entries(it.st).map(([k, v]) => statLabel(k, v)).join(' · ');
 function mainStat(it) { return it ? (it.st.atk ?? it.st.hp ?? Object.values(it.st).reduce((a, b) => a + b, 0)) : 0; }
@@ -1646,7 +1651,7 @@ function frame(now) {
       let mx = fwd[0] * iz + right[0] * ix, mz = fwd[1] * iz + right[1] * ix;
       const ml = Math.hypot(mx, mz); mx /= ml; mz /= ml;
       const sprint = performance.now() - state.lastCombat > SPRINT_AFTER * 1000 && !combat.guarding;
-      const want = (sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult(); // half speed while guarding
+      const want = (sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult(); // half speed while guarding; talents can add move speed
       state.speed += (want - state.speed) * Math.min(1, dt * (want > state.speed ? 3 : 10));
       const step = state.speed * dt;
       let nx = state.x + mx * step, nz = state.z + mz * step;
@@ -1680,6 +1685,7 @@ function frame(now) {
   ground.frame(vdt, isTouch);
   mastery.frame(vdt, now); // Skill Shrines, evolved-skill auras
   classesA.frame(vdt, now); // arrows, marks, Rage bars
+  talents.frame(now); // Skill Tree window refresh, unspent-points badge
   if (state.joined && !state.spectator) {
     const ml = $('merchant-lbl'), mp = project(MERCHANT.x, 3.6, MERCHANT.z), md = Math.hypot(state.x - MERCHANT.x, state.z - MERCHANT.z);
     if (mp && md < 20) { ml.style.display = ''; ml.style.left = `${mp[0]}px`; ml.style.top = `${mp[1]}px`; ml.innerHTML = `Merchant${md < MERCHANT.r + 1 ? `<br><small>${isTouch ? 'tap Trade' : 'press F to trade'}</small>` : ''}`; }

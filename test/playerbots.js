@@ -109,7 +109,7 @@ try {
   ok(mine.every(b => b.kit.mastery.length && b.kit.mastery.every(m => m.lvl === 2 && !m.br)), 'premade mastery: every skill at Mastery 2');
   const heal = mine.find(b => CLASSES[b.cls].role === 'Healer'), dmg = mine.find(b => CLASSES[b.cls].role === 'Damage');
   ok(heal.kit.gear.find(g => g.slot === 'charm').st.haste && dmg.kit.gear.find(g => g.slot === 'charm').st.crit, 'charm suits the role (healer: haste, damage: crit)');
-  ok(mine.every(b => { const p = A.pl.get(b.id); return p && p.maxHp === Math.round(statsFor(b.cls, 8).maxHp * (1 + b.kit.gear.find(g => g.slot === 'armor').st.hp / 100)); }), 'max health includes the armour');
+  ok(mine.every(b => { const p = A.pl.get(b.id); return p && p.maxHp >= Math.round(statsFor(b.cls, 8).maxHp * (1 + b.kit.gear.find(g => g.slot === 'armor').st.hp / 100)); }), 'max health includes the armour (talent health nodes may add more)');
   ok(mine.every(b => /^Following/.test(b.doing)), `bots are following ("${mine[0].doing}")`);
 
   // they follow: Ann walks ~20 m, the bots come along

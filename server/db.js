@@ -46,6 +46,7 @@ async function setup() {
   await q(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS inv JSONB`);
   await q(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS stats JSONB`);
   await q(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS mastery JSONB`); // skill mastery + chosen evolutions
+  await q(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS talents JSONB`); // talent tree ranks { nodeId: rank } (shared/talents.js)
   await q(`CREATE TABLE IF NOT EXISTS floor_clears (
     id SERIAL PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT now(), floor INT NOT NULL, secs INT NOT NULL,
     players JSONB, last_attack TEXT, deaths INT NOT NULL DEFAULT 0)`);
