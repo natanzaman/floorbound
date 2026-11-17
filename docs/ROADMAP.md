@@ -102,7 +102,7 @@ One row per task. Whoever picks a task sets **Status** and **Owner** here first 
 |---|---|---|---|---|
 | F1 Speech bubbles | `feat/bubbles` | todo | | |
 | F2 Scene director | `feat/director` | todo | | |
-| F3 Staging hooks | `feat/staging` | todo | | |
+| F3 Staging hooks | `feat/staging` | in progress | agent staging | |
 | F4 Cinematic camera | `feat/cinecam` | todo | | |
 | F5 Poses | `feat/poses` | todo | | |
 | F6 The Tower Bell and the engraved Hall | `feat/bell` | todo | | |
