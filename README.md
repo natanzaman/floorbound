@@ -38,7 +38,7 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Guard / parry (Guardian) | Hold R to guard; tap R just before a hit to parry | — |
 | Select a character (enemy or ally) | Hold Ctrl (Cmd on Mac) to preview, Ctrl+click to select; Ctrl+right-click to deselect | Lock on button (enemies) |
 | Lock on / cycle enemies | Tab (Esc to clear) | Lock on button |
-| Chat | Enter (`/p` party, `/s` nearby, `/b` bot orders) | Chat button |
+| Chat | Enter (`/p` party, `/s` nearby, `/b` bot orders); lines also show as speech bubbles over the speaker's head (Settings → Speech bubbles turns them off) | Chat button |
 | Party | Players button (P) → Find party, or Invite | Players button → Find party / Invite |
 | Order your party's bots | Hold V (command wheel), or chat `/b stay`, `/b Lyra: heal` (`/b help` lists them) | ⌘ Bot orders under the party frames |
 | Items | 4 potion, 5 tonic, 6 draught; B bag | Potion button; Bag button |
@@ -287,6 +287,7 @@ public/          Three.js client (no build step): main.js, world.js, style.css
 public/models/   rigged character models (glTF) with shared animations
 test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
+test/bubbles.js  speech bubble logic: duration, one per speaker, who sees which line (public/bubbles.js)
 test/feeltext.js in-process checks for who sees combat text (`to` tags on reactions) and which boss hits hit-stop their victim
 test/warden3.js  in-process checks for the Quake Ring (jump / roll / out of reach), Warden scaling and bot jump timing per capability
 test/aircontrol.js  jump air control: the shared air step, client prediction vs the server's movement check while airborne, bots steering mid-jump
@@ -379,6 +380,8 @@ Teamwork comes from the party as each bot sees it, **real players included**:
 | status | status, report | answers with HP, level, potions and what it is doing |
 
 Chat channels: plain text goes to everyone, `/p text` to your party, `/s text` to players within 40 m.
+
+**Speech bubbles** (`public/bubbles.js`): every chat line also pops up over the speaker's head, bots' chatter included, to whoever would see it in the log (say within 40 m, party chat to the party, global to everyone; spectators see all of it; `/b` orders never). A rounded panel above the nameplate (max ~260 px, word-wrapped), it fades in, holds ≈ 1.6 s + 0.07 s per character (2–5 s; a `hold` in seconds on the chat event wins, for the scene director), and fades out; a new line from the same speaker replaces the old one. Hidden when the speaker is off screen, a little smaller far away. Settings → Speech bubbles turns them off (the chat log still has everything). Test: `node test/bubbles.js`.
 
 **Class plug-ins** (`shared/bots/registry.js`): a class's bot logic is `registerClassBrain(cls, { role, name, parry, combat(b, tgt, ctx), idle(b, ctx), onEvent(b, e), onLevel(b, lvl, ctx) })`; the brain handles perception, dodging, party, targets, orders and chatter, the plug-in only plays its kit against the target it is given (`ctx`: `useSkill`, `moveToward`, `switchOpen`, `dodge`, `ready`, `anchor`, `tank`, `hurt`, `healFocus`, `party`, `say`...). Systems that run on level-up (talents, weapon styles) hook in with `registerBotHook('onLevel', (b, lvl, ctx) => ...)`.
 
