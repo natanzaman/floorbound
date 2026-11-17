@@ -6,14 +6,16 @@
 // Everyone dodge-rolls out of the boss's red circles and plays Break -> Switch.
 // The Warden's perilous Horn Sweep: DPS and healer roll through it at the last moment (a perfect dodge), the tank parries it.
 // A fresh (low-level) party warms up on boars before taking on wolves.
+// Skill evolutions: when a skill reaches Mastery 3 the bot picks a branch (`branch`: 'A' / 'B', or random when unset).
 // floor: 2 sends the party to Floor 2 (via a waystone once unlocked, or the Stairway after a Warden kill): they farm the
 // Glimmering Mire until level 15, then take on the Drowned Sovereign (rolling through its Tidal Waves).
 import { MOBS, MOB_IDS, PLAYER_SPEED, DODGE, SWEEP, walkable, resolveCollision, inGateZone, inArena } from './data.js';
 import { F2, WAYSTONES, STAIRWAY, SOVEREIGN, inGateZone2, inArena2, onFloor2, floorUnlocked } from './floor2.js';
+import { MASTERY, BRANCHES, masteryLevel } from './mastery.js';
 
 export const TEAM_NAMES = { guardian: 'Brann', swordsman: 'Kael', cleric: 'Lyra' };
 
-export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = ['guardian', 'swordsman', 'cleric'], suffix = '', inviteHumans = false, log = () => {}, floor = 1 }) {
+export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = ['guardian', 'swordsman', 'cleric'], suffix = '', inviteHumans = false, log = () => {}, floor = 1, branch = null }) {
   const ROSTER = roles.map(c => [c, TEAM_NAMES[c] + suffix]);
   const DT = 0.05;
   const send = (b, o) => b.ws.readyState === 1 && b.ws.send(JSON.stringify(o));
@@ -28,6 +30,16 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
       const msg = JSON.parse(typeof ev.data === 'string' ? ev.data : ev.data.toString());
       if (msg.type === 'welcome') Object.assign(b, { id: msg.id, x: msg.x, z: msg.z, seq: msg.seq });
       if (msg.type === 'inv') b.life = msg.life;
+      if (msg.type === 'mastery') { // evolve any skill that reached Mastery 3
+        b.mastery = msg.m;
+        for (const [sk, e] of Object.entries(msg.m)) {
+          if (e.br || masteryLevel(e.pts) < MASTERY.evolveAt || b.asked?.[sk]) continue;
+          const br = branch === 'A' || branch === 'B' ? branch : Math.random() < 0.5 ? 'A' : 'B';
+          (b.asked ||= {})[sk] = br;
+          send(b, { type: 'evolve', sk, br });
+          log(`[evolve] ${b.name}: ${sk} -> ${BRANCHES[sk][br].name}`);
+        }
+      }
       if (msg.type !== 'snap') return;
       b.t += DT;
       b.me = msg.me;

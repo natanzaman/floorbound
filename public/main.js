@@ -15,6 +15,7 @@ import { initGround } from '/ground.js';
 import { initCombat } from '/combat.js';
 import { F2, inGateZone2, inArena2, onFloor2, floorOf, WAYSTONES } from '/shared/floor2.js';
 import { initFloor2Client } from '/floor2client.js';
+import { initMastery } from '/mastery.js';
 
 const sfx = new Sound();
 
@@ -190,6 +191,12 @@ const ground = initGround({ scene, state, project, $ }); // items lying on the g
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
 const combat = initCombat({ state, players, mobs, fx, sfx, guide, send, floatNum, slowMotion, shake: a => shake(a), bossShot: (...a) => bossShot(...a), lockedMob: () => lockedMob(), nearestMob: r => nearestMob(r) });
+// skill mastery + evolutions: Skills panel (K), Skill Shrines, evolved skill visuals (public/mastery.js)
+const mastery = initMastery({
+  state, players, mobs, fx, sfx, send, log, floatNum, project, isTouch, scene, floor1, $,
+  banner: (a, b) => banner(a, b), shake: a => shake(a), playAnim: (...a) => playSkillAnim(...a),
+  rebuildBar: () => { if (state.joined && !state.spectator && mastery.barChanged()) buildSkillBar(); },
+});
 
 // ---------------- networking ----------------
 function onMessage(msg) {
@@ -216,7 +223,7 @@ function onMessage(msg) {
     buildSkillBar();
     guide.start(msg.charId ? `c${msg.charId}` : `anon_${state.cls}`, msg.lvl);
     log('Welcome to Floorbound! Head north through the field and defeat the Horned Warden.', 'sys');
-    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion.' : `WASD move · right-drag or screen edge to look · Left click (or J) attack · 1 2 3 skills · Shift dodge · Space jump${state.cls === 'guardian' ? ' · R guard / parry' : ''} · 4 5 6 items · B bag · F interact · P party · Ctrl+click select`, 'sys');
+    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion.' : `WASD move · right-drag or screen edge to look · Left click (or J) attack · 1 2 3 skills · K skill mastery · Shift dodge · Space jump${state.cls === 'guardian' ? ' · R guard / parry' : ''} · 4 5 6 items · B bag · F interact · P party · Ctrl+click select`, 'sys');
     log('Fill an enemy\'s yellow posture bar (heavy hits, Break skills, perfect dodges, parries) to BREAK it, then a teammate hits it for a SWITCH: big bonus damage.', 'sys');
     return;
   }
@@ -226,6 +233,7 @@ function onMessage(msg) {
     renderPlayers();
     return;
   }
+  if (mastery.onMessage(msg)) return; // skill mastery
   if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); smith.render(); return; }
   if (msg.type === 'hall') { state.hallData = msg; renderHall(); return; }
   if (msg.type === 'snap') {
@@ -242,7 +250,7 @@ function onSnapshot({ me, w }) {
   const now = performance.now();
   if (me) {
     state.xp = me.xp; state.next = me.next;
-    if (me.lvl !== state.lvl) { state.lvl = me.lvl; buildSkillBar(me.lvl); }
+    if (me.lvl !== state.lvl) { state.lvl = me.lvl; buildSkillBar(me.lvl); mastery.render(); }
     me.cds.forEach((c, i) => { if (now - state.lastPress[i] > 350) state.ready[i] = now + c * 1000; });
     if (now - state.dodgePress > 350) state.dodgeReady = now + (me.dodge || 0) * 1000;
     state.gold = me.gold; state.meReady = me.ready; state.tonic = me.tonic; state.draught = me.draught;
@@ -278,7 +286,7 @@ function onSnapshot({ me, w }) {
     seenM.add(id);
     let e = mobs.get(id);
     if (!e) e = addMobEntity(id, MOB_IDS[ti], x, z, face);
-    Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, moving: flags & 1, engaged: flags & 2, enraged: flags & 4, stunned: flags & 8, winding: flags & 16, staggered: flags & 32, frenzy: flags & 64, posture: posture || 0 });
+    Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, moving: flags & 1, engaged: flags & 2, enraged: flags & 4, stunned: flags & 8, winding: flags & 16, staggered: flags & 32, frenzy: flags & 64, launched: flags & 128, posture: posture || 0 });
   }
   for (const [id, e] of mobs) if (!seenM.has(id) && !e.dying) { removeEntity(e); mobs.delete(id); if (e === boss) boss = null; }
   renderPlayersThrottled();
@@ -288,6 +296,7 @@ function handleEvent(e) {
   const me = state.myId;
   f2.onEvent(e);
   if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
+  if (mastery.event(e)) return; // evolved skills, mastery level-ups, evolutions
   switch (e.t) {
     case 'tp':
       if (e.id === me) { state.x = e.x; state.z = e.z; state.seq = e.s; }
@@ -632,7 +641,8 @@ addEventListener('keydown', e => {
   if (k === 'j') attackHeld = true;
   if (k === ' ') { e.preventDefault(); if (!e.repeat) jump(); }
   if (k === '1' || k === '2' || k === '3') useSkill(+k);
-  if (k === 'shift' || k === 'k') dodge();
+  if (k === 'shift') dodge();
+  if (k === 'k' && !e.repeat) mastery.toggle(); // Skills panel
   if (k === 'r' && !e.repeat) combat.guard(true);
   if (k === 'tab') { e.preventDefault(); cycleLock(); }
   if (k === 'escape') { state.lock = 0; state.focus = 0; }
@@ -708,12 +718,13 @@ stickEl.addEventListener('pointercancel', endStick);
 // skill bar
 function buildSkillBar(lvl = state.lvl) {
   const skills = CLASSES[state.cls].skills;
+  mastery.barChanged(); // remember the names/pips this bar was built with
   const order = isTouch ? [1, 0, 2, 3] : [0, 1, 2, 3];
   $('skills').innerHTML = order.map(i => {
     const s = skills[i];
-    const locked = lvl < s.lvl;
-    return `<button class="sk s${i} ${i === 0 ? 'basic' : ''} ${locked ? 'locked' : ''}" data-slot="${i}" title="${s.name}: ${s.desc}${locked ? ` (unlocks at Lv ${s.lvl})` : ''}">
-      <span class="key">${i === 0 ? (isTouch ? '' : 'CLICK') : i}</span>${s.name}${locked ? `<br><small>Lv ${s.lvl}</small>` : ''}<span class="cd"></span><span class="cdt"></span></button>`;
+    const locked = lvl < s.lvl, nm = mastery.name(i); // evolved name once a branch is active (public/mastery.js)
+    return `<button class="sk s${i} ${i === 0 ? 'basic' : ''} ${locked ? 'locked' : ''} ${mastery.evoId(i) ? 'evolved' : ''}" data-slot="${i}" title="${esc(nm)}: ${esc(mastery.desc(i))}${locked ? ` (unlocks at Lv ${s.lvl})` : ''}">
+      <span class="key">${i === 0 ? (isTouch ? '' : 'CLICK') : i}</span>${mastery.pip(i)}${esc(nm)}${locked ? `<br><small>Lv ${s.lvl}</small>` : ''}<span class="cd"></span><span class="cdt"></span></button>`;
   }).join('') + `<button class="sk sd" data-slot="dodge" title="Dodge roll: dash and avoid damage"><span class="key">${isTouch ? '' : 'SHIFT'}</span>Dodge<span class="cd"></span><span class="cdt"></span></button>`
     + `<button class="sk sj" data-slot="jump" title="Jump: hop over the boss's ground slams"><span class="key">${isTouch ? '' : 'SPACE'}</span>Jump<span class="cd"></span><span class="cdt"></span></button>`
     + combat.guardButton(state.cls, isTouch)
@@ -850,13 +861,13 @@ function useSkill(slot) {
   const sk = CLASSES[state.cls].skills[slot];
   const now = performance.now();
   if (!sk || state.lvl < sk.lvl || now < state.ready[slot] || combat.guarding) return;
-  const auto = ['slash', 'bash', 'rush', 'smite', 'burst'].includes(sk.id);
+  const auto = ['slash', 'bash', 'rush', 'smite', 'burst'].includes(sk.id) || ['challenge', 'seismic'].includes(mastery.evoId(slot)); // aimed evolutions too
   if (auto) {
     const lm = lockedMob();
     const t = lm && Math.hypot(lm.x - state.x, lm.z - state.z) < 14 ? lm : nearestMob(sk.id === 'smite' ? 11 : sk.id === 'rush' ? 9 : 6);
     if (t) state.face = angleTo(state.x, state.z, t.x, t.z);
   }
-  state.ready[slot] = now + sk.cd * 1000;
+  state.ready[slot] = now + mastery.cd(slot) * 1000; // mastery and branch cooldowns (the server corrects it)
   state.lastPress[slot] = now;
   send({ type: 'skill', slot, face: state.face });
 }
@@ -868,6 +879,7 @@ function interactKind() {
   if (nearMerchant()) return 'shop';
   if (nearHall()) return 'hall';
   if (smith.near()) return 'smith';
+  if (mastery.near()) return 'shrine'; // Skill Shrine (public/mastery.js)
   if (ground.near()) return 'pickup';
   if (!state.gateOpen && (inGateZone(state.x, state.z) || inGateZone2(state.x, state.z))) return 'gate';
   return f2.interactKind(); // waystones and the Stairway
@@ -878,6 +890,7 @@ function interact() {
   if (k === 'shop') { state.shopOpen = true; $('bag').classList.remove('hidden'); renderBag(); sfx.play('ui'); }
   else if (k === 'hall') { toggleHall(); sfx.play('ui'); }
   else if (k === 'smith') { smith.toggle(); sfx.play('ui'); }
+  else if (k === 'shrine') mastery.toggle();
   else if (k === 'pickup') { send({ type: 'pickup', id: ground.near() }); }
   else if (k === 'gate') { send({ type: 'ready' }); sfx.play('ui'); state.meReady = state.meReady ? 0 : 1; updateGateBox(true); }
   else f2.interact(k);
@@ -948,6 +961,7 @@ function toggleBag() {
   if (!el.classList.contains('hidden')) { state.shopOpen = nearMerchant(); renderBag(); guide.did('bag'); sfx.play('ui'); }
 }
 $('bag-btn').onclick = toggleBag;
+$('skills-btn').onclick = () => mastery.toggle(); // Skills panel (also K, or F at a Skill Shrine)
 
 const statsText = it => Object.entries(it.st).map(([k, v]) => statLabel(k, v)).join(' · ');
 function mainStat(it) { return it ? (it.st.atk ?? it.st.hp ?? Object.values(it.st).reduce((a, b) => a + b, 0)) : 0; }
@@ -1119,7 +1133,7 @@ function updateHud(now) {
   setBar($('me-xp'), state.lvl >= MAX_LEVEL ? 100 : (state.xp / state.next) * 100);
   const me = players.get(state.myId);
   const b = me?.buffs || 0;
-  $('me-buffs').innerHTML = `${b & 1 ? '<span>Guarded</span>' : ''}${b & 2 ? '<span>Blessed</span>' : ''}`;
+  $('me-buffs').innerHTML = `${b & 1 ? '<span>Guarded</span>' : ''}${b & 2 ? '<span>Blessed</span>' : ''}${mastery.buffTags(b)}`;
 
   // party frames
   const mates = state.spectator ? [...players.values()] : state.party ? [...players.values()].filter(p => p.party === state.party && p.id !== state.myId) : [];
@@ -1160,9 +1174,9 @@ function updateHud(now) {
       continue;
     }
     if (btn.dataset.slot === 'guard') { btn.classList.toggle('on', combat.guarding); continue; }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); btn.textContent = a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : state.meReady ? 'Unready' : 'Ready'; continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); btn.textContent = a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : state.meReady ? 'Unready' : 'Ready'; continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
-    const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : CLASSES[state.cls].skills[slot];
+    const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : { cd: mastery.cd(slot) }; // mastery/branch cooldowns
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
     btn.querySelector('.cd').style.setProperty('--p', `${Math.min(100, (left / sk.cd) * 100)}%`);
     btn.querySelector('.cdt').textContent = left > 0.3 && slot > 0 && !isDodge && !isJump ? left.toFixed(left < 3 ? 1 : 0) : '';
@@ -1261,6 +1275,7 @@ function animateEntity(e, dt) {
     const jk = Math.min(1, e.jumpT / JUMP.time);
     g.position.y = 4 * JUMP.height * jk * (1 - jk);
   } else g.position.y = 0;
+  if (e.kind === 'mob') mastery.lift(e, dt); // Quake launches enemies
   if (e.punch > 0) e.punch -= dt;
   const kk = e.punch > 0 ? Math.min(1, dt * 22) : k;
   if (Math.hypot(tx - px, tz - pz) > 15) g.position.set(tx, 0, tz);
@@ -1493,6 +1508,7 @@ function frame(now) {
   if (merchantNpc?.anim) merchantNpc.anim.update(vdt);
   smith.frame(vdt);
   ground.frame(vdt, isTouch);
+  mastery.frame(vdt, now); // Skill Shrines, evolved-skill auras
   if (state.joined && !state.spectator) {
     const ml = $('merchant-lbl'), mp = project(MERCHANT.x, 3.6, MERCHANT.z), md = Math.hypot(state.x - MERCHANT.x, state.z - MERCHANT.z);
     if (mp && md < 20) { ml.style.display = ''; ml.style.left = `${mp[0]}px`; ml.style.top = `${mp[1]}px`; ml.innerHTML = `Merchant${md < MERCHANT.r + 1 ? `<br><small>${isTouch ? 'tap Trade' : 'press F to trade'}</small>` : ''}`; }

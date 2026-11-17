@@ -31,7 +31,7 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Look | Right-click drag, or park the cursor at the left/right screen edge; Q/E; wheel to zoom | Drag the right side |
 | Basic attack | Left click or J (hold) | Big round button (hold) |
 | Skills | 1, 2, 3 | Small buttons |
-| Dodge roll | Shift or K | Dodge button |
+| Dodge roll | Shift | Dodge button |
 | Jump | Space (hop over the boss's slams) | Jump button |
 | Guard / parry (Guardian) | Hold R to guard; tap R just before a hit to parry | — |
 | Select a character (enemy or ally) | Ctrl+click it (Cmd+click on Mac); Ctrl+click empty ground to clear | Lock on button (enemies) |
@@ -39,7 +39,8 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Chat | Enter | Chat button |
 | Party | Players button (P) → Find party, or Invite | Players button → Find party / Invite |
 | Items | 4 potion, 5 tonic, 6 draught; B bag | Potion button; Bag button |
-| Interact (merchant, Smith, raid gate) | F | Trade / Forge / Ready button |
+| Skills panel (mastery, evolutions) | K, or the Skills button | Skills button |
+| Interact (merchant, Smith, Skill Shrine, raid gate) | F | Trade / Forge / Skills / Ready button |
 | Sound on/off | Sound button | Sound button |
 
 Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 3-hit combos with a heavy, knockback finisher. You sprint automatically after 3 seconds out of combat. All sound effects and music are synthesized in the browser (`public/audio.js`), so there are no audio files.
@@ -139,6 +140,33 @@ With a database, the server records play events (session start/end, first kill, 
 - **Guard and parry (Guardian, R):** hold R to guard: hits from the front (±70°) take 70% less damage, but you can't attack and you move at half speed. Press R at most ~0.2 s before a frontal hit lands to **parry** it: no damage at all, and big posture damage to the attacker. Mashing R doesn't parry.
 - **Perilous attacks:** the Warden's **Horn Sweep** shows an orange/gold circle around it with a "!" glint and its own warning horn (about 0.9 s). Anyone inside takes about 80% of their max health: Shield Wall, Taunt, guarding, gear and jumping don't reduce it. Roll through it (i-frames) or parry it. Breaking the Warden during the wind-up cancels it. It comes every ~18 s in phase 1, more often later.
 
+## Skill mastery and evolutions
+
+Each class skill on 1, 2 and 3 (not the basic attack) has its own **Mastery** level from 1 to 5, raised by **using it well**, not by pressing it: the damage and posture it deals, Breaks it causes, Switches it sets up or lands, damage it prevents (Taunt, Shield Wall, Haven, Aegis), healing it does (overheal doesn't count) and the extra damage allies deal while it buffs them (Blessing). A whiff gives nothing. Points are measured in "attacks' worth" (amount / your attack power), so the pace doesn't change with level or gear: a skill you use often reaches Mastery 3 after roughly 30–45 minutes of normal play, Mastery 5 after a few hours.
+
+- **Mastery 2:** -10% cooldown. **Mastery 4:** +10% effect (damage, healing, shields, buffs).
+- **Mastery 3: the skill evolves.** You pick one of two branches that change how it plays (a prompt appears, or press **K**). The first pick works anywhere; changing it later is free but only at a **Skill Shrine**: a violet crystal in each town (Town of Beginnings, beside the Hall of Clearers; Mirelight Camp on Floor 2, by the tents). Press **F** there, or tap Skills.
+- The **Skills panel** (K, the Skills button, or the shrine) lists each skill's mastery, progress, upgrades and both branch cards with the active one highlighted. Evolved skills keep their slot and show their new name on the skill bar.
+
+| Skill | A | B |
+| --- | --- | --- |
+| Rush | **Phantom Rush**: dash through, an afterimage strikes the path again 0.4 s later | **Shoulder Charge**: stop on the first enemy, heavy posture damage and a stun (co-op) |
+| Whirl | **Vortex**: pull enemies within 7 m in, then spin (co-op) | **Blade Ring**: smaller ring that spins with you for 1.5 s while you move |
+| Burst Combo | **Starburst**: 6 hits, more damage, no Break | **Finisher**: 2 hits; above 50% health the second fills posture, instant BREAK (co-op) |
+| Taunt | **Challenge**: one enemy deals 30% less to everyone but you for 5 s (co-op) | **War Cry**: 11 m taunt that drags enemies in, allies +10% damage for 6 s (co-op) |
+| Shield Wall | **Bulwark**: stand still: -80% from the front, allies behind you -60% (co-op) | **Iron Skin**: move freely, -35% for 6 s, reflects 30% of each hit |
+| Ground Slam | **Quake**: 7 m, launches enemies, longer stun | **Seismic Line**: a shockwave travelling 12 m forward, Breaks along its path (co-op) |
+| Heal | **Renew**: smaller heal over 6 s on the two most hurt allies | **Miracle**: big heal + purify (immune to mire pools, cracked ground, the Deluge for 4 s), 2.5x cooldown |
+| Blessing | **Zeal**: allies +15% damage, cooldowns 25% faster for 8 s (co-op) | **Aegis**: shields absorbing 25% of each ally's health for 8 s |
+| Sanctuary | **Haven**: allies inside take 25% less damage, smaller heal | **Consecrate**: burns enemies inside and fills their posture for a Switch, no heal (co-op) |
+
+Mastery and branches are saved with the character (a `mastery` JSONB column); anonymous players keep them until they leave. Tuning (thresholds, weights, branch names) lives in `shared/mastery.js`; the server side is `server/mastery.js` (`useEvolved` runs the 18 evolutions), the Skills panel, shrines and visuals `public/mastery.js`. Tests: `node test/evolve.js` (add `DATABASE_URL=...` for the save/load round trip). Testing aids: `MASTERY=3` (or 5) starts every skill at that mastery; the bot party picks random branches, or `BRANCH=A` / `BRANCH=B`:
+
+```bash
+MASTERY=3 START_LEVEL=10 SPAWN_AT=0,150 npm start
+BRANCH=B node test/team.js                  # every skill evolved into branch B
+```
+
 ## Classes
 
 | Class | Role | Skills |
@@ -162,6 +190,7 @@ public/models/   rigged character models (glTF) with shared animations
 test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
 shared/teambots.js  role-playing party bots (tank / DPS / healer), used by test/team.js and public/bots.html
+shared/mastery.js, server/mastery.js, public/mastery.js  skill mastery and evolutions; test/evolve.js
 ```
 
 Tuning lives in `shared/data.js` (class HP/ATK, cooldowns, mob stats). New skills are a `case` in `Game.useSkill` plus an entry in `CLASSES`.
@@ -214,4 +243,4 @@ Character models and animations: [KayKit Adventurers Character Pack](https://git
 
 ## Next steps
 
-See the design doc for the full roadmap: Floors 3–5, zone servers for hundreds of players.
+See the design doc for the full roadmap: Floors 3–5, zone servers for hundreds of players. Stage C (skill mastery and evolutions) is done in spirit: see above.

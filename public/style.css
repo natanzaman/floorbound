@@ -207,6 +207,9 @@ input { font: inherit; }
 /* ---------- items, raid gate, guide ---------- */
 #bag-btn { right: 210px; }
 .touch #bag-btn { right: 280px; }
+#skills-btn { right: 318px; }
+.touch #skills-btn { right: 388px; }
+.spectator #skills-btn { display: none !important; }
 #gold-chip { color: #fcd34d; font-weight: 700; margin-left: 4px; }
 #bag { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); right: 10px; width: min(380px, 94vw); max-height: calc(100vh - 140px); overflow: auto; padding: 10px 12px; font-size: 13px; z-index: 3; }
 #bag h4 { margin: 10px 0 6px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; opacity: .6; }

@@ -15,6 +15,8 @@ import { SmithMethods } from './smith.js';
 import { GroundMethods } from './ground.js';
 import { TwistMethods } from './twists.js';
 import { installCombat } from './combat.js';
+import { MasteryMethods } from './mastery.js';
+import { MASTERY } from '../shared/mastery.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
@@ -98,6 +100,7 @@ export class Game {
     p.lvlStart = p.lvl;
     p.stats = newStats(saved?.stats); // lifetime stats + titles (memory-only for anonymous players)
     p.stats.maxLvl = Math.max(p.stats.maxLvl, p.lvl);
+    this.initMastery(p, saved?.mastery); // skill mastery + evolutions (server/mastery.js)
     this.checkTitles(p);
     this.recompute(p);
     p.hp = p.maxHp;
@@ -170,6 +173,7 @@ export class Game {
       case 'decline': p.invite = null; return;
       case 'leave': return this.leaveParty(p);
       case 'warp': return this.warp(p, msg.f); // waystones and the Stairway (server/floor2.js)
+      case 'evolve': return this.chooseBranch(p, String(msg.sk), String(msg.br)); // skill evolutions (server/mastery.js)
     }
   }
 
@@ -500,15 +504,20 @@ export class Game {
   }
 
   // ---------- skills ----------
-  dmgMult(p) { return (this.time < p.dmg.until ? 1 + p.dmg.v : 1) * (this.time < p.tonicUntil ? 1.15 : 1); }
+  dmgMult(p) { return (this.time < p.dmg.until ? 1 + p.dmg.v : 1) * (this.time < p.tonicUntil ? 1.15 : 1) * (this.time < p.cry.until ? 1 + p.cry.v : 1); }
 
   useSkill(p, slot, face) {
     if (p.dead || p.guarding) return; // a guarding Guardian can't attack
     const sk = CLASSES[p.cls].skills[slot];
     if (!sk || p.lvl < sk.lvl || this.time < p.cds[slot]) return;
     if (typeof face === 'number' && isFinite(face)) p.face = wrapAngle(face);
-    p.cds[slot] = this.time + sk.cd * (slot > 0 ? 1 - p.haste : 1);
-    const atk = p.atk * this.dmgMult(p);
+    // Skill mastery (server/mastery.js): S = the skill credited with mastery (not the basic attack), pow = Mastery 4's +10%,
+    // and from Mastery 3 an evolved branch replaces the skill entirely.
+    const S = slot > 0 ? sk.id : undefined, pow = slot > 0 ? this.skillPow(p, sk.id) : 1, br = slot > 0 ? this.branchOf(p, sk.id) : null;
+    const cd = this.skillCd(p, sk, slot);
+    if (br) { if (this.useEvolved(p, sk, br, pow) !== false) p.cds[slot] = this.time + cd; return; }
+    p.cds[slot] = this.time + cd;
+    const atk = p.atk * this.dmgMult(p) * pow;
     const fx = (k, extra = {}) => this.events.push({ t: 'fx', k, s: sk.id, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), ...extra });
     const t = this.time;
 
@@ -530,17 +539,17 @@ export class Game {
           [tx, tz] = resolveCollision(nx, nz);
         }
         fx('rush', { x2: r2(tx), z2: r2(tz) });
-        this.hitLine(p, p.x, p.z, tx, tz, 1.8, atk * 1.6, { knock: 1.5 });
+        this.hitLine(p, p.x, p.z, tx, tz, 1.8, atk * 1.6, { knock: 1.5, sk: S });
         this.teleport(p, tx, tz);
         break;
       }
-      case 'whirl': fx('ring', { r: 4 }); this.hitCircle(p, p.x, p.z, 4, atk * 1.4, { knock: 1.2 }); break;
+      case 'whirl': fx('ring', { r: 4 }); this.hitCircle(p, p.x, p.z, 4, atk * 1.4, { knock: 1.2, sk: S }); break;
       case 'burst':
         for (let i = 0; i < 4; i++) {
           this.schedule(i * 0.2, () => {
             if (p.dead || !this.players.has(p.id)) return;
             this.events.push({ t: 'fx', k: 'arc', s: 'burst', n: i, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), r: 3.2, c: i === 3 ? 'gold' : undefined });
-            this.hitArc(p, 3.2, 0.9, p.atk * this.dmgMult(p) * (i === 3 ? 1.6 : 0.9), i === 3 ? { brk: true, knock: 2.5, heavy: true } : { knock: 0.3 });
+            this.hitArc(p, 3.2, 0.9, p.atk * this.dmgMult(p) * pow * (i === 3 ? 1.6 : 0.9), i === 3 ? { brk: true, knock: 2.5, heavy: true, sk: S } : { knock: 0.3, sk: S });
           });
         }
         break;
@@ -551,13 +560,13 @@ export class Game {
           let top = 0; for (const v of m.threat.values()) top = Math.max(top, v);
           m.threat.set(p.id, top + 100);
         }
-        this.hitCircle(p, p.x, p.z, 8, atk * 0.5);
-        p.dr = { until: t + 4, v: 0.3 };
+        this.hitCircle(p, p.x, p.z, 8, atk * 0.5, { sk: S });
+        p.dr = { until: t + 4, v: 0.3 * pow, by: p.id, sk: S };
         this.events.push({ t: 'buff', id: p.id, k: 'dr', d: 4 });
         break;
       }
-      case 'wall': p.dr = { until: t + 4, v: 0.6 }; this.events.push({ t: 'buff', id: p.id, k: 'wall', d: 4 }); fx('shield'); break;
-      case 'gslam': fx('ring', { r: 5, c: 'gold' }); this.hitCircle(p, p.x, p.z, 5, atk * 1.3, { stun: 1.5, threat: 1.5, brk: true, knock: 2, heavy: true }); break;
+      case 'wall': p.dr = { until: t + 4, v: Math.min(0.7, 0.6 * pow), by: p.id, sk: S }; this.events.push({ t: 'buff', id: p.id, k: 'wall', d: 4 }); fx('shield'); break;
+      case 'gslam': fx('ring', { r: 5, c: 'gold' }); this.hitCircle(p, p.x, p.z, 5, atk * 1.3, { stun: 1.5, threat: 1.5, brk: true, knock: 2, heavy: true, sk: S }); break;
       case 'smite': {
         const range = 10, dx = Math.sin(p.face), dz = Math.cos(p.face);
         let best = null, bestT = range;
@@ -579,7 +588,7 @@ export class Game {
           const f = o.hp / o.maxHp;
           if (f < low) { low = f; target = o; }
         }
-        this.healPlayer(target, target.maxHp * 0.3 + 10 + p.lvl * 2, p);
+        this.healPlayer(target, (target.maxHp * 0.3 + 10 + p.lvl * 2) * pow, p, S);
         this.events.push({ t: 'fx', k: 'heal', s: 'heal', by: p.id, id: target.id, x: r2(target.x), z: r2(target.z) });
         break;
       }
@@ -587,13 +596,13 @@ export class Game {
         fx('ring', { r: 15, c: 'light' });
         for (const o of this.players.values()) {
           if (o.dead || dist(o, p) > 15) continue;
-          o.dmg = { until: t + 8, v: 0.25 };
+          o.dmg = { until: t + 8, v: 0.25 * pow, by: p.id, sk: S };
           this.events.push({ t: 'buff', id: o.id, k: 'bless', d: 8 });
         }
         break;
       }
       case 'sanct': {
-        this.zones.push({ x: p.x, z: p.z, r: 6, until: t + 5, next: t, owner: p.id });
+        this.zones.push({ x: p.x, z: p.z, r: 6, until: t + 5, next: t, owner: p.id, sk: S, heal: 0.06 * pow });
         fx('zone', { r: 6, d: 5 });
         break;
       }
@@ -629,7 +638,8 @@ export class Game {
     }
   }
 
-  damageMob(m, p, base, { threat = 1, stun = 0, brk = false, interrupt = false, knock = 0, heavy = false } = {}) {
+  // sk: the skill (slots 1-3) credited with mastery for this hit; frac: an extra posture chunk [normal/elite, boss] (evolved skills).
+  damageMob(m, p, base, { threat = 1, stun = 0, brk = false, interrupt = false, knock = 0, heavy = false, sk = null, frac = null } = {}) {
     if (!this.targetable(m)) return;
     if (m.def.f2 && (base = this.f2DamageMod(m, p, base)) <= 0) return; // Floor 2: shells, burrowed lurkers
     const t = this.time;
@@ -645,11 +655,16 @@ export class Game {
     const counter = this.counterHit(p); // perfect-dodge counter window
     if (counter) mult *= PERFECT.dmg;
     const amount = Math.max(1, Math.round(base * (0.9 + Math.random() * 0.2) * (crit ? 1.5 : 1) * mult));
+    const dealt = Math.min(amount, Math.max(0, m.hp)); // overkill doesn't count toward mastery
     m.hp -= amount;
+    if (sk) this.masteryGain(p, sk, dealt, 'dmg');
+    this.bookBuffs(p, dealt); // Blessing / Zeal / War Cry mastery
     if (sw) {
       this.events.push({ t: 'switch', id: m.id, by: p.id, from: m.staggerBy, a: amount });
       const from = this.players.get(m.staggerBy);
       if (from) this.giveXp(from, 5); // a little thank-you for setting it up
+      if (from && m.staggerSk) this.masteryGain(from, m.staggerSk, MASTERY.setup); // the skill that broke it set up a Switch
+      if (sk) this.masteryGain(p, sk, MASTERY.sw);
       p.switches++;
       this.bumpStat(p, 'switches');
     }
@@ -660,7 +675,7 @@ export class Game {
     this.events.push({ t: 'hit', id: m.id, a: amount, c: crit ? 1 : 0, by: p.id, sw, h: heavy ? 1 : 0 });
     if (m.hp <= 0) return this.killMob(m, p);
     if (knock && !m.def.boss && !m.def.ranged) this.knockback(m, p, knock);
-    this.addPosture(m, p, amount, { heavy, brk, interrupt, counter }); // full posture = BROKEN (see combat.js)
+    this.addPosture(m, p, amount, { heavy, brk, interrupt, counter, sk, frac }); // full posture = BROKEN (see combat.js)
     this.twistAfterHit(m); // Warden twist (Ironhide: longer Broken windows)
   }
 
@@ -752,12 +767,15 @@ export class Game {
     if (p.lvl > p.stats.maxLvl) { p.stats.maxLvl = p.lvl; this.checkTitles(p); }
   }
 
-  healPlayer(t, amount, by) {
-    if (t.dead) return;
+  // sk: the healer's skill credited with mastery (overheal doesn't count). Returns the health actually restored.
+  healPlayer(t, amount, by, sk) {
+    if (t.dead) return 0;
     const before = t.hp;
     t.hp = Math.min(t.maxHp, t.hp + Math.round(amount));
     if (t.hp > before) this.events.push({ t: 'heal', id: t.id, a: t.hp - before });
     if (by && this.boss && !this.boss.dead && this.boss.threat.size && inArena(t.x, t.z)) this.boss.contributors.add(by.id);
+    if (by && sk && t.hp > before) this.masteryGain(by, sk, t.hp - before, 'heal');
+    return t.hp - before;
   }
 
   // peril: a perilous attack (Horn Sweep): only dodge i-frames or a parry avoid it; no damage reduction, jumping doesn't help.
@@ -765,11 +783,24 @@ export class Game {
     if (p.dead || inTown(p.x, p.z)) return;
     if (this.time < p.iframeUntil) { this.evadeHit(p, src, mob); return; } // may be a perfect dodge
     if (ground && !peril && this.time >= p.airFrom && this.time < p.airUntil) { this.events.push({ t: 'evade', id: p.id, k: 'jump' }); return; }
+    if (!peril && this.purified(p, src, base)) return; // Miracle (server/mastery.js)
     const guard = this.guardHit(p, src, mob, peril); // Guardian guard / parry
     if (guard === 'parry') return;
-    const dr = peril ? 0 : Math.min(0.8, (this.time < p.dr.until ? p.dr.v : 0) + (p.gearDr || 0) + (this.time < p.draughtUntil ? 0.15 : 0));
-    let amount = peril ? Math.round(base) : Math.max(1, Math.round(base * (0.9 + Math.random() * 0.2) * (1 - dr)));
+    let amount;
+    if (peril) amount = Math.round(base);
+    else {
+      const raw = base * (0.9 + Math.random() * 0.2);
+      const mod = this.hitMods(p, raw, src, mob); // Challenge, Bulwark, Haven, Iron Skin (server/mastery.js)
+      const skDr = this.time < p.dr.until ? p.dr.v : 0, haven = mod.haven ? mod.haven.dr : 0;
+      const dr = Math.min(0.8, skDr + haven + (p.gearDr || 0) + (this.time < p.draughtUntil ? 0.15 : 0));
+      const pre = raw * mod.mult;
+      amount = Math.max(1, Math.round(pre * (1 - dr)));
+      this.bookDr(p, pre, skDr, mod.haven, dr); // mastery for the damage Taunt / Shield Wall / Haven prevented
+      if (mod.reflect) this.reflectHit(p, mod.attacker, raw);
+    }
     if (guard) amount = Math.max(1, Math.round(amount * (1 - GUARD.dr)));
+    if (!peril) amount = this.absorbHit(p, amount); // Aegis shields
+    if (amount <= 0) { p.lastHurt = this.time; p.lastCombat = this.time; return; }
     p.hp -= amount;
     p.lastHurt = this.time; p.lastCombat = this.time;
     this.events.push({ t: 'hurt', id: p.id, a: amount });
@@ -814,14 +845,10 @@ export class Game {
     }
 
     for (const zn of this.zones) {
-      if (t >= zn.next) {
-        zn.next = t + 0.5;
-        for (const p of this.players.values()) {
-          if (!p.dead && Math.hypot(p.x - zn.x, p.z - zn.z) <= zn.r) this.healPlayer(p, p.maxHp * 0.06, this.players.get(zn.owner));
-        }
-      }
+      if (t >= zn.next) { zn.next = t + 0.5; this.zoneTick(zn); } // Sanctuary, Haven, Consecrate (server/mastery.js)
     }
     this.zones = this.zones.filter(zn => t < zn.until);
+    this.updateMastery(); // Renew, Bulwark, Aegis upkeep
 
     for (const m of [...this.mobs.values()]) this.updateMob(m, dt);
     this.updateCombat(dt); // posture decay, Horn Sweep
@@ -1201,13 +1228,15 @@ export class Game {
     const players = [];
     for (const p of this.players.values()) {
       const party = this.partyOf(p);
-      const buffs = (this.time < p.dr.until ? 1 : 0) | (this.time < p.dmg.until ? 2 : 0) | (p.lfg || party?.open ? 4 : 0) | (this.time < p.tonicUntil ? 8 : 0) | (this.time < p.draughtUntil ? 16 : 0);
+      const t = this.time, zeal = p.dmg.zeal && t < p.dmg.until;
+      const buffs = (t < p.dr.until ? 1 : 0) | (t < p.dmg.until && !zeal ? 2 : 0) | (p.lfg || party?.open ? 4 : 0) | (t < p.tonicUntil ? 8 : 0) | (t < p.draughtUntil ? 16 : 0)
+        | (p.shield ? 32 : 0) | (p.bulwark ? 64 : 0) | (t < (p.iron?.until || 0) ? 128 : 0) | (p.renew ? 256 : 0) | (t < p.cry.until ? 512 : 0) | (zeal ? 1024 : 0) | (t < (p.purifyUntil || 0) ? 2048 : 0);
       players.push([p.id, r2(p.x), r2(p.z), r2(p.face), p.hp, p.maxHp, p.lvl, CLASS_IDS.indexOf(p.cls), p.party || 0, p.dead ? 1 : 0, buffs]);
     }
     const mobs = [];
     for (const m of this.mobs.values()) {
       if (m.dead || m.hidden) continue; // burrowed lurkers are sent as w.f2.bur
-      mobs.push([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase >= 2 ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0) | (m.windupAt ? 16 : 0) | (this.time < m.staggerUntil ? 32 : 0) | (this.time < m.frenzyUntil ? 64 : 0), this.posturePct(m)]);
+      mobs.push([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase >= 2 ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0) | (m.windupAt ? 16 : 0) | (this.time < m.staggerUntil ? 32 : 0) | (this.time < m.frenzyUntil ? 64 : 0) | (this.time < (m.launchUntil || 0) ? 128 : 0) | (this.time < (m.weakUntil || 0) ? 256 : 0), this.posturePct(m)]);
     }
     const g = this.gate;
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
@@ -1238,4 +1267,5 @@ Object.assign(Game.prototype, SmithMethods);
 Object.assign(Game.prototype, GroundMethods); // items on the ground (server/ground.js)
 Object.assign(Game.prototype, TwistMethods); // Warden twists (server/twists.js)
 installCombat(Game); // posture, perfect dodge, guard/parry, Horn Sweep (server/combat.js)
+Object.assign(Game.prototype, MasteryMethods); // skill mastery + evolutions (server/mastery.js)
 Object.assign(Game.prototype, F2Methods); // Floor 2 (server/floor2.js)
