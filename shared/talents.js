@@ -191,6 +191,216 @@ export const TREES = {
     bot: ['cl_hands', 'cl_hands', 'cl_hands', 'cl_vigor', 'cl_vigor', 'cl_vigor', 'cl_mend', 'cl_mend', 'cl_wide', 'cl_wide',
       'cl_devotion', 'cl_devotion', 'cl_bloom', 'cl_bloom', 'cl_bloom', 'cl_overflow', 'cl_presence', 'cl_presence', 'cl_presence'],
   },
+
+  // ---------- the newer classes (shared/classes/): same shape, keystones in server/talents.js ----------
+  ranger: {
+    branches: [
+      {
+        id: 'marksman', name: 'Marksman', color: '#2dd4bf', theme: 'Charged shots, piercing, crits, range',
+        nodes: [
+          { id: 'rg_aim', name: 'Steady Aim', icon: '◎', tier: 0, x: -1, max: 3, fx: [{ stat: 'crit', v: 2 }] },
+          { id: 'rg_draw', name: 'Heavy Draw', icon: '➶', tier: 0, x: 1, max: 3, fx: [{ sk: 'basic', dmg: 5 }] },
+          { id: 'rg_pierce', name: 'Penetrator', icon: '⇶', tier: 1, x: -1, max: 2, req: ['rg_aim'], fx: [{ sk: 'pierce', dmg: 10 }, { sk: 'pierce', cd: -6 }] },
+          { id: 'rg_third', name: 'Broadhead', icon: '✶', tier: 1, x: 1, max: 2, req: ['rg_draw'], fx: [{ sk: 'basic', fin: 20 }] },
+          { id: 'rg_focus', name: 'Focus', icon: '◉', tier: 2, x: 0, max: 2, req: ['rg_pierce', 'rg_third'], fx: [{ stat: 'atk', v: 3 }] },
+          { id: 'rg_vital', name: 'Vital Shot', icon: '✚', tier: 3, x: -1, max: 2, req: ['rg_focus'], fx: [{ stat: 'crit', v: 2 }, { stat: 'broken', v: 5 }] },
+          { id: 'rg_long', name: 'Longshot', icon: '⟶', tier: 3, x: 1, max: 2, req: ['rg_focus'], fx: [{ key: 'longshot' }], touches: ['basic', 'pierce'],
+            desc: 'Arrows that fly more than 12 m before they hit deal +10% damage per rank.' },
+          { id: 'rg_deadshot', name: 'Dead Shot', icon: '☩', tier: 4, x: 0, max: 1, keystone: true, req: ['rg_vital', 'rg_long'], fx: [{ key: 'deadshot' }], touches: ['pierce', 'basic'],
+            desc: 'Piercing Shot (and its evolutions) always crits, and every critical hit from your other arrows takes 1 s off its cooldown.' },
+        ],
+      },
+      {
+        id: 'trapper', name: 'Trapper', color: '#a3e635', theme: 'Traps, slows, control',
+        nodes: [
+          { id: 'rg_spikes', name: 'Barbed Caltrops', icon: '⁂', tier: 0, x: -1, max: 3, fx: [{ sk: 'disengage', dmg: 12 }] },
+          { id: 'rg_feet', name: 'Quick Feet', icon: '»', tier: 0, x: 1, max: 2, fx: [{ stat: 'speed', v: 4 }] },
+          { id: 'rg_spread', name: 'Wide Spread', icon: '◌', tier: 1, x: -1, max: 2, req: ['rg_spikes'], fx: [{ sk: 'disengage', radius: 15 }, { sk: 'disengage', dur: 15 }] },
+          { id: 'rg_tumble', name: 'Tumbler', icon: '↻', tier: 1, x: 1, max: 2, req: ['rg_feet'], fx: [{ sk: 'disengage', cd: -10 }, { stat: 'dodge', v: 6 }] },
+          { id: 'rg_tangle', name: 'Tanglefoot', icon: '⌇', tier: 2, x: 0, max: 2, req: ['rg_spread', 'rg_tumble'], fx: [{ stat: 'posture', v: 6 }, { stat: 'dr', v: 2 }] },
+          { id: 'rg_grounds', name: 'Hunting Grounds', icon: '⌂', tier: 3, x: -1, max: 3, req: ['rg_tangle'], fx: [{ stat: 'atk', v: 2 }, { stat: 'hp', v: 2 }] },
+          { id: 'rg_pin', name: 'Pinning Arrow', icon: '⊥', tier: 3, x: 1, max: 1, req: ['rg_tangle'], fx: [{ key: 'pinshot' }], touches: ['basic'],
+            desc: 'Your third (heavy) arrow slows its target by 30% for 2 s (half on bosses).' },
+          { id: 'rg_mines', name: 'Minefield', icon: '✹', tier: 4, x: 0, max: 1, keystone: true, req: ['rg_grounds', 'rg_pin'], fx: [{ key: 'minefield' }], touches: ['disengage'],
+            desc: 'Your caltrops and snares explode when they spring or run out: 1.5x attack to everything on them and a posture chunk (10%, 4% on bosses).' },
+        ],
+      },
+      {
+        id: 'packhunt', name: 'Pack Hunter', color: '#fbbf24', theme: 'Hunter\'s Mark, party bonuses, Switch',
+        nodes: [
+          { id: 'rg_pack', name: 'Pack Tactics', icon: '⇄', tier: 0, x: -1, max: 3, fx: [{ stat: 'sw', v: 8 }] },
+          { id: 'rg_prey', name: 'Mark the Prey', icon: '◈', tier: 0, x: 1, max: 3, fx: [{ sk: 'mark', dur: 12 }] },
+          { id: 'rg_exploit', name: 'Exploit', icon: '✕', tier: 1, x: -1, max: 2, req: ['rg_pack'], fx: [{ stat: 'broken', v: 8 }] },
+          { id: 'rg_quickmark', name: 'Quick Mark', icon: '⇡', tier: 1, x: 1, max: 2, req: ['rg_prey'], fx: [{ sk: 'mark', cd: -10 }] },
+          { id: 'rg_howl', name: 'Howl', icon: '♪', tier: 2, x: 0, max: 2, req: ['rg_exploit', 'rg_quickmark'], fx: [{ aura: 'atk', v: 3 }] },
+          { id: 'rg_deep', name: 'Deep Mark', icon: '◆', tier: 3, x: -1, max: 2, req: ['rg_howl'], fx: [{ key: 'deepmark' }], touches: ['mark'],
+            desc: 'Hunter\'s Mark (and Pack Hunter) gives the party +5% more damage per rank on the target.' },
+          { id: 'rg_volley', name: 'Coordinated Volley', icon: '⚭', tier: 3, x: 1, max: 3, req: ['rg_howl'], fx: [{ stat: 'sw', v: 6 }, { stat: 'posture', v: 4 }] },
+          { id: 'rg_leader', name: 'Pack Leader', icon: '♞', tier: 4, x: 0, max: 1, keystone: true, coop: true, req: ['rg_deep', 'rg_volley'], fx: [{ key: 'packlead' }], touches: ['mark', 'pierce'],
+            desc: 'When anyone lands a Switch on an enemy you marked, the mark refreshes, your Piercing Shot is ready at once, and you and allies within 12 m of it deal +10% damage for 5 s.' },
+        ],
+      },
+    ],
+    bot: ['rg_aim', 'rg_aim', 'rg_aim', 'rg_draw', 'rg_draw', 'rg_draw', 'rg_pierce', 'rg_pierce', 'rg_third', 'rg_third',
+      'rg_focus', 'rg_focus', 'rg_vital', 'rg_vital', 'rg_long', 'rg_long', 'rg_deadshot', 'rg_pack', 'rg_pack'],
+  },
+
+  berserker: {
+    branches: [
+      {
+        id: 'carnage', name: 'Carnage', color: '#ef4444', theme: 'Rage damage, cleaves, executions',
+        nodes: [
+          { id: 'bz_brutal', name: 'Brutality', icon: '⚔', tier: 0, x: -1, max: 3, fx: [{ stat: 'atk', v: 3 }] },
+          { id: 'bz_fury', name: 'Fury', icon: '♨', tier: 0, x: 1, max: 3, fx: [{ key: 'fury' }],
+            desc: 'You build 10% more Rage per rank.' },
+          { id: 'bz_cleave', name: 'Wide Cleave', icon: '◠', tier: 1, x: -1, max: 2, req: ['bz_brutal'], fx: [{ sk: 'cleave', radius: 12 }, { sk: 'cleave', dmg: 8 }] },
+          { id: 'bz_heavy', name: 'Heavy Swings', icon: '⚒', tier: 1, x: 1, max: 2, req: ['bz_fury'], fx: [{ sk: 'basic', dmg: 8 }] },
+          { id: 'bz_redmist', name: 'Red Mist', icon: '❂', tier: 2, x: 0, max: 2, req: ['bz_cleave', 'bz_heavy'], fx: [{ key: 'redmist' }],
+            desc: 'Your hits deal up to +8% damage per rank at full Rage (scales with your Rage).' },
+          { id: 'bz_savage', name: 'Savage Edge', icon: '◎', tier: 3, x: -1, max: 2, req: ['bz_redmist'], fx: [{ stat: 'crit', v: 3 }] },
+          { id: 'bz_reaper', name: 'Reaper', icon: '☠', tier: 3, x: 1, max: 2, req: ['bz_redmist'], fx: [{ stat: 'broken', v: 6 }, { stat: 'atk', v: 2 }] },
+          { id: 'bz_massacre', name: 'Massacre', icon: '✷', tier: 4, x: 0, max: 1, keystone: true, req: ['bz_savage', 'bz_reaper'], fx: [{ key: 'massacre' }], touches: ['cleave'],
+            desc: 'Every kill grants 15 Rage and resets Cleave. Cleave (and its evolutions) deals +30% to enemies below 35% health.' },
+        ],
+      },
+      {
+        id: 'bloodlust', name: 'Bloodlust', color: '#be123c', theme: 'Lifesteal, sustain, Bloodrage',
+        nodes: [
+          { id: 'bz_thick', name: 'Thick Skin', icon: '♥', tier: 0, x: -1, max: 3, fx: [{ stat: 'hp', v: 4 }] },
+          { id: 'bz_leech', name: 'Leech', icon: '⚕', tier: 0, x: 1, max: 3, fx: [{ key: 'leech' }],
+            desc: 'Heal for 2% of the damage you deal per rank.' },
+          { id: 'bz_scar', name: 'Scar Tissue', icon: '▣', tier: 1, x: -1, max: 2, req: ['bz_thick'], fx: [{ stat: 'dr', v: 3 }] },
+          { id: 'bz_price', name: 'Blood Price', icon: '✦', tier: 1, x: 1, max: 2, req: ['bz_leech'], fx: [{ sk: 'bloodrage', cd: -10 }, { sk: 'bloodrage', dur: 15 }] },
+          { id: 'bz_wind', name: 'Second Wind', icon: '❦', tier: 2, x: 0, max: 2, req: ['bz_scar', 'bz_price'], fx: [{ key: 'secondwind' }],
+            desc: 'Below 35% health you take 6% less damage per rank.' },
+          { id: 'bz_feast', name: 'Feast', icon: '✚', tier: 3, x: -1, max: 2, req: ['bz_wind'], fx: [{ stat: 'heal', v: 10 }, { stat: 'hp', v: 2 }] },
+          { id: 'bz_thirst', name: 'Bloodthirst', icon: '⧗', tier: 3, x: 1, max: 2, req: ['bz_wind'], fx: [{ stat: 'haste', v: 4 }] },
+          { id: 'bz_sanguine', name: 'Sanguine Frenzy', icon: '❖', tier: 4, x: 0, max: 1, keystone: true, req: ['bz_feast', 'bz_thirst'], fx: [{ key: 'sanguine' }], touches: ['bloodrage'],
+            desc: 'While Bloodrage (or Frenzy) is on, every kill extends it by 1.5 s and your hits fill 25% more posture; when it ends you heal 15% of your health.' },
+        ],
+      },
+      {
+        id: 'warcry', name: 'Warcry', color: '#f59e0b', theme: 'Posture, staggers, team-ups, Switch set-ups',
+        nodes: [
+          { id: 'bz_bones', name: 'Bonebreaker', icon: '▼', tier: 0, x: -1, max: 3, fx: [{ stat: 'posture', v: 8 }] },
+          { id: 'bz_shout', name: 'Battle Shout', icon: '⇄', tier: 0, x: 1, max: 3, fx: [{ stat: 'sw', v: 8 }] },
+          { id: 'bz_quake', name: 'Earthquake', icon: '◉', tier: 1, x: -1, max: 2, req: ['bz_bones'], fx: [{ sk: 'leap', radius: 12 }, { sk: 'leap', cd: -8 }] },
+          { id: 'bz_menace', name: 'Intimidate', icon: '☗', tier: 1, x: 1, max: 2, req: ['bz_shout'], fx: [{ stat: 'threat', v: 20 }, { stat: 'dr', v: 2 }] },
+          { id: 'bz_roar', name: 'Rallying Roar', icon: '♪', tier: 2, x: 0, max: 2, req: ['bz_quake', 'bz_menace'], fx: [{ aura: 'atk', v: 3 }] },
+          { id: 'bz_concuss', name: 'Concussive', icon: '✕', tier: 3, x: -1, max: 2, req: ['bz_roar'], fx: [{ stat: 'broken', v: 8 }] },
+          { id: 'bz_shatter', name: 'Shatterpoint', icon: '⚡', tier: 3, x: 1, max: 3, req: ['bz_roar'], fx: [{ stat: 'posture', v: 5 }, { stat: 'sw', v: 5 }] },
+          { id: 'bz_warcry', name: 'Warcry', icon: '✺', tier: 4, x: 0, max: 1, keystone: true, coop: true, req: ['bz_concuss', 'bz_shatter'], fx: [{ key: 'warcry' }], touches: ['leap'],
+            desc: 'When you Break an enemy you roar: you and allies within 12 m deal +12% damage for 6 s, and Leap Slam is ready again (at most every 8 s).' },
+        ],
+      },
+    ],
+    bot: ['bz_brutal', 'bz_brutal', 'bz_brutal', 'bz_fury', 'bz_fury', 'bz_fury', 'bz_cleave', 'bz_cleave', 'bz_heavy', 'bz_heavy',
+      'bz_redmist', 'bz_redmist', 'bz_savage', 'bz_savage', 'bz_reaper', 'bz_reaper', 'bz_massacre', 'bz_thick', 'bz_thick'],
+  },
+
+  lancer: {
+    branches: [
+      {
+        id: 'dragoon', name: 'Dragoon', color: '#38bdf8', theme: 'Sky Lance, aerial strikes, posture',
+        nodes: [
+          { id: 'ln_wings', name: 'Dragon Wings', icon: '⌃', tier: 0, x: -1, max: 3, fx: [{ sk: 'skylance', cd: -6 }] },
+          { id: 'ln_point', name: 'Spearpoint', icon: '▼', tier: 0, x: 1, max: 3, fx: [{ stat: 'posture', v: 8 }] },
+          { id: 'ln_dive', name: 'Diving Strike', icon: '⤓', tier: 1, x: -1, max: 2, req: ['ln_wings'], fx: [{ sk: 'skylance', dmg: 12 }, { sk: 'skylance', radius: 10 }] },
+          { id: 'ln_tip', name: 'Honed Tip', icon: '⟟', tier: 1, x: 1, max: 2, req: ['ln_point'], fx: [{ key: 'honedtip' }], touches: ['basic'],
+            desc: 'Hits at the tip of your reach deal 10% more per rank (on top of the usual +30%).' },
+          { id: 'ln_aerial', name: 'Aerial Poise', icon: '◇', tier: 2, x: 0, max: 2, req: ['ln_dive', 'ln_tip'], fx: [{ stat: 'atk', v: 3 }, { stat: 'dodge', v: 6 }] },
+          { id: 'ln_impale', name: 'Impale', icon: '✕', tier: 3, x: -1, max: 2, req: ['ln_aerial'], fx: [{ stat: 'broken', v: 8 }] },
+          { id: 'ln_drake', name: 'Drake\'s Fury', icon: '◎', tier: 3, x: 1, max: 2, req: ['ln_aerial'], fx: [{ stat: 'crit', v: 3 }] },
+          { id: 'ln_dragoon', name: 'Dragoon', icon: '⚚', tier: 4, x: 0, max: 1, keystone: true, req: ['ln_impale', 'ln_drake'], fx: [{ key: 'dragoon' }], touches: ['skylance', 'basic'],
+            desc: 'Every thrust that lands at the tip of your reach takes 0.5 s off Sky Lance, and Sky Lance (and its evolutions) fills 40% more posture.' },
+        ],
+      },
+      {
+        id: 'skirmish', name: 'Skirmisher', color: '#2dd4bf', theme: 'Lance Charge, mobility, reach',
+        nodes: [
+          { id: 'ln_stride', name: 'Long Stride', icon: '➶', tier: 0, x: -1, max: 2, fx: [{ stat: 'speed', v: 4 }] },
+          { id: 'ln_light', name: 'Light Armour', icon: '↻', tier: 0, x: 1, max: 3, fx: [{ stat: 'dodge', v: 7 }] },
+          { id: 'ln_momentum', name: 'Momentum', icon: '»', tier: 1, x: -1, max: 2, req: ['ln_stride'], fx: [{ sk: 'lcharge', cd: -10 }, { sk: 'lcharge', dmg: 10 }] },
+          { id: 'ln_counter', name: 'Counter-Thrust', icon: '⤺', tier: 1, x: 1, max: 3, req: ['ln_light'], fx: [{ stat: 'counter', v: 15 }] },
+          { id: 'ln_tempo', name: 'Skirmish', icon: '⧗', tier: 2, x: 0, max: 3, req: ['ln_momentum', 'ln_counter'], fx: [{ stat: 'haste', v: 3 }] },
+          { id: 'ln_reach', name: 'Extended Reach', icon: '⟶', tier: 3, x: -1, max: 2, req: ['ln_tempo'], fx: [{ sk: 'basic', dmg: 8 }] },
+          { id: 'ln_slip', name: 'Slip Away', icon: '◇', tier: 3, x: 1, max: 2, req: ['ln_tempo'], fx: [{ stat: 'dr', v: 3 }] },
+          { id: 'ln_fade', name: 'Hit and Fade', icon: '∞', tier: 4, x: 0, max: 1, keystone: true, req: ['ln_reach', 'ln_slip'], fx: [{ key: 'fade' }], touches: ['lcharge', 'basic'],
+            desc: 'Every dodge roll takes 1.5 s off Lance Charge and a perfect dodge resets it; your first thrust within 3 s of a charge deals +40%.' },
+        ],
+      },
+      {
+        id: 'phalanx', name: 'Phalanx', color: '#fbbf24', theme: 'Sweep, control, protecting allies, Switch',
+        nodes: [
+          { id: 'ln_line', name: 'Hold the Line', icon: '⛨', tier: 0, x: -1, max: 3, fx: [{ stat: 'hp', v: 4 }] },
+          { id: 'ln_open', name: 'Lancer\'s Opening', icon: '⇄', tier: 0, x: 1, max: 3, fx: [{ stat: 'sw', v: 8 }] },
+          { id: 'ln_sweep', name: 'Wide Sweep', icon: '◯', tier: 1, x: -1, max: 2, req: ['ln_line'], fx: [{ sk: 'lsweep', radius: 12 }, { sk: 'lsweep', cd: -8 }] },
+          { id: 'ln_ward', name: 'Warding Reach', icon: '☂', tier: 1, x: 1, max: 2, req: ['ln_open'], fx: [{ aura: 'dr', v: 2 }] },
+          { id: 'ln_trip', name: 'Trip', icon: '⌇', tier: 2, x: 0, max: 2, req: ['ln_sweep', 'ln_ward'], fx: [{ stat: 'posture', v: 6 }, { stat: 'threat', v: 15 }] },
+          { id: 'ln_wall', name: 'Spear Wall', icon: '▥', tier: 3, x: -1, max: 2, req: ['ln_trip'], fx: [{ stat: 'dr', v: 3 }] },
+          { id: 'ln_shared', name: 'Shared Opening', icon: '⚭', tier: 3, x: 1, max: 2, req: ['ln_trip'], fx: [{ aura: 'sw', v: 8 }] },
+          { id: 'ln_phalanx', name: 'Phalanx', icon: '♜', tier: 4, x: 0, max: 1, keystone: true, coop: true, req: ['ln_wall', 'ln_shared'], fx: [{ key: 'phalanx' }], touches: ['lsweep'],
+            desc: 'Sweep (and its evolutions) shields you and allies within 8 m for 12% of their health (5 s), and every enemy it hits that was after an ally turns on you.' },
+        ],
+      },
+    ],
+    bot: ['ln_wings', 'ln_wings', 'ln_wings', 'ln_point', 'ln_point', 'ln_point', 'ln_dive', 'ln_dive', 'ln_tip', 'ln_tip',
+      'ln_aerial', 'ln_aerial', 'ln_impale', 'ln_impale', 'ln_drake', 'ln_drake', 'ln_dragoon', 'ln_open', 'ln_open'],
+  },
+
+  bard: {
+    branches: [
+      {
+        id: 'maestro', name: 'Maestro', color: '#fbbf24', theme: 'Song duration and strength, Anthem',
+        nodes: [
+          { id: 'bd_breath', name: 'Breath Control', icon: '∿', tier: 0, x: -1, max: 3, fx: [{ sk: 'anthem', dur: 10 }] },
+          { id: 'bd_voice', name: 'Resonant Voice', icon: '♫', tier: 0, x: 1, max: 3, fx: [{ key: 'voice' }], touches: ['anthem'],
+            desc: 'Your songs are 5% stronger per rank (Anthem\'s haste, War March\'s damage, Lullaby\'s slow).' },
+          { id: 'bd_tempo', name: 'Quick Tempo', icon: '⇡', tier: 1, x: -1, max: 2, req: ['bd_breath'], fx: [{ sk: 'anthem', cd: -10 }] },
+          { id: 'bd_soothe', name: 'Soothing Song', icon: '✚', tier: 1, x: 1, max: 2, req: ['bd_voice'], fx: [{ key: 'soothe' }], touches: ['anthem'],
+            desc: 'While you play Anthem (or War March), allies in the song heal 1% of their health per rank every second.' },
+          { id: 'bd_chorus', name: 'Chorus', icon: '♪', tier: 2, x: 0, max: 2, req: ['bd_tempo', 'bd_soothe'], fx: [{ aura: 'atk', v: 3 }] },
+          { id: 'bd_virtuoso', name: 'Virtuoso', icon: '⧗', tier: 3, x: -1, max: 2, req: ['bd_chorus'], fx: [{ stat: 'haste', v: 4 }] },
+          { id: 'bd_power', name: 'Power Chord', icon: '⚡', tier: 3, x: 1, max: 2, req: ['bd_chorus'], fx: [{ stat: 'atk', v: 3 }, { stat: 'heal', v: 5 }] },
+          { id: 'bd_maestro', name: 'Maestro', icon: '𝄞', tier: 4, x: 0, max: 1, keystone: true, req: ['bd_virtuoso', 'bd_power'], fx: [{ key: 'maestro' }], touches: ['anthem', 'basic'],
+            desc: 'Every basic attack that lands while you play extends your song by 0.5 s (up to +6 s), and allies under your song deal +8% damage.' },
+        ],
+      },
+      {
+        id: 'discord', name: 'Discord', color: '#e879f9', theme: 'Discord stacks, debuffs, Breaks with Crescendo',
+        nodes: [
+          { id: 'bd_harsh', name: 'Dissonant Tones', icon: '▼', tier: 0, x: -1, max: 3, fx: [{ stat: 'posture', v: 8 }] },
+          { id: 'bd_sharp', name: 'Sharp Notes', icon: '♯', tier: 0, x: 1, max: 3, fx: [{ sk: 'basic', dmg: 5 }] },
+          { id: 'bd_chord', name: 'Harsh Chord', icon: '◠', tier: 1, x: -1, max: 2, req: ['bd_harsh'], fx: [{ sk: 'dissonance', dmg: 12 }, { sk: 'dissonance', cd: -8 }] },
+          { id: 'bd_linger', name: 'Lingering Discord', icon: '∞', tier: 1, x: 1, max: 2, req: ['bd_sharp'], fx: [{ key: 'linger' }], touches: ['basic'],
+            desc: 'Discord you apply lasts 1.5 s longer per rank.' },
+          { id: 'bd_tension', name: 'Rising Tension', icon: '⤒', tier: 2, x: 0, max: 2, req: ['bd_chord', 'bd_linger'], fx: [{ sk: 'crescendo', cd: -8 }, { stat: 'broken', v: 6 }] },
+          { id: 'bd_crack', name: 'Crack', icon: '◎', tier: 3, x: -1, max: 2, req: ['bd_tension'], fx: [{ stat: 'crit', v: 3 }] },
+          { id: 'bd_resonance', name: 'Resonance', icon: '❂', tier: 3, x: 1, max: 2, req: ['bd_tension'], fx: [{ key: 'resonance' }],
+            desc: 'Enemies take 2% more damage from you per rank for each Discord stack they carry.' },
+          { id: 'bd_cacophony', name: 'Cacophony', icon: '✺', tier: 4, x: 0, max: 1, keystone: true, req: ['bd_crack', 'bd_resonance'], fx: [{ key: 'cacophony' }], touches: ['basic', 'crescendo'],
+            desc: 'Your basic attacks also add a Discord stack to every enemy within 3 m of the one they hit, and Crescendo (and Grand Finale) needs one stack fewer to BREAK.' },
+        ],
+      },
+      {
+        id: 'harmony', name: 'Harmony', color: '#5eead4', theme: 'Shields, party sustain, haste',
+        nodes: [
+          { id: 'bd_ward', name: 'Warding Song', icon: '☂', tier: 0, x: -1, max: 3, fx: [{ aura: 'dr', v: 2 }] },
+          { id: 'bd_life', name: 'Lifesong', icon: '♥', tier: 0, x: 1, max: 3, fx: [{ stat: 'heal', v: 6 }] },
+          { id: 'bd_bulwark', name: 'Bulwark Chord', icon: '⛉', tier: 1, x: -1, max: 2, req: ['bd_ward'], fx: [{ key: 'crescshield' }], touches: ['crescendo'],
+            desc: 'Crescendo\'s (and Encore\'s) shield is worth 5% more of each ally\'s health per rank.' },
+          { id: 'bd_allegro', name: 'Allegro', icon: '⇶', tier: 1, x: 1, max: 2, req: ['bd_life'], fx: [{ stat: 'haste', v: 4 }] },
+          { id: 'bd_unity', name: 'Unison', icon: '⚭', tier: 2, x: 0, max: 2, req: ['bd_bulwark', 'bd_allegro'], fx: [{ aura: 'sw', v: 8 }] },
+          { id: 'bd_mend', name: 'Mending Notes', icon: '✚', tier: 3, x: -1, max: 2, req: ['bd_unity'], fx: [{ sk: 'crescendo', cd: -8 }, { stat: 'hp', v: 3 }] },
+          { id: 'bd_swift', name: 'Swift Song', icon: '»', tier: 3, x: 1, max: 2, req: ['bd_unity'], fx: [{ stat: 'speed', v: 4 }] },
+          { id: 'bd_symphony', name: 'Symphony', icon: '❖', tier: 4, x: 0, max: 1, keystone: true, coop: true, req: ['bd_mend', 'bd_swift'], fx: [{ key: 'symphony' }], touches: ['crescendo'],
+            desc: 'When an ally within 12 m of you lands a Switch, they get a shield worth 8% of their health (6 s) and your Crescendo recharges 2 s faster.' },
+        ],
+      },
+    ],
+    bot: ['bd_ward', 'bd_ward', 'bd_ward', 'bd_life', 'bd_life', 'bd_life', 'bd_bulwark', 'bd_bulwark', 'bd_allegro', 'bd_allegro',
+      'bd_unity', 'bd_unity', 'bd_mend', 'bd_mend', 'bd_swift', 'bd_swift', 'bd_symphony', 'bd_breath', 'bd_breath'],
+  },
 };
 
 // Custom rule numbers (server/talents.js reads these; the descriptions above say the same).
@@ -206,6 +416,35 @@ export const KEYS = {
   wrath: { range: 14, width: 1.2, after: 0.7 },
   cleanse: { d: 3 },
   spirit: { r: 15, hp: 0.3, cd: 60 },
+  // Ranger
+  longshot: { from: 12, dmg: 0.1 },                      // per rank
+  deadshot: { refund: 1, sk: 'pierce' },
+  pinshot: { slow: 0.3, d: 2 },
+  minefield: { mult: 1.5, frac: [0.1, 0.04] },
+  deepmark: { bonus: 0.05 },                             // per rank
+  packlead: { r: 12, dmg: 0.1, d: 5, reset: 'pierce' },
+  // Berserker
+  fury: { rage: 0.1 },                                   // per rank
+  redmist: { dmg: 0.08 },                                // per rank, at full Rage
+  massacre: { rage: 15, reset: 'cleave', below: 0.35, dmg: 0.3 },
+  leech: { ls: 0.02 },                                   // per rank
+  secondwind: { below: 0.35, dr: 0.06 },                 // per rank
+  sanguine: { ext: 1.5, posture: 0.25, heal: 0.15 },
+  warcry: { r: 12, dmg: 0.12, d: 6, reset: 'leap', every: 8 },
+  // Lancer
+  honedtip: { mult: 0.1 },                               // per rank
+  dragoon: { cdr: 0.5, posture: 0.4, sk: 'skylance' },
+  fade: { roll: 1.5, sk: 'lcharge', window: 3, dmg: 0.4 },
+  phalanx: { r: 8, shield: 0.12, d: 5 },
+  // Bard
+  voice: { pow: 0.05 },                                  // per rank
+  soothe: { heal: 0.01 },                                // per rank, per second
+  maestro: { ext: 0.5, max: 6, dmg: 0.08 },
+  linger: { d: 1.5 },                                    // per rank
+  resonance: { dmg: 0.02 },                              // per rank, per stack
+  cacophony: { r: 3, need: 1 },
+  crescshield: { shield: 0.05 },                         // per rank
+  symphony: { r: 12, shield: 0.08, d: 6, cdr: 2, sk: 'crescendo' },
 };
 
 // ---------- lookups ----------

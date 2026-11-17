@@ -28,18 +28,18 @@ export const CLASSES_A = new Set(['ranger', 'berserker']);
 const SKILLS = {
   // ---------- Ranger ----------
   shot(g, p, c) {
-    const A = RT.arrow;
+    const A = { ...RT.arrow, ...g.styleNum(p, 'arrow', null) }; // weapon styles (shared/styles.js): Crossbow
     p.combo = c.t - p.lastBasic < A.combo ? (p.combo + 1) % 3 : 0;
     p.lastBasic = c.t;
     const fin = p.combo === 2, tg = g.aimA(p, A.range, A.cone);
     if (tg) p.face = angleTo(p.x, p.z, tg.x, tg.z);
-    g.fxA(p, 'shot', { s: 'shot', n: p.combo, fin: fin ? 1 : 0 });
-    g.fireArrowA(p, { tg, dmg: c.atk * A.mult[p.combo], k: fin ? 'heavy' : 'shot', opts: { heavy: fin, threat: 1 } });
+    g.fxA(p, 'shot', { s: 'shot', n: p.combo, fin: fin ? 1 : 0, sty: g.styleNum(p, 'arrow', null) ? p.style : undefined });
+    g.fireArrowA(p, { tg, sp: A.speed, pierceN: A.pierceN, dmg: c.atk * A.mult[p.combo], k: fin ? A.kFin || 'heavy' : A.k || 'shot', opts: { heavy: fin, threat: 1 } });
   },
   pierce(g, p, c) {
-    const P = RT.pierce;
-    g.fxA(p, 'draw', { s: 'pierce', d: P.draw, r: P.range });
-    g.schedule(P.draw, () => {
+    const P = RT.pierce, draw = P.draw * g.styleNum(p, 'drawMul', 1); // Crossbow: a faster draw
+    g.fxA(p, 'draw', { s: 'pierce', d: r2(draw), r: P.range });
+    g.schedule(draw, () => {
       if (!c.alive()) return;
       const tg = g.aimA(p, P.range, 0.3);
       if (tg) p.face = angleTo(p.x, p.z, tg.x, tg.z);
@@ -60,9 +60,9 @@ const SKILLS = {
     }
   },
   snipershot(g, p, c) {
-    const N = RT.sniper;
-    g.fxA(p, 'draw', { s: 'pierce', d: N.draw, r: N.range, big: 1 });
-    g.schedule(N.draw, () => {
+    const N = RT.sniper, draw = N.draw * g.styleNum(p, 'drawMul', 1);
+    g.fxA(p, 'draw', { s: 'pierce', d: r2(draw), r: N.range, big: 1 });
+    g.schedule(draw, () => {
       if (!c.alive()) return;
       const tg = g.aimA(p, N.range, 0.3);
       if (tg) p.face = angleTo(p.x, p.z, tg.x, tg.z);
@@ -121,18 +121,25 @@ const SKILLS = {
 
   // ---------- Berserker ----------
   chop(g, p, c) {
-    const C = BT.chop;
+    const C = { ...BT.chop, ...g.styleNum(p, 'chop', null) }; // weapon styles (shared/styles.js): Twin Axes, Warhammer
     p.combo = c.t - p.lastBasic < C.combo ? (p.combo + 1) % 3 : 0;
     p.lastBasic = c.t;
-    const fin = p.combo === 2;
-    g.fxA(p, 'chop', { s: 'chop', n: p.combo, r: C.r, fin: fin ? 1 : 0 });
-    g.hitArc(p, C.r, C.half, c.atk * C.mult[p.combo], { heavy: true, knock: fin ? C.fin.knock : 0.3, frac: fin ? C.fin.frac : null });
+    const fin = p.combo === 2, ring = fin && C.fin.ring;
+    g.fxA(p, 'chop', { s: 'chop', n: p.combo, r: ring || C.r, fin: fin ? 1 : 0, sty: g.styleNum(p, 'chop', null) ? p.style : undefined });
+    const opts = { heavy: C.heavy ? C.heavy[p.combo] : true, knock: fin ? C.fin.knock : 0.3, frac: fin ? C.fin.frac : C.frac || null };
+    if (ring) g.hitCircle(p, p.x, p.z, ring, c.atk * C.mult[p.combo], opts); // Warhammer: the third blow smashes all around
+    else g.hitArc(p, C.r, C.half, c.atk * C.mult[p.combo], opts);
     return g.raging(p) ? p.brA.haste : 1; // Bloodrage / Frenzy: faster swings
   },
   cleave(g, p, c) {
-    const C = BT.cleave, rage = p.rage || 0;
+    const C = BT.cleave, rage = p.rage || 0, twin = g.styleNum(p, 'cleaveTwin', 0); // Twin Axes: a second sweep
     g.fxA(p, 'cleave', { s: 'cleave', r: C.r, h: C.half, rage: Math.round(rage) });
     g.hitArc(p, C.r, C.half, c.atk * (C.mult + (C.rage * rage) / 100), { sk: c.S, heavy: true, knock: 1.2 });
+    if (twin) g.schedule(0.22, () => {
+      if (!c.alive()) return;
+      g.fxA(p, 'cleave', { r: C.r, h: C.half, rage: Math.round(p.rage || 0), tw: 1 });
+      g.hitArc(p, C.r, C.half, c.atkNow() * twin * (C.mult + (C.rage * (p.rage || 0)) / 100), { sk: c.S, heavy: true, knock: 0.6 });
+    });
   },
   whirlingaxe(g, p, c) {
     const W = BT.whirlaxe;
@@ -201,7 +208,7 @@ export const ClassesAMethods = {
   // ---------- dispatch (from useSkill) ----------
   // Returns true when p is a Ranger / Berserker: the skill was handled here (used or refused).
   classSkillA(p, slot, sk) {
-    if (!CLASSES_A.has(p.cls)) return false;
+    if (!CLASSES_A.has(p.cls) || (slot === 0 && this.styleOwnsBasic(p))) return false; // Twin Daggers: game.js / styleSkill
     const t = this.time;
     const S = slot > 0 ? sk.id : undefined, pow = slot > 0 ? this.skillPow(p, sk.id) : 1, br = slot > 0 ? this.branchOf(p, sk.id) : null;
     const id = br ? BRANCHES[sk.id][br].id : sk.id, fn = SKILLS[id];
@@ -248,13 +255,14 @@ export const ClassesAMethods = {
 
   // ---------- arrows ----------
   arrowsA() { return (this.arrowList ||= []); },
-  // o: { a (angle, default p.face), tg (mob to steer toward), sp, range, rad, dmg, opts (damageMob), pierce, k (visual) }
+  // o: { a (angle, default p.face), tg (mob to steer toward), sp, range, rad, dmg, opts (damageMob), pierce, pierceN (extra
+  //   enemies it passes through: Crossbow), k (visual) }
   fireArrowA(p, o) {
     const A = RT.arrow;
     const ar = {
       id: this.id(), by: p.id, x: p.x, z: p.z, ox: p.x, oz: p.z, a: o.a ?? p.face, tg: o.tg?.id || 0,
       sp: o.sp || A.speed, range: (o.range || A.range) + (o.tg ? o.tg.def.radius : 0), rad: o.rad ?? A.radius, trav: 0,
-      dmg: o.dmg, opts: o.opts || {}, pierce: !!o.pierce, hit: new Set(), k: o.k || 'shot',
+      dmg: o.dmg, opts: o.opts || {}, pierce: !!o.pierce, left: o.pierceN || 0, hit: new Set(), k: o.k || 'shot',
     };
     this.arrowsA().push(ar);
     this.events.push({ t: 'aproj', id: ar.id, by: p.id, x: r2(ar.x), z: r2(ar.z), a: r2(ar.a), sp: ar.sp, r: r2(ar.range), tg: ar.tg, k: ar.k });
@@ -285,7 +293,7 @@ export const ClassesAMethods = {
       for (const [k, m] of hits) {
         a.hit.add(m.id);
         this.arrowHitA(a, p, m);
-        if (!a.pierce) { hitAt = k; break; }
+        if (!a.pierce && !(a.left-- > 0)) { hitAt = k; break; }
       }
       if (hitAt !== null) {
         a.x += (x1 - a.x) * hitAt; a.z += (z1 - a.z) * hitAt; a.done = true;
@@ -306,7 +314,7 @@ export const ClassesAMethods = {
     const mk = m.markA, dead = mk && mk.dead && mk.by === p.id && this.time < mk.until; // Deadeye: always crits, +20%
     if (dead) dmg *= 1 + mk.self;
     const crit = p.crit;
-    if (dead) p.crit = 1;
+    if (dead || this.styleFirstCrit(p, m)) p.crit = 1; // (Crossbow: the first bolt on a new target)
     this.damageMob(m, p, dmg, a.opts);
     p.crit = crit;
   },
@@ -375,7 +383,7 @@ export const ClassesAMethods = {
   raging(p) { return !!p.brA && this.time < p.brA.until; },
   gainRageA(p, v) {
     if (p.cls !== 'berserker' || !(v > 0)) return;
-    p.rage = Math.min(RAGE.max, (p.rage || 0) + v);
+    p.rage = Math.min(RAGE.max, (p.rage || 0) + v * this.styleNum(p, 'rageGain', 1)); // Twin Axes: +30%
     p.rageAt = this.time;
   },
   payHpA(p, frac) { p.hp = Math.max(1, p.hp - Math.round(p.maxHp * frac)); },
@@ -384,19 +392,20 @@ export const ClassesAMethods = {
   onHurtA(p, amount) { if (p.cls === 'berserker') this.gainRageA(p, (amount / p.maxHp) * RAGE.hurt); },
 
   leapA(p, c, L, { brk = false }) {
+    const R = L.r * this.styleNum(p, 'leapR', 1), hitR = R * (this.tRadius?.(p) ?? 1); // Warhammer, talents (the fx radius is scaled by server/talents.js)
     const tg = this.aimA(p, L.range, 0.6) || this.pickFront(p, L.range, 0.9);
     let lx, lz;
     if (tg) { const a = angleTo(p.x, p.z, tg.x, tg.z); p.face = a; [lx, lz] = this.lineEndA(p, a, Math.max(0, dist(p, tg) - tg.def.radius - 0.8)); }
     else [lx, lz] = this.lineEndA(p, p.face, L.ahead);
     p.airFrom = c.t; p.airUntil = c.t + L.delay + 0.05; // airborne: ground slams pass under
-    this.fxA(p, 'leap', { s: 'leap', x0: r2(p.x), z0: r2(p.z), x2: r2(lx), z2: r2(lz), r: L.r, d: L.delay, big: brk ? 1 : 0 });
+    this.fxA(p, 'leap', { s: 'leap', x0: r2(p.x), z0: r2(p.z), x2: r2(lx), z2: r2(lz), r: r2(R), d: L.delay, big: brk ? 1 : 0 });
     this.schedule(L.delay, () => {
       if (!c.alive()) return;
       this.teleport(p, lx, lz);
-      this.events.push({ t: 'fx', k: 'ca', v: 'slam', id: p.id, x: r2(lx), z: r2(lz), r: L.r, big: brk ? 1 : 0 });
+      this.events.push({ t: 'fx', k: 'ca', v: 'slam', id: p.id, x: r2(lx), z: r2(lz), r: r2(hitR), big: brk ? 1 : 0 });
       const now = this.time;
       for (const m of [...this.mobs.values()]) {
-        if (!this.targetable(m) || Math.hypot(m.x - lx, m.z - lz) > L.r + m.def.radius) continue;
+        if (!this.targetable(m) || Math.hypot(m.x - lx, m.z - lz) > hitR + m.def.radius) continue;
         if (!m.def.boss) m.launchUntil = now + 0.7;
         this.damageMob(m, p, c.atkNow() * L.mult, { sk: c.S, stun: L.stun, heavy: true, knock: 1, threat: 1.3, ...(brk ? { brk: true } : { frac: L.frac }) });
       }

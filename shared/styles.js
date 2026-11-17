@@ -4,14 +4,21 @@
 // animations, hit effects, tooltips). No imports, so items.js / crafting.js can import it without a cycle.
 
 // Order is the wire format (the style index at the end of each snapshot player row): append only, never reorder.
-export const STYLE_IDS = ['sword', 'dual', 'rapier', 'shield', 'mace', 'spear', 'staff', 'tome', 'wand'];
+export const STYLE_IDS = ['sword', 'dual', 'rapier', 'shield', 'mace', 'spear', 'staff', 'tome', 'wand',
+  'longbow', 'crossbow', 'daggers', 'greataxe', 'twinaxes', 'warhammer', 'lance', 'halberd', 'glaive', 'lyre', 'drum', 'flute'];
 
 // basic: the styled basic attack (default styles have none: the original combo in game.js runs unchanged).
 //   cd: seconds between presses · window: seconds to keep the combo going · aim: auto-aim range (client)
 //   steps[i]: one press of the combo. shape 'arc' (r, half), 'line' (len, w: a thrust through everything in a line),
 //   'ring' (r: around you), 'bolt' (len: the first enemy along a ray). mult: x attack. knock, heavy (x2 posture),
 //   frac: extra posture chunk [normal/elite, boss], twin: a second identical hit this many seconds later.
-// mods: numeric tweaks read by game.js through styleNum(p, key, default).
+//   ring/arc steps may also add `discord` (Bard: Discord stacks on every enemy hit) and `sweet` ([from m, x damage] for
+//   enemies whose near edge is that far away: the Lancer's tip-of-reach bonus).
+// mods: numeric tweaks read by game.js and the class files through styleNum(p, key, default).
+// The newer classes (Ranger, Berserker, Lancer, Bard) implement their basic attacks in server/classes-a.js / classes-b.js;
+// a style there either has `basic` steps (it replaces the class attack: Twin Daggers, Halberd, Drum) or tunes the class
+// attack through mods: basicCd (x the basic attack's cooldown) and arrow / chop / thrust / bolt (overrides merged over
+// RANGER_TUNE.arrow, BERSERKER_TUNE.chop, LANCE, SONG.bolt).
 export const STYLES = {
   // ---------- Swordsman ----------
   sword: {
@@ -115,6 +122,107 @@ export const STYLES = {
       steps: [{ shape: 'bolt', len: 12, w: 1.2, mult: 0.72, interrupt: true }],
     },
   },
+  // ---------- Ranger ----------
+  longbow: {
+    cls: 'ranger', name: 'Longbow', noun: 'Longbow', def: true,
+    desc: 'Arrows from range; every third hits harder. Weak point-blank.',
+  },
+  crossbow: {
+    cls: 'ranger', name: 'Crossbow', noun: 'Crossbow',
+    desc: 'Slower, heavier bolts (1 s) that punch through one extra enemy; every third still hits hardest.',
+    passive: 'Your first bolt on an enemy you haven\'t hit yet is a critical hit.',
+    tweak: 'Piercing Shot (and its evolutions) draws 40% faster.',
+    mods: { basicCd: 1.65, arrow: { mult: [1.75, 1.75, 2.4], speed: 46, pierceN: 1, combo: 2.1, k: 'xbolt', kFin: 'xheavy' }, firstCrit: 1, drawMul: 0.6 },
+  },
+  daggers: {
+    cls: 'ranger', name: 'Twin Daggers', noun: 'Twin Daggers',
+    desc: 'Melee instead of the bow: a fast 4-hit dagger combo (0.4 s); the 4th is a double stab.',
+    passive: 'Dagger hits have a 12% chance to put a 4 s Hunter\'s Mark on the enemy.',
+    tweak: 'Disengage is ready again whenever you kill an enemy.',
+    mods: { markChance: [0.12, 4], killReset: 'disengage' },
+    basic: {
+      cd: 0.4, window: 0.9, aim: 5, threat: 1,
+      steps: [
+        { shape: 'arc', r: 2.7, half: 1.0, mult: 0.8, knock: 0.15 },
+        { shape: 'arc', r: 2.7, half: 1.0, mult: 0.8, knock: 0.15 },
+        { shape: 'arc', r: 2.7, half: 1.0, mult: 0.8, knock: 0.15 },
+        { shape: 'arc', r: 2.9, half: 1.1, mult: 0.75, knock: 0.6, heavy: true, frac: [0.05, 0.015], twin: 0.12, fin: true },
+      ],
+    },
+  },
+  // ---------- Berserker ----------
+  greataxe: {
+    cls: 'berserker', name: 'Greataxe', noun: 'Greataxe', def: true,
+    desc: 'Slow, heavy 3-hit axe combo with big posture damage.',
+  },
+  twinaxes: {
+    cls: 'berserker', name: 'Twin Axes', noun: 'Twin Axes',
+    desc: 'A faster 3-hit combo (0.55 s) with lighter hits and less posture damage (only the third swing is heavy).',
+    passive: 'You build Rage 30% faster.',
+    tweak: 'Cleave strikes twice (the second sweep at 60%).',
+    mods: { basicCd: 0.65, chop: { r: 3.1, half: 1.0, mult: [0.9, 0.9, 1.4], heavy: [false, false, true], fin: { knock: 1.6, frac: [0.06, 0.02] } }, rageGain: 1.3, cleaveTwin: 0.6 },
+  },
+  warhammer: {
+    cls: 'berserker', name: 'Warhammer', noun: 'Warhammer',
+    desc: 'The slowest swings (1.25 s), every blow heavy with a posture chunk; the third smashes the ground all around you.',
+    passive: 'Breaks you cause last 1 s longer (0.5 s on bosses).',
+    tweak: 'Leap Slam (and its evolutions) lands in a 35% wider ring.',
+    mods: { basicCd: 1.45, chop: { r: 3.5, half: 1.2, mult: [2.0, 2.0, 3.0], frac: [0.05, 0.015], fin: { knock: 3, frac: [0.16, 0.05], ring: 3.8 } }, breakBonus: [1.0, 0.5], leapR: 1.35 },
+  },
+  // ---------- Lancer ----------
+  lance: {
+    cls: 'lancer', name: 'Spear', noun: 'Spear', def: true,
+    desc: '3-hit thrusts along a 4.6-5.4 m line; +30% at the tip of your reach.',
+  },
+  halberd: {
+    cls: 'lancer', name: 'Halberd', noun: 'Halberd',
+    desc: 'Sweeping arcs instead of lines (4 m, the third 4.6 m and wide); still +30% at the tip of the reach.',
+    passive: 'The hooked blade slows every enemy you hit by 25% for 2 s (half on bosses).',
+    tweak: 'Sweep radius +30%.',
+    mods: { hookSlow: [0.25, 2], sweepR: 1.3 },
+    basic: {
+      cd: 0.7, window: 1.1, aim: 5.5, threat: 1,
+      steps: [
+        { shape: 'arc', r: 4.0, half: 0.9, mult: 1.0, knock: 0.3, sweet: [2.4, 1.3] },
+        { shape: 'arc', r: 4.0, half: 0.9, mult: 1.0, knock: 0.3, sweet: [2.4, 1.3] },
+        { shape: 'arc', r: 4.6, half: 1.5, mult: 1.5, knock: 1.2, heavy: true, sweet: [2.4, 1.3], fin: true },
+      ],
+    },
+  },
+  glaive: {
+    cls: 'lancer', name: 'Glaive', noun: 'Glaive',
+    desc: 'The longest thrusts (5.6-6.4 m), a little slower (0.7 s).',
+    passive: 'Hits at the tip of your reach (3.4 m+) deal +50% instead of +30%.',
+    tweak: 'Lance Charge dashes 12 m (9 m).',
+    mods: { basicCd: 1.15, thrust: { reach: 5.6, finReach: 6.4, mult: 1.0, finMult: 1.55, sweetFrom: 3.4, sweetMult: 1.5 }, chargeLen: 1.35 },
+  },
+  // ---------- Bard ----------
+  lyre: {
+    cls: 'bard', name: 'Lyre', noun: 'Lyre', def: true,
+    desc: 'Sonic Bolt: an 11 m bolt that adds a Discord stack.',
+  },
+  drum: {
+    cls: 'bard', name: 'War Drum', noun: 'War Drum',
+    desc: 'Short-range shockwaves all around you (3.4 m, the third 4.4 m and interrupts) that add a Discord stack to everything they hit.',
+    passive: 'Enemies with 3+ Discord stacks take 10% more damage from your whole party.',
+    tweak: 'Anthem (and its evolutions) plays 40% longer.',
+    mods: { warDrums: [3, 0.1], songDur: 1.4 },
+    basic: {
+      cd: 0.9, window: 1.3, aim: 4, threat: 1.2,
+      steps: [
+        { shape: 'ring', r: 3.4, mult: 0.75, knock: 0.4, discord: 1 },
+        { shape: 'ring', r: 3.4, mult: 0.75, knock: 0.4, discord: 1 },
+        { shape: 'ring', r: 4.4, mult: 1.0, knock: 1.4, heavy: true, interrupt: true, discord: 1, fin: true },
+      ],
+    },
+  },
+  flute: {
+    cls: 'bard', name: 'Flute', noun: 'Flute',
+    desc: 'Quick, long-range bolts (16 m, 0.45 s) that hit lighter.',
+    passive: 'Every second bolt that lands adds 2 Discord stacks instead of 1.',
+    tweak: 'Dissonance (and Shattering Chord) sounds in a 50% wider cone.',
+    mods: { basicCd: 0.65, bolt: { speed: 36, range: 16, radius: 0.45, mult: 0.62 }, fluteStacks: 2, chordHalf: 1.5, aim: 16 },
+  },
 };
 
 export const CLASS_STYLES = {};
@@ -135,6 +243,10 @@ const PREFIX = {
   swordsman: ['Iron', 'Tempered', 'Duskglass', 'Storm'],
   guardian: ['Iron', 'Tempered', 'Bastion', 'Oathbound'],
   cleric: ['Ash', 'Willow', 'Lumen', 'Dawn'],
+  ranger: ['Hunting', 'Ashwood', 'Galeshot', 'Skyreaver'],
+  berserker: ['Woodcutter', 'Bearded', 'Ravager', 'Worldsplitter'],
+  lancer: ['Ash', 'Tempered', 'Galeglass', 'Skyreaver'],
+  bard: ['Pine', 'Maple', 'Resonant', 'Dawnsong'],
 };
 export const styleItemName = (id, rarity) => `${PREFIX[STYLES[id].cls]?.[Math.min(3, rarity)] || 'Fine'} ${STYLES[id].noun}`;
 
@@ -174,6 +286,22 @@ export const STYLE_RECIPES = [
     gold: 180, mats: { resin: 10, dust: 4, ess: 1 }, desc: 'Amber that holds a spark. Cleric.' },
   { id: 'hornmaul', name: 'Hornmaul Mace & Shield', style: 'mace', slot: 'weapon', r: 3, cls: true, st: { atk: 22, crit: 3 },
     gold: 500, mats: { horn: 6, core: 2, ess: 3 }, desc: 'The Warden\'s horn as a mace head. Guardian.' },
+  { id: 'tuskbolt', name: 'Tuskbolt Crossbow', style: 'crossbow', slot: 'weapon', r: 2, cls: true, st: { atk: 15, crit: 3 },
+    gold: 180, mats: { tusk: 8, resin: 3, dust: 4, ess: 1 }, desc: 'Ivory-tipped bolts and a resin-glued stock. Ranger.' },
+  { id: 'fangpair', name: 'Fangpair Twin Daggers', style: 'daggers', slot: 'weapon', r: 2, cls: true, st: { atk: 14, crit: 5 },
+    gold: 180, mats: { fang: 2, pelt: 5, dust: 4, ess: 1 }, desc: 'Two Alpha fangs, honed to a point. Ranger.' },
+  { id: 'peltcleavers', name: 'Peltcleaver Twin Axes', style: 'twinaxes', slot: 'weapon', r: 2, cls: true, st: { atk: 14, crit: 4 },
+    gold: 180, mats: { pelt: 8, tusk: 3, dust: 4, ess: 1 }, desc: 'A pair of hide-wrapped hatchets. Berserker.' },
+  { id: 'tuskhammer', name: 'Tuskhammer Warhammer', style: 'warhammer', slot: 'weapon', r: 2, cls: true, st: { atk: 15, crit: 2 },
+    gold: 180, mats: { tusk: 10, resin: 2, dust: 4, ess: 1 }, desc: 'A boar-ivory maul. Berserker.' },
+  { id: 'resinhalberd', name: 'Resinhook Halberd', style: 'halberd', slot: 'weapon', r: 2, cls: true, st: { atk: 14, crit: 3 },
+    gold: 180, mats: { resin: 8, pelt: 3, dust: 4, ess: 1 }, desc: 'A hooked blade on an amber-bound haft. Lancer.' },
+  { id: 'fangglaive', name: 'Fangreach Glaive', style: 'glaive', slot: 'weapon', r: 2, cls: true, st: { atk: 14, crit: 4 },
+    gold: 180, mats: { fang: 2, tusk: 4, dust: 4, ess: 1 }, desc: 'An Alpha fang at the end of a very long pole. Lancer.' },
+  { id: 'hidedrum', name: 'Direhide War Drum', style: 'drum', slot: 'weapon', r: 2, cls: true, st: { atk: 14, crit: 3 },
+    gold: 180, mats: { pelt: 10, dust: 4, ess: 1 }, desc: 'Dire-wolf hide stretched tight. Bard.' },
+  { id: 'resinflute', name: 'Resinsong Flute', style: 'flute', slot: 'weapon', r: 2, cls: true, st: { atk: 14, crit: 4 },
+    gold: 180, mats: { resin: 8, fang: 1, dust: 4, ess: 1 }, desc: 'Amber that sings when you breathe through it. Bard.' },
 ];
 
 // Tooltip text for an item (client): "Dual Blades — passive ..." or '' for non-weapons.
