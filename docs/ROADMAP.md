@@ -102,7 +102,7 @@ One row per task. Whoever picks a task sets **Status** and **Owner** here first 
 |---|---|---|---|---|
 | F1 Speech bubbles | `feat/bubbles` | in progress | agent bubbles | |
 | F2 Scene director | `feat/director` | in progress | agent director | |
-| F3 Staging hooks | `feat/staging` | in progress | agent staging | |
+| F3 Staging hooks | `feat/staging` | done | agent staging | 497be53 |
 | F4 Cinematic camera | `feat/cinecam` | in progress | agent cinecam | |
 | F5 Poses | `feat/poses` | in progress | agent poses | |
 | F6 The Tower Bell and the engraved Hall | `feat/bell` | in progress | agent bell | |
