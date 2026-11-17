@@ -22,6 +22,7 @@ import { initClassesB } from '/classes-b.js';
 import { initClassesA } from '/classes-a.js';
 import { initStyles } from '/styles.js';
 import { initPlayerBots } from '/playerbots.js';
+import { snapPoses, poseFrame } from '/poses.js'; // kneel / sit / bow (F5)
 import { initTalents } from '/talents.js';
 import { initBotWheel } from '/botwheel.js';
 import { initCine } from '/cine.js'; // film view camera, titles, fades, letterbox, light (F4)
@@ -335,6 +336,7 @@ function onSnapshot({ me, w }) {
     }
   }
   for (const [id, e] of players) if (!seen.has(id)) { removeEntity(e); players.delete(id); }
+  if (snapPoses(w.poses, players).has(state.myId)) guide.tip('poses'); // held poses (public/poses.js)
 
   const seenM = new Set();
   for (const a of w.mobs) {
@@ -1298,7 +1300,7 @@ $('sound-btn').textContent = sfx.on ? 'Sound on' : 'Sound off';
 $('sound-btn').onclick = () => { sfx.unlock(); $('sound-btn').textContent = sfx.toggle() ? 'Sound on' : 'Sound off'; };
 $('lock-btn').onpointerdown = e => { e.preventDefault(); cycleLock(); };
 canvas.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
-$('chat-btn').onclick = () => { const t = prompt('Say something (/p party, /s nearby, /b bot orders: /b help)'); if (t) sendChat(t); };
+$('chat-btn').onclick = () => { const t = prompt('Say something (/p party, /s nearby, /b bot orders: /b help, /sit /kneel /bow /stand)'); if (t) sendChat(t); };
 // Chat channels: "/p text" party, "/s text" say (nearby); anything else goes to everyone ("/b ..." bot orders: the server
 // reads them, shared/bots/social.js parseBotChat; they never show as chat).
 function sendChat(raw) {
@@ -1608,7 +1610,8 @@ function animateEntity(e, dt) {
     const dirSign = isP && e.back > 0.5 ? -1 : 1;
     if (e.spd > (isP ? 3.5 : 4.6)) a.base(dirSign < 0 ? 'Walking_A' : 'Running_A', 0.2, dirSign * Math.max(0.7, e.spd / (isP ? (dirSign < 0 ? 4.5 : 6.5) : 5.5)));
     else if (e.spd > 0.5) a.base('Walking_A', 0.2, dirSign * (isP ? 1.2 : Math.max(0.6, e.spd / 3.5)));
-    else a.base(a.idle, 0.25);
+    else a.base(a.posed ? 'Idle' : a.idle, 0.25); // a held pose is tuned over the plain Idle
+    if (isP) poseFrame(e, a);
     a.update(hitStop > 0 ? dt * 0.08 : dt);
     if (isP) m.cursor.material.color.setHex(state.party && e.party === state.party && !self ? 0xa78bfa : 0x4ade80);
     else m.cursor.rotation.y += dt * 2;
