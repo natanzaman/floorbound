@@ -31,6 +31,7 @@ const TIPS = {
   perfect: 'PERFECT dodge! Rolling just before a hit lands staggers the attacker\'s posture, and your next hit does +50% damage.',
   peril: 'Orange = perilous: dodge through it or parry (Guardian R). Shields won\'t save you.',
   rguard: 'R is the Guardian\'s guard: hold it to block, tap it just before a hit to parry.',
+  bubbles: 'Chat lines pop up as speech bubbles over the speaker\'s head: /s is heard nearby, /p by your party. Settings turns bubbles off; the chat log keeps everything.',
   bots: 'Bots in your party take orders: hold V for the order wheel, or type /b stay, /b follow, /b Lyra: heal (one bot). /b help lists them all; ordinary chat never gives orders.',
 };
 

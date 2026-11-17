@@ -25,6 +25,7 @@ import { initPlayerBots } from '/playerbots.js';
 import { initTalents } from '/talents.js';
 import { initBotWheel } from '/botwheel.js';
 import { initCine } from '/cine.js'; // film view camera, titles, fades, letterbox, light (F4)
+import { initBubbles } from '/bubbles.js';
 
 const sfx = new Sound();
 
@@ -226,6 +227,7 @@ function reconnect(joinMsg) {
 }
 const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
 const wheel = initBotWheel({ send, state, players, log }); // orders for the bots in your party: hold V (public/botwheel.js)
+const bubbles = initBubbles({ state, players, project, camera, layer: $('labels'), enabled: () => settings.bubbles !== false }); // speech bubbles over heads (public/bubbles.js)
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
@@ -615,6 +617,7 @@ function handleEvent(e) {
       break;
     case 'invite': if (e.to === me) showInvite(e.from, e.name); break;
     case 'chat': // ch 'p': party chat (only your party sees it), 's': say (heard within 40 m)
+      if (bubbles.chat(e) && e.id !== me && !state.spectator) guide.tip('bubbles'); // a bubble over the speaker's head (same rules as the log)
       if (e.ch === 'p') { if (state.party && e.party === state.party) log(`[Party] ${e.from}: ${e.text}`, e.id === me ? 'me party' : 'party'); break; }
       if (e.ch === 's') { if (state.spectator || Math.hypot(e.x - state.x, e.z - state.z) < 40) log(`${e.from} says: ${e.text}`, e.id === me ? 'me' : 'say'); break; }
       log(`${e.from}: ${e.text}`, e.id === me ? 'me' : ''); break;
@@ -737,7 +740,7 @@ addEventListener('blur', () => { keys.clear(); attackHeld = false; combat.guard(
 // ---------- settings: camera control ----------
 // 'mouse' (default): the camera follows the mouse (pointer lock; click the game to capture the cursor, Esc to free it).
 // 'classic': right-drag to look, or rest the cursor at a screen edge to turn.
-const settings = Object.assign({ camera: 'mouse', sens: 1, invertY: false }, (() => { try { return JSON.parse(localStorage.getItem('fb_settings') || '{}'); } catch { return {}; } })());
+const settings = Object.assign({ camera: 'mouse', sens: 1, invertY: false, bubbles: true }, (() => { try { return JSON.parse(localStorage.getItem('fb_settings') || '{}'); } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem('fb_settings', JSON.stringify(settings)); } catch {} };
 const mouseLook = () => settings.camera === 'mouse' && !isTouch;
 const locked = () => document.pointerLockElement === canvas;
@@ -772,7 +775,9 @@ function renderSettings() {
     <label class="opt"><input type="radio" name="cam" value="classic" ${settings.camera === 'classic' ? 'checked' : ''}> Classic <small>right-drag to look · rest the cursor at a screen edge to turn</small></label>
     <h4>Mouse sensitivity <span id="sens-v">${settings.sens.toFixed(1)}×</span></h4>
     <input type="range" min="0.3" max="3" step="0.1" value="${settings.sens}" data-a="sens">
-    <label class="opt"><input type="checkbox" data-a="inv" ${settings.invertY ? 'checked' : ''}> Invert vertical look</label>`;
+    <label class="opt"><input type="checkbox" data-a="inv" ${settings.invertY ? 'checked' : ''}> Invert vertical look</label>
+    <h4>Chat</h4>
+    <label class="opt"><input type="checkbox" data-a="bub" ${settings.bubbles !== false ? 'checked' : ''}> Speech bubbles <small>chat lines over the speaker's head (the chat log keeps everything)</small></label>`;
 }
 $('settings-btn').onclick = () => { const el = $('settings'); el.classList.toggle('hidden'); if (!el.classList.contains('hidden')) renderSettings(); sfx.play('ui'); };
 $('settings').addEventListener('click', e => { if (e.target.closest('[data-a=close]')) $('settings').classList.add('hidden'); });
@@ -781,6 +786,7 @@ $('settings').addEventListener('input', e => {
   if (t.name === 'cam') { settings.camera = t.value; if (t.value === 'classic') freeCursor(); }
   if (t.dataset.a === 'sens') { settings.sens = +t.value; $('sens-v').textContent = `${settings.sens.toFixed(1)}×`; }
   if (t.dataset.a === 'inv') settings.invertY = t.checked;
+  if (t.dataset.a === 'bub') { settings.bubbles = t.checked; if (!t.checked) bubbles.clear(); }
   saveSettings();
 });
 
@@ -1880,6 +1886,7 @@ function frame(now) {
   sfx.listener.x = cx; sfx.listener.z = cz;
 
   drawFloats(dt, vdt);
+  bubbles.frame();
 
   if (state.joined) updateHud(now);
   updateRareHint(now);
@@ -1888,4 +1895,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { state, players, mobs, banner, sfx, project, floatLog, cine, camera };
+window.__fb = { state, players, mobs, banner, sfx, project, floatLog, cine, camera, bubbles };
