@@ -52,8 +52,36 @@ export function initBotWheel({ send, state, players, log }) {
   // the wheel covers the screen: a click outside the ring closes it
   el.addEventListener('pointerdown', e => { if (e.target === el) close(); });
 
+  // Small order menu next to a party frame: one bot (name) or all bots ('').
+  const menuEl = document.createElement('div');
+  menuEl.id = 'botmenu'; menuEl.className = 'panel hidden';
+  document.getElementById('hud').appendChild(menuEl);
+  let menuWho = '';
+  function menu(rect, name = '') {
+    if (!state.joined || state.spectator || !partyBots().length) return;
+    menuWho = name;
+    const cmds = Object.entries(BOT_COMMANDS);
+    menuEl.innerHTML = `<div class="bm-head"><b>${esc(name || 'All bots')}</b><button class="bm-x" title="Close">✕</button></div>`
+      + `<div class="bm-grid">${cmds.map(([id, c]) => `<button data-mc="${id}" class="${id === 'leave' ? 'dismiss' : ''}"><span class="ic">${c.icon}</span>${esc(id === 'leave' ? (name ? 'Dismiss' : 'Dismiss all') : c.label)}</button>`).join('')}</div>`;
+    menuEl.classList.remove('hidden');
+    const top = Math.min(innerHeight - menuEl.offsetHeight - 10, Math.max(10, rect.top));
+    menuEl.style.left = `${Math.round(rect.right + 8)}px`; menuEl.style.top = `${Math.round(top)}px`;
+  }
+  const menuOpen = () => !menuEl.classList.contains('hidden');
+  const closeMenu = () => menuEl.classList.add('hidden');
+  menuEl.addEventListener('click', e => {
+    if (e.target.closest('.bm-x')) return closeMenu();
+    const c = e.target.closest('[data-mc]'); if (!c) return;
+    const cmd = c.dataset.mc;
+    send({ type: 'botcmd', cmd, ...(menuWho ? { name: menuWho } : {}) });
+    log(`→ ${menuWho || 'Bots'}: ${BOT_COMMANDS[cmd].label}`, 'party');
+    closeMenu();
+  });
+  addEventListener('pointerdown', e => { if (menuOpen() && !menuEl.contains(e.target) && !e.target.closest?.('#party')) closeMenu(); });
+  addEventListener('keydown', e => { if (e.key === 'Escape' && menuOpen()) closeMenu(); });
+
   return {
-    open, close, isOpen, el,
+    open, close, isOpen, el, menu, menuOpen, closeMenu,
     keydown(e) { // V pressed (not repeating)
       if (isOpen() && !key) { close(); return; } // second tap closes
       key = true; open();

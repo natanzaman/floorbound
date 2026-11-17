@@ -705,7 +705,7 @@ addEventListener('mousemove', e => {
   state.pitch = Math.min(1.25, Math.max(0.12, state.pitch + e.movementY * s * (settings.invertY ? -1 : 1)));
 });
 // Panels need the cursor: free it whenever one is open.
-const CURSOR_PANELS = ['players', 'bag', 'hall', 'warp', 'smith', 'skillsp', 'settings', 'talentsp', 'botwheel'];
+const CURSOR_PANELS = ['players', 'bag', 'hall', 'warp', 'smith', 'skillsp', 'settings', 'talentsp', 'botwheel', 'botmenu'];
 function cursorPanelOpen() { return CURSOR_PANELS.some(id => { const el = $(id); return el && !el.classList.contains('hidden'); }); }
 // Top-right chips: lay them out right-to-left by their real widths, so a long gold count never overlaps a neighbour.
 function layoutChips() {
@@ -1198,7 +1198,14 @@ function updateGateBox(force) {
 // ---------------- HUD ----------------
 const logEl = $('log');
 let hudParty = '';
-$('party').addEventListener('pointerdown', e => { if (e.target.closest('#bots-btn')) { e.preventDefault(); if (wheel.isOpen()) wheel.close(); else wheel.open(); } });
+// Party frames: click a bot's frame for its own orders, or "All bots" for orders to every bot (V still opens the wheel).
+$('party').addEventListener('pointerdown', e => {
+  const all = e.target.closest('#bots-btn'), one = e.target.closest('.frame[data-bot]');
+  if (!all && !one) return;
+  e.preventDefault(); e.stopPropagation();
+  const el = all || one;
+  if (wheel.menuOpen()) wheel.closeMenu(); else wheel.menu(el.getBoundingClientRect(), all ? '' : one.dataset.bot);
+});
 function log(text, cls = '') {
   const d = document.createElement('div');
   d.className = cls; d.textContent = text;
@@ -1314,8 +1321,9 @@ function updateHud(now) {
   const mates = state.spectator ? [...players.values()] : state.party ? [...players.values()].filter(p => p.party === state.party && p.id !== state.myId) : [];
   const partyHtml = mates.map(p => {
     const pc = (p.hp / p.maxHp) * 100, bot = state.roster.get(p.id)?.bot;
-    return `<div class="frame ${p.dead ? 'dead' : ''}"><div class="row" style="font-size:12px;margin:0"><span>${esc(p.name)}${bot ? ' <small class="bottag">BOT</small>' : ''}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div>${classesA.frameBar(p)}</div>`;
-  }).join('') + (!state.spectator && mates.some(p => state.roster.get(p.id)?.bot) ? `<button id="bots-btn" class="pbtn" title="Orders for your bots (hold V)">⌘ Bot orders <small>V</small></button>` : '');
+    const nm = state.roster.get(p.id)?.name || p.name;
+    return `<div class="frame ${p.dead ? 'dead' : ''} ${bot && !state.spectator ? 'botf' : ''}" ${bot && !state.spectator ? `data-bot="${esc(nm)}" title="Click for ${esc(nm)}'s orders"` : ''}><div class="row" style="font-size:12px;margin:0"><span>${bot && !state.spectator ? '<span class="bcmd">⌘</span> ' : ''}${esc(p.name)}${bot ? ' <small class="bottag">BOT</small>' : ''}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div>${classesA.frameBar(p)}</div>`;
+  }).join('') + (!state.spectator && mates.some(p => state.roster.get(p.id)?.bot) ? `<button id="bots-btn" class="pbtn" title="Orders for all your bots (or hold V for the wheel)">⌘ All bots <small>V</small></button>` : '');
   if (partyHtml !== hudParty) { hudParty = partyHtml; $('party').innerHTML = partyHtml; }
 
   // boss bar (the boss of the floor you're on)
