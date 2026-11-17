@@ -27,7 +27,7 @@ function makeBow() {
   const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.22, 6), dark);
   grip.position.x = -0.12; g.add(grip);
   const span = 2 * 0.62 * Math.sin(Math.PI * 0.31);
-  const str = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, span, 3), new THREE.MeshBasicMaterial({ color: 0xe7e5e4 }));
+  const str = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, span, 3), new THREE.MeshStandardMaterial({ color: 0xe7e5e4, roughness: 0.5 })); // Standard: main.js flashes every rig material's emissive
   str.position.x = 0.5 + Math.cos(Math.PI - Math.PI * 0.31) * 0.62; g.add(str);
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
   return g;
