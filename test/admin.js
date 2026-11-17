@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import pg from 'pg';
 import { MASTERY, masterySkills } from '../shared/mastery.js';
+import { CLASS_IDS, MAX_LEVEL } from '../shared/data.js';
+import { spentOf, pointsAt, allocError } from '../shared/talents.js';
 
 const DB = process.env.DATABASE_URL;
 if (!DB) { console.log('skipped: set DATABASE_URL to run the admin tests'); process.exit(0); }
@@ -179,6 +181,19 @@ try {
   await until(() => watcher.last.roster && !watcher.last.roster.players.some(p => p.bot), 4000, 'all bots gone');
   ok(r.body.removed === 4, 'remove all bots');
   watcher.ws.close();
+
+  // ---------- maxed preset (every class) ----------
+  for (const cls of CLASS_IDS) {
+    const m = await mk(userTok, `Mx${cls.slice(0, 5)}${tag}`.slice(0, 16), cls);
+    r = await call('PATCH', `/api/admin/characters/${m.id}`, adminTok, { preset: 'maxed' });
+    const c = r.body.character;
+    const good = r.status === 200 && c.lvl === MAX_LEVEL && c.stats.floor2 === 1
+      && Object.values(c.mastery).every(e => e.pts >= MASTERY.need[MASTERY.max])
+      && spentOf(c.talents) === pointsAt(MAX_LEVEL) && !allocError(cls, c.talents, MAX_LEVEL)
+      && c.inv.eq.weapon?.cls === cls && c.inv.eq.weapon.r === 3 && c.inv.eq.armor?.la === 2 && c.inv.eq.charm?.la === 1 && c.inv.cons.potion >= 20;
+    ok(good, `maxed preset: ${cls} (Lv ${c?.lvl}, ${spentOf(c?.talents)} talents, ${c?.inv?.eq?.weapon?.name})`);
+    await call('DELETE', `/api/admin/characters/${m.id}`, adminTok, { confirm: c.name });
+  }
 
   // ---------- delete ----------
   r = await call('DELETE', `/api/admin/characters/${other.id}`, adminTok, { confirm: 'wrong' });

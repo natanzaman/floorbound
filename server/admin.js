@@ -15,7 +15,7 @@ import { MAT_IDS } from '../shared/crafting.js';
 import { STAT_KEYS, TITLE_BY_ID, newStats } from '../shared/titles.js';
 import { floorOf } from '../shared/floor2.js';
 import { MASTERY, BRANCHES, newMastery, masteryLevel } from '../shared/mastery.js';
-import { newTalents, allocError } from '../shared/talents.js';
+import { newTalents, allocError, TREES, spendBlock, nodesOf, pointsAt } from '../shared/talents.js';
 import { BEHAVIOURS } from './botmanager.js';
 import * as hall from './hall.js';
 
@@ -200,11 +200,34 @@ function applyEdit(c, body, online) {
       }
     }
   }
+  if (body.preset === 'maxed') maxOut(c);
   for (const op of Array.isArray(body.ops) ? body.ops : []) applyOp(c, op);
   if (allocError(c.cls, c.talents, c.lvl)) { // more points than the level gives
     if (talentsIn !== undefined) throw new Bad(`talents: ${allocError(c.cls, c.talents, c.lvl)}`);
     c.talents = {}; // the level went down: refund everything
   }
+}
+
+// "Maxed" preset: max level, Floor 2, every skill Mastery 5 (evolved), all talent points spent, best gear, a stock of consumables.
+// Talents follow the class's recommended path (TREES[cls].bot), then any points left go to the first node that accepts one.
+// Gear: an Epic weapon with top rolls (keeping the worn weapon's style), Sovereign's Tidecloak and Horn of the Warden.
+// What was worn goes to the bag while there's room.
+function maxOut(c) {
+  c.lvl = MAX_LEVEL; c.xp = 0; c.stats.floor2 = 1;
+  for (const [sk, e] of Object.entries(c.mastery)) { e.pts = Math.max(e.pts | 0, MASTERY.need[MASTERY.max]); if (!e.br && BRANCHES[sk]) e.br = 'A'; }
+  const t = {}, total = pointsAt(c.lvl), want = {};
+  for (const id of TREES[c.cls]?.bot || []) { want[id] = (want[id] || 0) + 1; if ((t[id] | 0) < want[id] && !spendBlock(c.cls, t, c.lvl, id)) t[id] = (t[id] | 0) + 1; }
+  for (let more = true; more;) { more = false; for (const n of nodesOf(c.cls)) if (!spendBlock(c.cls, t, c.lvl, n.id)) { t[n.id] = (t[n.id] | 0) + 1; more = true; break; } }
+  if (Object.values(t).reduce((a, r) => a + r, 0) <= total) c.talents = t;
+  const worn = c.inv.eq.weapon, style = worn?.cls === c.cls ? worn.style : undefined;
+  const top = () => 0.999; // the highest roll for every stat
+  const gear = { weapon: makeItem('weapon', 3, c.cls, top, undefined, style), armor: lastAttackItem2(), charm: lastAttackItem() };
+  for (const s of SLOTS) {
+    const old = c.inv.eq[s];
+    if (old && !(old.la && old.la === gear[s].la) && c.inv.bag.length < BAG_SIZE) c.inv.bag.push(old);
+    gear[s].u = freeU(c.inv); c.inv.eq[s] = gear[s];
+  }
+  for (const k of CONSUMABLE_IDS) c.inv.cons[k] = Math.max(c.inv.cons[k] | 0, 20);
 }
 
 function freeU(inv) {

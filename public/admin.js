@@ -422,7 +422,7 @@ function renderEditor() {
       ${c.online ? `<span class="pill on">online · F${c.floor} · ${esc(c.area)}</span>` : '<span class="pill">offline</span>'}
       <span>account: ${esc(c.account.label)} (#${c.account.id})${c.account.admin ? ' <span class="pill adm">ADMIN</span>' : ''}</span>
       <span class="faint">created ${date(c.created_at)} · last seen ${c.online ? 'now' : ago(c.updated_at)}</span></div></div>
-    <span class="grow"></span><button id="e-reload" class="ghost">↻ Reload</button><button id="e-back">← Players</button></div>
+    <span class="grow"></span><button id="e-max" class="primary" title="Max level, Floor 2, Mastery 5 + evolutions, all talents, best gear, 20 of each consumable">⚡ Maxed preset</button><button id="e-reload" class="ghost">↻ Reload</button><button id="e-back">← Players</button></div>
   <div class="secnav"><a href="#" data-go="e-sec-char">Character</a><a href="#" data-go="e-sec-cons">Consumables &amp; materials</a><a href="#" data-go="e-sec-titles">Titles &amp; stats</a><a href="#" data-go="e-sec-mastery">Skill mastery</a><a href="#" data-go="e-sec-items">Items</a><a href="#" data-go="e-sec-raw">Raw JSON</a><a href="#" data-go="e-sec-danger" style="color:#fca5a5">Delete</a></div>
   <div class="grid">
     <section class="card esec" id="e-sec-char"><h2>Character</h2>
@@ -500,6 +500,10 @@ function wireEditor() {
   for (const a of document.querySelectorAll('.secnav a')) a.onclick = e => { e.preventDefault(); $(a.dataset.go).scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   $('e-back').onclick = () => show('players');
   $('e-reload').onclick = () => openEditor(c.id);
+  $('e-max').onclick = () => {
+    if (!confirm(`Max out ${c.name}?\n\nLevel ${MAX_LEVEL}, Floor 2 unlocked, every skill Mastery 5 with an evolution, all talent points spent (recommended path; current talents are replaced), an Epic weapon with top rolls (same style), Sovereign's Tidecloak, Horn of the Warden and 20 of each consumable. Worn gear goes to the bag if there's room.`)) return;
+    patch({ preset: 'maxed' }, `${c.name} is maxed.`);
+  };
   $('e-lvl').oninput = () => { const l = +$('e-lvl').value; $('e-xpmax').textContent = `(of ${l >= MAX_LEVEL ? 0 : xpToNext(l) || '?'})`; };
   $('e-rename').onclick = () => patch({ name: $('e-name').value }, 'Renamed.');
   if ($('e-setcls')) $('e-setcls').onclick = () => patch({ cls: $('e-cls').value }, 'Class changed.');
