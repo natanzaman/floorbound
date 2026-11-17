@@ -157,6 +157,7 @@ export class Game {
       case 'unequip': return this.unequip(p, String(msg.slot));
       case 'buy': return this.buy(p, msg.i | 0);
       case 'sell': return this.sell(p, msg.u | 0);
+      case 'discard': return this.discard(p, msg.u | 0);
       case 'title': return this.setTitle(p, msg.id);
       case 'smith': return this.smith(p, msg);
       case 'track': // the client's first-time guide reports progress
@@ -351,6 +352,16 @@ export class Game {
     if (s.kind === 'cons') p.inv.cons[s.id] = (p.inv.cons[s.id] || 0) + 1;
     else p.inv.bag.push(makeItem(s.slot, 1, p.cls));
     this.events.push({ t: 'coin', id: p.id });
+    this.invChanged(p);
+  }
+
+  // Throw away a bag item (anywhere; the client asks for a second click first).
+  discard(p, u) {
+    const i = p.inv.bag.findIndex(it => it.u === u);
+    if (i < 0) return;
+    const [it] = p.inv.bag.splice(i, 1);
+    this.sys(`Discarded ${it.name}.`, p.id);
+    this.track(p, 'discard', { r: it.r, slot: it.slot });
     this.invChanged(p);
   }
 

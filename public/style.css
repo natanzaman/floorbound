@@ -325,3 +325,5 @@ input { font: inherit; }
 #smith .cost span.g { color: #fcd34d; }
 #smith .cost span.no { color: #f87171; text-decoration: line-through; text-decoration-color: rgba(248,113,113,.5); }
 #smith .cost i { font-style: normal; opacity: .6; }
+.it button.del { border-color: rgba(248,113,113,.35); background: rgba(248,113,113,.08); padding: 4px 7px; }
+.it button.del.armed { background: #b91c1c; color: #fff; }

@@ -970,7 +970,7 @@ function renderBag() {
     const cur = inv.eq[it.slot], diff = Math.round((mainStat(it) - mainStat(cur)) * 10) / 10; // refined stats have one decimal
     const cmp = it.slot !== 'charm' && cur ? (diff > 0 ? ` <span class="up">▲${diff}</span>` : diff < 0 ? ` <span class="down">▼${-diff}</span>` : '') : !cur ? ' <span class="up">new</span>' : '';
     const usable = !it.cls || it.cls === state.cls;
-    return `<div class="it"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}</div>`;
+    return `<div class="it"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}<button class="del" data-a="discard" data-u="${it.u}" title="Discard">✕</button></div>`;
   }).join('') : '<div class="it empty"><span class="nm"><small>Nothing yet. Enemies drop gear; the Warden always does.</small></span></div>';
   h += smith.matsHtml(inv);
   h += renderTitles(inv.life);
@@ -995,6 +995,10 @@ $('bag').addEventListener('click', e => {
   if (a === 'buy') send({ type: 'buy', i: +b.dataset.i });
   if (a === 'sell') send({ type: 'sell', u: +b.dataset.u });
   if (a === 'equip') send({ type: 'equip', u: +b.dataset.u });
+  if (a === 'discard') { // two clicks: the first arms it
+    if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'Discard?'; setTimeout(() => { b.classList.remove('armed'); b.textContent = '✕'; }, 3000); return; }
+    send({ type: 'discard', u: +b.dataset.u });
+  }
   if (a === 'unequip') send({ type: 'unequip', slot: b.dataset.s });
   if (a === 'use') useItem(b.dataset.id);
   if (a === 'title') send({ type: 'title', id: b.dataset.t || null });
