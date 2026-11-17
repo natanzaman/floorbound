@@ -1,5 +1,7 @@
 // Crafting: materials, the town Smith (refine, salvage, reforge, recipes).
 // Shared by the server (validation, costs, results) and the client (names, costs, the Smith panel).
+import { RANGER_CRAFT } from './classes/ranger.js';
+import { BERSERKER_CRAFT } from './classes/berserker.js';
 
 // Materials live in inv.mats { id: count }, not in bag slots.
 export const MATS = {
@@ -104,6 +106,7 @@ export const charmAffix = it => CHARM_AFFIXES.find(k => (it.b || it.st)[k] !== u
 
 // ---------- recipes ----------
 const CLASS_WEAPON = { swordsman: 'Blade', guardian: 'Longsword', cleric: 'Staff' };
+Object.assign(CLASS_WEAPON, { ranger: RANGER_CRAFT, berserker: BERSERKER_CRAFT }); // shared/classes/
 export const RECIPES = [
   { id: 'tuskbreaker', name: 'Tuskbreaker', slot: 'weapon', r: 2, cls: true, st: { atk: 15, crit: 3 },
     gold: 150, mats: { tusk: 12, dust: 4, ess: 1 }, desc: 'Boar-ivory edge. Your class.' },

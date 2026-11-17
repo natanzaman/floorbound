@@ -1,5 +1,7 @@
 // Shared game data and helpers, imported by both the server and the browser client.
 import { F2, F2_MOB_IDS, F2_MOBS, F2_BITE, inCamp2, walkable2, areaName2, floor2Obstacles } from './floor2.js';
+import { RANGER } from './classes/ranger.js';
+import { BERSERKER } from './classes/berserker.js';
 
 export const TICK_RATE = 20;
 export const PLAYER_SPEED = 7;
@@ -131,6 +133,9 @@ export const CLASSES = {
     ],
   },
 };
+// Ranger and Berserker (shared/classes/), appended so existing class indices never move.
+CLASS_IDS.push('ranger', 'berserker');
+Object.assign(CLASSES, { ranger: RANGER, berserker: BERSERKER });
 
 export const MOB_IDS = ['boar', 'wolf', 'warden', 'alpha', 'spitter', 'hound', 'oldtusk', 'ghostfang', 'thornmother'];
 

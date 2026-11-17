@@ -6,6 +6,8 @@
 // Mastery 2: -10% cooldown. Mastery 3: the skill EVOLVES into one of two branches (pick anywhere the first time,
 // re-pick for free at a Skill Shrine in town). Mastery 4: +10% effect.
 import { CLASSES } from './data.js';
+import { RANGER_BRANCHES } from './classes/ranger.js';
+import { BERSERKER_BRANCHES } from './classes/berserker.js';
 
 export const MASTERY = {
   max: 5,
@@ -75,6 +77,8 @@ export const BRANCHES = {
     B: { id: 'consecrate', name: 'Consecrate', desc: 'Burns enemies inside and fills their posture so allies can Switch. No healing.', coop: 1 },
   },
 };
+
+Object.assign(BRANCHES, RANGER_BRANCHES, BERSERKER_BRANCHES); // Ranger and Berserker (shared/classes/)
 
 export const masterySkills = cls => (CLASSES[cls]?.skills || []).slice(1).map(s => s.id);
 

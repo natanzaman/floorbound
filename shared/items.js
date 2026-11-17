@@ -1,5 +1,7 @@
 // Items: gear (weapon, armour, charm), consumables, drops and the town shop.
 // Shared by the server (rolls, stats) and the client (names, colours, tooltips).
+import { RANGER_WEAPONS } from './classes/ranger.js';
+import { BERSERKER_WEAPONS } from './classes/berserker.js';
 
 export const RARITY = [
   { id: 'common', name: 'Common', color: '#e5e7eb', sell: 5 },
@@ -31,6 +33,7 @@ const WEAPON_NAMES = {
   guardian: ['Iron Longsword', 'Tempered Longsword', 'Bastion Brand', 'Oathkeeper'],
   cleric: ['Ash Staff', 'Willow Staff', 'Lumen Staff', 'Dawnspire'],
 };
+Object.assign(WEAPON_NAMES, { ranger: RANGER_WEAPONS, berserker: BERSERKER_WEAPONS }); // shared/classes/
 const ARMOR_NAMES = ['Padded Vest', 'Riveted Jerkin', 'Wardensteel Mail', 'Aegis of the Field'];
 const CHARM_PREFIX = ['Worn', 'Fine', 'Gleaming', 'Radiant'];
 
