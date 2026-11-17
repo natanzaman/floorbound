@@ -27,7 +27,7 @@ export function installAI({ bots, server = null }, opts = {}) {
   const env = opts.env || process.env;
   const cfg = readConfig(env);
   const provider = opts.provider || makeProvider(cfg, { env });
-  const listBots = () => (bots?.bots || []).filter(e => !e.b.closed).map(e => e.b);
+  const listBots = () => (bots?.bots || []).filter(e => !e.b.closed && !e.director).map(e => e.b); // (never the director's actors)
   const minds = new Minds({ cfg, provider, listBots, env, now: opts.now, log: opts.log });
   registerBotHook('onEvent', (b, e) => minds.onEvent(b, e));
   const tickMs = opts.tickMs ?? 1000;

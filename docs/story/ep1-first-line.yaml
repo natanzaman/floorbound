@@ -57,8 +57,6 @@ scenes:
     cues:
       - { do: fade, to: in, secs: 1 }
       - { do: camera, shot: wide, target: raid_gate }
-      - { who: all, do: ready, after: prev }
-      - { who: tamsin, do: say, text: "Five seconds. Last chance to turn back.", hold: 3 }
       - { who: pell, do: walk_to, to: bram, after: prev }
       - { who: bram, do: face, to: pell, after: prev }
       - { do: camera, shot: medium, target: bram }
@@ -66,6 +64,10 @@ scenes:
       - { who: pell, do: say, text: "And if I can't?", after: prev }
       - { who: bram, do: say, text: "Then I come to you.", hold: 3, after: prev }
       - { who: corvin, do: say, text: "Nobody dies today. That's the only order.", after: prev }
+      # the gate counts down 5 s once everyone at it is ready
+      - { who: all, do: ready, after: prev }
+      - { do: camera, shot: wide, target: raid_gate }
+      - { who: tamsin, do: say, text: "Five seconds. Last chance to turn back.", hold: 3 }
       - { do: wait, until: gate_open, after: prev }
       - { do: camera, shot: follow, target: corvin }
       - { who: all, do: walk_to, to: arena_edge, after: prev }
@@ -117,9 +119,9 @@ scenes:
       - { who: pell, do: fight, target: warden, until: "warden_dead", after: prev }
       - { do: slowmo, secs: 1.5, scale: 0.3, after: prev }
       - { who: juno, do: emote, anim: cheer, after: prev, delay: 1 }
-      - { who: pell, do: walk_to, to: bram }
+      - { id: to_bram, who: pell, do: walk_to, to: bram }
       - { do: camera, shot: medium, target: pell }
-      - { who: pell, do: pose, k: kneel, after: prev }
+      - { who: pell, do: pose, k: kneel, after: to_bram }
       - { who: pell, do: give_item, name: "Bram's Buckle", slot: charm, desc: "The clasp of Bram's shield. Nobody gets left at the stop.", after: prev }
       - { who: pell, do: say, text: "He told me to stay behind him.", hold: 4, after: prev }
       - { who: tamsin, do: say, text: "You did. Every second.", hold: 4, after: prev }
