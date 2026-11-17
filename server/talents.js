@@ -468,7 +468,10 @@ function installTalentsNew(P, wrap) {
     if (key === 'basic' && p.cls === 'bard' && !m.dead) {
       if (K.maestro && p.song && t < p.song.until && p.song.kind !== 'lullaby') { // Maestro: the song goes on
         const s = p.song; s.cap ??= s.until + KEYS.maestro.max;
-        if (s.until < s.cap) { s.until = Math.min(s.cap, s.until + KEYS.maestro.ext); this.tproc(p, 'maestro'); }
+        if (s.until < s.cap) {
+          s.until = Math.min(s.cap, s.until + KEYS.maestro.ext); this.tproc(p, 'maestro');
+          this.cbFx?.(p, 'songExt', { kind: s.kind, d: r2(s.until - t) }); // the new end: clients stretch the song ring and buff timers
+        }
       }
       if (K.cacophony) for (const o of [...this.mobs.values()]) { // Cacophony: the discord spreads
         if (o !== m && this.targetable(o) && dist(o, m) <= KEYS.cacophony.r + o.def.radius) this.addDiscord(o, p, 1);

@@ -9,6 +9,11 @@ import { SWITCH, PERFECT, POSTURE } from '../shared/data.js';
 import { makeItem, SHOP, MERCHANT, BAG_SIZE } from '../shared/items.js';
 import { SMITH, RECIPES, RECIPE_BY_ID } from '../shared/crafting.js';
 import { STYLES, STYLE_IDS, CLASS_STYLES, styleOf, rollStyle, styleLine } from '../shared/styles.js';
+import { MOBS } from '../shared/data.js';
+import { basicProfile, standOff } from '../shared/bots/style.js';
+import { brainFor } from '../shared/bots/registry.js';
+import { d2, moveToward } from '../shared/bots/motor.js';
+import '../shared/bots/brain.js'; // registers the class brains
 
 const realRandom = Math.random;
 const g = new Game();
@@ -349,6 +354,72 @@ g.time = 10;
   delete process.env.BOT_STYLES; Math.random = () => 0.5;
   reset();
   ok('testing aids: START_STYLE=<id> and BOT_STYLES=1');
+}
+
+// ---------- bots and weapon styles ----------
+{
+  process.env.START_STYLE = 'daggers,drum';
+  const r = g.addPlayer(ws, 'AidR', 'ranger'), bd = g.addPlayer(ws, 'AidB', 'bard'), gd = g.addPlayer(ws, 'AidG', 'guardian');
+  assert.equal(r.style, 'daggers'); assert.equal(bd.style, 'drum'); assert.equal(gd.style, 'shield');
+  delete process.env.START_STYLE;
+  reset();
+  ok('testing aids: START_STYLE takes a list (each class arms the first of its own styles)');
+
+  // The bot's reach profile comes from the style data.
+  const P = (c, s) => basicProfile(c, s);
+  assert.deepEqual([P('ranger', 'daggers').kind, P('ranger', 'daggers').reach], ['melee', 2.7]);
+  assert.deepEqual([P('ranger', 'longbow').kind, P('ranger', 'longbow').min], ['ranged', 7]);
+  assert.deepEqual([P('bard', 'drum').kind, P('bard', 'drum').reach], ['ring', 3.4]);
+  assert.deepEqual([P('bard', 'flute').kind, P('bard', 'flute').reach, P('bard', 'lyre').reach], ['ranged', 16, 11]);
+  assert.deepEqual([P('lancer', 'glaive').reach, P('lancer', 'glaive').sweet, P('lancer', 'halberd').reach, P('lancer', 'halberd').sweet], [5.6, 3.4, 4, 2.4]);
+  assert.deepEqual([P('cleric', 'tome').kind, P('cleric', 'wand').kind, P('cleric', 'wand').reach], ['melee', 'ranged', 12]);
+  assert.equal(P('berserker', 'warhammer').reach, 3.5); assert.equal(P('guardian', 'spear').reach, 4.8);
+  assert.equal(P('ranger', 'drum').style, null, 'another class\'s style falls back to the class default');
+  ok('bot reach profiles derive from the style data (daggers melee 2.7 m, drum ring 3.4 m, flute 16 m, glaive 5.6 m / tip 3.4 m)');
+
+  // Every press of every style's basic attack lands at the edge distance the bot stands at (standOff), and the melee /
+  // ring reach the profile reports is real (an enemy just inside it is hit by every press of the combo).
+  const R = MOBS.wolf.radius;
+  for (const id of STYLE_IDS) {
+    const cls = STYLES[id].cls, pr = P(cls, id);
+    for (const edge of [standOff(pr), pr.kind === 'ranged' ? null : pr.reach - 0.15]) {
+      if (edge === null) continue;
+      for (let k = 0; k < 4; k++) {
+        const p = hero(cls, id), m = dummy(p, edge + R);
+        const hp = m.hp;
+        advance(Math.max(0, p.cds[0] - g.time) + 0.01);
+        p.combo = k - 1; p.lastBasic = g.time - 0.05; // press k of the combo
+        g.useSkill(p, 0, p.face);
+        for (let t = 0; t < (pr.kind === 'ranged' ? 1.2 : 0.3); t += 0.05) { advance(0.05); g.updateClassesA(0.05); g.updateProjectiles(0.05); } // (arrows, sonic bolts)
+        assert.ok(m.hp < hp, `${id}: press ${k + 1} at ${edge.toFixed(2)} m from the edge lands`);
+        reset();
+      }
+    }
+  }
+  ok('every style\'s basic attack lands from the bot\'s stand-off distance; melee / ring reach holds for every press');
+
+  // The brains use it: a few seconds of turns against a still target (no tank, perfect capability).
+  function fight(cls, style, start = 10, turns = 80) {
+    const tgt = { id: 1, x: 0, z: 60, def: MOBS.wolf, hp: 1, maxHp: 1, engaged: true };
+    const b = { cls, style, id: 9, x: 0, z: 60 - start - R, face: 0, t: 0, skill: 5, gateOpen: true, me: { lvl: 10 }, mobs: [tgt], players: [], cds: [0, 0, 0, 0], stag: {} };
+    const basic = [], edges = [];
+    const ctx = { basic: basicProfile(cls, style), useSkill: (bb, slot) => { if (slot === 0) basic.push(d2(b.x, b.z, tgt.x, tgt.z) - R); return slot === 0; }, moveToward, switchOpen: () => false, d2,
+      dodge: null, ready: true, anchor: null, tank: null, leader: null, party: { mates: [], humans: [], all: [] }, hurt: [], healFocus: null, mayBreak: true, peel: false, say() {} };
+    for (let i = 0; i < turns; i++) { b.t += 0.05; brainFor(cls).combat(b, tgt, ctx); edges.push(d2(b.x, b.z, tgt.x, tgt.z) - R); }
+    return { edge: edges.at(-1), basic };
+  }
+  const reachOf = (c, s) => P(c, s).reach;
+  for (const [cls, style, lo, hi] of [['ranger', 'daggers', 0, 2.7], ['bard', 'drum', 0, 3.4], ['lancer', 'glaive', 3.4, 5.6], ['lancer', 'halberd', 2.4, 4], ['cleric', 'tome', 0, 3],
+    ['swordsman', 'rapier', 0, 4.6], ['guardian', 'spear', 0, 4.8], ['berserker', 'warhammer', 0, 3.5], ['ranger', 'longbow', 7, 24], ['bard', 'lyre', 5.5, 11], ['bard', 'flute', 5.5, 16]]) {
+    const f = fight(cls, style, cls === 'ranger' && style === 'longbow' ? 12 : 10);
+    assert.ok(f.edge >= lo - 0.05 && f.edge <= hi, `${cls}/${style} settles ${f.edge.toFixed(2)} m from the edge (want ${lo}-${hi})`);
+    assert.ok(f.basic.length > 0, `${cls}/${style} attacks`);
+    const bad = f.basic.filter(e => e > reachOf(cls, style) - (P(cls, style).kind === 'ranged' ? 0.5 : 0.15));
+    assert.equal(bad.length, 0, `${cls}/${style}: no basic attack pressed out of reach (${bad.map(e => e.toFixed(1))})`);
+  }
+  const lb = fight('ranger', 'longbow', 3);
+  assert.ok(lb.edge > 6, `a longbow Ranger backs off (${lb.edge.toFixed(1)} m)`);
+  ok('bot brains fight at their style\'s range: daggers / drum / tome close in, glaive / halberd hold the tip, bows and flutes kite, nothing swings out of reach');
 }
 
 // ---------- persistence round trip (needs DATABASE_URL) ----------

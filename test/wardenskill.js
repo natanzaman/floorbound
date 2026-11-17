@@ -1,13 +1,16 @@
 // Warden runs with human-like bots: starts its own server (START_LEVEL, SPAWN_AT at the raid gate), sends a role party
 // (Guardian, Swordsman, Cleric) at a capability level, and reports kill / wipe, fight time and deaths.
 // Usage: BOT_SKILL=3 RUNS=2 PORT=3621 node test/wardenskill.js
-//        (env: START_LEVEL=10, SPAWN_AT=0,150, LIMIT=300 s per run, WARDEN_TWIST to force a twist)
+//        (env: START_LEVEL=10, SPAWN_AT=0,150, LIMIT=300 s per run, WARDEN_TWIST to force a twist,
+//         ROLES=guardian,ranger,bard,cleric, START_STYLE=daggers,drum to arm each class with the first of its styles listed,
+//         STATS=1 for each bot's damage, DPS and basic-attack presses; styled melee / ring combos also report how many landed)
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { startTeam } from '../shared/teambots.js';
 import { skillName } from '../shared/botskill.js';
+import { STYLE_IDS } from '../shared/styles.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SKILL = Number(process.env.BOT_SKILL) || 5, RUNS = Number(process.env.RUNS) || 1, PORT = Number(process.env.PORT) || 3621;
@@ -25,11 +28,23 @@ async function run(i) {
   const res = { run: i + 1, result: 'timeout', secs: 0, deaths: 0, twist: (log.match(/Warden twist: (\w+)/) || [])[1] || '?' };
   let start = null, hit = false, done = false;
   const t0 = Date.now();
+  const stats = new Map(g.team.map(b => [b, { dmg: 0, presses: 0, swings: 0, landed: 0, style: null }]));
+  for (const b of g.team) { // count basic-attack presses once the fight is on
+    const send = b.send;
+    b.send = o => { if (o.type === 'skill' && o.slot === 0 && start) stats.get(b).presses++; return send(o); };
+  }
   lead.ws.addEventListener('message', ev => {
     if (done) return;
     const msg = JSON.parse(ev.data.toString());
     if (msg.type !== 'snap') return;
     const ids = new Set(g.team.map(b => b.id));
+    const byId = new Map(g.team.map(b => [b.id, stats.get(b)]));
+    for (const r of msg.w.players) if (byId.has(r[0])) byId.get(r[0]).style = r[11];
+    const open = new Map(); // bot id -> its styled swing in this snapshot, waiting for a hit
+    if (start) for (const e of msg.w.events) {
+      if (e.t === 'fx' && e.k === 'sty' && !e.ev && !e.tw && byId.has(e.id)) { byId.get(e.id).swings++; open.set(e.id, true); }
+      if (e.t === 'hit' && byId.has(e.by)) { const st = byId.get(e.by); st.dmg += e.a; if (open.get(e.by)) { st.landed++; open.set(e.by, false); } }
+    }
     for (const e of msg.w.events) {
       if (e.t === 'pdie' && ids.has(e.id) && start) res.deaths++;
       if (e.t === 'sys' && /Horned Warden has fallen/.test(e.text)) { res.result = 'kill'; done = true; }
@@ -41,13 +56,17 @@ async function run(i) {
   });
   while (!done && Date.now() - t0 < LIMIT * 1000) await sleep(250);
   if (!done) res.secs = Math.round((Date.now() - (start || t0)) / 1000);
+  if (process.env.STATS) {
+    const secs = Math.max(1, (Date.now() - (start || t0)) / 1000);
+    res.stats = g.team.map(b => { const s = stats.get(b); return `${b.cls}/${s.style >= 0 ? STYLE_IDS[s.style] : '-'} dmg ${Math.round(s.dmg)} (${(s.dmg / secs).toFixed(1)}/s) basic ${s.presses}${s.swings ? ` styled ${s.landed}/${s.swings} landed (${Math.round((100 * s.landed) / s.swings)}%)` : ''}`; });
+  }
   g.stop(); srv.kill();
   await sleep(300);
   return res;
 }
 
 const out = [];
-for (let i = 0; i < RUNS; i++) { const r = await run(i); out.push(r); console.log(`[skill ${SKILL} ${skillName(SKILL)}] run ${r.run}: ${r.result} in ${r.secs}s, ${r.deaths} deaths (twist ${r.twist})`); }
+for (let i = 0; i < RUNS; i++) { const r = await run(i); out.push(r); console.log(`[skill ${SKILL} ${skillName(SKILL)}] run ${r.run}: ${r.result} in ${r.secs}s, ${r.deaths} deaths (twist ${r.twist})`); for (const l of r.stats || []) console.log(`    ${l}`); }
 const wins = out.filter(r => r.result === 'kill');
 console.log(`[skill ${SKILL} ${skillName(SKILL)}] ${wins.length}/${out.length} kills · avg kill time ${wins.length ? Math.round(wins.reduce((s, r) => s + r.secs, 0) / wins.length) : '-'}s · avg deaths ${(out.reduce((s, r) => s + r.deaths, 0) / out.length).toFixed(1)}`);
 process.exit(0);

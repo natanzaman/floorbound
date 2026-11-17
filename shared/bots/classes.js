@@ -1,15 +1,19 @@
 // Built-in class plug-ins for the bot brain: Guardian (tank), Swordsman (DPS), Cleric (healer), and a generic fallback
 // ('*') for any class without its own plug-in. See shared/bots/registry.js for the interface.
 import { registerClassBrain } from './registry.js';
+import { standOff } from './style.js';
 
 const faceTo = (b, m) => Math.atan2(m.x - b.x, m.z - b.z);
+
+// Reaches below come from ctx.basic (the weapon style's basic attack, shared/bots/style.js): Spear & Shield and Rapier
+// poke from further out, Dual Blades stay tight, Mace & Tome takes the Cleric into melee, the Wand bolts from further back.
 
 // Guardian: opens with Taunt, peels mobs off the party, Ground Slam to Break, Bash to Switch, Shield Wall when low.
 registerClassBrain('guardian', {
   role: 'tank', name: 'Brann', parry: true,
   combat(b, tgt, ctx) {
     const { useSkill, moveToward, switchOpen, d2, dodge } = ctx;
-    const reach = tgt.def.radius + 1.6, d = d2(b.x, b.z, tgt.x, tgt.z), face = faceTo(b, tgt);
+    const reach = tgt.def.radius + ctx.basic.reach - 1.4, d = d2(b.x, b.z, tgt.x, tgt.z), face = faceTo(b, tgt);
     if (!dodge) { moveToward(b, tgt.x, tgt.z, reach - 0.3); b.face = face; }
     if (d < 8.5 && b.engAt === null) { if (useSkill(b, 1, face)) b.tauntT = b.t; b.engAt = b.t; } // open with Taunt
     if (ctx.peel && b.t - (b.tauntT ?? -99) > 2 && useSkill(b, 1, face)) { b.tauntT = b.t; return true; } // pull it off a teammate
@@ -32,7 +36,7 @@ registerClassBrain('swordsman', {
   combat(b, tgt, ctx) {
     const { useSkill, moveToward, switchOpen, d2, dodge, anchor } = ctx;
     if (dodge) return true;
-    const reach = tgt.def.radius + 1.3;
+    const reach = tgt.def.radius + Math.max(1, ctx.basic.reach - 1.7);
     if (anchor) {
       const tx = tgt.x - anchor.x, tz = tgt.z - anchor.z, tl = Math.hypot(tx, tz) || 1;
       const spot = ctx.ready ? [tgt.x + (tx / tl) * reach, tgt.z + (tz / tl) * reach] : [anchor.x - (tx / tl) * 4, anchor.z - (tz / tl) * 4];
@@ -64,22 +68,27 @@ registerClassBrain('cleric', {
   combat(b, tgt, ctx) {
     const { useSkill, moveToward, d2, dodge } = ctx;
     const front = ctx.tank && ctx.tank.id !== b.id ? ctx.tank : ctx.anchor;
-    const f = ctx.healFocus;
+    const f = ctx.healFocus, P = ctx.basic, melee = P.kind !== 'ranged';
     if (!dodge) {
       if (f && d2(f.x, f.z, b.x, b.z) > 11) moveToward(b, f.x, f.z, 6);       // keep the "heal me" player in range
-      else if (front) { // behind the front line, facing the fight
+      else if (melee && ctx.ready) { // Mace & Tome: in melee (its hits heal the party), behind the target and off to one side
+        const a = front ? Math.atan2(tgt.x - front.x, tgt.z - front.z) + 0.6 : Math.atan2(b.x - tgt.x, b.z - tgt.z); // (alone: our side)
+        const r = tgt.def.radius + standOff(P);
+        moveToward(b, tgt.x + Math.sin(a) * r, tgt.z + Math.cos(a) * r, 0.4);
+      } else if (front) { // behind the front line, facing the fight
         const tx = front.x - tgt.x, tz = front.z - tgt.z, tl = Math.hypot(tx, tz) || 1;
         moveToward(b, front.x + (tx / tl) * 5.5, front.z + (tz / tl) * 5.5, 0.6);
       } else moveToward(b, tgt.x, tgt.z, 7.6);
     }
     const face = faceTo(b, tgt), d = d2(b.x, b.z, tgt.x, tgt.z);
     if (!dodge) b.face = face;
-    if (tgt.winding && !tgt.staggered && d < 11 && useSkill(b, 0, face)) return true;          // Smite interrupt
+    const inReach = d < tgt.def.radius + (melee ? P.reach - 0.3 : P.reach);
+    if (tgt.winding && !tgt.staggered && inReach && useSkill(b, 0, face)) return true;        // Smite interrupt
     if (clericHeal(b, ctx, face)) return true;                                                  // Heal
     const low = ctx.party.all.filter(p => !p.dead && p.hp / p.maxHp < 0.7).length;
     if (low >= 1 && tgt.def.boss && useSkill(b, 3, face)) return true;                         // Sanctuary
     if (ctx.ready && b.engAt !== null && useSkill(b, 2, face)) return true;                     // Blessing
-    if (ctx.ready && d < 11) useSkill(b, 0, face);                                              // Smite
+    if (ctx.ready && inReach) useSkill(b, 0, face);                                             // Smite
     return true;
   },
   idle(b, ctx) { clericHeal(b, ctx, b.face); },
@@ -89,7 +98,7 @@ registerClassBrain('cleric', {
 registerClassBrain('*', {
   combat(b, tgt, ctx) {
     const { useSkill, moveToward, switchOpen, d2, dodge } = ctx;
-    const reach = tgt.def.radius + 1.5, face = faceTo(b, tgt);
+    const P = ctx.basic, reach = tgt.def.radius + (P.kind === 'ranged' ? standOff(P) : Math.max(1, P.reach - 1.5)), face = faceTo(b, tgt);
     if (!dodge) { moveToward(b, tgt.x, tgt.z, reach - 0.4); b.face = face; }
     if (d2(b.x, b.z, tgt.x, tgt.z) > reach + 1.2) return true;
     for (const slot of [3, 2, 1]) if ((!tgt.staggered || switchOpen(b, tgt)) && useSkill(b, slot, face)) return true;

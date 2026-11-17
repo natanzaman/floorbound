@@ -9,8 +9,9 @@
 //    style's overrides through styleNum (arrow / chop / thrust / bolt); styles with `basic` steps (Twin Daggers,
 //    Halberd, War Drum) hand slot 0 back to styleSkill (styleOwnsBasic).
 //  - Skill tweaks are numbers read in game.js and the class files through styleNum(p, key, default).
-//  - Testing aids: START_STYLE=<id>|random equips that style's weapon on join; BOT_STYLES=1 gives every anonymous
-//    (unsaved) player, bots included, a random style.
+//  - Testing aids: START_STYLE=<id>|random equips that style's weapon on join (a comma list: each class takes the first
+//    style in it that's one of its own, e.g. START_STYLE=daggers,drum for a dagger Ranger and a drum Bard);
+//    BOT_STYLES=1 gives every anonymous (unsaved) player, bots included, a random style.
 import { CLASSES } from '../shared/data.js';
 import { BAG_SIZE, makeItem } from '../shared/items.js';
 import { STYLES, STYLE_IDS, CLASS_STYLES, styleOf, validStyle } from '../shared/styles.js';
@@ -173,7 +174,7 @@ export const StyleMethods = {
     if (!list) return;
     let id = null;
     if (want === 'random' || (process.env.BOT_STYLES && !saved && !want)) id = list[Math.floor(Math.random() * list.length)];
-    else if (want && validStyle(want, p.cls)) id = want;
+    else if (want) id = want.split(',').map(s => s.trim()).find(s => validStyle(s, p.cls)) || null;
     if (id && (styleOf(p.inv.eq.weapon, p.cls) !== id || !p.inv.eq.weapon)) this.styleArm(p, id);
   },
 

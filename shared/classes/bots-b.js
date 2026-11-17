@@ -3,6 +3,7 @@
 // Each brain gets the bot b, its target tgt and dodge (a spot to roll to, or null; when set the bot is already evading).
 import { LANCE } from './lancer.js';
 import { SONG } from './bard.js';
+import { basicProfile, standOff } from '../bots/style.js';
 
 export const TEAM_NAMES_B = { lancer: 'Rook', bard: 'Wren' };
 
@@ -14,18 +15,22 @@ function holdRange(ctx, b, tgt, keep, side = null) {
   ctx.moveToward(b, spot[0], spot[1], 0.35);
 }
 
+// The basic attack with the bot's weapon style (shared/bots/style.js): Glaive / Halberd reach and tip, War Drum
+// shockwaves (the Bard plays in melee), Flute range.
+const basicOf = (ctx, b) => ctx.basic || basicProfile(b.cls, b.style);
+
 export const CLASS_BRAINS_B = {
   // Lancer: fights at the tip of its spear (the +30% sweet spot), charges to close gaps, Sky Lance to Break.
   lancer(ctx, b, tgt, dodge) {
     const { useSkill, switchOpen, d2 } = ctx;
-    const edge = d2(b.x, b.z, tgt.x, tgt.z) - tgt.def.radius, want = LANCE.reach - 0.9;
+    const P = basicOf(ctx, b), edge = d2(b.x, b.z, tgt.x, tgt.z) - tgt.def.radius, want = standOff(P);
     if (!dodge) {
-      if (edge > want + 0.4 || edge < LANCE.sweetFrom) holdRange(ctx, b, tgt, tgt.def.radius + want);
+      if (edge > want + 0.4 || edge < P.sweet) holdRange(ctx, b, tgt, tgt.def.radius + want);
       b.face = Math.atan2(tgt.x - b.x, tgt.z - b.z);
     }
     const face = Math.atan2(tgt.x - b.x, tgt.z - b.z);
     if (edge > 5.5 && edge < LANCE.charge.len && useSkill(b, 1, face)) return; // Lance Charge: close the gap
-    if (edge > LANCE.reach + 0.4) return;
+    if (edge > P.reach - 0.1) return;                                              // (out of reach: the thrust would whiff)
     const crowd = b.mobs.filter(m => d2(m.x, m.z, b.x, b.z) < LANCE.sweep.r + m.def.radius).length;
     if (switchOpen(b, tgt) && useSkill(b, 3, face)) return;                       // Sky Lance into a teammate's Break
     if (!tgt.staggered && edge > 2 && useSkill(b, 3, face)) return;                 // ...or to Break it ourselves
@@ -33,13 +38,16 @@ export const CLASS_BRAINS_B = {
     useSkill(b, 0, face);                                                           // Thrust
   },
 
-  // Bard: hangs back at 7-9 m, Dissonance on wind-ups, songs when allies are near, Crescendo to cash in Discord.
+  // Bard: hangs back at 7-9 m (in the shockwave with a War Drum, looser with a Flute), Dissonance on wind-ups, songs
+  // when allies are near, Crescendo to cash in Discord.
   bard(ctx, b, tgt, dodge) {
     const { useSkill, d2 } = ctx;
     const allies = b.players.filter(p => p.id !== b.id && !p.dead && d2(p.x, p.z, b.x, b.z) < SONG.anthem.r);
     const edge = d2(b.x, b.z, tgt.x, tgt.z) - tgt.def.radius, a = ctx.anchor(b);
+    const P = basicOf(ctx, b), hold = standOff(P), ranged = P.kind === 'ranged';
     if (!dodge) {
-      if (edge > 9 || edge < 6) holdRange(ctx, b, tgt, tgt.def.radius + 7.5, a && d2(a.x, a.z, tgt.x, tgt.z) > 3 ? a : null); // behind our front line
+      if (!ranged) { if (edge > P.reach - 0.6) holdRange(ctx, b, tgt, tgt.def.radius + hold); } // War Drum: inside the shockwave
+      else if (edge > Math.max(hold + 1.5, Math.min(P.reach - 3, 12)) || edge < hold - 1.5) holdRange(ctx, b, tgt, tgt.def.radius + hold, a && d2(a.x, a.z, tgt.x, tgt.z) > 3 ? a : null); // behind our front line
       b.face = Math.atan2(tgt.x - b.x, tgt.z - b.z);
     }
     const face = Math.atan2(tgt.x - b.x, tgt.z - b.z);
@@ -50,7 +58,7 @@ export const CLASS_BRAINS_B = {
     if (allies.length && tgt.def.boss && b.hp / b.maxHp < 0.6 && useSkill(b, 3, face)) return; // Crescendo shields when it's rough
     const cone = b.mobs.filter(m => d2(m.x, m.z, b.x, b.z) < SONG.dissonance.r + m.def.radius).length;
     if (cone >= 2 && useSkill(b, 2, face)) return;                                   // Dissonance on a pack that got close
-    if (edge < SONG.bolt.range - 0.8) useSkill(b, 0, face);                          // Sonic Bolt
+    if (edge < P.reach - (ranged ? 0.8 : 0.3)) useSkill(b, 0, face);                // Sonic Bolt (or the drum)
   },
 };
 

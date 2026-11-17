@@ -317,6 +317,10 @@ g.time = 100;
   const u0 = p.song.until, m = wolf(p, 5);
   press(p); advance(0.5);
   near(p.song.until - u0, KEYS.maestro.ext, 1e-6, 'a bolt that lands extends the song');
+  const ext = ev('fx', e => e.k === 'cb' && e.ev === 'songExt' && e.id === p.id);
+  assert.equal(ext.length, 1, 'clients are told about the extension');
+  const left = p.song.until - g.time; // (the bolt landed during the last 0.5 s)
+  assert.equal(ext[0].kind, 'anthem'); assert.ok(ext[0].d >= left - 0.01 && ext[0].d <= left + 0.51, `the new time left (song ring, buff timers): ${ext[0].d} vs ${left}`);
   const target = wolf(ally, 2, 0.5); clear();
   g.damageMob(target, ally, 100, {});
   assert.equal(dealt(target, ally), Math.round(100 * (1 + KEYS.maestro.dmg) * 1.06), 'ally +8% under the song (and Chorus +6%)');
@@ -324,7 +328,7 @@ g.time = 100;
   advance(1.05);
   assert.ok(ally.hp > h0, 'Soothing Song heals');
   done();
-  ok('Maestro (hits extend the song; allies under it +8%), Resonant Voice, Soothing Song');
+  ok('Maestro (hits extend the song and tell clients the new end; allies under it +8%), Resonant Voice, Soothing Song');
 
   const d = mk('bard', { alloc: full('bard', 'discord') });
   const a = wolf(d, 5), b = wolf(d, 6.5, 0.3);

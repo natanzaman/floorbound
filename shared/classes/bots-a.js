@@ -1,8 +1,11 @@
 // Bot brains for the Ranger and Berserker, used by shared/teambots.js (the party's DPS slot and the single-bot brain).
+// Weapon styles (h.basic, shared/bots/style.js): a Twin Daggers Ranger fights in melee like the Berserker (no Disengage);
+// the Twin Axes / Warhammer Berserker closes to its own reach.
 // Ranger: keeps 9-12 m from its target, shoots, opens with Hunter's Mark, Piercing Shot on cooldown (and to Switch),
 // Disengages when something reaches it. Berserker: dives in with Leap Slam, chops, Cleaves at high Rage or into a
 // crowd, Bloodrage when it has the Rage for it.
 import { CLASSES } from '../data.js';
+import { basicProfile, standOff } from '../bots/style.js';
 
 export const TEAM_NAMES_A = { ranger: 'Sylas', berserker: 'Bjorn' };
 export const isDpsA = cls => CLASSES[cls]?.role === 'Damage';
@@ -22,7 +25,40 @@ export function brainA(b, tgt, h) {
   return false;
 }
 
+const basicOf = (b, h) => h.basic || basicProfile(b.cls, b.style);
+
+// Melee positioning shared by the Berserker and a Twin Daggers Ranger: wait behind the tank until it holds the target,
+// then the far side of the target from the tank (out of its frontal swing), `reach` from its centre.
+function meleeMove(b, tgt, h, reach) {
+  const { moveToward, anchor } = h;
+  if (anchor && !h.ready) {
+    const tx = tgt.x - anchor.x, tz = tgt.z - anchor.z, tl = Math.hypot(tx, tz) || 1;
+    moveToward(b, anchor.x - (tx / tl) * 4, anchor.z - (tz / tl) * 4, 0.8);
+    return false;
+  }
+  if (anchor) {
+    const tx = tgt.x - anchor.x, tz = tgt.z - anchor.z, tl = Math.hypot(tx, tz) || 1;
+    moveToward(b, tgt.x + (tx / tl) * reach, tgt.z + (tz / tl) * reach, 0.5);
+  } else moveToward(b, tgt.x, tgt.z, reach - 0.4);
+  return true;
+}
+
+function rangerMelee(b, tgt, h, P) {
+  const { useSkill, d2 } = h;
+  const d = d2(b.x, b.z, tgt.x, tgt.z), face = Math.atan2(tgt.x - b.x, tgt.z - b.z);
+  if (!h.dodge && !meleeMove(b, tgt, h, tgt.def.radius + standOff(P))) { b.face = face; return true; }
+  b.face = face;
+  if (d > tgt.def.radius + 20) return true;                                                  // (its skills still shoot)
+  if (h.switchOpen(b, tgt) && useSkill(b, 1, face)) return true;                            // Switch in with Piercing Shot
+  if ((b.me?.lvl || 1) >= 3 && (tgt.engaged || tgt.def.boss) && (tgt.def.boss || tgt.def.elite || tgt.maxHp >= 100) && useSkill(b, 3, face)) return true; // Hunter's Mark
+  if (!tgt.staggered && useSkill(b, 1, face)) return true;                                  // Piercing Shot
+  if (d <= tgt.def.radius + P.reach - 0.2) useSkill(b, 0, face);                            // the dagger combo
+  return true;
+}
+
 function ranger(b, tgt, h) {
+  const P = basicOf(b, h);
+  if (P.kind !== 'ranged') return rangerMelee(b, tgt, h, P);
   const { useSkill, moveToward, d2, anchor } = h;
   const d = d2(b.x, b.z, tgt.x, tgt.z), face = Math.atan2(tgt.x - b.x, tgt.z - b.z);
   const want = tgt.def.boss ? 12.5 : 10;
@@ -46,7 +82,7 @@ function ranger(b, tgt, h) {
     }
   }
   b.face = face;
-  if (d > 23 + tgt.def.radius) return true;
+  if (d > P.reach - 1 + tgt.def.radius) return true;
   if (h.switchOpen(b, tgt) && useSkill(b, 1, face)) return true;                            // Switch in with Piercing Shot
   if ((b.me?.lvl || 1) >= 3 && (tgt.engaged || tgt.def.boss) && (tgt.def.boss || tgt.def.elite || tgt.maxHp >= 100) && useSkill(b, 3, face)) return true; // Hunter's Mark
   if (!tgt.staggered && useSkill(b, 1, face)) return true;                                  // Piercing Shot
@@ -55,21 +91,13 @@ function ranger(b, tgt, h) {
 }
 
 function berserker(b, tgt, h) {
-  const { useSkill, moveToward, d2, anchor } = h;
+  const { useSkill, d2 } = h;
   const d = d2(b.x, b.z, tgt.x, tgt.z), face = Math.atan2(tgt.x - b.x, tgt.z - b.z);
-  const reach = tgt.def.radius + 1.6, rage = b.rageA || 0;
+  const reach = tgt.def.radius + Math.max(1.2, basicOf(b, h).reach - 1.8), rage = b.rageA || 0;
   if (!h.dodge) {
-    if (anchor && !h.ready) {
-      const tx = tgt.x - anchor.x, tz = tgt.z - anchor.z, tl = Math.hypot(tx, tz) || 1;
-      moveToward(b, anchor.x - (tx / tl) * 4, anchor.z - (tz / tl) * 4, 0.8);
-      b.face = face;
-      return true;
-    }
+    if (h.anchor && !h.ready) { meleeMove(b, tgt, h, reach); b.face = face; return true; }
     if (d > 4 + tgt.def.radius && d < 9.5 && useSkill(b, 2, face)) { b.face = face; return true; } // Leap Slam in
-    if (anchor) { // far side of the target from the tank, out of its frontal swing
-      const tx = tgt.x - anchor.x, tz = tgt.z - anchor.z, tl = Math.hypot(tx, tz) || 1;
-      moveToward(b, tgt.x + (tx / tl) * reach, tgt.z + (tz / tl) * reach, 0.5);
-    } else moveToward(b, tgt.x, tgt.z, reach - 0.4);
+    meleeMove(b, tgt, h, reach);
   }
   b.face = face;
   if (d > reach + 1.2) return true;

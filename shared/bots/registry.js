@@ -14,6 +14,7 @@
 //   });
 //
 // ctx (built fresh each turn by the brain):
+//   basic                    the bot's basic attack with its weapon style: { kind, reach, sweet, min, half } (shared/bots/style.js)
 //   useSkill(b, slot, face, tid?)  press a skill (capability cadence applied; false if on cooldown / not unlocked / not yet noticed)
 //   moveToward(b, x, z, stop?, speed?)   walk (capability positioning noise applied); true if it moved
 //   switchOpen(b, mob)       a party member (or anyone else) Broke this mob: Switch in now
