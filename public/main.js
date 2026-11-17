@@ -24,6 +24,7 @@ import { initStyles } from '/styles.js';
 import { initPlayerBots } from '/playerbots.js';
 import { initTalents } from '/talents.js';
 import { initBotWheel } from '/botwheel.js';
+import { initCine } from '/cine.js'; // film view camera, titles, fades, letterbox, light (F4)
 
 const sfx = new Sound();
 
@@ -62,6 +63,7 @@ const state = {
 const players = new Map(); // id -> entity
 const mobs = new Map();
 let boss = null;
+const cine = initCine({ camera, state, players, mobs, slowMotion: (a, b) => slowMotion(a, b), twists }); // public/cine.js
 // Floor 2 — The Glimmering Mire (floor2client.js): world, waystones, Stairway, hazards and its events.
 const f2 = initFloor2Client({
   scene, sun, occluders, fx, sfx, state, mobs, players, isTouch,
@@ -281,6 +283,7 @@ function onMessage(msg) {
     renderPlayers();
     return;
   }
+  if (cine.onMessage(msg)) return; // the film picture as it is now (sent on join)
   if (talents.onMessage(msg)) return; // talent tree (also keeps a copy of the mastery data)
   if (mastery.onMessage(msg)) return; // skill mastery
   if (pbots.onMessage(msg)) return; // player-owned bots (Players panel → Bots tab)
@@ -345,6 +348,7 @@ function onSnapshot({ me, w }) {
 
 function handleEvent(e) {
   const me = state.myId;
+  if (cine.event(e)) return; // shots, titles, fades, letterbox, clean feed, light
   f2.onEvent(e);
   if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
   if (talents.event(e)) return; // talent points, learned talents, talent procs
@@ -1865,6 +1869,7 @@ function frame(now) {
   const sx = (Math.random() - 0.5) * shakeAmt, sy = (Math.random() - 0.5) * shakeAmt;
   camera.position.set(cx - Math.sin(state.yaw) * Math.cos(cp) * cd + sx, 1.6 + Math.sin(cp) * cd + sy, cz - Math.cos(state.yaw) * Math.cos(cp) * cd);
   camera.lookAt(cx, 1.6, cz);
+  const cf = cine.frame(dt, cx, cz); if (cf) [cx, cz] = cf; // film view: the director's shot takes over
   if (!state.joined) { // slow orbit behind the login screen
     state.yaw += dt * 0.08;
     camera.position.set(Math.sin(state.yaw) * 40, 22, 30 + Math.cos(state.yaw) * 40);
@@ -1885,4 +1890,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { state, players, mobs, banner, sfx, project, floatLog };
+window.__fb = { state, players, mobs, banner, sfx, project, floatLog, cine, camera };

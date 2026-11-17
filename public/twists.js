@@ -12,7 +12,7 @@ const DARK = { fog: new THREE.Color(0x14172b), bg: new THREE.Color(0x090b18), ne
 
 export class TwistClient {
   constructor({ scene, fx, banner }) {
-    Object.assign(this, { scene, fx, banner, id: null, dark: 0 });
+    Object.assign(this, { scene, fx, banner, id: null, dark: 0, light: null }); // light: 'eclipse' | 'day' | null, set by the film director (public/cine.js)
     this.hemi = scene.children.find(o => o.isHemisphereLight);
     this.sun = scene.children.find(o => o.isDirectionalLight);
     this.fill = new THREE.AmbientLight(0x9fb2ff, 0); // moonlight fill, only during Eclipse
@@ -115,10 +115,11 @@ export class TwistClient {
     e.model.group.add(collar, rune);
   }
 
-  // Eclipse: darken fog and lights while the camera's focus is in the chamber.
+  // Eclipse: darken fog and lights while the camera's focus is in the chamber (or everywhere: `light` 'eclipse').
   frame(dt, x, z) {
-    const want = this.id === 'eclipse' && inArena(x, z) ? 1 : 0;
+    const want = this.light === 'eclipse' ? 1 : this.light === 'day' ? 0 : this.id === 'eclipse' && inArena(x, z) ? 1 : 0;
     if (want === this.dark) return;
+    if (this.dark === 0) this.rebase(); // darken from whatever the sky is now (Floor 1 or the Mire)
     this.dark += (want - this.dark) * Math.min(1, dt * 1.5);
     if (Math.abs(want - this.dark) < 0.005) this.dark = want;
     const d = this.dark, B = this.base, s = this.scene;
@@ -129,5 +130,13 @@ export class TwistClient {
     if (this.hemi) this.hemi.intensity = B.hemi + (DARK.hemi - B.hemi) * d;
     if (this.sun) this.sun.intensity = B.sun + (DARK.sun - B.sun) * d;
     this.fill.intensity = DARK.fill * d;
+  }
+
+  rebase() {
+    const s = this.scene, B = this.base;
+    B.fog.copy(s.fog.color); B.near = s.fog.near; B.far = s.fog.far;
+    if (B.bg && s.background?.isColor) B.bg.copy(s.background);
+    if (this.hemi) B.hemi = this.hemi.intensity;
+    if (this.sun) B.sun = this.sun.intensity;
   }
 }
