@@ -47,6 +47,7 @@ host.innerHTML = `
       </div>
       <div class="row"><span class="big mono" id="d-scene">–</span><span class="dim" id="d-elapsed"></span></div>
       <div class="actors" id="d-actors"></div>
+      <div class="row dim" id="d-povs" style="font-size:12.5px" title="One window per character: record them alongside the film view for a multi-camera take (open before Run)"></div>
       <h2 style="margin-top:12px">Running cues</h2><ul class="cues mono" id="d-cues"></ul>
       <h2 style="margin-top:12px">Log</h2><ul class="log mono" id="d-log"></ul>
     </div>
@@ -106,6 +107,8 @@ async function poll() {
   $('d-scene').textContent = s.scene ? `${s.scene.i + 1}/${s.scenes.length} · ${s.scene.id} · ${s.scene.place}` : s.state === 'casting' ? 'casting…' : '–';
   $('d-elapsed').textContent = s.scene ? `${s.scene.secs.toFixed(0)} s in scene · ${s.elapsed.toFixed(0)} s total · ${s.scene.done}/${s.scene.cues} cues` : s.error ? s.error : '';
   $('d-actors').innerHTML = s.actors.map(a => `<span class="act${a.dead ? ' dead' : ''}" title="${esc(a.cls)}">${esc(a.name)} <span class="dim">Lv ${a.lvl} · ${a.maxHp ? Math.round(a.hp / a.maxHp * 100) : 0}%${a.absent ? ' · absent' : ''} · ${esc(a.doing)}</span></span>`).join('');
+  const povs = (s.cast || []).map(n => `<a href="/?spectate=1&pov=${encodeURIComponent(n)}" target="_blank" rel="noopener">${esc(n)}</a> <a href="/?spectate=1&pov=${encodeURIComponent(n)}&eyes=1" target="_blank" rel="noopener" title="First person">(eyes)</a>`).join(' · ');
+  if ($('d-povs').dataset.v !== povs) { $('d-povs').dataset.v = povs; $('d-povs').innerHTML = povs ? `POV views: ${povs}` : ''; }
   $('d-cues').innerHTML = s.running.map(c => `<li>#${c.n} ${esc(c.do)}${c.who ? ` <b>${esc([].concat(c.who).join(', '))}</b>` : ''} <span class="dim">${esc(typeof c.text === 'object' ? JSON.stringify(c.text) : c.text)} · ${c.secs.toFixed(1)} s</span></li>`).join('') || '<li class="dim">none</li>';
   $('d-log').innerHTML = s.log.slice().reverse().map(l => `<li class="${l.text.startsWith('!') ? 'bad' : ''}">${l.t.toFixed(1)} ${l.scene ? `[${esc(l.scene)}] ` : ''}${esc(l.text)}</li>`).join('');
 }

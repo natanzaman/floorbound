@@ -5,7 +5,7 @@
 //   shot      { shot, target, from, secs }  target/from: { pid } | { mid } | { x, z } (or [x, z]); secs: move time, 0 = cut
 //   slowmo    { secs, scale }               title { text, sub, secs }   fade { to: 'black' | 'in', secs }
 //   letterbox { on }   clean { on }   light { light: 'eclipse' | 'day' | null }   reset (everything back to normal)
-export const SHOTS = ['close_up', 'medium', 'wide', 'over_shoulder', 'follow', 'orbit', 'crane', 'free'];
+export const SHOTS = ['close_up', 'medium', 'wide', 'over_shoulder', 'follow', 'orbit', 'crane', 'pov', 'eyes', 'free']; // pov / eyes: a character's own view (F8)
 export const CINE_OPS = ['shot', 'slowmo', 'title', 'fade', 'letterbox', 'clean', 'light', 'reset'];
 const LIGHTS = ['eclipse', 'day'];
 
