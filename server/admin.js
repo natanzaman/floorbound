@@ -14,6 +14,7 @@ import { STAT_KEYS, TITLE_BY_ID, newStats } from '../shared/titles.js';
 import { floorOf } from '../shared/floor2.js';
 import { MASTERY, BRANCHES, newMastery, masteryLevel } from '../shared/mastery.js';
 import { BEHAVIOURS } from './botmanager.js';
+import * as hall from './hall.js';
 
 const q = (...a) => db.q(...a);
 const ADMIN_IDS = new Set((process.env.ADMIN_DISCORD_IDS || '').split(',').map(s => s.trim()).filter(Boolean));
@@ -309,6 +310,18 @@ async function playersList() {
   return { players: out, anon, bots: nbots };
 }
 
+// ---------- dashboard summary strip ----------
+function summary() {
+  const live = livePlayers(), h = hall.message();
+  const clears = [...(h.recent || []), ...(h.floors?.[2]?.recent || [])].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 6)
+    .map(r => ({ at: r.at, floor: r.floor, secs: r.secs, deaths: r.deaths, players: r.players.map(p => ({ name: p.name, cls: p.cls })), lastAttack: r.lastAttack }));
+  return {
+    players: live.filter(p => !p.bot).length, accounts: live.filter(p => !p.bot && p.charId).length, bots: live.filter(p => p.bot).length, maxBots: bots.max,
+    uptime: Math.round(process.uptime()), floorClears: game.floorClears,
+    twist: game.twist ? { id: game.twist.id, name: game.twist.name } : null, clears,
+  };
+}
+
 // ---------- routes ----------
 export async function handle(req, res, url) {
   const path = url.pathname;
@@ -333,6 +346,7 @@ export async function handle(req, res, url) {
     let mm;
 
     if (path === '/api/admin/players' && m === 'GET') return json(res, 200, await playersList()), true;
+    if (path === '/api/admin/summary' && m === 'GET') return json(res, 200, summary()), true;
 
     if ((mm = path.match(/^\/api\/admin\/characters\/(\d+)$/))) {
       const id = +mm[1];
@@ -356,25 +370,34 @@ export async function handle(req, res, url) {
 
     if (path === '/api/admin/bots' && m === 'GET') {
       return json(res, 200, {
-        bots: bots.list(), max: bots.max, behaviours: BEHAVIOURS,
+        bots: bots.list(), max: bots.max, behaviours: BEHAVIOURS, skills: bots.skillTable(),
         players: bots.realPlayers().map(p => ({ id: p.id, name: p.name, cls: p.cls, lvl: p.lvl })),
       }), true;
     }
     if (path === '/api/admin/bots' && m === 'POST') {
       const b = await readBody(req) || {};
-      return json(res, 200, { added: bots.add({ cls: b.cls, name: b.name, lvl: b.lvl, behaviour: b.behaviour, follow: b.follow }) }), true;
+      return json(res, 200, { added: bots.add({ cls: b.cls, name: b.name, lvl: b.lvl, behaviour: b.behaviour, follow: b.follow, skill: b.skill }) }), true;
     }
     if (path === '/api/admin/bots/team' && m === 'POST') {
       const b = await readBody(req) || {};
-      return json(res, 200, { added: bots.addTeam({ lvl: b.lvl, behaviour: b.behaviour || 'auto', follow: b.follow }) }), true;
+      return json(res, 200, { added: bots.addTeam({ lvl: b.lvl, behaviour: b.behaviour || 'auto', follow: b.follow, skill: b.skill }) }), true;
     }
     if (path === '/api/admin/bots' && m === 'DELETE') return json(res, 200, { removed: bots.removeAll() }), true;
     if ((mm = path.match(/^\/api\/admin\/bots\/(\d+)$/)) && m === 'DELETE') {
       return bots.remove(+mm[1]) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'No such bot.' }), true;
     }
+    if ((mm = path.match(/^\/api\/admin\/bots\/(\d+)$/)) && m === 'PATCH') { // live edit: name, lvl, skill, behaviour, follow
+      const b = await readBody(req);
+      if (!b) return json(res, 400, { error: 'Bad JSON.' }), true;
+      return json(res, 200, { bot: bots.edit(+mm[1], b) }), true;
+    }
+    if ((mm = path.match(/^\/api\/admin\/bots\/(\d+)\/(teleport|kill|revive|heal|respawn)$/)) && m === 'POST') {
+      const b = await readBody(req) || {};
+      return json(res, 200, { bot: bots.action(+mm[1], mm[2], b) }), true;
+    }
     return json(res, 404, { error: 'Unknown admin route.' }), true;
   } catch (e) {
-    if (e instanceof Bad) return json(res, e.code, { error: e.message }), true;
+    if (e instanceof Bad || e.name === 'BotError') return json(res, e.code, { error: e.message }), true;
     if (e.message && /^(Pick|Unknown behaviour|Bot limit)/.test(e.message)) return json(res, 400, { error: e.message }), true;
     console.error('admin error', e);
     json(res, 500, { error: 'Server error' });
