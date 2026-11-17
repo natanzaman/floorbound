@@ -334,3 +334,16 @@ input { font: inherit; }
 #players details.sect { margin-top: 8px; }
 #players details.sect summary { cursor: pointer; padding: 4px 0; }
 #players .p.off { opacity: .75; }
+
+/* settings + mouse-look crosshair */
+#settings-btn { right: 400px; }
+.touch #settings-btn, .spectator #settings-btn { display: none; }
+#settings { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); right: 10px; width: min(340px, 94vw); padding: 10px 14px; font-size: 13px; z-index: 4; }
+#settings .top { display: flex; justify-content: space-between; align-items: center; font-size: 15px; }
+#settings .x { padding: 2px 9px; border-radius: 6px; border: 1px solid rgba(160,200,255,.3); background: transparent; }
+#settings h4 { margin: 12px 0 6px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; opacity: .65; }
+#settings .opt { display: block; margin: 6px 0; cursor: pointer; }
+#settings .opt small { display: block; opacity: .6; margin-left: 22px; }
+#settings input[type=range] { width: 100%; }
+#crosshair { display: none; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,.85); box-shadow: 0 0 0 2px rgba(0,0,0,.35); pointer-events: none; }
+body.mlock #crosshair { display: block; }

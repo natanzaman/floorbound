@@ -219,11 +219,12 @@ function onMessage(msg) {
   }
   if (msg.type === 'welcome') {
     Object.assign(state, { myId: msg.id, x: msg.x, z: msg.z, seq: msg.seq, joined: true });
+    setTimeout(layoutChips, 50);
     $('login').classList.add('hidden'); $('hud').classList.remove('hidden');
     buildSkillBar();
     guide.start(msg.charId ? `c${msg.charId}` : `anon_${state.cls}`, msg.lvl);
     log('Welcome to Floorbound! Head north through the field and defeat the Horned Warden.', 'sys');
-    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion.' : `WASD move · right-drag or screen edge to look · Left click (or J) attack · 1 2 3 skills · K skill mastery · Shift dodge · Space jump${state.cls === 'guardian' ? ' · R guard / parry' : ''} · 4 5 6 items · B bag · F interact · P party · Ctrl+click select`, 'sys');
+    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion.' : `WASD move (S back, A/D strafe) · mouse to look (click to capture, Esc frees it; Settings for classic) · Left click (or J) attack · 1 2 3 skills · K skill mastery · Shift dodge · Space jump${state.cls === 'guardian' ? ' · R guard / parry' : ''} · 4 5 6 items · B bag · F interact · P party · Ctrl+click select`, 'sys');
     log('Fill an enemy\'s yellow posture bar (heavy hits, Break skills, perfect dodges, parries) to BREAK it, then a teammate hits it for a SWITCH: big bonus damage.', 'sys');
     return;
   }
@@ -635,7 +636,7 @@ addEventListener('keydown', e => {
     if (e.key === 'Escape') chat.blur();
     return;
   }
-  if (e.key === 'Enter') { chat.focus(); e.preventDefault(); return; }
+  if (e.key === 'Enter') { freeCursor(); chat.focus(); e.preventDefault(); return; }
   const k = e.key.toLowerCase();
   keys.add(k);
   if (k === 'j') attackHeld = true;
@@ -661,13 +662,65 @@ addEventListener('keyup', e => {
 addEventListener('blur', () => { keys.clear(); attackHeld = false; combat.guard(false); });
 
 // camera drag (mouse + touch on the right/anywhere outside the stick)
+// ---------- settings: camera control ----------
+// 'mouse' (default): the camera follows the mouse (pointer lock; click the game to capture the cursor, Esc to free it).
+// 'classic': right-drag to look, or rest the cursor at a screen edge to turn.
+const settings = Object.assign({ camera: 'mouse', sens: 1, invertY: false }, (() => { try { return JSON.parse(localStorage.getItem('fb_settings') || '{}'); } catch { return {}; } })());
+const saveSettings = () => { try { localStorage.setItem('fb_settings', JSON.stringify(settings)); } catch {} };
+const mouseLook = () => settings.camera === 'mouse' && !isTouch;
+const locked = () => document.pointerLockElement === canvas;
+function lockCursor() { if (mouseLook() && !locked() && state.joined && !state.spectator) try { canvas.requestPointerLock()?.catch?.(() => {}); } catch {} }
+function freeCursor() { if (locked()) document.exitPointerLock(); }
+document.addEventListener('pointerlockchange', () => document.body.classList.toggle('mlock', locked()));
+addEventListener('mousemove', e => {
+  if (!locked()) return;
+  const s = 0.0024 * settings.sens;
+  state.yaw -= e.movementX * s;
+  state.pitch = Math.min(1.25, Math.max(0.12, state.pitch + e.movementY * s * (settings.invertY ? -1 : 1)));
+});
+// Panels need the cursor: free it whenever one is open.
+const CURSOR_PANELS = ['players', 'bag', 'hall', 'warp', 'smith', 'skillsp', 'settings'];
+function cursorPanelOpen() { return CURSOR_PANELS.some(id => { const el = $(id); return el && !el.classList.contains('hidden'); }); }
+// Top-right chips: lay them out right-to-left by their real widths, so a long gold count never overlaps a neighbour.
+function layoutChips() {
+  let right = 10;
+  for (const id of ['players-btn', 'chat-btn', 'sound-btn', 'bag-btn', 'skills-btn', 'settings-btn']) {
+    const el = $(id); if (!el || getComputedStyle(el).display === 'none') continue;
+    el.style.right = `${right}px`; right += el.offsetWidth + 8;
+  }
+}
+addEventListener('resize', layoutChips);
+setTimeout(layoutChips, 0); setTimeout(layoutChips, 1500);
+
+function renderSettings() {
+  const el = $('settings');
+  el.innerHTML = `<div class="top"><b>Settings</b><button class="x" data-a="close">✕</button></div>
+    <h4>Camera</h4>
+    <label class="opt"><input type="radio" name="cam" value="mouse" ${settings.camera === 'mouse' ? 'checked' : ''}> Follows the mouse <small>click the game to capture the cursor · Esc to free it</small></label>
+    <label class="opt"><input type="radio" name="cam" value="classic" ${settings.camera === 'classic' ? 'checked' : ''}> Classic <small>right-drag to look · rest the cursor at a screen edge to turn</small></label>
+    <h4>Mouse sensitivity <span id="sens-v">${settings.sens.toFixed(1)}×</span></h4>
+    <input type="range" min="0.3" max="3" step="0.1" value="${settings.sens}" data-a="sens">
+    <label class="opt"><input type="checkbox" data-a="inv" ${settings.invertY ? 'checked' : ''}> Invert vertical look</label>`;
+}
+$('settings-btn').onclick = () => { const el = $('settings'); el.classList.toggle('hidden'); if (!el.classList.contains('hidden')) renderSettings(); sfx.play('ui'); };
+$('settings').addEventListener('click', e => { if (e.target.closest('[data-a=close]')) $('settings').classList.add('hidden'); });
+$('settings').addEventListener('input', e => {
+  const t = e.target;
+  if (t.name === 'cam') { settings.camera = t.value; if (t.value === 'classic') freeCursor(); }
+  if (t.dataset.a === 'sens') { settings.sens = +t.value; $('sens-v').textContent = `${settings.sens.toFixed(1)}×`; }
+  if (t.dataset.a === 'inv') settings.invertY = t.checked;
+  saveSettings();
+});
+
 const drag = { id: null, x: 0, y: 0 };
 let mouseAttack = false;
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse') {
-    if (e.button === 0 && (e.ctrlKey || e.metaKey)) { selectAt(e.clientX, e.clientY); return; }
+    if (e.button === 0 && (e.ctrlKey || e.metaKey)) { if (locked()) selectAt(innerWidth / 2, innerHeight / 2); else selectAt(e.clientX, e.clientY); return; } // mouse look: select what's under the crosshair
+    if (e.button === 0 && mouseLook() && !locked()) { lockCursor(); return; } // the first click captures the cursor
     if (e.button === 0) { mouseAttack = true; attackHeld = true; return; }
+    if (locked()) return; // no right-drag needed while the camera follows the mouse
     if (e.button !== 2) return;
   }
   if (drag.id !== null) return;
@@ -1167,7 +1220,7 @@ function updateHud(now) {
   }
 
   // items, raid gate, merchant, guide
-  $('gold-chip').textContent = `${state.gold}g`;
+  { const gt = `${state.gold}g`; if ($('gold-chip').textContent !== gt) { $('gold-chip').textContent = gt; layoutChips(); } }
   $('me-buffs').innerHTML += `${state.tonic > 0 ? `<span>Tonic ${Math.ceil(state.tonic)}s</span>` : ''}${state.draught > 0 ? `<span>Ironbark ${Math.ceil(state.draught)}s</span>` : ''}`;
   updateGateBox();
   const near = nearMerchant();
@@ -1303,8 +1356,13 @@ function animateEntity(e, dt) {
     const a = m.anim, isP = e.kind === 'player';
     if (isP && e.dead && !a.dead) a.die();
     else if (isP && !e.dead && a.dead) a.revive();
-    if (e.spd > (isP ? 3.5 : 4.6)) a.base('Running_A', 0.2, Math.max(0.7, e.spd / (isP ? 6.5 : 5.5)));
-    else if (e.spd > 0.5) a.base('Walking_A', 0.2, isP ? 1.2 : Math.max(0.6, e.spd / 3.5));
+    if (isP && speed > 0.5) { // moving away from where we face = walking backwards
+      const rel = Math.atan2(g.position.x - px, g.position.z - pz) - g.rotation.y;
+      e.back = (e.back || 0) + ((Math.cos(rel) < -0.35 ? 1 : 0) - (e.back || 0)) * Math.min(1, dt * 12);
+    } else if (isP && e.spd < 0.5) e.back = 0;
+    const dirSign = isP && e.back > 0.5 ? -1 : 1;
+    if (e.spd > (isP ? 3.5 : 4.6)) a.base(dirSign < 0 ? 'Walking_A' : 'Running_A', 0.2, dirSign * Math.max(0.7, e.spd / (isP ? (dirSign < 0 ? 4.5 : 6.5) : 5.5)));
+    else if (e.spd > 0.5) a.base('Walking_A', 0.2, dirSign * (isP ? 1.2 : Math.max(0.6, e.spd / 3.5)));
     else a.base(a.idle, 0.25);
     a.update(hitStop > 0 ? dt * 0.08 : dt);
     if (isP) m.cursor.material.color.setHex(state.party && e.party === state.party && !self ? 0xa78bfa : 0x4ade80);
@@ -1433,7 +1491,8 @@ function frame(now) {
   const lm = state.joined && !state.spectator ? lockedMob() : null;
   const la = !lm && state.joined && !state.spectator ? focusedAlly() : null;
   const sel = lm || la;
-  if (state.joined && !state.spectator && !isTouch && mouse.inside && mouse.onCanvas && drag.id === null && document.activeElement !== $('chat-input')) {
+  if (cursorPanelOpen()) freeCursor();
+  if (settings.camera === 'classic' && state.joined && !state.spectator && !isTouch && mouse.inside && mouse.onCanvas && drag.id === null && document.activeElement !== $('chat-input')) {
     const edge = Math.max(40, innerWidth * 0.06);
     const side = mouse.x < edge ? 1 : mouse.x > innerWidth - edge ? -1 : 0;
     if (side !== mouse.edgeSide) { mouse.edgeSide = side; mouse.edgeSince = now; }
@@ -1499,7 +1558,7 @@ function frame(now) {
       state.moved += Math.hypot(nx - state.x, nz - state.z);
       if (state.moved > 10) guide.did('move');
       state.x = nx; state.z = nz;
-      state.face = Math.atan2(mx, mz);
+      state.face = state.yaw; // keep looking where the camera looks: S walks backwards, A/D strafe (also under camera lock)
     } else state.speed = 0;
     if (attackHeld && !state.roll) useSkill(0);
     combat.frame(); // guarding: face the enemy, drop the guard on a roll

@@ -4,7 +4,7 @@
 const touch = () => document.body.classList.contains('touch');
 
 const STEPS = [
-  { id: 'move', title: 'Find your feet', text: () => touch() ? 'Drag on the left half of the screen to move. Drag on the right half to look around.' : 'Move with WASD. Hold right-click and drag, or rest the cursor at a screen edge, to look around.' },
+  { id: 'move', title: 'Find your feet', text: () => touch() ? 'Drag on the left half of the screen to move. Drag on the right half to look around.' : 'Move with WASD (S walks backwards, A/D strafe). Click the game, then move the mouse to look around. Esc frees the cursor. Prefer right-drag? Change it in Settings.' },
   { id: 'hit', title: 'First strike', text: () => `Head north out of town and hit a Forest Boar. ${touch() ? 'Tap the big attack button' : 'Click (or press J)'} to attack; it aims at the nearest enemy.` },
   { id: 'dodge', title: 'Dodge', text: () => `A red shape on the ground means an attack is coming. ${touch() ? 'Tap Dodge' : 'Press Shift'} to roll through it: you can't be hit mid-roll.` },
   { id: 'kill', title: 'Defeat an enemy', text: () => 'Finish one off. Enemies drop gold, potions and sometimes gear.' },

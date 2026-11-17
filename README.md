@@ -28,7 +28,8 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Action | Desktop | Phone |
 | --- | --- | --- |
 | Move | WASD / arrows | Left side of the screen (joystick) |
-| Look | Right-click drag, or park the cursor at the left/right screen edge; Q/E; wheel to zoom | Drag the right side |
+| Look | Move the mouse (click the game to capture the cursor, Esc to free it); Q/E; wheel to zoom. Settings → Classic switches to right-drag + screen-edge turning | Drag the right side |
+| Move | WASD: the character keeps facing where the camera looks, so S walks backwards and A/D strafe (also while locked on) | Left stick |
 | Basic attack | Left click or J (hold) | Big round button (hold) |
 | Skills | 1, 2, 3 | Small buttons |
 | Dodge roll | Shift | Dodge button |
