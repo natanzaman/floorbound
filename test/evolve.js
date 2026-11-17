@@ -73,7 +73,7 @@ const hits = (m, by) => ev('hit', e => e.id === m.id && (!by || e.by === by.id))
   assert.deepEqual(Object.keys(fresh), ['rush', 'whirl', 'burst']);
   assert.equal(fresh.rush.br, 'B'); assert.equal(fresh.whirl.pts, 0);
   assert.equal(newMastery({}, 'cleric', 3).heal.pts, MASTERY.need[3], 'MASTERY=3 start level');
-  assert.equal(Object.keys(BRANCHES).length, 9);
+  assert.equal(Object.keys(BRANCHES).length, Object.values(CLASSES).reduce((n, c) => n + c.skills.length - 1, 0)); // 3 per class
   for (const b of Object.values(BRANCHES)) assert.ok(b.A.name && b.B.name && b.A.desc && b.B.desc);
   for (const cls of Object.keys(CLASSES)) { // every class has at least one co-op leaning branch
     assert.ok(CLASSES[cls].skills.slice(1).some(s => BRANCHES[s.id].A.coop || BRANCHES[s.id].B.coop), cls);

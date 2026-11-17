@@ -17,6 +17,7 @@ import { TwistMethods } from './twists.js';
 import { installCombat } from './combat.js';
 import { MasteryMethods } from './mastery.js';
 import { MASTERY } from '../shared/mastery.js';
+import { installClassesB } from './classes-b.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
@@ -515,6 +516,7 @@ export class Game {
     // and from Mastery 3 an evolved branch replaces the skill entirely.
     const S = slot > 0 ? sk.id : undefined, pow = slot > 0 ? this.skillPow(p, sk.id) : 1, br = slot > 0 ? this.branchOf(p, sk.id) : null;
     const cd = this.skillCd(p, sk, slot);
+    if (this.useClassSkillB?.(p, sk, slot, { S, pow, br, cd })) return; // Lancer, Bard (server/classes-b.js)
     if (br) { if (this.useEvolved(p, sk, br, pow) !== false) p.cds[slot] = this.time + cd; return; }
     p.cds[slot] = this.time + cd;
     const atk = p.atk * this.dmgMult(p) * pow;
@@ -1269,3 +1271,4 @@ Object.assign(Game.prototype, TwistMethods); // Warden twists (server/twists.js)
 installCombat(Game); // posture, perfect dodge, guard/parry, Horn Sweep (server/combat.js)
 Object.assign(Game.prototype, MasteryMethods); // skill mastery + evolutions (server/mastery.js)
 Object.assign(Game.prototype, F2Methods); // Floor 2 (server/floor2.js)
+installClassesB(Game); // Lancer, Bard skills + their hooks (server/classes-b.js)

@@ -1,5 +1,7 @@
 // Items: gear (weapon, armour, charm), consumables, drops and the town shop.
 // Shared by the server (rolls, stats) and the client (names, colours, tooltips).
+import { LANCER_WEAPONS } from './classes/lancer.js';
+import { BARD_WEAPONS } from './classes/bard.js';
 
 export const RARITY = [
   { id: 'common', name: 'Common', color: '#e5e7eb', sell: 5 },
@@ -33,6 +35,7 @@ const WEAPON_NAMES = {
 };
 const ARMOR_NAMES = ['Padded Vest', 'Riveted Jerkin', 'Wardensteel Mail', 'Aegis of the Field'];
 const CHARM_PREFIX = ['Worn', 'Fine', 'Gleaming', 'Radiant'];
+Object.assign(WEAPON_NAMES, { lancer: LANCER_WEAPONS, bard: BARD_WEAPONS }); // Lancer, Bard (shared/classes/)
 
 export const CONSUMABLES = {
   potion: { name: 'Health Potion', desc: 'Restore 40% of your health.', price: 15, key: '4', cd: 10 },
