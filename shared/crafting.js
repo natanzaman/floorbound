@@ -56,7 +56,7 @@ const REFINE_ESS = [0, 0, 1, 1, 2];
 // Cost to go from it.lv to it.lv + 1 (null when maxed).
 export function refineCost(it) {
   const lv = it.lv || 0;
-  if (lv >= REFINE_MAX) return null;
+  if (lv >= REFINE_MAX || it.ks) return null; // keepsakes (shared/items.js) are never refined
   const [main, second] = SLOT_MATS[it.slot] || SLOT_MATS.charm;
   const mats = { [main]: REFINE_MAIN[lv] };
   if (REFINE_SECOND[lv]) mats[second] = REFINE_SECOND[lv];
@@ -82,7 +82,7 @@ export function applyRefine(it) {
 export const SALVAGE = [{ dust: 2 }, { dust: 1, ess: 1 }, { ess: 2 }, { ess: 2, prism: 1 }];
 // What salvaging returns: the rarity yield plus half the main/second materials spent refining it.
 export function salvageYield(it) {
-  if (!SALVAGE[it.r]) return null; // Last Attack items can't be salvaged
+  if (!SALVAGE[it.r] || it.ks) return null; // Last Attack items and keepsakes can't be salvaged
   const out = { ...SALVAGE[it.r] };
   const [main, second] = SLOT_MATS[it.slot] || SLOT_MATS.charm;
   let m = 0, s = 0;
@@ -96,7 +96,7 @@ export function salvageYield(it) {
 // 'stats': reroll the stat values within the item's rarity range. 'affix': a charm gets a different affix.
 export const CHARM_AFFIXES = ['crit', 'haste', 'sw'];
 export function reforgeCost(it, mode) {
-  if (it.r > 3 || it.cr || it.la) return null; // crafted and Last Attack items are fixed
+  if (it.r > 3 || it.cr || it.la || it.ks) return null; // crafted and Last Attack items are fixed
   if (mode === 'affix' && it.slot !== 'charm') return null;
   if (mode !== 'affix' && mode !== 'stats') return null;
   const mats = { ess: [1, 1, 2, 3][it.r] + (mode === 'affix' ? 1 : 0) };

@@ -38,7 +38,7 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Guard / parry (Guardian) | Hold R to guard; tap R just before a hit to parry | — |
 | Select a character (enemy or ally) | Hold Ctrl (Cmd on Mac) to preview, Ctrl+click to select; Ctrl+right-click to deselect | Lock on button (enemies) |
 | Lock on / cycle enemies | Tab (Esc to clear) | Lock on button |
-| Chat | Enter (`/p` party, `/s` nearby, `/b` bot orders) | Chat button |
+| Chat | Enter (`/p` party, `/s` nearby, `/b` bot orders); lines also show as speech bubbles over the speaker's head (Settings → Speech bubbles turns them off) | Chat button |
 | Party | Players button (P) → Find party, or Invite | Players button → Find party / Invite |
 | Order your party's bots | Hold V (command wheel), or chat `/b stay`, `/b Lyra: heal` (`/b help` lists them) | ⌘ Bot orders under the party frames |
 | Items | 4 potion, 5 tonic, 6 draught; B bag | Potion button; Bag button |
@@ -118,6 +118,7 @@ The stone itself is engraved: its face carries the names of the latest Floor 1 c
 - **Drops are personal:** every party member nearby rolls their own gold, potions and gear. Alphas always drop Uncommon+; the Warden drops two Rare+ items for everyone who fought.
 - **Consumables:** Health Potion (40% health), Battle Tonic (+15% damage, 30 s), Ironbark Draught (−15% damage taken, 30 s). New characters start with 3 potions.
 - **Merchant** in town (press F at the stall): buy consumables and Uncommon gear (including a weapon in your class's alternate style), sell items.
+- **Keepsakes** (pink): story items handed out by a scene (e.g. *Bram's Buckle*). No stats, a line of text instead; they can be worn but never sold, salvaged, refined, reforged, dropped or deleted.
 
 ## Crafting
 
@@ -291,6 +292,7 @@ public/          Three.js client (no build step): main.js, world.js, style.css
 public/models/   rigged character models (glTF) with shared animations
 test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
+test/bubbles.js  speech bubble logic: duration, one per speaker, who sees which line (public/bubbles.js)
 test/feeltext.js in-process checks for who sees combat text (`to` tags on reactions) and which boss hits hit-stop their victim
 test/warden3.js  in-process checks for the Quake Ring (jump / roll / out of reach), Warden scaling and bot jump timing per capability
 test/aircontrol.js  jump air control: the shared air step, client prediction vs the server's movement check while airborne, bots steering mid-jump
@@ -302,6 +304,7 @@ shared/classes/   Lancer and Bard data, tuning, evolutions (lancer.js, bard.js) 
 server/classes-b.js, public/classes-b.js  Lancer / Bard skills (mixed into Game) and their rigs + visuals; test/classes-b.js
 shared/styles.js, server/styles.js, public/styles.js  weapon styles; test/styles.js, test/newclass.js (newer classes)
 shared/talents.js, server/talents.js, public/talents.js  talent trees and the Skill Tree window; test/talents.js
+server/staging.js  staging hooks for the scene director (filming): forceBossMove, reserveLastAttack, scriptDeath/scriptRevive, protect, setTwistOverride, spawnMob, giveKeepsake, clearStaging; test/staging.js
 server/admin.js  admin API (/api/admin/*) and /api/lobby; server/botmanager.js runs bots inside the server; public/admin.html the admin page
 ```
 
@@ -384,6 +387,8 @@ Teamwork comes from the party as each bot sees it, **real players included**:
 
 Chat channels: plain text goes to everyone, `/p text` to your party, `/s text` to players within 40 m.
 
+**Speech bubbles** (`public/bubbles.js`): every chat line also pops up over the speaker's head, bots' chatter included, to whoever would see it in the log (say within 40 m, party chat to the party, global to everyone; spectators see all of it; `/b` orders never). A rounded panel above the nameplate (max ~260 px, word-wrapped), it fades in, holds ≈ 1.6 s + 0.07 s per character (2–5 s; a `hold` in seconds on the chat event wins, for the scene director), and fades out; a new line from the same speaker replaces the old one. Hidden when the speaker is off screen, a little smaller far away. Settings → Speech bubbles turns them off (the chat log still has everything). Test: `node test/bubbles.js`.
+
 **Class plug-ins** (`shared/bots/registry.js`): a class's bot logic is `registerClassBrain(cls, { role, name, parry, combat(b, tgt, ctx), idle(b, ctx), onEvent(b, e), onLevel(b, lvl, ctx) })`; the brain handles perception, dodging, party, targets, orders and chatter, the plug-in only plays its kit against the target it is given (`ctx`: `useSkill`, `moveToward`, `switchOpen`, `dodge`, `ready`, `anchor`, `tank`, `hurt`, `healFocus`, `party`, `say`...). Systems that run on level-up (talents, weapon styles) hook in with `registerBotHook('onLevel', (b, lvl, ctx) => ...)`.
 
 ## Bots in game
@@ -453,6 +458,11 @@ node test/team.js                           # Brann (tank), Kael (DPS), Lyra (he
 **On any server (including the live one):** open `/bots.html` to add bot parties from your browser (`/bots.html?teams=2` for two), then watch at `/?spectate=1` or play alongside them. Keep the bots tab open.
 
 `?spectate=1` works on any server: it watches without joining and frames the whole group.
+
+**Film view** (`/?spectate=1&film=1`, for the Season 1 episodes, `docs/story/`): a spectator whose camera obeys the scene director. The server keeps a picture state, `game.cine(op, data)` (`server/cine.js`, client `public/cine.js`), and sends it to anyone who joins mid-take:
+- `shot` `{ shot, target, from, secs }`: `close_up` (~3 m, head and shoulders), `medium` (~6 m), `wide` (~16 m, high), `over_shoulder` (behind `from`, looking at `target`), `follow` (behind and above), `orbit` (slow circle), `crane` (rises and pulls back over ~7 s), `free` (back to the auto framing). Targets: `{ pid }` a player, `{ mid }` a mob, `{ x, z }` a point. `secs` is how long the camera takes to get there (0 = cut); the shot holds until the next one. Giants (the Warden) get a wider frame.
+- `slowmo` `{ secs, scale }`, `title` `{ text, sub, secs }`, `fade` `{ to: 'black' | 'in', secs }`, `letterbox` `{ on }` (2.39:1 bars), `clean` `{ on }` (hides the HUD, chat, skill bar, party frames and head markers; keeps nameplates, health bars, bubbles and banners), `light` `{ light: 'eclipse' | 'day' | null }` (the Eclipse darkness everywhere, forced daylight, or back to normal), `reset`.
+- Plain spectators ignore shots, letterbox and clean, but get light, titles, fades and slow motion. Players only get the light.
 
 Other testing aids: `SPAWN_AT=0,172` spawns players at the chamber gate. `TEST_HOOKS=1` lets a client set its own health (`{ type: 'test', hurt: 0.4 }`, for test/botbrain.js) or gain XP (`{ type: 'test', xp: 850 }`, for the bot level sync in test/playerbots.js and test/shutdown.js). `WARDEN_TWIST=<id>` forces a Warden twist (see above). `MAX_PLAYERS` caps the server (default 64).
 

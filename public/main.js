@@ -25,6 +25,8 @@ import { initPlayerBots } from '/playerbots.js';
 import { initTalents } from '/talents.js';
 import { initBotWheel } from '/botwheel.js';
 import { initBell } from '/bell.js'; // the Tower Bell and the engraved Hall stones
+import { initCine } from '/cine.js'; // film view camera, titles, fades, letterbox, light (F4)
+import { initBubbles } from '/bubbles.js';
 
 const sfx = new Sound();
 
@@ -63,6 +65,7 @@ const state = {
 const players = new Map(); // id -> entity
 const mobs = new Map();
 let boss = null;
+const cine = initCine({ camera, state, players, mobs, slowMotion: (a, b) => slowMotion(a, b), twists }); // public/cine.js
 // Floor 2 — The Glimmering Mire (floor2client.js): world, waystones, Stairway, hazards and its events.
 const f2 = initFloor2Client({
   scene, sun, occluders, fx, sfx, state, mobs, players, isTouch,
@@ -225,6 +228,7 @@ function reconnect(joinMsg) {
 }
 const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
 const wheel = initBotWheel({ send, state, players, log }); // orders for the bots in your party: hold V (public/botwheel.js)
+const bubbles = initBubbles({ state, players, project, camera, layer: $('labels'), enabled: () => settings.bubbles !== false }); // speech bubbles over heads (public/bubbles.js)
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
@@ -284,6 +288,7 @@ function onMessage(msg) {
     renderPlayers();
     return;
   }
+  if (cine.onMessage(msg)) return; // the film picture as it is now (sent on join)
   if (talents.onMessage(msg)) return; // talent tree (also keeps a copy of the mastery data)
   if (mastery.onMessage(msg)) return; // skill mastery
   if (pbots.onMessage(msg)) return; // player-owned bots (Players panel → Bots tab)
@@ -348,6 +353,7 @@ function onSnapshot({ me, w }) {
 
 function handleEvent(e) {
   const me = state.myId;
+  if (cine.event(e)) return; // shots, titles, fades, letterbox, clean feed, light
   f2.onEvent(e);
   if (bell.event(e)) return; // the Tower Bell
   if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
@@ -564,7 +570,7 @@ function handleEvent(e) {
     case 'pdie': {
       if (e.id === me) {
         const camp = WAYSTONES.find(w => w.floor === (e.f || floorOf(state.x)))?.name || 'town'; // Town of Beginnings / Mirelight Camp
-        $('dead').innerHTML = `<div>You were defeated</div><small>${e.src && e.src !== '?' ? `by ${esc(e.src)} · ` : ''}respawning at ${esc(camp)}…</small>`;
+        $('dead').innerHTML = `<div>You were defeated</div><small>${e.src && e.src !== '?' ? `by ${esc(e.src)} · ` : ''}${e.stay ? 'waiting to be revived' : `respawning at ${esc(camp)}…`}</small>`;
         $('dead').classList.remove('hidden');
       }
       break;
@@ -615,6 +621,7 @@ function handleEvent(e) {
       break;
     case 'invite': if (e.to === me) showInvite(e.from, e.name); break;
     case 'chat': // ch 'p': party chat (only your party sees it), 's': say (heard within 40 m)
+      if (bubbles.chat(e) && e.id !== me && !state.spectator) guide.tip('bubbles'); // a bubble over the speaker's head (same rules as the log)
       if (e.ch === 'p') { if (state.party && e.party === state.party) log(`[Party] ${e.from}: ${e.text}`, e.id === me ? 'me party' : 'party'); break; }
       if (e.ch === 's') { if (state.spectator || Math.hypot(e.x - state.x, e.z - state.z) < 40) log(`${e.from} says: ${e.text}`, e.id === me ? 'me' : 'say'); break; }
       log(`${e.from}: ${e.text}`, e.id === me ? 'me' : ''); break;
@@ -737,7 +744,7 @@ addEventListener('blur', () => { keys.clear(); attackHeld = false; combat.guard(
 // ---------- settings: camera control ----------
 // 'mouse' (default): the camera follows the mouse (pointer lock; click the game to capture the cursor, Esc to free it).
 // 'classic': right-drag to look, or rest the cursor at a screen edge to turn.
-const settings = Object.assign({ camera: 'mouse', sens: 1, invertY: false }, (() => { try { return JSON.parse(localStorage.getItem('fb_settings') || '{}'); } catch { return {}; } })());
+const settings = Object.assign({ camera: 'mouse', sens: 1, invertY: false, bubbles: true }, (() => { try { return JSON.parse(localStorage.getItem('fb_settings') || '{}'); } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem('fb_settings', JSON.stringify(settings)); } catch {} };
 const mouseLook = () => settings.camera === 'mouse' && !isTouch;
 const locked = () => document.pointerLockElement === canvas;
@@ -772,7 +779,9 @@ function renderSettings() {
     <label class="opt"><input type="radio" name="cam" value="classic" ${settings.camera === 'classic' ? 'checked' : ''}> Classic <small>right-drag to look · rest the cursor at a screen edge to turn</small></label>
     <h4>Mouse sensitivity <span id="sens-v">${settings.sens.toFixed(1)}×</span></h4>
     <input type="range" min="0.3" max="3" step="0.1" value="${settings.sens}" data-a="sens">
-    <label class="opt"><input type="checkbox" data-a="inv" ${settings.invertY ? 'checked' : ''}> Invert vertical look</label>`;
+    <label class="opt"><input type="checkbox" data-a="inv" ${settings.invertY ? 'checked' : ''}> Invert vertical look</label>
+    <h4>Chat</h4>
+    <label class="opt"><input type="checkbox" data-a="bub" ${settings.bubbles !== false ? 'checked' : ''}> Speech bubbles <small>chat lines over the speaker's head (the chat log keeps everything)</small></label>`;
 }
 $('settings-btn').onclick = () => { const el = $('settings'); el.classList.toggle('hidden'); if (!el.classList.contains('hidden')) renderSettings(); sfx.play('ui'); };
 $('settings').addEventListener('click', e => { if (e.target.closest('[data-a=close]')) $('settings').classList.add('hidden'); });
@@ -781,6 +790,7 @@ $('settings').addEventListener('input', e => {
   if (t.name === 'cam') { settings.camera = t.value; if (t.value === 'classic') freeCursor(); }
   if (t.dataset.a === 'sens') { settings.sens = +t.value; $('sens-v').textContent = `${settings.sens.toFixed(1)}×`; }
   if (t.dataset.a === 'inv') settings.invertY = t.checked;
+  if (t.dataset.a === 'bub') { settings.bubbles = t.checked; if (!t.checked) bubbles.clear(); }
   saveSettings();
 });
 
@@ -1154,12 +1164,14 @@ $('skills-btn').onclick = () => talents.toggle(); // Skill Tree window (also K, 
 const statsText = it => Object.entries(it.st).map(([k, v]) => statLabel(k, v)).join(' · ');
 function mainStat(it) { return it ? (it.st.atk ?? it.st.hp ?? Object.values(it.st).reduce((a, b) => a + b, 0)) : 0; }
 const stackBtns = (kind, id) => `<button data-a="dropStack" data-k="${kind}" data-id="${id}" title="Drop 1 on the ground (Shift: the whole stack)">Drop</button><button class="del" data-a="discardStack" data-k="${kind}" data-id="${id}" title="Delete 1 (Shift: the whole stack)">Delete</button>`;
+// A keepsake (story item, shared/items.js): its own colour, its line of text instead of stats, and no sell / drop / delete.
+const keepsakeRow = (it, slotName, actions) => `<div class="it keepsake" title="${esc(it.desc || '')}"><span class="slot">${slotName}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}</b><small class="ks-desc">${esc(it.desc || '')}</small><small>Keepsake · it stays with you</small></span>${actions}</div>`;
 function renderBag() {
   const el = $('bag');
   if (el.classList.contains('hidden') || !state.inv) return;
   const inv = state.inv, near = nearMerchant();
   const shopping = near && state.shopOpen;
-  const row = (it, slotName, actions) => it
+  const row = (it, slotName, actions) => it?.ks ? keepsakeRow(it, slotName, actions) : it
     ? `<div class="it" title="${esc(styles.title(it))}"><span class="slot">${slotName}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}</b><small>${statsText(it)}${styles.tag(it)}</small></span>${actions}</div>`
     : `<div class="it empty"><span class="slot">${slotName}</span><span class="nm"><small>Empty</small></span></div>`;
   let h = `<div class="top"><span>Bag <span class="gold">${inv.gold} gold</span></span><button class="x" data-a="close">✕</button></div>`;
@@ -1180,6 +1192,7 @@ function renderBag() {
     const cur = inv.eq[it.slot], diff = Math.round((mainStat(it) - mainStat(cur)) * 10) / 10; // refined stats have one decimal
     const cmp = it.slot !== 'charm' && cur ? (diff > 0 ? ` <span class="up">▲${diff}</span>` : diff < 0 ? ` <span class="down">▼${-diff}</span>` : '') : !cur ? ' <span class="up">new</span>' : '';
     const usable = !it.cls || it.cls === state.cls;
+    if (it.ks) return keepsakeRow(it, it.slot, `<button data-a="equip" data-u="${it.u}">Wear</button>`); // keepsakes: no sell, drop or delete
     return `<div class="it" title="${esc(styles.title(it))}"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}${styles.tag(it)}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}<button data-a="drop" data-u="${it.u}" title="Drop on the ground for anyone to pick up">Drop</button><button class="del" data-a="discard" data-u="${it.u}" title="Delete for good">Delete</button></div>`;
   }).join('') : '<div class="it empty"><span class="nm"><small>Nothing yet. Enemies drop gear; the Warden always does.</small></span></div>';
   { // materials, each with Drop / Delete
@@ -1864,6 +1877,7 @@ function frame(now) {
   const sx = (Math.random() - 0.5) * shakeAmt, sy = (Math.random() - 0.5) * shakeAmt;
   camera.position.set(cx - Math.sin(state.yaw) * Math.cos(cp) * cd + sx, 1.6 + Math.sin(cp) * cd + sy, cz - Math.cos(state.yaw) * Math.cos(cp) * cd);
   camera.lookAt(cx, 1.6, cz);
+  const cf = cine.frame(dt, cx, cz); if (cf) [cx, cz] = cf; // film view: the director's shot takes over
   if (!state.joined) { // slow orbit behind the login screen
     state.yaw += dt * 0.08;
     camera.position.set(Math.sin(state.yaw) * 40, 22, 30 + Math.cos(state.yaw) * 40);
@@ -1876,6 +1890,7 @@ function frame(now) {
   sfx.listener.x = cx; sfx.listener.z = cz;
 
   drawFloats(dt, vdt);
+  bubbles.frame();
 
   if (state.joined) updateHud(now);
   updateRareHint(now);
@@ -1886,4 +1901,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { state, players, mobs, banner, sfx, project, floatLog };
+window.__fb = { state, players, mobs, banner, sfx, project, floatLog, cine, camera, bubbles };

@@ -6,6 +6,7 @@ Original characters and places. The tone of SAO (trapped, death is real, raid pa
 Files:
 - `docs/story/STORY.md`: this bible (world, cast, arc, episode beats).
 - `docs/story/ep1-first-line.md`: Episode 1 screenplay; `ep1-first-line.yaml`: its cue sheet for the scene director.
+- `docs/story/ep2-mirelight.md`, `ep3-second-bell.md`: Episodes 2 and 3 screenplays (cue sheets come in ROADMAP F7).
 - `docs/SCRIPT_BRIEF.md`: what the game and the director can do (the capability list writers work from).
 
 ---
@@ -83,7 +84,7 @@ Season question: **can a tower full of strangers become a party?**
 ### Ep 3: The Second Bell
 1. **The Sunken Gate.** Six ready up: Corvin, Tamsin, Juno, Pell, Sable, Dax. Sable: *"Last Attack's mine." / Corvin: "Then earn it."*
 2. **The Sovereign's court.** Live fight. Phase 2: the Tidal Wave, *"Roll through it!"*. Phase 3: the Deluge; Juno, in the dark, holds the bright ring and calls it: *"Inside the light! On me!"* At 10% Sable Breaks the Sovereign, looks at Tamsin: *"Switch! Healer, it's yours!"* Tamsin's Smite lands the Last Attack.
-3. **Hall of Clearers, Floor 2 face.** Six names. **The second bell.** Tamsin closes the notebook: *"No new names."* Pell: *"Ninety-eight to go."* Title card.
+3. **Hall of Clearers, Floor 2 face.** Six names. **The second bell.** Tamsin closes the notebook: *"No new names."* Corvin: *"Ninety-eight to go."* Title card.
 
 ---
 

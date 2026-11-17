@@ -24,6 +24,8 @@ import { altStyle } from '../shared/styles.js';
 import { installTalents } from './talents.js';
 import { installTracking } from './trackgame.js';
 import { installBell } from './bell.js';
+import { installStaging } from './staging.js';
+import { installCine } from './cine.js'; // cinematic camera state for filming (F4)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -394,6 +396,7 @@ export class Game {
   discard(p, u) {
     const i = p.inv.bag.findIndex(it => it.u === u);
     if (i < 0) return;
+    if (p.inv.bag[i].ks) return this.sys('A keepsake stays with you.', p.id);
     const [it] = p.inv.bag.splice(i, 1);
     this.sys(`Discarded ${it.name}.`, p.id);
     this.track(p, 'discard', { r: it.r, slot: it.slot });
@@ -404,6 +407,7 @@ export class Game {
     if (!this.nearMerchant(p)) return;
     const i = p.inv.bag.findIndex(it => it.u === u);
     if (i < 0) return;
+    if (p.inv.bag[i].ks) return this.sys("The merchant won't take a keepsake.", p.id);
     const [it] = p.inv.bag.splice(i, 1);
     p.gold += sellPrice(it);
     this.events.push({ t: 'coin', id: p.id });
@@ -717,6 +721,7 @@ export class Game {
     const amount = Math.max(1, Math.round(base * (0.9 + Math.random() * 0.2) * (crit ? 1.5 : 1) * mult));
     const dealt = Math.min(amount, Math.max(0, m.hp)); // overkill doesn't count toward mastery
     m.hp -= amount;
+    if (m.hp <= 0 && this.lastAttackHeld(m, p)) m.hp = 1; // a reserved Last Attack (server/staging.js)
     if (sk) this.masteryGain(p, sk, dealt, 'dmg');
     this.bookBuffs(p, dealt); // Blessing / Zeal / War Cry mastery
     this.afterHitA?.(m, p, dealt, sw); // Rage, lifesteal, Mark mastery (server/classes-a.js)
@@ -752,8 +757,9 @@ export class Game {
   }
 
   killMob(m, killer) {
+    if (this.lastAttackHeld(m, killer)) { m.hp = Math.max(1, m.hp); return; } // reserved for someone else (server/staging.js)
     m.dead = true; m.hp = 0;
-    m.deadUntil = this.time + (m.def.boss ? 60 : m.def.elite ? 45 : 15);
+    m.deadUntil = m.staged ? Infinity : this.time + (m.def.boss ? 60 : m.def.elite ? 45 : 15); // staged spawns stay down
     this.events.push({ t: 'die', id: m.id, x: r2(m.x), z: r2(m.z), b: m.def.boss ? 1 : 0 });
     if (m.temp || m.rare) this.mobs.delete(m.id);
     if (!killer.kills++) this.track(killer, 'first_kill', { secs: Math.round(this.time - killer.joinedAt), mob: m.type });
@@ -864,6 +870,7 @@ export class Game {
     if (guard) amount = Math.max(1, Math.round(amount * (1 - GUARD.dr)));
     if (!peril) amount = this.absorbHit(p, amount); // Aegis shields
     amount = this.talentHurt?.(p, amount, guard, peril) ?? amount; // talents: guard block, ally auras, Guardian Spirit (server/talents.js)
+    amount = this.protectHit(p, amount); // protect(): a scripted health floor (server/staging.js)
     if (amount <= 0) { p.lastHurt = this.time; p.lastCombat = this.time; return; }
     p.hp -= amount;
     p.lastHurt = this.time; p.lastCombat = this.time;
@@ -1362,5 +1369,7 @@ installClassesB(Game); // Lancer, Bard skills + their hooks (server/classes-b.js
 Object.assign(Game.prototype, ClassesAMethods); // Ranger and Berserker (server/classes-a.js)
 installStyles(Game); // weapon styles (server/styles.js)
 installBell(Game); // the Tower Bell: ringBell, bellAuto (server/bell.js)
+installCine(Game); // cine(op, data), cineState(): filming camera, titles, fades, light (server/cine.js)
 installTracking(Game); // play-tracking hooks: boss fight rows, death / quit context (server/trackgame.js)
+installStaging(Game); // staging hooks for the scene director: boss moves, reserved Last Attack, scripted deaths (server/staging.js)
 installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js); keep it last
