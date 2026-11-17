@@ -147,7 +147,7 @@ export function initCombat(ctx) {
     });
     sweeps.set(e.follow, [ring, lastFx()]);
     sfx.play('peril', pos(), 1.4);
-    if (m) { bossShot(m.id, 'Cheer', 1.6); bossShot(m.id, '2H_Melee_Attack_Spin', 1.3, Math.max(0, e.d - 0.45)); }
+    m?.model.anim?.windup?.('sweep', e.d); // coils round, axe wound back (world.js WINDUPS)
     if (near(e.x, e.z, e.r + 6)) guide.tip('peril');
   }
 
@@ -184,7 +184,7 @@ export function initCombat(ctx) {
     });
     const pos = m?.model.group.position || { x: e.x, z: e.z };
     sfx.play('quakeWarn', pos, 1.5);
-    if (m) { bossShot(m.id, 'Cheer', 1.5); bossShot(m.id, '2H_Melee_Attack_Chop', 1.5, Math.max(0, e.d - 0.4)); }
+    m?.model.anim?.windup?.('quake', e.d); // rears up on one leg, then stomps
     const mine = !state.spectator && near(e.x, e.z, e.max + 4);
     if (mine || (state.spectator && near(e.x, e.z, 60))) {
       callout(e.n > 1 ? `QUAKE RINGS ×${e.n}` : 'QUAKE RING', `${isTouch() ? 'Jump' : 'Jump (Space)'} as the wave reaches you, roll through it, or get outside the amber ring`, e.d + 0.5);
@@ -195,7 +195,7 @@ export function initCombat(ctx) {
   // slow frame must never make the next ring look later than it really is.
   function quakeRing(e) {
     const m = mobs.get(e.by), t0 = performance.now() / 1000 + Math.max(0, e.d), life = e.max / e.sp;
-    if (e.i > 0 && m) bossShot(m.id, '2H_Melee_Attack_Chop', 1.6, Math.max(0, e.d - 0.4)); // stomps again for each ring
+    if (e.i > 0 && m) setTimeout(() => m.model.anim?.windup?.('quake', 0.6), Math.max(0, e.d - 0.6) * 1000); // stomps again for each ring
     setTimeout(() => {
       const g = new THREE.Group();
       const glowMat = c => { const mt = fx.fadeMat(c, 0.9); mt.blending = THREE.AdditiveBlending; return mt; };

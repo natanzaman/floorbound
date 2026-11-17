@@ -113,9 +113,9 @@ export const MATRON = { callEvery: 13, callR: 24, aura: 0.25, auraR: 14 };      
 // Drowned Thralls, mire pools. Below 33%: + the Deluge (outer ring floods) and homing orb volleys; waves come faster.
 export const SOVEREIGN = {
   phases: [0.66, 0.33], hpBase: 4600, hpPer: 2000,
-  sweep: { wind: 0.85, mult: 1.0 },
-  geyser: { every: [7, 6, 5], r: 3.0, wind: 1.3, mult: 1.5, extra: [1, 2, 3] },
-  wave: { every: [0, 15, 11], first: 3.5, wind: 1.8, speed: 11, width: 1.4, mult: 2.8 },
+  sweep: { wind: 1.1, mult: 1.0 },
+  geyser: { every: [7, 6, 5], r: 3.0, wind: 1.65, mult: 1.5, extra: [1, 2, 3] },
+  wave: { every: [0, 15, 11], first: 3.5, wind: 2.3, speed: 11, width: 1.4, mult: 2.8 },
   thralls: { every: 24, n: 2, max: 4 },
   pools: { every: 10, n: 2, r: 3.8, arm: 1.2, life: 16, tick: 0.5, mult: 0.3, max: 6 },
   deluge: { r: 16.5, tick: 0.5, mult: 0.25 },

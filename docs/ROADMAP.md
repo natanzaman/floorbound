@@ -33,6 +33,8 @@ Done and live:
 - **Hit-stop (freeze frame) only when a boss's big hit lands on *you*.** It's local to the victim and never shown to the whole party, never on player hits.
 
 ## Tasks
+**Status 2026-11-17: A–E are all done and merged** (specs kept below for reference). Next up: speech bubbles above heads, and a scene "director" that plays a cue sheet (docs/SCRIPT_BRIEF.md) once the owner sends a script.
+
 Each task has its own branch and worktree. Specs below; acceptance criteria are what "done" means.
 
 ### A. Combat text and boss-hit feel (`feat/feel-text`)

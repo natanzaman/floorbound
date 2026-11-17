@@ -465,16 +465,115 @@ class Animator {
     this.shotAct = a;
   }
   busy() { return !!this.shotAct; }
-  die() { this.shot('Death_A', 1, { clamp: true, fade: 0.1 }); this.dead = true; }
+  die() { this.wind = null; this.shot('Death_A', 1, { clamp: true, fade: 0.1 }); this.dead = true; }
   revive() {
-    this.dead = false;
+    this.dead = false; this.wind = null;
     this.mixer.stopAllAction();
     this.shotAct = null; this.cur = null;
     this.base(this.idle, 0);
   }
+  // A boss wind-up: blend into a procedural pose (WINDUPS) over `dur` s, hold it with a tremble, then strike (a clip
+  // or an impact pose) as the attack lands, and let go. Layered over whatever clip is playing (idle, walk).
+  windup(kind, dur) {
+    const W = WINDUPS[kind];
+    if (!W || this.dead) return;
+    this.pz ||= new PoseLayer(this.mixer.getRoot());
+    this.wind = { W, t: 0, dur: Math.max(0.25, dur), struck: false };
+  }
+  cancelWindup() { if (this.wind) { this.wind = null; if (this.shotAct) { this.shotAct.fadeOut(0.15); this.shotAct = null; this.fadeInBase(0.15); } } }
   update(dt) {
+    this.pz?.restore(); // undo last frame's pose offsets before the mixer writes this frame's clip pose
     this.mixer.update(dt);
+    const w = this.wind;
+    if (w) {
+      w.t += dt;
+      const { W } = w, lead = W.clip ? W.clip[2] : 0.1, hitAt = w.dur, k = Math.min(1, w.t / Math.max(0.1, (hitAt - lead) * 0.8));
+      const ease = k * k * (3 - 2 * k), tremble = w.t < hitAt - lead ? Math.sin(w.t * 46) * 0.035 * ease : 0;
+      if (W.clip && !w.struck && w.t >= hitAt - lead) { w.struck = true; this.shot(W.clip[0], W.clip[1]); }
+      let up = ease, hit = 0;
+      if (W.clip) up *= 1 - Math.min(1, Math.max(0, (w.t - (hitAt - lead)) / 0.16)); // hand over to the strike clip
+      else if (W.hit) { // snap into the impact pose, hold it, ease out
+        const s = (w.t - (hitAt - 0.12)) / 0.12;
+        if (s > 0) { hit = Math.min(1, s) * (1 - Math.max(0, Math.min(1, (w.t - hitAt - (W.hold ?? 0.3)) / 0.4))); up *= Math.max(0, 1 - s); }
+      } else up *= 1 - Math.max(0, Math.min(1, (w.t - hitAt - (W.hold ?? 0)) / 0.3));
+      if (up <= 0 && hit <= 0 && w.t > hitAt) this.wind = null;
+      else this.pz.apply(W.up, up, W.hit && POSES[W.hit], hit, tremble);
+    }
     if (this.head) this.head.scale.setScalar(HEAD_SCALE); // applied after the animation pose
+  }
+}
+
+// ---------- procedural poses on the KayKit rig ----------
+// Angles in degrees, in the model's own frame (it faces +Z): [pitch (+ bends forward / swings a limb forward is -),
+// yaw (+ turns to its left), roll]. drop: lower the hips by this fraction of the model's height (a crouch).
+// Upper arms hang down, so pitch -150 lifts an arm forward and up over the head; +40 swings it back.
+export const POSES = {
+  rear: { hips: [-9, 0, 0], spine: [-8, 0, 0], chest: [-10, 0, 0], head: [-14, 0, 0], // rear up, axe over the head
+    'upperarm.l': [-120, 0, -8], 'upperarm.r': [-120, 0, 8], 'lowerarm.l': [-20, 0, 0], 'lowerarm.r': [-20, 0, 0] },
+  crouch: { drop: 0.1, hips: [14, 0, 0], spine: [8, 0, 0], chest: [6, 0, 0], head: [16, 0, 0], // horns lowered
+    'upperarm.l': [35, 0, -20], 'upperarm.r': [35, 0, 20], 'lowerarm.l': [-15, 0, 0], 'lowerarm.r': [-15, 0, 0],
+    'upperleg.l': [-45, 0, 0], 'upperleg.r': [-45, 0, 0], 'lowerleg.l': [60, 0, 0], 'lowerleg.r': [60, 0, 0] },
+  coil: { drop: 0.06, hips: [4, 35, 0], spine: [3, 30, 0], chest: [2, 35, 0], head: [0, -65, 0], // wound up to swing round
+    'upperarm.l': [-50, 45, -25], 'upperarm.r': [-30, 60, 45], 'lowerarm.l': [-30, 0, 0], 'lowerarm.r': [-20, 0, 0],
+    'upperleg.l': [-25, 0, 0], 'upperleg.r': [-20, 0, 0], 'lowerleg.l': [35, 0, 0], 'lowerleg.r': [30, 0, 0] },
+  stompUp: { hips: [-8, 0, 0], spine: [-6, 0, 0], chest: [-8, 0, 0], head: [-12, 0, 0], // knee high, arms flung up
+    'upperarm.l': [-130, 0, -25], 'upperarm.r': [-130, 0, 25], 'lowerarm.l': [-15, 0, 0], 'lowerarm.r': [-15, 0, 0],
+    'upperleg.r': [-85, 0, 0], 'lowerleg.r': [85, 0, 0], 'upperleg.l': [4, 0, 0] },
+  stomp: { drop: 0.1, hips: [12, 0, 0], spine: [8, 0, 0], chest: [6, 0, 0], head: [8, 0, 0], // the foot comes down
+    'upperarm.l': [-20, 0, -45], 'upperarm.r': [-20, 0, 45], 'lowerarm.l': [-25, 0, 0], 'lowerarm.r': [-25, 0, 0],
+    'upperleg.l': [-40, 0, 0], 'upperleg.r': [-35, 0, 0], 'lowerleg.l': [55, 0, 0], 'lowerleg.r': [40, 0, 0] },
+  cock: { spine: [-3, 15, 0], chest: [-4, 18, 0], 'upperarm.r': [-95, 0, 15], 'upperarm.l': [-85, 0, -10], 'lowerarm.r': [-20, 0, 0] },
+};
+// Wind-up per attack: up = the pose it builds into; then either clip [name, speed, s before impact] or hit (an impact
+// pose held `hold` s). hold without hit keeps `up` past the impact (the charge keeps its horns down down the lane).
+export const WINDUPS = {
+  slam: { up: 'rear', clip: ['2H_Melee_Attack_Chop', 1.5, 0.4] },
+  charge: { up: 'crouch', hold: 0.4 },
+  sweep: { up: 'coil', clip: ['2H_Melee_Attack_Spin', 1.3, 0.45] },
+  spin: { up: 'coil', clip: ['2H_Melee_Attack_Spinning', 1.2, 0.3] },
+  quake: { up: 'stompUp', hit: 'stomp', hold: 0.3 },
+  cleave: { up: 'cock', clip: ['2H_Melee_Attack_Chop', 1.6, 0.4] },
+};
+const ORDER = ['hips', 'spine', 'chest', 'head', 'upperarm.l', 'lowerarm.l', 'upperarm.r', 'lowerarm.r', 'upperleg.l', 'lowerleg.l', 'upperleg.r', 'lowerleg.r'];
+const D2R = Math.PI / 180, _e = new THREE.Euler(), _r = new THREE.Quaternion(), _g = new THREE.Quaternion(), _gi = new THREE.Quaternion(),
+  _p = new THREE.Quaternion(), _x = new THREE.Quaternion(), _v = new THREE.Vector3(), _s = new THREE.Vector3();
+class PoseLayer {
+  constructor(root) {
+    this.root = root;
+    this.bones = ORDER.map(n => root.getObjectByName(n.replace('.', ''))) // (glTF loading drops the dots)
+      .map((b, i) => b && { name: ORDER[i], b, q: new THREE.Quaternion(), p: new THREE.Vector3() }).filter(Boolean);
+    this.dirty = false;
+  }
+  restore() {
+    if (!this.dirty) return;
+    for (const o of this.bones) { o.b.quaternion.copy(o.q); o.b.position.copy(o.p); }
+    this.dirty = false;
+  }
+  // Mix pose a (weight wa) and pose b (weight wb) on top of the current clip pose.
+  apply(a, wa, bPose, wb, tremble = 0) {
+    const A = POSES[a] || {}, B = bPose || {};
+    for (const o of this.bones) { o.q.copy(o.b.quaternion); o.p.copy(o.b.position); }
+    this.dirty = true;
+    this.root.updateMatrixWorld(true);
+    this.root.getWorldQuaternion(_g); _gi.copy(_g).invert();
+    const drop = (A.drop || 0) * wa + (B.drop || 0) * wb;
+    for (const o of this.bones) {
+      const ra = A[o.name], rb = B[o.name];
+      if (o.name === 'hips' && drop) { // crouch: lower the hips straight down in world space
+        o.b.getWorldPosition(_v); this.root.getWorldScale(_s);
+        _v.y -= drop * _s.y * ASSETS.baseHeight;
+        o.b.position.copy(o.b.parent.worldToLocal(_v));
+      }
+      const t = o.name === 'chest' ? tremble : 0;
+      if (!ra && !rb && !t) continue;
+      const ang = i => ((ra?.[i] || 0) * wa + (rb?.[i] || 0) * wb) * D2R;
+      _e.set(ang(0) + t, ang(1), ang(2), 'YXZ'); _r.setFromEuler(_e);
+      _r.premultiply(_g).multiply(_gi); // model frame -> world
+      o.b.parent.getWorldQuaternion(_p);
+      _x.copy(_p).invert().multiply(_r).multiply(_p); // the same rotation in the parent's frame
+      o.b.quaternion.premultiply(_x);
+      o.b.updateMatrixWorld(true);
+    }
   }
 }
 
@@ -622,14 +721,22 @@ export class Effects {
     this.add(m, life, (mesh, k) => { mesh.material.opacity = 0.25 * (1 - k * 0.6); edge.rotation.z += 0.02; });
   }
 
+  // A ground telegraph: a pulsing red edge, a fill that grows to the edge as it lands (easing in, so the last moment
+  // reads clearly), and a bright ring closing in from outside that meets the edge exactly on impact.
   telegraph(x, z, r, life, follow) {
     const g = new THREE.Group();
-    const edge = new THREE.Mesh(new THREE.RingGeometry(r - 0.3, r, 48), this.fadeMat(0xff2a2a, 0.85));
-    const fill = new THREE.Mesh(new THREE.CircleGeometry(r, 48), this.fadeMat(0xff3b3b, 0.3));
-    edge.rotation.x = fill.rotation.x = -Math.PI / 2;
-    g.add(edge, fill); g.position.set(x, 0.08, z);
+    const edge = new THREE.Mesh(new THREE.RingGeometry(r - 0.35, r, 56), this.fadeMat(0xff2a2a, 0.9));
+    const fill = new THREE.Mesh(new THREE.CircleGeometry(r, 56), this.fadeMat(0xff3b3b, 0.32));
+    const base = new THREE.Mesh(new THREE.CircleGeometry(r, 56), this.fadeMat(0x7f1d1d, 0.16));
+    const closer = new THREE.Mesh(new THREE.RingGeometry(0.93, 1, 56), this.fadeMat(0xffd0c0, 0.85));
+    for (const o of [edge, fill, base, closer]) o.rotation.x = -Math.PI / 2;
+    base.position.y = -0.01; fill.position.y = 0.005; closer.position.y = 0.012;
+    g.add(base, edge, fill, closer); g.position.set(x, 0.08, z);
     this.add(g, life, (mesh, k) => {
-      fill.scale.setScalar(Math.max(0.01, k));
+      fill.scale.setScalar(Math.max(0.01, k * k * (3 - 2 * k)));
+      fill.material.opacity = 0.3 + 0.25 * k;
+      edge.material.opacity = 0.65 + 0.3 * Math.sin(k * (14 + 22 * k));
+      closer.scale.setScalar(r * (1.45 - 0.45 * k)); closer.material.opacity = 0.35 + 0.55 * k;
       if (follow) { const p = follow(); if (p) mesh.position.set(p.x, 0.08, p.z); }
     });
   }
@@ -660,7 +767,10 @@ export class Effects {
     edge.rotation.x = fill.rotation.x = -Math.PI / 2; fill.position.y = 0.01;
     edge.position.z = fill.position.z = len / 2;
     g.add(edge, fill); g.position.set(x0, 0.09, z0); g.rotation.y = Math.atan2(x1 - x0, z1 - z0);
-    this.add(g, life, (mesh, k) => { fill.scale.y = Math.max(0.01, k); fill.position.z = (len * k) / 2; });
+    this.add(g, life, (mesh, k) => {
+      fill.scale.y = Math.max(0.01, k); fill.position.z = (len * k) / 2;
+      edge.material.opacity = 0.18 + 0.14 * (0.5 + 0.5 * Math.sin(k * (14 + 22 * k))); // pulses faster as it lands
+    });
   }
 
   rock(x, z, r) { // a boulder drops onto a rockfall circle

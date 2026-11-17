@@ -4,6 +4,7 @@ import {
   CLASSES, CLASS_IDS, MOBS, MOB_IDS, PLAYER_SPEED, SPRINT_SPEED, SPRINT_AFTER, TICK_RATE, MAX_LEVEL, DODGE, JUMP,
   walkable, resolveCollision, inTown, inArena, areaName, angleTo, inGateZone,
 } from '/shared/data.js';
+import { airStep } from '/shared/data.js'; // jump air control
 import { RARITY, CONSUMABLES, CONSUMABLE_IDS, SHOP, MERCHANT, SLOTS, statLabel, sellPrice } from '/shared/items.js';
 import { TITLES, TITLE_BY_ID, DEFAULT_TITLE, HALL, titleProgress } from '/shared/titles.js';
 import { Guide } from '/guide.js';
@@ -431,7 +432,7 @@ function handleEvent(e) {
     case 'stagger': {
       const m = mobs.get(e.id);
       if (!m) break;
-      m.staggerT = e.d; m.staggerBy = e.by;
+      m.staggerT = e.d; m.staggerBy = e.by; m.model.anim?.cancelWindup?.(); // Broken: the wind-up is cancelled
       if (Math.hypot(m.x - state.x, m.z - state.z) < 25) guide.tip('broken');
       fx.ring(m.x, m.z, m.def.radius + 2.5, 0xfacc15, 0.5);
       sfx.play('break', m.model.group.position);
@@ -456,7 +457,8 @@ function handleEvent(e) {
     case 'wind': {
       const m = mobs.get(e.id);
       if (m) {
-        m.wind = e.d; m.model.anim?.shot('2H_Melee_Attack_Chop', 1.4);
+        m.wind = e.d;
+        if (m.def?.boss && m.model.anim?.windup) m.model.anim.windup('cleave', e.d); else m.model.anim?.shot('2H_Melee_Attack_Chop', 1.4); // bosses: a readable wind-up pose (world.js WINDUPS)
         if ((m.type === 'wolf' || m.type === 'alpha') && Math.random() < 0.4) sfx.play('growl', m.model.group.position, 0.7);
         if (e.r) fx.wedge(m.x, m.z, e.f, e.r, e.h, e.d);                 // bite wedge: step out of it
         if (e.ax !== undefined) fx.aimLine(m.x, m.z, e.ax, e.az, e.d);   // thorn shot: sidestep the line
@@ -472,7 +474,7 @@ function handleEvent(e) {
       if (e.k === 'line') {
         fx.lane(e.x, e.z, e.x2, e.z2, e.w, e.d);
         sfx.play('warn', { x: e.x, z: e.z }, 1.3);
-        if (boss) { bossShot(boss.id, 'Cheer', 1.6); bossShot(boss.id, '2H_Melee_Attack_Stab', 1.4, Math.max(0, e.d - 0.2)); }
+        (mobs.get(e.id) || boss)?.model.anim?.windup?.('charge', e.d); // crouch, horns lowered
         guide.tip('lane');
         break;
       }
@@ -480,7 +482,10 @@ function handleEvent(e) {
       if (e.k === 'rock') { if (mine) { sfx.play('warn', { x: e.x, z: e.z }, 0.6); guide.tip('rock'); } break; }
       sfx.play('warn', { x: e.x, z: e.z });
       if (mine) guide.tip('slam');
-      if (boss && e.k !== 'lurk' && e.k !== 'pool') bossShot(boss.id, e.follow ? '2H_Melee_Attack_Spin' : '2H_Melee_Attack_Slice', 1.2, Math.max(0, e.d - 0.55));
+      if (boss && e.k !== 'lurk' && e.k !== 'pool') {
+        if (boss.def.f2) bossShot(boss.id, e.follow ? '2H_Melee_Attack_Spin' : '2H_Melee_Attack_Slice', 1.2, Math.max(0, e.d - 0.55));
+        else boss.model.anim?.windup?.(e.follow ? 'spin' : 'slam', e.d); // the Warden rears up (slam) or winds round (spin)
+      }
       break;
     }
     case 'buff': {
@@ -982,6 +987,7 @@ function jump() {
   const now = performance.now();
   if (state.dead || !state.joined || state.spectator || state.roll || now < state.jumpReady) return;
   state.jumpReady = now + JUMP.cd * 1000; state.jumpPress = now;
+  state.air = { x: state.vel?.[0] || 0, z: state.vel?.[1] || 0 }; // take off with your running speed
   const me = players.get(state.myId);
   if (me) { me.jumpT = 0; me.model.anim?.shot('Jump_Full_Short', 1.75); }
   sfx.play('roll', null, 0.4);
@@ -1772,12 +1778,24 @@ function frame(now) {
       const mx = Math.sin(fy) * iz - Math.cos(fy) * ix, mz = Math.cos(fy) * iz + Math.sin(fy) * ix;
       state.moveDir = Math.atan2(mx, mz);
     }
+    const airborne = state.air && performance.now() - state.jumpPress < JUMP.time * 1000;
+    if (state.air && (!airborne || state.roll)) { state.speed = Math.hypot(state.air.x, state.air.z); state.air = null; } // landed (or rolled)
     if (state.roll) {
       const step = Math.min(state.roll.left, dt) * (DODGE.dist / DODGE.time);
       state.roll.left -= dt;
       let [nx, nz] = resolveCollision(state.x + Math.sin(state.roll.dir) * step, state.z + Math.cos(state.roll.dir) * step);
       if (walkable(nx, nz, !state.gateOpen)) { state.x = nx; state.z = nz; }
       if (state.roll.left <= 0) state.roll = null;
+    } else if (airborne) { // in the air: keep your momentum, steer a little weaker than on the ground (shared airStep)
+      let dx = 0, dz = 0;
+      if (mag > 0.08) { const fy = state.yaw; dx = Math.sin(fy) * iz - Math.cos(fy) * ix; dz = Math.cos(fy) * iz + Math.sin(fy) * ix; const l = Math.hypot(dx, dz); dx /= l; dz /= l; }
+      const sprint = performance.now() - state.lastCombat > SPRINT_AFTER * 1000 && !combat.guarding;
+      airStep(state.air, dx, dz, (sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult(), dt);
+      let [nx, nz] = resolveCollision(state.x + state.air.x * dt, state.z + state.air.z * dt);
+      const gc = !state.gateOpen;
+      if (!walkable(nx, nz, gc)) { if (walkable(nx, state.z, gc)) nz = state.z; else if (walkable(state.x, nz, gc)) nx = state.x; else { nx = state.x; nz = state.z; } }
+      state.x = nx; state.z = nz;
+      if (mag > 0.08) state.face = state.yaw;
     } else if (mag > 0.08) {
       const fy = state.yaw;
       const fwd = [Math.sin(fy), Math.cos(fy)], right = [-Math.cos(fy), Math.sin(fy)];
@@ -1795,9 +1813,9 @@ function frame(now) {
       }
       state.moved += Math.hypot(nx - state.x, nz - state.z);
       if (state.moved > 10) guide.did('move');
-      state.x = nx; state.z = nz;
+      state.x = nx; state.z = nz; state.vel = [mx * state.speed, mz * state.speed]; // (the momentum a jump carries)
       state.face = state.yaw; // keep looking where the camera looks: S walks backwards, A/D strafe (also under camera lock)
-    } else state.speed = 0;
+    } else { state.speed = 0; state.vel = null; }
     if (attackHeld && !state.roll) useSkill(0);
     combat.frame(); // guarding: face the enemy, drop the guard on a roll
   }
