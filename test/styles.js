@@ -60,11 +60,12 @@ g.time = 10;
 
 // ---------- data, items, drops ----------
 {
-  assert.equal(STYLE_IDS.length, 9);
-  for (const cls of ['swordsman', 'guardian', 'cleric']) {
+  assert.equal(STYLE_IDS.length, 21); // 3 per class (the newer classes' styles: test/newclass.js)
+  assert.deepEqual(STYLE_IDS.slice(0, 9), ['sword', 'dual', 'rapier', 'shield', 'mace', 'spear', 'staff', 'tome', 'wand'], 'wire order kept');
+  for (const cls of ['swordsman', 'guardian', 'cleric', 'ranger', 'berserker', 'lancer', 'bard']) {
     assert.equal(CLASS_STYLES[cls].length, 3);
     assert.equal(CLASS_STYLES[cls].filter(id => STYLES[id].def).length, 1);
-    for (const id of CLASS_STYLES[cls]) if (!STYLES[id].def) assert.ok(STYLES[id].basic && STYLES[id].passive && STYLES[id].tweak, id);
+    for (const id of CLASS_STYLES[cls]) if (!STYLES[id].def) assert.ok((STYLES[id].basic || STYLES[id].mods) && STYLES[id].passive && STYLES[id].tweak, id);
   }
   const plain = makeItem('weapon', 1, 'swordsman', () => 0.5);
   assert.equal(plain.style, undefined); assert.equal(plain.name, 'Tempered Blade'); // old behaviour unchanged

@@ -22,7 +22,7 @@ const methods = {
   // ---------- dispatch (called from Game.useSkill once cooldown / level checks pass) ----------
   // Returns true when the skill belonged to a Lancer / Bard (handled here, used or not).
   useClassSkillB(p, sk, slot, { S, pow = 1, br = null, cd }) {
-    if (!CLASSES_B.includes(p.cls)) return false;
+    if (!CLASSES_B.includes(p.cls) || (slot === 0 && this.styleOwnsBasic(p))) return false; // Halberd, War Drum: styleSkill
     const ev = br ? BRANCHES[sk.id]?.[br]?.id : null, fn = SKILLS[ev || sk.id];
     if (!fn) return true;
     const c = { S, pow, ev, sk, atk: p.atk * this.dmgMult(p) * pow };
@@ -35,16 +35,17 @@ const methods = {
 
   // ---------- Lancer helpers ----------
   // Enemies in a narrow line in front of p, up to `reach` from p to their near edge. The spear tip (near edge 2.4 m+
-  // away) deals +30%. Returns the ids hit at the tip.
-  spearLine(p, reach, width, amount, opts) {
+  // away) deals +30% (Glaive: 3.4 m+, +50%; Honed Tip talent: +10% per rank). Returns the ids hit at the tip.
+  spearLine(p, reach, width, amount, opts, L = LANCE) {
     const dx = Math.sin(p.face), dz = Math.cos(p.face), tip = [];
+    const sweetMult = L.sweetMult + 0.1 * (p.tal?.keys.honedtip || 0);
     for (const m of [...this.mobs.values()]) {
       if (!this.targetable(m)) continue;
       const vx = m.x - p.x, vz = m.z - p.z, along = vx * dx + vz * dz, perp = Math.abs(vx * dz - vz * dx);
       if (along < -0.3 || along - m.def.radius > reach || perp > width + m.def.radius) continue;
-      const sweet = along - m.def.radius >= LANCE.sweetFrom;
+      const sweet = along - m.def.radius >= L.sweetFrom;
       if (sweet) tip.push(m.id);
-      this.damageMob(m, p, amount * (sweet ? LANCE.sweetMult : 1), opts);
+      this.damageMob(m, p, amount * (sweet ? sweetMult : 1), opts);
     }
     return tip;
   },
@@ -194,9 +195,9 @@ const methods = {
           const [cx, cz] = resolveCollision(pr.x, pr.z, 0.1);
           if (cx !== pr.x || cz !== pr.z || !this.walk(pr.x, pr.z)) { pr.ttl = 0; break; } // a tree, rock or wall
           for (const m of this.mobs.values()) {
-            if (!this.targetable(m) || Math.hypot(m.x - pr.x, m.z - pr.z) > SONG.bolt.radius + m.def.radius) continue;
-            this.addDiscord(m, owner, 1);
-            this.damageMob(m, owner, pr.amount, { threat: 1 });
+            if (!this.targetable(m) || Math.hypot(m.x - pr.x, m.z - pr.z) > (pr.rad ?? SONG.bolt.radius) + m.def.radius) continue;
+            this.addDiscord(m, owner, this.styleDiscordN(owner)); // (Flute: every second hit adds 2)
+            this.damageMob(m, owner, pr.amount, { threat: 1, tsk: 'sonic' }); // tsk: talents count it as the basic attack
             pr.ttl = 0; pr.hit = m.id;
             break;
           }
@@ -219,23 +220,23 @@ const methods = {
 const SKILLS = {
   // ----- Lancer -----
   lthrust(p, c) {
-    const t = this.time;
+    const t = this.time, sty = this.styleNum(p, 'thrust', null), L = sty ? { ...LANCE, ...sty } : LANCE; // Glaive (shared/styles.js)
     p.combo = t - p.lastBasic < 1.0 ? (p.combo + 1) % 3 : 0;
     p.lastBasic = t;
-    const fin = p.combo === 2, reach = fin ? LANCE.finReach : LANCE.reach;
-    const tip = this.spearLine(p, reach, LANCE.width, c.atk * (fin ? LANCE.finMult : LANCE.mult), { knock: fin ? 1.2 : 0.3, heavy: fin });
-    this.cbFx(p, 'thrust', { s: 'lthrust', n: p.combo, r: reach, tip });
+    const fin = p.combo === 2, reach = fin ? L.finReach : L.reach;
+    const tip = this.spearLine(p, reach, L.width, c.atk * (fin ? L.finMult : L.mult), { knock: fin ? 1.2 : 0.3, heavy: fin }, L);
+    this.cbFx(p, 'thrust', { s: 'lthrust', n: p.combo, r: reach, tip, sty: sty ? p.style : undefined });
   },
   lcharge(p, c) {
-    const x0 = p.x, z0 = p.z, [tx, tz] = this.lanceDash(p, LANCE.charge.len);
+    const x0 = p.x, z0 = p.z, [tx, tz] = this.lanceDash(p, LANCE.charge.len * this.styleNum(p, 'chargeLen', 1)); // Glaive: longer
     this.cbFx(p, 'charge', { s: c.S, x2: r2(tx), z2: r2(tz) });
     this.hitLine(p, x0, z0, tx, tz, LANCE.charge.width, c.atk * LANCE.charge.mult, { knock: LANCE.charge.knock, sk: c.S });
     this.teleport(p, tx, tz);
   },
   lsweep(p, c) {
-    const W = LANCE.sweep;
-    this.cbFx(p, 'sweep', { s: c.S, r: W.r });
-    this.hitCircle(p, p.x, p.z, W.r, c.atk * W.mult, { stun: W.stun, heavy: true, frac: W.frac, knock: 0.3, sk: c.S });
+    const W = LANCE.sweep, R = W.r * this.styleNum(p, 'sweepR', 1); // Halberd: wider
+    this.cbFx(p, 'sweep', { s: c.S, r: r2(R) });
+    this.hitCircle(p, p.x, p.z, R, c.atk * W.mult, { stun: W.stun, heavy: true, frac: W.frac, knock: 0.3, sk: c.S });
   },
   skylance(p, c) {
     const S = LANCE.sky, spot = this.skySpot(p, S.range, S.fwd);
@@ -301,24 +302,24 @@ const SKILLS = {
 
   // ----- Bard -----
   sonic(p, c) {
-    const B = SONG.bolt, dx = Math.sin(p.face), dz = Math.cos(p.face);
-    const pr = { id: this.id(), by: p.id, x: p.x + dx * 0.7, z: p.z + dz * 0.7, vx: dx * B.speed, vz: dz * B.speed, ttl: B.range / B.speed, amount: c.atk * B.mult };
+    const sty = this.styleNum(p, 'bolt', null), B = sty ? { ...SONG.bolt, ...sty } : SONG.bolt, dx = Math.sin(p.face), dz = Math.cos(p.face); // Flute
+    const pr = { id: this.id(), by: p.id, x: p.x + dx * 0.7, z: p.z + dz * 0.7, vx: dx * B.speed, vz: dz * B.speed, ttl: B.range / B.speed, amount: c.atk * B.mult, rad: B.radius };
     (this.cbShots ||= []).push(pr);
     p.lastCombat = this.time;
-    this.cbFx(p, 'sonic', { s: 'sonic', pid: pr.id, x: r2(pr.x), z: r2(pr.z), vx: r2(pr.vx), vz: r2(pr.vz), ttl: r2(pr.ttl) });
+    this.cbFx(p, 'sonic', { s: 'sonic', pid: pr.id, x: r2(pr.x), z: r2(pr.z), vx: r2(pr.vx), vz: r2(pr.vz), ttl: r2(pr.ttl), sty: sty ? p.style : undefined });
   },
   anthem(p, c) { this.startSong(p, c, 'anthem'); },
   warmarch(p, c) { this.startSong(p, c, 'warmarch'); },
   lullaby(p, c) { this.startSong(p, c, 'lullaby'); },
   dissonance(p, c) {
-    const D = SONG.dissonance;
-    this.cbFx(p, 'dissonance', { s: c.S, r: D.r, h: D.half });
-    this.chord(p, c, { r: D.r, half: D.half, mult: D.mult, slow: D.slow, slowFor: D.slowFor });
+    const D = SONG.dissonance, half = D.half * this.styleNum(p, 'chordHalf', 1); // Flute: a wider cone
+    this.cbFx(p, 'dissonance', { s: c.S, r: D.r, h: r2(half) });
+    this.chord(p, c, { r: D.r, half, mult: D.mult, slow: D.slow, slowFor: D.slowFor });
   },
   shatter(p, c) {
-    const D = SONG.shatter;
-    this.cbFx(p, 'shatter', { s: c.S, r: D.r, h: D.half });
-    this.chord(p, c, { r: D.r, half: D.half, mult: D.mult, stacks: D.stacks });
+    const D = SONG.shatter, half = D.half * this.styleNum(p, 'chordHalf', 1);
+    this.cbFx(p, 'shatter', { s: c.S, r: D.r, h: r2(half) });
+    this.chord(p, c, { r: D.r, half, mult: D.mult, stacks: D.stacks });
   },
   feedback(p, c) {
     const D = SONG.feedback;
@@ -332,7 +333,7 @@ const SKILLS = {
 
 Object.assign(methods, {
   startSong(p, c, kind) {
-    const t = this.time, d = SONG.anthem.dur;
+    const t = this.time, d = SONG.anthem.dur * this.styleNum(p, 'songDur', 1); // War Drum: longer songs
     p.song = { kind, until: t + d, next: t, stackT: t, S: c.S, pow: c.pow };
     this.cbFx(p, 'song', { s: c.S, kind, d, r: kind === 'lullaby' ? SONG.lullaby.r : SONG.anthem.r });
     this.songTick(p);

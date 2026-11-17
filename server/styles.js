@@ -3,11 +3,18 @@
 //  - styleSkill() runs the styled basic attack (slot 0) for non-default styles; default styles fall through to game.js.
 //  - Passives: Dual Blades (Switch -> skill cooldowns), Rapier (crit, counter damage), Mace (longer Breaks),
 //    Spear (threat), Mace & Tome (heal on hit), Wand (bolts on a Broken enemy heal whoever Broke it).
-//  - Skill tweaks are numbers read in game.js through styleNum(p, key, default).
+//  - Newer classes: Crossbow (first bolt crits), Twin Daggers (marks on hit, Disengage resets on kill), Twin Axes (Rage),
+//    Warhammer (longer Breaks), Halberd (slows on hit), Glaive (tip bonus), War Drum (party damage on 3+ Discord),
+//    Flute (double Discord stacks). Their basic attacks live in server/classes-a.js / classes-b.js, which read the
+//    style's overrides through styleNum (arrow / chop / thrust / bolt); styles with `basic` steps (Twin Daggers,
+//    Halberd, War Drum) hand slot 0 back to styleSkill (styleOwnsBasic).
+//  - Skill tweaks are numbers read in game.js and the class files through styleNum(p, key, default).
 //  - Testing aids: START_STYLE=<id>|random equips that style's weapon on join; BOT_STYLES=1 gives every anonymous
 //    (unsaved) player, bots included, a random style.
+import { CLASSES } from '../shared/data.js';
 import { BAG_SIZE, makeItem } from '../shared/items.js';
 import { STYLES, STYLE_IDS, CLASS_STYLES, styleOf, validStyle } from '../shared/styles.js';
+import { RANGER_TUNE } from '../shared/classes/ranger.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r2 = v => Math.round(v * 100) / 100;
@@ -22,6 +29,8 @@ export const StyleMethods = {
   },
   styleNum(p, key, def) { return STYLES[p?.style]?.mods?.[key] ?? def; },
   styleIdx(p) { return p.style ? STYLE_IDS.indexOf(p.style) : -1; },
+  // Does the style replace the class's own basic attack (styleSkill handles slot 0)?
+  styleOwnsBasic(p) { return !!STYLES[p?.style]?.basic; },
 
   // ---------- the styled basic attack ----------
   // Returns true when it handled the skill (useSkill then stops). atk already includes buffs.
@@ -30,7 +39,7 @@ export const StyleMethods = {
     const B = STYLES[p.style]?.basic;
     if (!B) return false;
     const t = this.time;
-    p.cds[0] = t + B.cd; // replaces the class basic's cooldown
+    p.cds[0] = t + B.cd * (this.hasteB?.(p, 0) ?? 1); // replaces the class basic's cooldown (Anthem still speeds it up)
     p.combo = t - p.lastBasic < B.window ? (p.combo + 1) % B.steps.length : 0;
     p.lastBasic = t;
     const n = p.combo, st = B.steps[n];
@@ -79,7 +88,10 @@ export const StyleMethods = {
     const aid = []; // Wand: enemies a teammate has Broken (checked before the hit)
     for (const m of hit) {
       if (st.shape === 'bolt' && this.time < m.staggerUntil && m.staggerBy !== p.id) aid.push(m.staggerBy);
-      this.damageMob(m, p, amount, opts(m));
+      const sweet = st.sweet && dist(m, p) - m.def.radius >= st.sweet[0]; // Halberd: the tip of the reach
+      if (sweet) (fx.tip ||= []).push(m.id);
+      if (st.discord) this.addDiscord?.(m, p, st.discord); // War Drum (before the hit, so its posture counts the stack)
+      this.damageMob(m, p, amount * (sweet ? st.sweet[1] : 1), opts(m));
     }
     if (aid.length) this.wandAid(p, aid);
     return hit;
@@ -87,7 +99,16 @@ export const StyleMethods = {
 
   // ---------- passives ----------
   // Mace & Tome: a press that lands heals the most hurt ally nearby (you included) a little.
+  // Twin Daggers: a chance to mark; Halberd: slows.
   stylePassiveHit(p, hit, st) {
+    const mc = this.styleNum(p, 'markChance', null), slow = this.styleNum(p, 'hookSlow', null);
+    if (mc && this.markA) for (const m of hit) {
+      const mk = m.markA;
+      if (m.dead || (mk && this.time < mk.until) || Math.random() >= mc[0]) continue;
+      this.markA(p, m, '', mc[1], RANGER_TUNE.mark.bonus, RANGER_TUNE.mark.sw);
+      this.events.push({ t: 'fx', k: 'sty', st: p.style, ev: 'mark', id: p.id, m: m.id, x: r2(m.x), z: r2(m.z) });
+    }
+    if (slow && this.slowMob) for (const m of hit) if (!m.dead) this.slowMob(m, slow[0], slow[1]);
     const h = this.styleNum(p, 'tomeHeal', null);
     if (!h) return;
     const [frac, flat, range] = h;
@@ -128,6 +149,23 @@ export const StyleMethods = {
     return b ? b[m.def.boss ? 1 : 0] : 0;
   },
 
+  // Crossbow: the first bolt on an enemy you haven't hit yet crits (arrowHitA, server/classes-a.js).
+  styleFirstCrit(p, m) { return !!this.styleNum(p, 'firstCrit', 0) && !m.contributors.has(p.id); },
+  // Flute: every second bolt that lands adds 2 Discord stacks (server/classes-b.js).
+  styleDiscordN(p) {
+    const n = this.styleNum(p, 'fluteStacks', 0);
+    if (!n) return 1;
+    p.fluteN = (p.fluteN || 0) + 1;
+    return p.fluteN % 2 ? 1 : n;
+  },
+  // War Drum: enemies carrying enough Discord from a drummer take more damage from everyone.
+  styleTakenMult(m) {
+    const D = m.discord;
+    if (!D || this.time >= D.until) return 1;
+    const w = this.styleNum(this.players.get(D.by), 'warDrums', null);
+    return w && D.n >= w[0] ? 1 + w[1] : 1;
+  },
+
   // ---------- testing aids ----------
   styleJoin(p, saved) {
     const want = process.env.START_STYLE;
@@ -155,6 +193,18 @@ export function installStyles(Game) {
   // Wrap (rather than edit) recompute and addPlayer, so they stay merge-friendly.
   const recompute = Game.prototype.recompute;
   Game.prototype.recompute = function (p) { recompute.call(this, p); this.applyStyle(p); };
+  // Styles that slow or speed up a class's own basic attack (Crossbow, Twin Axes, Warhammer, Glaive, Flute).
+  const skillCd = Game.prototype.skillCd;
+  Game.prototype.skillCd = function (p, sk, slot) { const cd = skillCd.call(this, p, sk, slot); return slot === 0 ? cd * this.styleNum(p, 'basicCd', 1) : cd; };
+  // War Drum: more damage to enemies in deep Discord. Twin Daggers: Disengage resets on a kill.
+  const damageMob = Game.prototype.damageMob;
+  Game.prototype.damageMob = function (m, p, base, opts) { return damageMob.call(this, m, p, m && !m.dead && m.discord ? base * this.styleTakenMult(m) : base, opts); };
+  const killMob = Game.prototype.killMob;
+  Game.prototype.killMob = function (m, killer) {
+    const out = killMob.call(this, m, killer), id = this.styleNum(killer, 'killReset', null);
+    if (id) { const i = (CLASSES[killer.cls]?.skills || []).findIndex(s => s.id === id); if (i > 0 && killer.cds[i] > this.time) { killer.cds[i] = this.time; this.events.push({ t: 'fx', k: 'sty', st: killer.style, ev: 'reset', id: killer.id, x: r2(killer.x), z: r2(killer.z) }); } }
+    return out;
+  };
   const addPlayer = Game.prototype.addPlayer;
   Game.prototype.addPlayer = function (ws, name, cls, saved = null) {
     const p = addPlayer.call(this, ws, name, cls, saved);
