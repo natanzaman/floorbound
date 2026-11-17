@@ -22,6 +22,7 @@ import { ClassesAMethods } from './classes-a.js';
 import { installStyles } from './styles.js';
 import { altStyle } from '../shared/styles.js';
 import { installTalents } from './talents.js';
+import { installTracking } from './trackgame.js';
 import { BOT_COMMANDS } from '../shared/bots/social.js'; // party orders for bots (botCommand)
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -123,7 +124,7 @@ export class Game {
     this.gate.ready.delete(p.id);
     this.players.delete(p.id);
     this.sys(`${p.name} left.`);
-    this.track(p, 'session_end', { secs: Math.round(this.time - p.joinedAt), kills: p.kills, deaths: p.deaths, lvl: p.lvl, lvlStart: p.lvlStart, switches: p.switches, gold: p.gold });
+    this.track(p, 'session_end', { secs: Math.round(this.time - p.joinedAt), kills: p.kills, deaths: p.deaths, lvl: p.lvl, lvlStart: p.lvlStart, switches: p.switches, gold: p.gold, ...this.quitCtx?.(p) });
   }
 
   // Base class stats plus equipped gear. Keeps the same health fraction.
@@ -855,7 +856,7 @@ export class Game {
       if (this.fight && (this.fight.ids.has(p.id) || inArena(p.x, p.z))) (this.fight.pd ||= new Map()).set(p.id, (this.fight.pd.get(p.id) || 0) + 1); // for "Undying"
       this.bumpStat(p, 'deaths');
       const floor = floorOf(p.x); // the respawn point (and the stats page) depend on the floor you died on
-      this.track(p, 'death', { cause: src, lvl: p.lvl, floor, area: (floor === 2 ? inArena2(p.x, p.z) : inArena(p.x, p.z)) ? 'arena' : p.z > 95 ? 'woods' : 'field' });
+      this.track(p, 'death', { cause: src, lvl: p.lvl, floor, area: (floor === 2 ? inArena2(p.x, p.z) : inArena(p.x, p.z)) ? 'arena' : p.z > 95 ? 'woods' : 'field', ...this.fightCtx?.(p) });
       this.events.push({ t: 'pdie', id: p.id, src, f: floor });
       this.sys(`${p.name} was defeated.`);
     }
@@ -1336,4 +1337,5 @@ Object.assign(Game.prototype, F2Methods); // Floor 2 (server/floor2.js)
 installClassesB(Game); // Lancer, Bard skills + their hooks (server/classes-b.js)
 Object.assign(Game.prototype, ClassesAMethods); // Ranger and Berserker (server/classes-a.js)
 installStyles(Game); // weapon styles (server/styles.js)
+installTracking(Game); // play-tracking hooks: boss fight rows, death / quit context (server/trackgame.js)
 installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js); keep it last

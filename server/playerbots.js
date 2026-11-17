@@ -122,6 +122,7 @@ export class PlayerBots {
       mode: 'follow', outfitted: false, wantParty: true, lastParty: 0, goneAt: 0, goneT: 0,
     });
     g.rosterDirty = true;
+    g.track(p, 'pbot_add', { cls, skill, lvl }); // stats dashboard: bot vs player share
     return { msg: `${view.name} the ${CLASSES[cls].name} (Lv ${lvl}, ${skillName(skill)}) is on the way.`, bid: view.bid };
   }
 
