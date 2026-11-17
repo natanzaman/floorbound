@@ -1,0 +1,194 @@
+// Players panel tabs (Players | Bots) and the Bots tab: every bot in the world (your own first) and a form to add
+// your own bots (server/playerbots.js, { type: 'pbot' } messages). main.js calls render() from renderPlayers() when
+// the Bots tab is open and puts tabsHtml() / bindTabs() on the Players tab.
+import { CLASSES } from '/shared/data.js';
+import { RARITY } from '/shared/items.js';
+import { BRANCHES } from '/shared/mastery.js';
+import { MODES, MODE_IDS, SKILL_LEVELS, SKILL_DEFAULT, PLAYER_BOT_MAX, setups, loadoutFor } from '/shared/playerbots.js';
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const hex = cls => `#${(CLASSES[cls]?.color ?? 0x94a3b8).toString(16).padStart(6, '0')}`;
+const clsName = cls => CLASSES[cls]?.name || cls;
+
+export function initPlayerBots({ $, send, state, players, log, sfx, rerender }) {
+  const ui = {
+    tab: 'players', data: null, sig: '', at: 0,
+    form: { cls: setups()[0]?.cls, skill: SKILL_DEFAULT, name: '' },
+    note: null, // { text, err, at }
+    confirm: 0, // bid waiting for a second Dismiss click
+  };
+
+  // ---------- persistent DOM (so the form keeps its state between refreshes) ----------
+  const root = document.createElement('div');
+  root.className = 'pb';
+  root.innerHTML = `
+    <div class="pb-head"><b class="pb-count">Your bots</b><small class="pb-cap"></small></div>
+    <div class="pb-note hidden"></div>
+    <div class="pb-mine"></div>
+    <details class="pb-add" open>
+      <summary><b>Add a bot</b></summary>
+      <div class="pb-setups"></div>
+      <div class="pb-lbl">Skill level</div>
+      <div class="pb-skill"></div>
+      <div class="pb-skilldesc"></div>
+      <input class="pb-name" maxlength="16" placeholder="Name (optional)" autocomplete="off" spellcheck="false" />
+      <div class="pb-preview"></div>
+      <button class="pb-go">Add bot</button>
+      <div class="pb-why"></div>
+    </details>
+    <div class="pb-others"></div>`;
+  const q = s => root.querySelector(s);
+  const set = (el, html) => { if (el._h !== html) { el._h = html; el.innerHTML = html; } }; // only touch the DOM on a change
+  // keys typed into the form (or arrow keys on a select) must not move the character / toggle panels
+  root.addEventListener('keydown', e => {
+    if (!/^(INPUT|SELECT)$/.test(e.target.tagName)) return;
+    e.stopPropagation();
+    if (e.key === 'Enter' && e.target.classList.contains('pb-name')) add();
+    if (e.key === 'Escape') e.target.blur();
+  });
+  q('.pb-name').oninput = e => { ui.form.name = e.target.value; };
+  q('.pb-go').onclick = () => add();
+  q('.pb-setups').onclick = e => { const b = e.target.closest('[data-cls]'); if (b) { ui.form.cls = b.dataset.cls; drawForm(); } };
+  q('.pb-skill').onclick = e => { const b = e.target.closest('[data-sk]'); if (b) { ui.form.skill = +b.dataset.sk; drawForm(); } };
+  for (const sel of ['.pb-mine', '.pb-others']) {
+    q(sel).addEventListener('change', e => { const t = e.target, bid = +t.closest('[data-bid]')?.dataset.bid; if (bid && t.dataset.k) edit(bid, { [t.dataset.k]: t.dataset.k === 'skill' ? +t.value : t.value }); });
+    q(sel).addEventListener('click', e => {
+      const t = e.target.closest('button[data-k]'), bid = +t?.closest('[data-bid]')?.dataset.bid;
+      if (!t || !bid) return;
+      if (t.dataset.k === 'rename') {
+        const b = ui.data?.bots.find(x => x.bid === bid);
+        const n = prompt('New name for the bot (2-16 letters, numbers, spaces, _ . -)', b?.name || '');
+        if (n && n.trim()) edit(bid, { name: n.trim() });
+      }
+      if (t.dataset.k === 'dismiss') {
+        if (ui.confirm !== bid) { ui.confirm = bid; setTimeout(() => { if (ui.confirm === bid) { ui.confirm = 0; ui.sig = ''; draw(); } }, 3000); ui.sig = ''; return draw(); }
+        ui.confirm = 0; send({ type: 'pbot', op: 'dismiss', bid }); sfx?.play('ui');
+      }
+    });
+  }
+
+  function add() {
+    if (!ui.form.cls) return;
+    send({ type: 'pbot', op: 'add', cls: ui.form.cls, skill: ui.form.skill, ...(ui.form.name.trim() ? { name: ui.form.name.trim() } : {}) });
+    sfx?.play('ui');
+  }
+  function edit(bid, o) { send({ type: 'pbot', op: 'edit', bid, ...o }); sfx?.play('ui'); }
+  function poll(force) {
+    if (!state.joined || state.spectator) return;
+    if (!force && Date.now() - ui.at < 1400) return;
+    ui.at = Date.now();
+    send({ type: 'pbot', op: 'list' });
+  }
+  setInterval(() => { if (visible()) poll(); }, 1500);
+  const visible = () => ui.tab === 'bots' && !$('players').classList.contains('hidden');
+
+  // ---------- drawing ----------
+  function myPartySize() { let n = 0; if (!state.party) return 1; for (const e of players.values()) if (e.party === state.party) n++; return Math.max(1, n); }
+
+  function drawForm() {
+    const d = ui.data, mine = d?.mine ?? 0, max = d?.max ?? PLAYER_BOT_MAX;
+    set(q('.pb-setups'), setups().map(s => `<button data-cls="${s.cls}" class="${s.cls === ui.form.cls ? 'on' : ''}" style="--c:${hex(s.cls)}"><b>${esc(s.role)}</b><small>${esc(clsName(s.cls))}</small></button>`).join(''));
+    set(q('.pb-skill'), SKILL_LEVELS.map(s => `<button data-sk="${s.v}" class="${s.v === ui.form.skill ? 'on' : ''}" title="${esc(s.name)}"><b>${s.v}</b><small>${esc(s.name)}</small></button>`).join(''));
+    q('.pb-skilldesc').textContent = skillBlurb(ui.form.skill);
+    const L = loadoutFor(state.lvl);
+    set(q('.pb-preview'), `Joins at <b>Lv ${L.lvl}</b> (yours) · <span style="color:${RARITY[L.rarity].color}">${L.rarityName} gear</span> · Mastery ${L.mastery}${L.evolved ? ' (evolved)' : ''}`);
+    let why = '';
+    if (mine >= max) why = `You have ${max} bots, the most you can have. Dismiss one to add another.`;
+    else if (d && d.total >= d.cap) why = `The server's bot limit is reached (${d.cap}).`;
+    else if (d && myPartySize() + pendingMine() >= d.partyMax) why = `Your party is full (${d.partyMax}/${d.partyMax}).`;
+    q('.pb-go').disabled = !!why || state.dead;
+    q('.pb-go').textContent = `Add ${clsName(ui.form.cls)} bot`;
+    q('.pb-why').textContent = why;
+  }
+  function pendingMine() { return (ui.data?.bots || []).filter(b => b.mine && !b.myParty).length; }
+  const SKILL_BLURB = { 1: 'Slow reactions, stands in fire, mashes the basic attack.', 2: 'Late dodges and potions, rarely Breaks or Switches.', 3: 'Decent, but misses some dodges and Switch windows.', 4: 'Quick reactions and good rotations. Recommended.', 5: 'Instant reactions, perfect dodges, optimal rotations.' };
+  const skillBlurb = v => SKILL_BLURB[v] || '';
+
+  function botRow(b, full) {
+    const c = hex(b.cls), pc = b.maxHp ? Math.round((b.hp / b.maxHp) * 100) : 0;
+    const tags = `${b.myParty ? '<span class="tag">Party</span>' : ''}${b.dead ? '<span class="tag dead">Down</span>' : ''}${b.floor === 2 ? '<span class="tag f2">F2</span>' : ''}`;
+    const who = b.mine ? '' : b.owner ? `<span class="pb-own">${esc(b.owner)}'s</span>` : '<span class="pb-own adm">server bot</span>';
+    const party = !b.myParty && b.party?.length ? ` · party: ${esc(b.party.slice(0, 3).join(', '))}${b.party.length > 3 ? '…' : ''}` : '';
+    let html = `<div class="pb-bot ${b.mine ? 'mine' : ''} ${full ? '' : 'compact'}" data-bid="${b.bid}" style="--c:${c}">
+      <div class="pb-top"><span class="pb-dot"></span><b class="nm">${esc(b.name)}</b><small>Lv ${b.lvl} ${esc(clsName(b.cls))}</small>${tags}${who}</div>
+      <div class="pb-doing">${esc(b.doing)}${b.area && b.area !== 'joining…' ? ` · ${esc(b.area)}` : ''}${party} · <span class="pb-sk">${esc(b.skillName)}</span></div>`;
+    if (full) html += `<div class="pb-hp"><div style="width:${pc}%"></div></div>`;
+    if (full && b.kit) {
+      const gear = b.kit.gear.map(g => `<span style="color:${RARITY[g.r]?.color || '#ddd'}" title="${esc(g.name)}">${esc(g.name)}</span>`).join(' · ');
+      const evo = b.kit.mastery.filter(m => m.br).map(m => BRANCHES[m.sk]?.[m.br]?.name).filter(Boolean);
+      const ml = b.kit.mastery.length ? Math.min(...b.kit.mastery.map(m => m.lvl)) : 1;
+      html += `<div class="pb-kit">${gear}<br><span>Mastery ${ml}${evo.length ? ` · ${esc(evo.join(', '))}` : ''}</span></div>`;
+    }
+    if (b.can) {
+      const modeSel = b.mode || (b.behaviour === 'follow' ? 'follow' : MODES[b.behaviour] ? b.behaviour : '');
+      html += `<div class="pb-ctl">
+        <select data-k="skill" title="Skill level">${SKILL_LEVELS.map(s => `<option value="${s.v}" ${s.v === b.skill ? 'selected' : ''}>${s.v} ${esc(s.name)}</option>`).join('')}</select>
+        <select data-k="mode" title="Behaviour">${modeSel ? '' : '<option selected disabled>…</option>'}${MODE_IDS.map(m => `<option value="${m}" ${m === modeSel ? 'selected' : ''}>${esc(b.mine || b.owner ? MODES[m].name.replace(' me', b.mine ? ' me' : ` ${b.owner}`) : MODES[m].name)}</option>`).join('')}</select>
+        <button data-k="rename" title="Rename">Rename</button>
+        <button data-k="dismiss" class="danger">${ui.confirm === b.bid ? 'Sure?' : 'Dismiss'}</button>
+      </div>`;
+    }
+    return html + '</div>';
+  }
+
+  function draw() {
+    const d = ui.data;
+    drawForm();
+    q('.pb-count').textContent = `Your bots (${d?.mine ?? 0}/${d?.max ?? PLAYER_BOT_MAX})`;
+    q('.pb-cap').textContent = d ? `${d.total}/${d.cap} on the server${d.admin ? ' · admin' : ''}` : '';
+    const n = ui.note && Date.now() - ui.note.at < 8000 ? ui.note : null;
+    q('.pb-note').className = `pb-note ${n ? (n.err ? 'err' : 'okay') : 'hidden'}`;
+    q('.pb-note').textContent = n?.text || '';
+    if (!d) { set(q('.pb-mine'), '<div class="pb-empty">Loading…</div>'); return; }
+    // don't rebuild the lists while a dropdown in them is open
+    const busy = root.contains(document.activeElement) && document.activeElement.tagName === 'SELECT';
+    const sig = JSON.stringify([d.bots, ui.confirm]);
+    if (busy || sig === ui.sig) return;
+    ui.sig = sig;
+    const mine = d.bots.filter(b => b.mine), others = d.bots.filter(b => !b.mine);
+    set(q('.pb-mine'), mine.length ? mine.map(b => botRow(b, true)).join('') : '<div class="pb-empty">No bots yet. Add one below: it joins your party at your level and follows you.</div>');
+    set(q('.pb-others'), others.length ? `<div class="pb-sub"><b>Other bots (${others.length})</b></div>${others.map(b => botRow(b, false)).join('')}` : '');
+  }
+
+  // ---------- public ----------
+  return {
+    get tab() { return ui.tab; },
+    tabsHtml(nPlayers, nBots) {
+      return `<div class="pb-tabs"><button data-tab="players" class="${ui.tab === 'players' ? 'on' : ''}">Players${nPlayers !== undefined ? ` (${nPlayers})` : ''}</button><button data-tab="bots" class="${ui.tab === 'bots' ? 'on' : ''}">Bots${nBots ? ` (${nBots})` : ''}</button></div>`;
+    },
+    bindTabs(panel) {
+      if (ui.tab !== 'bots') panel.classList.remove('wide');
+      for (const b of panel.querySelectorAll('.pb-tabs [data-tab]')) b.onclick = () => {
+        if (ui.tab === b.dataset.tab) return;
+        ui.tab = b.dataset.tab; ui.sig = ''; sfx?.play('ui');
+        if (ui.tab === 'bots') poll(true);
+        rerender();
+      };
+    },
+    // The Bots tab (keeps its DOM between calls).
+    render(panel, nPlayers, nBots) {
+      panel.classList.add('wide');
+      const tabs = panel.querySelector(':scope > .pb-tabs');
+      if (!tabs || panel.lastElementChild !== root) {
+        panel.innerHTML = ui.tabsH = this.tabsHtml(nPlayers, nBots);
+        panel.appendChild(root);
+        ui.sig = '';
+      } else { const h = this.tabsHtml(nPlayers, nBots); if (ui.tabsH !== h) { ui.tabsH = h; tabs.outerHTML = h; } }
+      this.bindTabs(panel);
+      poll();
+      draw();
+    },
+    onMessage(msg) {
+      if (msg.type !== 'pbot') return false;
+      if (msg.list) ui.data = msg.list;
+      if (msg.op !== 'list') {
+        const text = msg.ok ? msg.msg : msg.error;
+        if (text) { ui.note = { text, err: !msg.ok, at: Date.now() }; log(text, 'sys'); }
+        if (msg.ok && msg.op === 'add') { ui.form.name = ''; q('.pb-name').value = ''; }
+        ui.sig = '';
+      }
+      if (visible()) draw();
+      return true;
+    },
+  };
+}

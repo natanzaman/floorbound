@@ -11,6 +11,7 @@ import * as track from './track.js';
 import * as hall from './hall.js';
 import * as admin from './admin.js';
 import { BotManager } from './botmanager.js';
+import { PlayerBots } from './playerbots.js';
 import { TICK_RATE } from '../shared/data.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -40,6 +41,7 @@ game.track = track.record;
 game.onClear = rec => hall.add(rec); // Hall of Clearers (DB insert + in-memory cache)
 const spectators = new Set(); // watch-only clients (?spectate=1)
 const bots = new BotManager(game, { url: () => `ws://127.0.0.1:${server.address().port}/ws` }); // admin-managed bots
+const playerBots = new PlayerBots(game, bots); // bots players add in game (P → Bots), server/playerbots.js
 
 const server = http.createServer(async (req, res) => {
   if (res.handled) return;
@@ -132,6 +134,7 @@ wss.on('connection', ws => {
       return;
     }
     if (msg.type === 'hall') return ws.send(JSON.stringify(hall.message()));
+    if (msg.type === 'pbot') return void playerBots.handle(player, msg).catch(e => console.error('pbot', e));
     game.handle(player, msg);
   });
 
