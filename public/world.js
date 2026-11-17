@@ -24,15 +24,17 @@ export function createWorld(scene) {
   sc.left = -40; sc.right = 40; sc.top = 40; sc.bottom = -40; sc.near = 1; sc.far = 160;
   sun.shadow.bias = -0.0008;
   scene.add(sun, sun.target);
+  // Floor 1's scenery lives under one group so it can be hidden in one go while you're on Floor 2 (and vice versa).
+  const root = new THREE.Group(); root.name = 'floor1'; scene.add(root);
 
   // Ground
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 700, 1, 1), mat(0x5f9a45));
   ground.rotation.x = -Math.PI / 2; ground.position.z = 80; ground.receiveShadow = true;
-  scene.add(ground);
+  root.add(ground);
 
   const flat = (geo, color, y, x = 0, z = 0) => {
     const m = new THREE.Mesh(geo, mat(color));
-    m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; scene.add(m); return m;
+    m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; root.add(m); return m;
   };
   // Town plaza, road, chamber floor
   flat(new THREE.CircleGeometry(WORLD.town.r, 48), 0xb9b2a3, 0.02);
@@ -54,7 +56,7 @@ export function createWorld(scene) {
   crystal.position.y = 4.1;
   fountain.add(basin, water, spire, crystal);
   fountain.traverse(o => { o.castShadow = true; o.receiveShadow = true; });
-  scene.add(fountain);
+  root.add(fountain);
 
   // Houses
   for (const o of OBSTACLES.filter(o => o.kind === 'house')) {
@@ -68,7 +70,7 @@ export function createWorld(scene) {
     g.add(walls, roof, door);
     g.position.set(o.x, 0, o.z); g.rotation.y = o.rot;
     g.traverse(m => { m.castShadow = true; m.receiveShadow = true; });
-    scene.add(g); occluders.push(g);
+    root.add(g); occluders.push(g);
   }
 
   // Trees & rocks (instanced)
@@ -99,21 +101,21 @@ export function createWorld(scene) {
     leaves.setColorAt(i, leafColor.setHSL(0.3 + r() * 0.06, 0.45, 0.25 + r() * 0.1));
   });
   trunks.castShadow = leaves.castShadow = true;
-  scene.add(trunks, leaves);
+  root.add(trunks, leaves);
   const treeFader = new TreeFader(scene, allTrees, trunks, leaves);
   const rockMesh = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), mat(0x8a8d91), rocks.length);
   rocks.forEach((o, i) => {
     m4.compose(p.set(o.x, o.r * 0.5, o.z), q.setFromEuler(new THREE.Euler(r(), r(), r())), s.set(o.r * 1.1, o.r * 0.8, o.r * 1.1));
     rockMesh.setMatrixAt(i, m4);
   });
-  rockMesh.castShadow = true; scene.add(rockMesh);
+  rockMesh.castShadow = true; root.add(rockMesh);
 
   // Chamber: pillars, walls, gate
   for (const o of OBSTACLES.filter(o => o.kind === 'pillar')) {
     const pil = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.6, 12, 8), mat(0x5b5664));
-    pil.position.set(o.x, 6, o.z); pil.castShadow = true; scene.add(pil); occluders.push(pil);
+    pil.position.set(o.x, 6, o.z); pil.castShadow = true; root.add(pil); occluders.push(pil);
     const flame = new THREE.Mesh(new THREE.OctahedronGeometry(0.5), mat(0xff7a2f, { emissive: 0xff5500, emissiveIntensity: 2 }));
-    flame.position.set(o.x, 12.6, o.z); scene.add(flame);
+    flame.position.set(o.x, 12.6, o.z); root.add(flame);
   }
   const wallMat = mat(0x3d3946);
   for (let i = 0; i < 40; i++) {
@@ -121,7 +123,7 @@ export function createWorld(scene) {
     if (Math.abs(Math.sin(a) + 1) < 0.02 || (Math.sin(a) < -0.96)) continue; // opening toward the field
     const w = new THREE.Mesh(new THREE.BoxGeometry(4.3, 8, 1.2), wallMat);
     w.position.set(WORLD.arena.x + Math.cos(a) * (WORLD.arena.r + 0.8), 4, WORLD.arena.z + Math.sin(a) * (WORLD.arena.r + 0.8));
-    w.rotation.y = -a + Math.PI / 2; w.castShadow = true; scene.add(w); occluders.push(w);
+    w.rotation.y = -a + Math.PI / 2; w.castShadow = true; root.add(w); occluders.push(w);
   }
   const gate = new THREE.Group();
   const postL = new THREE.Mesh(new THREE.BoxGeometry(1.6, 10, 1.6), wallMat); postL.position.set(-6, 5, 0);
@@ -132,7 +134,7 @@ export function createWorld(scene) {
   gate.add(postL, postR, lintel, sigil);
   gate.position.set(0, 0, 150);
   gate.traverse(m => { m.castShadow = true; });
-  scene.add(gate); occluders.push(gate);
+  root.add(gate); occluders.push(gate);
 
   // Distant scenery: mountains and the tower spire above everything
   const mtn = mat(0x7d8fa6);
@@ -140,10 +142,10 @@ export function createWorld(scene) {
     const a = (i / 18) * Math.PI * 2, d = 240 + r() * 40;
     const h = 40 + r() * 50;
     const c = new THREE.Mesh(new THREE.ConeGeometry(30 + r() * 20, h, 6), mtn);
-    c.position.set(Math.cos(a) * d, h / 2 - 2, 80 + Math.sin(a) * d); scene.add(c);
+    c.position.set(Math.cos(a) * d, h / 2 - 2, 80 + Math.sin(a) * d); root.add(c);
   }
   const tower = new THREE.Mesh(new THREE.CylinderGeometry(14, 22, 420, 10), mat(0x8792b0, { fog: false }));
-  tower.position.set(60, 200, 420); scene.add(tower);
+  tower.position.set(60, 200, 420); root.add(tower);
 
   // Raid gate: a portcullis across the corridor. It rises when the party is ready.
   const raid = new THREE.Group();
@@ -164,7 +166,7 @@ export function createWorld(scene) {
   raid.add(bars);
   raid.position.set(0, 0, GATE.z);
   raid.traverse(m => { if (m.isMesh) m.castShadow = true; });
-  scene.add(raid);
+  root.add(raid);
   const raidGate = {
     open: false, h: 0,
     set(open) { this.open = open; },
@@ -181,7 +183,7 @@ export function createWorld(scene) {
   stall.position.set(MERCHANT.x, 0, MERCHANT.z);
   stall.rotation.y = Math.atan2(-MERCHANT.x, -MERCHANT.z);
   stall.traverse(m => { if (m.isMesh) m.castShadow = true; });
-  scene.add(stall);
+  root.add(stall);
 
   // Hall of Clearers: an engraved stone tablet facing the plaza (mirrors the merchant's stall)
   const hall = new THREE.Group();
@@ -206,10 +208,10 @@ export function createWorld(scene) {
   hall.position.set(HALL.x, 0, HALL.z);
   hall.rotation.y = Math.atan2(-HALL.x, -HALL.z);
   hall.traverse(m => { if (m.isMesh) m.castShadow = true; });
-  scene.add(hall);
+  root.add(hall);
   hall.userData.crest = crest;
 
-  return { sun, crystal, occluders, treeFader, gate: raidGate, stall, hall };
+  return { sun, crystal, occluders, treeFader, gate: raidGate, stall, hall, root };
 }
 
 // ---------- characters ----------

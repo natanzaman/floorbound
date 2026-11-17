@@ -12,7 +12,7 @@ import { TwistClient } from '/twists.js';
 import { Sound } from '/audio.js';
 import { createSmith } from '/smith.js';
 import { initCombat } from '/combat.js';
-import { F2, inGateZone2 } from '/shared/floor2.js';
+import { F2, inGateZone2, inArena2, onFloor2, floorOf, WAYSTONES } from '/shared/floor2.js';
 import { initFloor2Client } from '/floor2client.js';
 
 const sfx = new Sound();
@@ -30,7 +30,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 900);
-const { sun, crystal, occluders, treeFader, gate: gateMesh } = createWorld(scene);
+const { sun, crystal, occluders, treeFader, gate: gateMesh, root: floor1 } = createWorld(scene); // floor1: Floor 1-only scenery
 const ray = new THREE.Raycaster();
 let camCur = 11;
 const fx = new Effects(scene);
@@ -82,7 +82,7 @@ function addMerchant() { // the shopkeeper stands behind the stall's counter, fa
   m.group.position.set(MERCHANT.x - Math.sin(face) * 0.3, 0, MERCHANT.z - Math.cos(face) * 0.3);
   m.group.rotation.y = face;
   for (const mt of m.mats || []) mt.color?.multiplyScalar(0.8);
-  scene.add(m.group);
+  floor1.add(m.group); // hidden with the rest of the town while you're on Floor 2
   merchantNpc = m;
 }
 $('enter').onclick = () => onEnter();
@@ -185,7 +185,7 @@ async function join(joinMsg) {
 }
 const send = o => state.ws?.readyState === 1 && state.ws.send(JSON.stringify(o));
 const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
-const smith = createSmith({ scene, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
+const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
 const combat = initCombat({ state, players, mobs, fx, sfx, guide, send, floatNum, slowMotion, shake: a => shake(a), bossShot: (...a) => bossShot(...a), lockedMob: () => lockedMob(), nearestMob: r => nearestMob(r) });
 
@@ -323,11 +323,12 @@ function handleEvent(e) {
       break;
     }
     case 'proj': projFx.set(e.id, fx.thorn(e.x, e.z, e.vx, e.vz, e.ttl)); sfx.play('spit', { x: e.x, z: e.z }); break;
-    case 'rare': { // a rare named enemy appeared somewhere on the floor
+    case 'rare': { // a rare named enemy appeared somewhere on the floor (to: a late joiner's personal copy)
+      if (e.to && e.to !== me) break;
       fx.rareBeam(e.x, e.z, 7);
       sfx.play('rare', null, 0.9);
       const [dist, dir] = rareBearing(e.x, e.z);
-      banner(`RARE · ${e.name.toUpperCase()}`, `Sighted ${dist} m ${dir}`);
+      banner(`RARE · ${e.name.toUpperCase()}`, floorOf(e.x) !== floorOf(state.x) ? `Sighted on Floor ${floorOf(e.x)}` : `${e.late ? 'Roaming' : 'Sighted'} ${dist} m ${dir}`);
       break;
     }
     case 'rareDown': {
@@ -482,7 +483,8 @@ function handleEvent(e) {
     }
     case 'pdie': {
       if (e.id === me) {
-        $('dead').innerHTML = `<div>You were defeated</div><small>${e.src && e.src !== '?' ? `by ${esc(e.src)} · ` : ''}returning to town…</small>`;
+        const camp = WAYSTONES.find(w => w.floor === (e.f || floorOf(state.x)))?.name || 'town'; // Town of Beginnings / Mirelight Camp
+        $('dead').innerHTML = `<div>You were defeated</div><small>${e.src && e.src !== '?' ? `by ${esc(e.src)} · ` : ''}respawning at ${esc(camp)}…</small>`;
         $('dead').classList.remove('hidden');
       }
       break;
@@ -498,6 +500,7 @@ function handleEvent(e) {
       break;
     }
     case 'clear': sfx.play('clear'); banner('FLOOR 1 CLEARED', e.names.join(' · ')); if (inArena(state.x, state.z)) guide.did('boss'); break;
+    case 'clear2': if (inArena2(state.x, state.z)) guide.did('boss'); break; // banner/sound in floor2client.js
     case 'forge': smith.onForge(e); break;
     case 'loot': {
       if (e.to !== me) break;
@@ -734,12 +737,14 @@ function buildSkillBar(lvl = state.lvl) {
 }
 
 // ---------- lock-on ----------
+// Dying enemies and burrowed Bog Lurkers (hidden: the server doesn't let anything hit them) can't be targeted.
+const canTarget = m => !!m && !m.dying && !m.hidden;
 const lockRing = new THREE.Mesh(new THREE.RingGeometry(1, 1.15, 40), new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
 lockRing.rotation.x = -Math.PI / 2; lockRing.visible = false; scene.add(lockRing);
 function cycleLock() {
   const fy = state.yaw, fx0 = Math.sin(fy), fz0 = Math.cos(fy);
   const list = [...mobs.values()]
-    .filter(m => !m.dying && Math.hypot(m.x - state.x, m.z - state.z) < 25)
+    .filter(m => canTarget(m) && Math.hypot(m.x - state.x, m.z - state.z) < 25)
     .map(m => {
       const dx = m.x - state.x, dz = m.z - state.z, d = Math.hypot(dx, dz) || 1;
       return { m, score: d * (1.6 - (dx * fx0 + dz * fz0) / d) }; // prefer close and in front of the camera
@@ -766,7 +771,7 @@ function selectAt(sx, sy) {
     const d = Math.hypot(sx - cx, sy - cy) + Math.hypot(g.x - state.x, g.z - state.z) * 0.5; // nearer wins ties
     if (d < bd) { bd = d; best = { ent, kind }; }
   };
-  for (const m of mobs.values()) if (!m.dying) consider(m, 'mob');
+  for (const m of mobs.values()) if (canTarget(m)) consider(m, 'mob');
   for (const p of players.values()) if (p.id !== state.myId && !p.dead) consider(p, 'player');
   state.lock = best?.kind === 'mob' ? best.ent.id : 0;
   state.focus = best?.kind === 'player' ? best.ent.id : 0;
@@ -779,7 +784,7 @@ function focusedAlly() {
 }
 function lockedMob() {
   const m = state.lock && mobs.get(state.lock);
-  if (!m || m.dying || Math.hypot(m.x - state.x, m.z - state.z) > 35) { state.lock = 0; return null; }
+  if (!canTarget(m) || Math.hypot(m.x - state.x, m.z - state.z) > 35) { state.lock = 0; return null; }
   return m;
 }
 
@@ -828,6 +833,7 @@ function callout(title, sub, secs) {
 function nearestMob(range) {
   let best = null, bd = range;
   for (const m of mobs.values()) {
+    if (!canTarget(m)) continue;
     const d = Math.hypot(m.x - state.x, m.z - state.z) - m.def.radius;
     if (d < bd) { bd = d; best = m; }
   }
@@ -1005,10 +1011,11 @@ function updateGateBox(force) {
   gateKey = key;
   el.classList.toggle('hidden', !show);
   if (!show) return;
-  el.innerHTML = `<b>RAID GATE</b><div class="sub">${f2.gateText()} · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}</div>`
+  const gate2 = onFloor2(state.x);
+  el.innerHTML = `<b>${gate2 ? 'THE SUNKEN GATE' : 'RAID GATE'}</b><div class="sub">${f2.gateText()} · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}</div>`
     + (count > 0 ? `<div class="count">${Math.ceil(count)}</div>` : '')
     + `<button class="${state.meReady ? 'on' : ''}">${state.meReady ? 'Ready ✓' : `Ready${isTouch ? '' : ' (F)'}`}</button>`;
-  twists.gateBox(el);
+  if (!gate2) twists.gateBox(el); // the Warden's twist only applies behind Floor 1's gate
   el.querySelector('button').onclick = interact;
 }
 
@@ -1059,7 +1066,8 @@ function renderPlayers() {
     const p = players.get(id);
     const inParty = state.party && p?.party === state.party;
     const lfgTag = (p?.buffs || 0) & 4 ? '<span class="tag">LFG</span>' : '';
-    rows.push(`<div class="p"><span>${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}</div>`);
+    const floorTag = p && onFloor2(p.tx ?? p.x) ? '<span class="tag f2">F2</span>' : '';
+    rows.push(`<div class="p"><span>${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}</div>`);
   }
   const meE = players.get(state.myId), seeking = !!((meE?.buffs || 0) & 4);
   const lfgBtn = `<button class="lfg ${seeking ? 'on' : ''}">${state.party ? (seeking ? 'Recruiting via party finder ✓' : 'Recruit with party finder') : seeking ? 'Searching for a party… (cancel)' : 'Find party'}</button>`;
@@ -1128,7 +1136,7 @@ function updateHud(now) {
   const near = nearMerchant();
   if (near !== state.wasNear) { state.wasNear = near; if (!near) state.shopOpen = false; renderBag(); }
   if (!state.dead && state.hp / state.maxHp < 0.35 && state.hp > 0) guide.tip('lowhp');
-  if (inArena(state.x, state.z)) guide.did('gate');
+  if (inArena(state.x, state.z) || inArena2(state.x, state.z)) guide.did('gate');
 
   // cooldowns
   for (const btn of $('skills').children) {
@@ -1201,7 +1209,7 @@ let rareHintEl = null, rareHintT = 0;
 function updateRareHint(now) { // a small HUD line pointing at a live rare: "Old Tusk · 84 m north"
   if (now - rareHintT < 150) return; rareHintT = now;
   let rare = null;
-  for (const m of mobs.values()) if (m.def?.rare && !m.dying) { rare = m; break; }
+  for (const m of mobs.values()) if (m.def?.rare && !m.dying && floorOf(m.x) === floorOf(state.x)) { rare = m; break; } // only point at a rare on your floor
   if (!rareHintEl) {
     rareHintEl = document.createElement('div');
     rareHintEl.id = 'rare-hint';
@@ -1501,6 +1509,7 @@ function frame(now) {
     camera.lookAt(0, 2, 30);
   }
   sun.position.set(cx + 30, 60, cz - 20); sun.target.position.set(cx, 0, cz);
+  floor1.visible = !onFloor2(cx); // Floor 1's town, field, chamber and skyline (incl. the tower spire) aren't drawn from Floor 2
   if (state.joined) treeFader.update(dt, camera.position, cx, cz);
   twists.frame(vdt, cx, cz); // Eclipse darkness
   sfx.listener.x = cx; sfx.listener.z = cz;

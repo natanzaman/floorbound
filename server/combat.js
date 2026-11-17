@@ -58,7 +58,7 @@ const methods = {
     const type = String(src).split(' ')[0];
     let best = null, bd = 30;
     for (const m of this.mobs.values()) {
-      if (m.dead) continue;
+      if (m.dead || m.hidden) continue; // a burrowed lurker can't be countered
       const match = m.type === type || (type === 'spitter' && m.def.ranged);
       if (!match && !m.threat.has(p.id)) continue;
       const d = dist(m, p) + (match ? 0 : 20);

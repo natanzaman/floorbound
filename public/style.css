@@ -261,6 +261,8 @@ input { font: inherit; }
 #players .lfg { width: 100%; margin: 6px 0 8px; padding: 9px; font-weight: 700; border: 0; border-radius: 8px; background: linear-gradient(90deg, #3b82f6, #7c3aed); }
 #players .lfg.on { background: #16a34a; }
 #players .tag { font-size: 10px; padding: 1px 5px; border-radius: 4px; background: rgba(59,130,246,.3); margin-left: 4px; }
+#players .tag.f2 { background: rgba(45,212,191,.28); }
+#players .ttl { display: block; font-size: 10px; font-weight: 700; letter-spacing: .05em; line-height: 1.2; opacity: .95; }
 .num.gold { color: #fcd34d; font-size: 15px; }
 .num.loot { font-size: 15px; }
 #boss .phase { font-size: 11px; letter-spacing: .14em; opacity: .8; margin-top: 3px; }
