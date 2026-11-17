@@ -144,6 +144,7 @@ With a database, the server records play events (session start/end, first kill, 
 - **Perfect dodge:** start a roll at most ~0.2 s before a hit lands and it's PERFECT: a brief slow-motion flash, heavy posture damage to the attacker, and for 1.5 s your next hit does +50% damage and double posture damage.
 - **Guard and parry (Guardian, R):** hold R to guard: hits from the front (±70°) take 70% less damage, but you can't attack and you move at half speed. Press R at most ~0.2 s before a frontal hit lands to **parry** it: no damage at all, and big posture damage to the attacker. Mashing R doesn't parry.
 - **Perilous attacks:** the Warden's **Horn Sweep** shows an orange/gold circle around it with a "!" glint and its own warning horn (about 0.9 s). Anyone inside takes about 80% of their max health: Shield Wall, Taunt, guarding, gear and jumping don't reduce it. Roll through it (i-frames) or parry it. Breaking the Warden during the wind-up cancels it. It comes every ~15 s in phase 1, more often later (never while a Quake Ring is still rolling out near the Warden).
+- **Combat text and hit feel:** floating texts on the same character stagger into lanes and repeats merge ("Jumped! ×3"). Your own reactions (Jumped!, Dodged!, PERFECT, PARRY!, COUNTER, Switch, talent/style procs) show only to you; effects on a target (BROKEN, MARKED, PINNED, Discord) show to everyone; other players' damage numbers are small and dim, with only a few on screen at once. When a boss's big hit (Warden slam, charge, Horn Sweep, Quake Ring, rockfall; the Sovereign's trident, geysers, Tidal Wave) lands on you, your screen alone freezes for ~75 ms with a small shake; stomps and Quake Rings shake the camera more the closer they land. Player hits never hit-stop.
 
 ## Skill mastery and evolutions
 
@@ -286,6 +287,7 @@ public/          Three.js client (no build step): main.js, world.js, style.css
 public/models/   rigged character models (glTF) with shared animations
 test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
+test/feeltext.js in-process checks for who sees combat text (`to` tags on reactions) and which boss hits hit-stop their victim
 test/warden3.js  in-process checks for the Quake Ring (jump / roll / out of reach), Warden scaling and bot jump timing per capability
 shared/bots/     one brain per bot: brain.js (decision loop, party teamwork, orders), motor.js (moving, dodging), registry.js (per-class plug-ins), classes.js (Guardian, Swordsman, Cleric), social.js (orders, /b chat parsing, chatter)
 shared/teambots.js  startTeam(): a few bots in one party; used by test/team.js, public/bots.html and server/botmanager.js

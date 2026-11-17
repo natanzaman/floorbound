@@ -297,14 +297,14 @@ export function initClassesA(ctx) {
       case 'markA': {
         marker(e.id, e.by, e.d, e.k);
         const m = mobs.get(e.id);
-        if (m && (e.by === me() || state.spectator)) floatNum(m.model.group.position, (m.model.height || 2) + 0.4, e.k === 'deadeye' ? 'DEADEYE' : 'MARKED', 'rage');
+        if (m) floatNum(m.model.group.position, (m.model.height || 2) + 0.4, e.k === 'deadeye' ? 'DEADEYE' : 'MARKED', 'rage', e.by === me() ? 1 : 0.75); // a status on the target: everyone sees it
         return true;
       }
       case 'brA': {
         if (e.end) { endAura(e.id); return true; }
         aura(e.id, e.d, e.k);
         const p = players.get(e.id);
-        if (p && (e.id === me() || state.spectator)) floatNum(p.model.group.position, 2.5, e.k === 'warblood' ? 'Warblood' : e.k === 'frenzy' ? 'FRENZY' : 'BLOODRAGE', 'rage');
+        if (p && (e.to ?? e.id) === me()) floatNum(p.model.group.position, 2.5, e.k === 'warblood' ? 'Warblood' : e.k === 'frenzy' ? 'FRENZY' : 'BLOODRAGE', 'rage');
         return true;
       }
     }

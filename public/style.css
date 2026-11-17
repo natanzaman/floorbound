@@ -135,6 +135,9 @@ input { font: inherit; }
 .num.hurt { color: #f87171; }
 .num.heal { color: #4ade80; }
 .num.xp { color: #93c5fd; font-size: 14px; }
+.num.other { color: #d1d5db; font-size: 12px; font-weight: 700; } /* other players' numbers: small and dim */
+.num.other.crit { color: #fde68a; font-size: 14px; }
+.num.other.hurt { color: #fca5a5; }
 
 #chat-btn { display: none; right: 110px; }
 .touch #chat-btn { display: block; }

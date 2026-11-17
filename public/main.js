@@ -226,7 +226,7 @@ const wheel = initBotWheel({ send, state, players, log }); // orders for the bot
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
-const combat = initCombat({ state, players, mobs, fx, sfx, guide, send, floatNum, slowMotion, shake: a => shake(a), bossShot: (...a) => bossShot(...a), lockedMob: () => lockedMob(), nearestMob: r => nearestMob(r), callout: (a, b, c) => callout(a, b, c) });
+const combat = initCombat({ state, players, mobs, fx, sfx, guide, send, floatNum, slowMotion, shake: a => shake(a), shakeNear: (...a) => shakeNear(...a), bossShot: (...a) => bossShot(...a), lockedMob: () => lockedMob(), nearestMob: r => nearestMob(r), callout: (a, b, c) => callout(a, b, c) });
 // skill mastery + evolutions: Skills panel (K), Skill Shrines, evolved skill visuals (public/mastery.js)
 const mastery = initMastery({
   state, players, mobs, fx, sfx, send, log, floatNum, project, isTouch, scene, floor1, $,
@@ -376,9 +376,13 @@ function handleEvent(e) {
       else if (e.k === 'heal') { const t = players.get(e.id); if (t) fx.heal(t.model.group); }
       else if (e.k === 'zone') fx.zone(e.x, e.z, e.r, e.d);
       else if (e.k === 'marc') fx.arc(e.x, e.z, e.f, e.r, e.small ? 0.6 : 1.3, 0xff4d4d);
-      else if (e.k === 'boom') { fx.ring(e.x, e.z, e.r, 0xff7a2f, 0.5); shake(0.35); }
-      else if (e.k === 'rock') { fx.rock(e.x, e.z, e.r); setTimeout(() => { fx.ring(e.x, e.z, e.r, 0x9ca3af, 0.5); shake(0.2); sfx.play('boom', { x: e.x, z: e.z }, 0.7); }, 200); }
-      else if (e.k === 'charge') { fx.line(e.x, e.z, e.x2, e.z2, 0xff7a2f, 4, 0.5, 0.5); shake(0.45); sfx.play('boom', { x: e.x2, z: e.z2 }, 1.3); }
+      else if (e.k === 'boom') { fx.ring(e.x, e.z, e.r, 0xff7a2f, 0.5); shakeNear(e.x, e.z, 0.35, e.r + 14); } // a stomp near you
+      else if (e.k === 'rock') { fx.rock(e.x, e.z, e.r); setTimeout(() => { fx.ring(e.x, e.z, e.r, 0x9ca3af, 0.5); shakeNear(e.x, e.z, 0.2, e.r + 8); sfx.play('boom', { x: e.x, z: e.z }, 0.7); }, 200); }
+      else if (e.k === 'charge') {
+        fx.line(e.x, e.z, e.x2, e.z2, 0xff7a2f, 4, 0.5, 0.5); sfx.play('boom', { x: e.x2, z: e.z2 }, 1.3);
+        const lx = e.x2 - e.x, lz = e.z2 - e.z, k = Math.max(0, Math.min(1, ((state.x - e.x) * lx + (state.z - e.z) * lz) / (lx * lx + lz * lz || 1)));
+        shakeNear(e.x + lx * k, e.z + lz * k, 0.45, 18); // by how close the charge passed you
+      }
       else if (e.k === 'summon') { fx.ring(e.x, e.z, 3, 0xff3b1f, 0.7); sfx.play('howl', { x: e.x, z: e.z }, 0.8); }
       break;
     }
@@ -423,7 +427,7 @@ function handleEvent(e) {
       if (p) { p.model.anim?.shot('Dodge_Forward', 1.9); fx.ring(p.model.group.position.x, p.model.group.position.z, 1.2, 0xe5e7eb, 0.3); }
       break;
     }
-    case 'evade': { const p = players.get(e.id); if (p && (e.id === me || state.spectator)) { floatNum(p.model.group.position, 2.4, e.k === 'jump' ? 'Jumped!' : 'Dodged!', 'evade'); sfx.play('evade', p.model.group.position); } break; }
+    case 'evade': { const p = players.get(e.id); if (p && (e.to ?? e.id) === me) { floatNum(p.model.group.position, 2.4, e.k === 'jump' ? 'Jumped!' : 'Dodged!', 'evade'); sfx.play('evade', p.model.group.position); } break; } // your reaction: only you see it
     case 'stagger': {
       const m = mobs.get(e.id);
       if (!m) break;
@@ -441,9 +445,11 @@ function handleEvent(e) {
       if (e.by === me || e.from === me) guide.did('switch');
       const m = mobs.get(e.id);
       if (m) {
-        floatNum(m.model.group.position, m.model.height * 0.85, `SWITCH! ${e.a}`, 'switch');
+        const ours = e.by === me || e.from === me; // the Switch is a reaction: its text is for the two who made it
+        if (ours) floatNum(m.model.group.position, m.model.height * 0.85, `SWITCH! ${e.a}`, 'switch');
         fx.ring(m.x, m.z, m.def.radius + 4, 0xfde047, 0.6); fx.ring(m.x, m.z, m.def.radius + 1.5, 0xffffff, 0.4);
-        shake(0.3); sfx.play('switch', m.model.group.position); hitStop = Math.max(hitStop, 0.14);
+        if (ours) shake(0.3);
+        sfx.play('switch', m.model.group.position, ours ? 1 : 0.6);
       }
       break;
     }
@@ -492,17 +498,16 @@ function handleEvent(e) {
       if (m) hitJuice(m, e);
       if (m && !e.sw) {
         m.flash = 0.08;
-        const mine = e.by === me || state.spectator;
         sfx.play(e.h ? 'hitHeavy' : e.c ? 'crit' : 'hit', m.model.group.position, e.by === me ? 1 : 0.55);
         if (e.by === me) {
           guide.did('hit');
           state.lastCombat = performance.now();
-          hitStop = Math.max(hitStop, e.h ? 0.1 : e.c ? 0.07 : 0.04);
-          if (e.h) shake(0.18);
+          if (e.h) shake(0.18); // (no hit-stop on player hits: that's for a boss's big hit landing on you)
           // knockback lands a little quicker than normal interpolation
           if (e.h && m.type !== 'warden') m.punch = 0.25;
         }
-        floatNum(m.model.group.position, m.model.height * 0.7, e.c ? `${e.a}!` : `${e.a}`, e.c ? 'crit' : '', mine ? 1 : 0.55);
+        // your numbers full size; everyone else's small, dim and capped
+        floatNum(m.model.group.position, m.model.height * 0.7, e.c ? `${e.a}!` : `${e.a}`, e.by === me ? (e.c ? 'crit' : '') : e.c ? 'other crit' : 'other');
       }
       break;
     }
@@ -510,7 +515,11 @@ function handleEvent(e) {
       const p = players.get(e.id);
       if (p) { p.flash = 0.15; const a = p.model.anim; if (a && !a.busy() && !a.dead) a.shot('Hit_A', 1.8);
         if (e.id === me) { state.lastCombat = performance.now(); sfx.play('hurt'); }
-        if (e.id === me || state.spectator) floatNum(p.model.group.position, 2.2, `-${e.a}`, 'hurt'); if (e.id === me) shake(0.15); }
+        if (e.id === me) {
+          floatNum(p.model.group.position, 2.2, `-${e.a}`, 'hurt');
+          if (e.big) { hitStop = Math.max(hitStop, BIG_HIT_STOP); shake(0.3); } else shake(0.15);
+        } else if (state.spectator) floatNum(p.model.group.position, 2.2, `-${e.a}`, 'other hurt');
+      }
       break;
     }
     case 'heal': {
@@ -1411,14 +1420,68 @@ function updateHud(now) {
   if (a !== state.area) { state.area = a; showArea(a + (inTown(state.x, state.z) ? ' — Safe Zone' : '')); }
 }
 
-// floating numbers
-const nums = [];
-function floatNum(pos, h, text, cls, opacity = 1) {
-  if (nums.length > 40) nums.shift().el.remove();
+// ---------------- floating combat text (docs/ROADMAP.md A) ----------------
+// Nothing piles up: texts on one entity form a stack. A new one starts at the bottom and pushes the live ones up by
+// its height (they keep their order, so nothing crosses as they rise and fade); a repeat of a live text on that
+// entity ("Jumped!" again) bumps one label ("Jumped! ×3") instead. A stack taller than FT.stack drops its oldest.
+// Who sees what is decided by the callers: your own reactions (events tagged `to`) only for you, effects on a target
+// for everyone, other players' damage numbers small and dim ('other'), at most FT.otherCap of them alive at once.
+const FT = { max: 32, life: 0.75, longLife: 1.05, rise: 1.3, gap: 2, side: 10, stack: 140, merge: 0.5, pop: 0.12, otherCap: 4 };
+const FT_LONG = new Set(['switch', 'perfect', 'parry', 'crit', 'loot', 'mastery', 'talent', 'counter']);
+const nums = [], floatLog = []; // floatLog: the last texts shown (window.__fb.floatLog, for tests)
+function floatNum(pos, h, text, cls = '', opacity = 1) {
+  const kind = cls.split(' ')[0], numeric = /^[-+(]?\d/.test(text);
+  const here = nums.filter(n => n.anchor === pos);
+  const twin = !numeric && here.find(n => n.text === text && n.cls === cls && n.age < n.life * FT.merge);
+  if (twin) { // merge the repeat
+    twin.count++; twin.el.textContent = `${text} ×${twin.count}`; twin.age = Math.min(twin.age, 0.06); twin.pop = 0;
+    logFloat(text, cls, twin.count);
+    return;
+  }
+  if (kind === 'other' && nums.reduce((s, n) => s + (n.kind === 'other'), 0) >= FT.otherCap) return;
+  while (nums.length >= FT.max) drop(nums[0]);
   const el = document.createElement('div');
-  el.className = `num ${cls}`; el.textContent = text; el.style.opacity = opacity;
+  el.className = `num ${cls}`; el.textContent = text; el.style.opacity = 0;
   $('labels').appendChild(el);
-  nums.push({ el, x: pos.x + (Math.random() - 0.5) * 0.8, y: h, z: pos.z, age: 0, opacity });
+  const ht = el.offsetHeight || 22, wd = el.offsetWidth || 30;
+  const low = here.length ? here[here.length - 1] : null; // the newest live text: the bottom of the stack
+  if (low) {
+    const push = (ht + low.ht) / 2 + FT.gap;
+    for (const n of here) n.dyTo += push;
+    for (const n of here) if (n.dyTo > FT.stack) drop(n); // too tall: the oldest give way
+  }
+  const life = FT_LONG.has(kind) ? FT.longLife : FT.life;
+  if (kind === 'other') opacity *= 0.55;
+  nums.push({ el, anchor: pos, x: pos.x, y: low ? low.y : h, z: pos.z, age: 0, pop: 0, life, opacity, dy: 0, dyTo: 0, lift: 0, ht, wd,
+    dx: low ? (low.dx > 0 ? -FT.side : FT.side) : 0, text, cls, kind, count: 1 }); // one base height per stack; alternate sides a little
+  logFloat(text, cls, 1);
+}
+function logFloat(text, cls, n) { floatLog.push({ text, cls, n, at: Math.round(performance.now()) }); if (floatLog.length > 150) floatLog.shift(); }
+function drop(n) { n.el.remove(); const i = nums.indexOf(n); if (i >= 0) nums.splice(i, 1); }
+function drawFloats(dt, vdt) {
+  const placed = []; // screen rects already drawn this frame, oldest first: a newer text that would cover one moves up
+  for (let i = 0; i < nums.length; i++) {
+    const n = nums[i]; n.age += vdt; n.pop += vdt;
+    if (n.age > n.life) { n.el.remove(); nums.splice(i--, 1); continue; }
+    n.dy += (n.dyTo - n.dy) * Math.min(1, dt * 30); // a quick slide when pushed up
+    const k = n.age / n.life, ease = 1 - Math.pow(1 - k, 3); // rise fast, then settle
+    const p = project(n.x, n.y + ease * FT.rise, n.z);
+    if (!p) { n.el.style.display = 'none'; continue; }
+    // texts on different entities can still meet on screen: lift this one clear of any drawn before it
+    const x = p[0] + n.dx, hw = n.wd / 2, hh = n.ht / 2;
+    n.lift *= 1 - Math.min(1, dt * 4); // settle back down once there's room
+    let y = p[1] - n.dy - n.lift;
+    for (let moved = true, guard = 0; moved && guard < 8; guard++) {
+      moved = false;
+      for (const r of placed) if (Math.abs(x - r.x) < hw + r.hw && Math.abs(y - r.y) < hh + r.hh) { y = r.y - r.hh - hh - FT.gap; moved = true; }
+    }
+    n.lift = p[1] - n.dy - y;
+    placed.push({ x, y, hw: hw * 1.1, hh: hh * 1.1 }); // (a little margin for the pop-in scale)
+    n.el.style.display = '';
+    n.el.style.left = `${x}px`; n.el.style.top = `${y}px`;
+    n.el.style.transform = `translate(-50%, -50%) scale(${n.pop < FT.pop ? 1.3 - (0.3 * n.pop) / FT.pop : 1})`;
+    n.el.style.opacity = String(n.opacity * (k < 0.65 ? 1 : (1 - k) / 0.35));
+  }
 }
 
 // ---------------- juice: hit sparks, flinch, killing-blow slow motion ----------------
@@ -1478,6 +1541,10 @@ function updateRareHint(now) { // a small HUD line pointing at a live rare: "Old
 const v3 = new THREE.Vector3();
 let shakeAmt = 0;
 const shake = a => { shakeAmt = Math.max(shakeAmt, a); };
+// A shake that fades with distance: full at the spot, 40% at r, nothing beyond (stomps, rockfall, Quake Rings).
+const shakeNear = (x, z, a, r) => { const d = Math.hypot(x - state.x, z - state.z); if (d < r && !state.dead) shake(a * (1 - (0.6 * d) / r)); };
+// Hit-stop: a boss's big hit landed on YOU (a `hurt` event tagged big). Only this client freezes; never on your own hits.
+const BIG_HIT_STOP = 0.075;
 let sendT = 0, last = performance.now();
 
 function project(x, y, z) {
@@ -1650,7 +1717,7 @@ function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   hitStop = Math.max(0, hitStop - dt);
   slowMo = Math.max(0, slowMo - dt);
-  const vdt = slowMo > 0 ? dt * slowMoScale : dt; // visual dt: animation and effects only
+  const vdt = hitStop > 0 ? 0 : slowMo > 0 ? dt * slowMoScale : dt; // visual dt: animation and effects only (frozen during a hit-stop)
   const lm = state.joined && !state.spectator ? lockedMob() : null;
   const la = !lm && state.joined && !state.spectator ? focusedAlly() : null;
   const sel = lm || la;
@@ -1786,16 +1853,7 @@ function frame(now) {
   twists.frame(vdt, cx, cz); // Eclipse darkness
   sfx.listener.x = cx; sfx.listener.z = cz;
 
-  // floating numbers
-  for (let i = nums.length - 1; i >= 0; i--) {
-    const n = nums[i]; n.age += vdt;
-    if (n.age > 0.9) { n.el.remove(); nums.splice(i, 1); continue; }
-    const p = project(n.x, n.y + n.age * 1.6, n.z);
-    if (!p) { n.el.style.display = 'none'; continue; }
-    n.el.style.display = '';
-    n.el.style.left = `${p[0]}px`; n.el.style.top = `${p[1]}px`;
-    n.el.style.opacity = String(n.opacity * (1 - Math.max(0, n.age - 0.5) / 0.4));
-  }
+  drawFloats(dt, vdt);
 
   if (state.joined) updateHud(now);
   updateRareHint(now);
@@ -1804,4 +1862,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { state, players, mobs, banner, sfx, project };
+window.__fb = { state, players, mobs, banner, sfx, project, floatLog };

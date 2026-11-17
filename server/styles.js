@@ -141,7 +141,7 @@ export const StyleMethods = {
     const cut = this.styleNum(p, 'switchCdr', 0);
     if (!cut) return;
     for (let i = 1; i < p.cds.length; i++) p.cds[i] = Math.max(this.time, p.cds[i] - cut);
-    this.events.push({ t: 'fx', k: 'sty', st: p.style, ev: 'cdr', id: p.id, a: cut, x: r2(p.x), z: r2(p.z) });
+    this.events.push({ t: 'fx', k: 'sty', st: p.style, ev: 'cdr', id: p.id, to: p.id, a: cut, x: r2(p.x), z: r2(p.z) });
   },
 
   // Mace & Shield: Breaks you cause last longer (called from breakMob in combat.js). Seconds to add.
@@ -203,7 +203,7 @@ export function installStyles(Game) {
   const killMob = Game.prototype.killMob;
   Game.prototype.killMob = function (m, killer) {
     const out = killMob.call(this, m, killer), id = this.styleNum(killer, 'killReset', null);
-    if (id) { const i = (CLASSES[killer.cls]?.skills || []).findIndex(s => s.id === id); if (i > 0 && killer.cds[i] > this.time) { killer.cds[i] = this.time; this.events.push({ t: 'fx', k: 'sty', st: killer.style, ev: 'reset', id: killer.id, x: r2(killer.x), z: r2(killer.z) }); } }
+    if (id) { const i = (CLASSES[killer.cls]?.skills || []).findIndex(s => s.id === id); if (i > 0 && killer.cds[i] > this.time) { killer.cds[i] = this.time; this.events.push({ t: 'fx', k: 'sty', st: killer.style, ev: 'reset', id: killer.id, to: killer.id, x: r2(killer.x), z: r2(killer.z) }); } }
     return out;
   };
   const addPlayer = Game.prototype.addPlayer;

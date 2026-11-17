@@ -361,7 +361,7 @@ export const MasteryMethods = {
   // Miracle's purify: lingering ground hazards don't touch you.
   purified(p, src, base) {
     if (this.time >= (p.purifyUntil || 0) || !HAZARDS.has(src)) return false;
-    this.events.push({ t: 'evade', id: p.id, k: 'purify' });
+    this.events.push({ t: 'evade', id: p.id, to: p.id, k: 'purify' });
     this.creditBy(p.purifyBy, 'heal', base, 'prevent');
     return true;
   },
@@ -390,7 +390,7 @@ export const MasteryMethods = {
       if (by) {
         this.creditBy(by, 'wall', raw * out.mult * best, 'prevent');
         out.mult *= 1 - best;
-        this.events.push({ t: 'block', id: p.id, by: by.id });
+        this.events.push({ t: 'block', id: p.id, to: p.id, by: by.id });
       }
     }
     for (const zn of this.zones) { // Haven

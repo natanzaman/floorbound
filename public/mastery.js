@@ -355,8 +355,8 @@ export function initMastery(ctx) {
         return false;
       }
       case 'absorb': { const p = players.get(e.id); if (p && (e.id === me || state.spectator || (state.party && p.party === state.party))) floatNum(p.model.group.position, 2.3, `(${e.a} absorbed)`, 'absorb'); return true; }
-      case 'block': { const p = players.get(e.id); if (p && e.id === me) floatNum(p.model.group.position, 2.5, 'Blocked', 'evade'); return true; }
-      case 'evade': if (e.k !== 'purify') return false; { const p = players.get(e.id); if (p && (e.id === me || state.spectator)) floatNum(p.model.group.position, 2.4, 'Purified', 'evade'); } return true;
+      case 'block': { const p = players.get(e.id); if (p && (e.to ?? e.id) === me) floatNum(p.model.group.position, 2.5, 'Blocked', 'evade'); return true; }
+      case 'evade': if (e.k !== 'purify') return false; { const p = players.get(e.id); if (p && (e.to ?? e.id) === me) floatNum(p.model.group.position, 2.4, 'Purified', 'evade'); } return true;
     }
     return false;
   }

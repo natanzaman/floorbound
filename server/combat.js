@@ -8,12 +8,20 @@ import { DODGE, SWITCH, POSTURE, PERFECT, GUARD, SWEEP, WARDEN, postureMax, angl
 import { MASTERY } from '../shared/mastery.js';
 
 const QSTATS = !!process.env.QUAKE_STATS; // test/wardenskill.js: count Quake Ring hits / evades
+
+// A boss's big hits (damagePlayer `src`): landing one tags the `hurt` event `big`, and only the victim's client
+// does a short hit-stop and camera shake (docs/ROADMAP.md A3). Twist echoes ("warden slam echo") count as the original.
+export const BIG_HITS = new Set(['warden slam', 'warden charge', 'warden sweep', 'warden quake', 'rockfall',
+  'sovereign trident', 'sovereign geyser', 'tidal wave']);
+// Who sees what (docs/ROADMAP.md A2): reactions a player performs (Jumped!, Dodged!, PERFECT, PARRY!, COUNTER, self procs)
+// carry `to: <their id>` and only that player's client shows the text; effects on a target (BROKEN, MARKED, Discord) carry no `to`.
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r2 = v => Math.round(v * 100) / 100;
 
 const methods = {
   // ---------- posture ----------
   postureCap(m) { return postureMax(m.def, m.maxHp); },
+  bigHit(src = '') { return BIG_HITS.has(String(src).replace(/ echo$/, '')); },
   posturePct(m) { return Math.min(100, Math.round((100 * (m.posture || 0)) / this.postureCap(m))) || 0; },
 
   // Add posture damage from player p. amount = damage dealt; the flags add big chunks.
@@ -21,7 +29,7 @@ const methods = {
   addPosture(m, p, amount, { heavy = false, brk = false, interrupt = false, counter = false, chunk = null, sk = null, frac = null } = {}) {
     if (!m || m.dead) return;
     const t = this.time;
-    if (counter) this.events.push({ t: 'counter', id: m.id, by: p.id });
+    if (counter) this.events.push({ t: 'counter', id: m.id, by: p.id, to: p.id });
     if (interrupt && !m.def.boss) m.windupAt = 0; // a Smite mid wind-up still interrupts small enemies
     if (t < m.staggerUntil) return; // frozen while broken
     const max = this.postureCap(m), bi = m.def.boss ? 1 : 0;
@@ -84,12 +92,12 @@ const methods = {
       p.perfectRoll = rollAt; // one perfect per roll
       const a = this.attackerOf(p, src, mob);
       p.counterUntil = t + PERFECT.counter;
-      this.events.push({ t: 'perfect', id: p.id, m: a?.id || 0, x: r2(p.x), z: r2(p.z) });
+      this.events.push({ t: 'perfect', id: p.id, to: p.id, m: a?.id || 0, x: r2(p.x), z: r2(p.z) });
       if (a) this.addPosture(a, p, 0, { chunk: 'perfect' });
       p.perfects = (p.perfects || 0) + 1;
       return;
     }
-    this.events.push({ t: 'evade', id: p.id });
+    this.events.push({ t: 'evade', id: p.id, to: p.id });
   },
 
   // ---------- Guardian guard / parry ----------
@@ -111,7 +119,7 @@ const methods = {
     const a = this.attackerOf(p, src, mob);
     if (a && Math.abs(wrapAngle(angleTo(p.x, p.z, a.x, a.z) - p.face)) > GUARD.arc) return null; // not frontal
     if (p.parryOk && this.time - p.guardAt <= GUARD.parry + 1e-6) {
-      this.events.push({ t: 'parry', id: p.id, m: a?.id || 0, x: r2(p.x), z: r2(p.z), f: r2(p.face) });
+      this.events.push({ t: 'parry', id: p.id, to: p.id, m: a?.id || 0, x: r2(p.x), z: r2(p.z), f: r2(p.face) });
       if (a) this.addPosture(a, p, 0, { chunk: 'parry' });
       p.parries = (p.parries || 0) + 1;
       return 'parry';

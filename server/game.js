@@ -842,7 +842,7 @@ export class Game {
   damagePlayer(p, base, { ground = false, src = '?', peril = false, mob = null } = {}) {
     if (p.dead || inTown(p.x, p.z)) return;
     if (this.time < p.iframeUntil) { this.evadeHit(p, src, mob); return; } // may be a perfect dodge
-    if (ground && !peril && this.time >= p.airFrom && this.time < p.airUntil) { this.events.push({ t: 'evade', id: p.id, k: 'jump' }); return; }
+    if (ground && !peril && this.time >= p.airFrom && this.time < p.airUntil) { this.events.push({ t: 'evade', id: p.id, to: p.id, k: 'jump' }); return; }
     if (!peril && this.purified(p, src, base)) return; // Miracle (server/mastery.js)
     const guard = this.guardHit(p, src, mob, peril); // Guardian guard / parry
     if (guard === 'parry') return;
@@ -866,7 +866,7 @@ export class Game {
     p.hp -= amount;
     p.lastHurt = this.time; p.lastCombat = this.time;
     this.onHurtA?.(p, amount); // Berserker Rage (server/classes-a.js)
-    this.events.push({ t: 'hurt', id: p.id, a: amount });
+    this.events.push({ t: 'hurt', id: p.id, a: amount, ...(this.bigHit(src) ? { big: 1 } : {}) }); // big: the victim's client hit-stops
     if (p.hp <= 0) {
       p.hp = 0; p.dead = true; p.respawnAt = this.time + 4;
       p.xp = Math.max(0, p.xp - Math.round(xpToNext(p.lvl) * 0.1)); p.dirty = true;
