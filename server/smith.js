@@ -71,6 +71,7 @@ export const SmithMethods = {
     const f = this.smithFind(p, u);
     if (!f) return false;
     const it = f.it;
+    if (it.ks) { this.sys("The Smith won't touch a keepsake.", p.id); return false; }
     if (it.cls && it.cls !== p.cls) { this.sys('The Smith only refines weapons you can wield.', p.id); return false; }
     const cost = refineCost(it);
     if (!cost) { this.sys(`${it.name} is already fully refined.`, p.id); return false; }

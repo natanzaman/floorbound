@@ -12,7 +12,9 @@ export const RARITY = [
   { id: 'rare', name: 'Rare', color: '#60a5fa', sell: 30 },
   { id: 'epic', name: 'Epic', color: '#c084fc', sell: 75 },
   { id: 'legend', name: 'Last Attack', color: '#fbbf24', sell: 150 },
+  { id: 'keepsake', name: 'Keepsake', color: '#f0abfc', sell: 0 }, // story items: no stats, never sold, salvaged, refined or dropped
 ];
+export const KEEPSAKE = 5; // RARITY index
 
 export const SLOTS = ['weapon', 'armor', 'charm'];
 export const BAG_SIZE = 24;
@@ -90,6 +92,13 @@ export function lastAttackItem() {
 export function lastAttackItem2() {
   return { u: ++uid, slot: 'armor', r: 4, name: "Sovereign's Tidecloak", st: { hp: 30, dr: 10, haste: 6 }, la: 2 };
 }
+
+// A keepsake (server/staging.js giveKeepsake): a named memento with a line of text and no stats. It can be worn, but
+// it can't be sold, salvaged, refined, reforged, dropped or deleted.
+export function keepsakeItem(name, slot = 'charm', desc = '') {
+  return { u: ++uid, slot, r: KEEPSAKE, name: String(name || 'Keepsake').slice(0, 40), st: {}, ks: 1, desc: String(desc || '').slice(0, 200) };
+}
+export const isKeepsake = it => !!it?.ks;
 
 // Rarity tables (weights for common..epic).
 const TABLES = {

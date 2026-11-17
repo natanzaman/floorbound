@@ -10,6 +10,7 @@ export const GroundMethods = {
     if (p.dead) return;
     const i = p.inv.bag.findIndex(it => it.u === u);
     if (i < 0) return;
+    if (p.inv.bag[i].ks) return this.sys('A keepsake stays with you.', p.id);
     const [it] = p.inv.bag.splice(i, 1);
     this.ground ||= new Map();
     let x = p.x + Math.sin(p.face || 0) * 1.1, z = p.z + Math.cos(p.face || 0) * 1.1;
