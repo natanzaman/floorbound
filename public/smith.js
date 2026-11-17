@@ -105,7 +105,7 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
   }
 
   function tabRefine() {
-    const list = gear();
+    const list = gear().filter(({ it }) => !it.ks); // keepsakes are never refined
     if (!list.length) return '<div class="it empty"><span class="nm"><small>No gear to refine yet.</small></span></div>';
     return `<p class="hint">Each level adds +10% of the item's base stats, up to +${REFINE_MAX}. Weapons take Tusks and Fangs, armour Pelts, charms Resin; +4 and +5 need Horn Shards. Refining never fails.</p>` + list.map(({ it, eq }) => {
       const cost = refineCost(it), ok = usable(it);
@@ -123,7 +123,7 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
   }
 
   function tabSalvage() {
-    const list = gear(true);
+    const list = gear(true).filter(({ it }) => !it.ks);
     if (!list.length) return '<div class="it empty"><span class="nm"><small>Your bag is empty. Salvage breaks bag items down into Dust (Common), Essence (Uncommon/Rare) or Prism (Epic).</small></span></div>';
     return '<p class="hint">Break bag items down for Dust (Common), Essence (Uncommon, Rare) or Prism (Epic). Refined items give back half their Tusks, Pelts or Resin.</p>' + list.map(({ it }) => {
       const out = salvageYield(it), sure = ui.confirm === it.u;

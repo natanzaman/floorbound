@@ -10,8 +10,10 @@ const TOTEM_DEF = { ...MOBS.spitter, ...TOTEM };
 
 export const TwistMethods = {
   // Roll (or force with WARDEN_TWIST) the twist for the next Warden fight and announce it server-wide.
+  // this.twistOverride (setTwistOverride, server/staging.js): 'off' = no twist, a twist id = that one.
   newTwist() {
-    const id = rollTwist(this.twist?.id, process.env.WARDEN_TWIST);
+    if (this.twistOverride === 'off') { this.twist = null; this.twistW = { ...WARDEN }; this.cracks = []; this.events.push({ t: 'twist', id: null }); return; }
+    const id = rollTwist(this.twist?.id, this.twistOverride || process.env.WARDEN_TWIST);
     const T = TWISTS[id];
     this.twist = { id, name: T.name };
     this.cracks = [];

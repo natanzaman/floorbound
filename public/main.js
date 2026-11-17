@@ -560,7 +560,7 @@ function handleEvent(e) {
     case 'pdie': {
       if (e.id === me) {
         const camp = WAYSTONES.find(w => w.floor === (e.f || floorOf(state.x)))?.name || 'town'; // Town of Beginnings / Mirelight Camp
-        $('dead').innerHTML = `<div>You were defeated</div><small>${e.src && e.src !== '?' ? `by ${esc(e.src)} · ` : ''}respawning at ${esc(camp)}…</small>`;
+        $('dead').innerHTML = `<div>You were defeated</div><small>${e.src && e.src !== '?' ? `by ${esc(e.src)} · ` : ''}${e.stay ? 'waiting to be revived' : `respawning at ${esc(camp)}…`}</small>`;
         $('dead').classList.remove('hidden');
       }
       break;
@@ -1150,12 +1150,14 @@ $('skills-btn').onclick = () => talents.toggle(); // Skill Tree window (also K, 
 const statsText = it => Object.entries(it.st).map(([k, v]) => statLabel(k, v)).join(' · ');
 function mainStat(it) { return it ? (it.st.atk ?? it.st.hp ?? Object.values(it.st).reduce((a, b) => a + b, 0)) : 0; }
 const stackBtns = (kind, id) => `<button data-a="dropStack" data-k="${kind}" data-id="${id}" title="Drop 1 on the ground (Shift: the whole stack)">Drop</button><button class="del" data-a="discardStack" data-k="${kind}" data-id="${id}" title="Delete 1 (Shift: the whole stack)">Delete</button>`;
+// A keepsake (story item, shared/items.js): its own colour, its line of text instead of stats, and no sell / drop / delete.
+const keepsakeRow = (it, slotName, actions) => `<div class="it keepsake" title="${esc(it.desc || '')}"><span class="slot">${slotName}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}</b><small class="ks-desc">${esc(it.desc || '')}</small><small>Keepsake · it stays with you</small></span>${actions}</div>`;
 function renderBag() {
   const el = $('bag');
   if (el.classList.contains('hidden') || !state.inv) return;
   const inv = state.inv, near = nearMerchant();
   const shopping = near && state.shopOpen;
-  const row = (it, slotName, actions) => it
+  const row = (it, slotName, actions) => it?.ks ? keepsakeRow(it, slotName, actions) : it
     ? `<div class="it" title="${esc(styles.title(it))}"><span class="slot">${slotName}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}</b><small>${statsText(it)}${styles.tag(it)}</small></span>${actions}</div>`
     : `<div class="it empty"><span class="slot">${slotName}</span><span class="nm"><small>Empty</small></span></div>`;
   let h = `<div class="top"><span>Bag <span class="gold">${inv.gold} gold</span></span><button class="x" data-a="close">✕</button></div>`;
@@ -1176,6 +1178,7 @@ function renderBag() {
     const cur = inv.eq[it.slot], diff = Math.round((mainStat(it) - mainStat(cur)) * 10) / 10; // refined stats have one decimal
     const cmp = it.slot !== 'charm' && cur ? (diff > 0 ? ` <span class="up">▲${diff}</span>` : diff < 0 ? ` <span class="down">▼${-diff}</span>` : '') : !cur ? ' <span class="up">new</span>' : '';
     const usable = !it.cls || it.cls === state.cls;
+    if (it.ks) return keepsakeRow(it, it.slot, `<button data-a="equip" data-u="${it.u}">Wear</button>`); // keepsakes: no sell, drop or delete
     return `<div class="it" title="${esc(styles.title(it))}"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}${styles.tag(it)}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}<button data-a="drop" data-u="${it.u}" title="Drop on the ground for anyone to pick up">Drop</button><button class="del" data-a="discard" data-u="${it.u}" title="Delete for good">Delete</button></div>`;
   }).join('') : '<div class="it empty"><span class="nm"><small>Nothing yet. Enemies drop gear; the Warden always does.</small></span></div>';
   { // materials, each with Drop / Delete

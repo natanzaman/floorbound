@@ -114,6 +114,7 @@ Characters keep lifetime stats and earn titles (Warden Slayer, Last Attacker, Sw
 - **Drops are personal:** every party member nearby rolls their own gold, potions and gear. Alphas always drop Uncommon+; the Warden drops two Rare+ items for everyone who fought.
 - **Consumables:** Health Potion (40% health), Battle Tonic (+15% damage, 30 s), Ironbark Draught (−15% damage taken, 30 s). New characters start with 3 potions.
 - **Merchant** in town (press F at the stall): buy consumables and Uncommon gear (including a weapon in your class's alternate style), sell items.
+- **Keepsakes** (pink): story items handed out by a scene (e.g. *Bram's Buckle*). No stats, a line of text instead; they can be worn but never sold, salvaged, refined, reforged, dropped or deleted.
 
 ## Crafting
 
@@ -298,6 +299,7 @@ shared/classes/   Lancer and Bard data, tuning, evolutions (lancer.js, bard.js) 
 server/classes-b.js, public/classes-b.js  Lancer / Bard skills (mixed into Game) and their rigs + visuals; test/classes-b.js
 shared/styles.js, server/styles.js, public/styles.js  weapon styles; test/styles.js, test/newclass.js (newer classes)
 shared/talents.js, server/talents.js, public/talents.js  talent trees and the Skill Tree window; test/talents.js
+server/staging.js  staging hooks for the scene director (filming): forceBossMove, reserveLastAttack, scriptDeath/scriptRevive, protect, setTwistOverride, spawnMob, giveKeepsake, clearStaging; test/staging.js
 server/admin.js  admin API (/api/admin/*) and /api/lobby; server/botmanager.js runs bots inside the server; public/admin.html the admin page
 ```
 
