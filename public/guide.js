@@ -17,7 +17,7 @@ const STEPS = [
 
 const TIPS = {
   wedge: 'Red wedge: a bite is coming. Step out of it or roll.',
-  aim: 'A Bramble Spitter is aiming down that line. Sidestep it.',
+  aim: 'Something is aiming down that red line. Sidestep it.',
   slam: 'Red circle: a ground slam. Roll out, or jump just as it lands.',
   lane: 'Charge lane! Get out sideways, fast.',
   rock: 'Rockfall: a circle drops under everyone. Keep moving.',
