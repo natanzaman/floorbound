@@ -1,0 +1,150 @@
+# Episode 1: First Line. Cue sheet for the scene director (docs/ROADMAP.md F2; schema in docs/SCRIPT_BRIEF.md).
+# Timing: a cue starts together with the previous cue, unless it has `after: prev` (when the previous one finishes)
+# or `after: <label>` (when the cue with that `id` finishes). `delay: s` waits that long after its start trigger.
+title: "First Line"
+episode: 1
+cast:
+  - { id: corvin, name: "Corvin", class: swordsman, style: sword,    level: 13 }
+  - { id: bram,   name: "Bram",   class: guardian,  style: shield,   level: 12 }
+  - { id: tamsin, name: "Tamsin", class: cleric,    style: staff,    level: 11 }
+  - { id: juno,   name: "Juno",   class: ranger,    style: crossbow, level: 11 }
+  - { id: pell,   name: "Pell",   class: lancer,    style: lance,    level: 8 }
+
+scenes:
+  # 1. Town of Beginnings: the party forms
+  - id: s1
+    place: town
+    light: day
+    marks: { corvin: hall_of_clearers, bram: fountain, tamsin: smith, juno: smith, pell: town_square }
+    cues:
+      - { do: clean, on: true }
+      - { do: letterbox, on: true }
+      - { do: fade, to: in, secs: 1.5 }
+      - { do: title, text: "DAY 41", secs: 3 }
+      - { do: camera, shot: close_up, target: hall_of_clearers, secs: 4 }
+      - { who: corvin, do: face, to: hall_of_clearers }
+      - { who: corvin, do: say, text: "Forty-one days. Not one name on this stone.", hold: 4, after: prev, delay: 1 }
+      - { do: camera, shot: wide, target: corvin }
+      - { who: bram, do: walk_to, to: corvin, after: prev }
+      - { who: bram, do: face, to: hall_of_clearers, after: prev }
+      - { who: bram, do: say, text: "Three raids tried.", hold: 2.5, after: prev }
+      - { who: corvin, do: say, text: "I'm what's left of the second.", hold: 3, after: prev }
+      - { who: bram, do: say, text: "Then we go in smarter. All of us.", after: prev }
+      - { who: [tamsin, juno], do: walk_to, to: corvin, after: prev }
+      - { who: juno, do: say, text: "Bolts are fresh. Tamsin's carrying forty potions.", after: prev }
+      - { who: tamsin, do: say, text: "Thirty-eight. Juno keeps \"testing\" them.", after: prev }
+      - { who: pell, do: run_to, to: corvin, after: prev }
+      - { do: camera, shot: medium, target: pell }
+      - { who: pell, do: say, text: "Wait! I heard you need a fifth.", after: prev }
+      - { who: [corvin, bram, tamsin, juno], do: face, to: pell }
+      - { who: juno, do: say, text: "You're level eight.", after: prev }
+      - { who: pell, do: say, text: "I'm fast. I don't freeze. Please.", after: prev }
+      - { who: corvin, do: face, to: bram, after: prev }
+      - { who: bram, do: walk_to, to: pell, after: prev }
+      - { do: camera, shot: over_shoulder, target: pell, from: bram }
+      - { who: bram, do: say, text: "Stay behind my shield. Every second. Understood?", hold: 4, after: prev }
+      - { who: pell, do: say, text: "Every second.", hold: 2.5, after: prev }
+      - { who: corvin, do: say, text: "Then we're five. Raid gate.", after: prev }
+      - { do: camera, shot: wide, target: corvin }
+      - { who: all, do: walk_to, to: north_road, after: prev }
+      - { do: fade, to: black, secs: 1.5, delay: 3 }
+
+  # 2. The raid gate: the countdown
+  - id: s2
+    place: raid_gate
+    light: day
+    marks: { corvin: raid_gate, bram: raid_gate, tamsin: raid_gate, juno: raid_gate, pell: raid_gate }
+    cues:
+      - { do: fade, to: in, secs: 1 }
+      - { do: camera, shot: wide, target: raid_gate }
+      - { who: all, do: ready, after: prev }
+      - { who: tamsin, do: say, text: "Five seconds. Last chance to turn back.", hold: 3 }
+      - { who: pell, do: walk_to, to: bram, after: prev }
+      - { who: bram, do: face, to: pell, after: prev }
+      - { do: camera, shot: medium, target: bram }
+      - { who: bram, do: say, text: "When it spins its horns, you get behind me.", after: prev }
+      - { who: pell, do: say, text: "And if I can't?", after: prev }
+      - { who: bram, do: say, text: "Then I come to you.", hold: 3, after: prev }
+      - { who: corvin, do: say, text: "Nobody dies today. That's the only order.", after: prev }
+      - { do: wait, until: gate_open, after: prev }
+      - { do: camera, shot: follow, target: corvin }
+      - { who: all, do: walk_to, to: arena_edge, after: prev }
+      - { do: fade, to: black, secs: 1, delay: 2 }
+
+  # 3. The Warden's arena: the raid
+  - id: s3
+    place: warden_arena
+    light: eclipse
+    marks: { corvin: arena_edge, bram: arena_edge, tamsin: arena_edge, juno: arena_edge, pell: arena_edge }
+    cues:
+      - { do: twists, set: off }
+      - { do: reserve_last_attack, target: warden, for: pell }
+      - { do: fade, to: in, secs: 1 }
+      - { do: camera, shot: wide, target: warden, secs: 3 }
+      - { who: bram, do: say, text: "Taunt's up! Hit it from the sides!" }
+      - { who: bram, do: skill, skill: taunt, target: warden }
+      - { do: camera, shot: follow, target: bram }
+      - { who: all, do: fight, target: warden, until: "warden_hp < 66%", after: prev }
+      - { who: juno, do: say, text: "Hounds! I'll keep them off Tamsin!", after: prev }
+      - { who: tamsin, do: say, text: "Sanctuary down! Stay inside the light!" }
+      - { who: tamsin, do: skill, skill: sanct }
+      - { who: all, do: fight, target: warden, until: "warden_hp < 33%", after: prev }
+      # the sacrifice
+      - { id: sweep, who: warden, do: boss_move, move: horn_sweep, target: pell, after: prev }
+      - { who: [corvin, tamsin, juno], do: hold }
+      - { who: pell, do: hold }
+      - { who: corvin, do: say, text: "Pell! Horn Sweep!", hold: 2 }
+      - { who: bram, do: run_to, to: pell }
+      - { who: bram, do: skill, skill: wall, after: prev }
+      - { do: camera, shot: close_up, target: bram, after: sweep }
+      - { do: slowmo, secs: 1.2, scale: 0.35 }
+      - { who: bram, do: emote, anim: hit }
+      - { who: bram, do: say, text: "Told you. I come to you.", hold: 3, after: prev }
+      - { who: bram, do: die, respawn: false, after: prev }
+      - { who: pell, do: say, text: "Bram!", hold: 2 }
+      - { who: pell, do: pose, k: kneel, after: prev }
+      - { who: tamsin, do: say, text: "His bar's empty. He's... he's gone.", hold: 3 }
+      - { who: corvin, do: say, text: "Pell. Up. We finish it. For him.", after: prev }
+      - { who: pell, do: pose, k: none, after: prev }
+      - { do: camera, shot: follow, target: corvin }
+      - { who: [corvin, tamsin, juno, pell], do: fight, target: warden, until: "warden_hp < 10%", after: prev }
+      # the clutch Switch
+      - { who: [tamsin, juno, pell], do: hold }
+      - { who: corvin, do: skill, skill: burst, target: warden, until: "warden_broken" }
+      - { who: corvin, do: say, text: "Switch!", hold: 2, after: prev }
+      - { who: pell, do: run_to, to: warden }
+      - { do: camera, shot: close_up, target: pell }
+      - { who: pell, do: fight, target: warden, until: "warden_dead", after: prev }
+      - { do: slowmo, secs: 1.5, scale: 0.3, after: prev }
+      - { who: juno, do: emote, anim: cheer, after: prev, delay: 1 }
+      - { who: pell, do: walk_to, to: bram }
+      - { do: camera, shot: medium, target: pell }
+      - { who: pell, do: pose, k: kneel, after: prev }
+      - { who: pell, do: give_item, name: "Bram's Buckle", slot: charm, desc: "The clasp of Bram's shield. Nobody gets left at the stop.", after: prev }
+      - { who: pell, do: say, text: "He told me to stay behind him.", hold: 4, after: prev }
+      - { who: tamsin, do: say, text: "You did. Every second.", hold: 4, after: prev }
+      - { do: fade, to: black, secs: 2, after: prev }
+
+  # 4. Town of Beginnings: the stone and the bell
+  - id: s4
+    place: town
+    light: day
+    absent: [bram]
+    marks: { corvin: fountain, tamsin: fountain, juno: fountain, pell: fountain }
+    cues:
+      - { do: fade, to: in, secs: 1.5 }
+      - { who: [corvin, tamsin, juno, pell], do: walk_to, to: hall_of_clearers }
+      - { do: camera, shot: close_up, target: hall_of_clearers, after: prev }
+      - { who: juno, do: say, text: "Five names. It kept his.", hold: 3, after: prev }
+      - { who: corvin, do: say, text: "First line on the stone. Where he always stood.", hold: 4, after: prev }
+      - { who: tamsin, do: pose, k: bow, after: prev }
+      - { do: bell, floor: 1, after: prev, delay: 1.5 }
+      - { do: camera, shot: wide, target: hall_of_clearers }
+      - { who: tamsin, do: pose, k: none, after: prev, delay: 3 }
+      - { who: tamsin, do: say, text: "The first bell.", hold: 3, after: prev }
+      - { who: pell, do: face, to: waystone, after: prev }
+      - { who: pell, do: say, text: "Floor two. I'll take the front.", after: prev }
+      - { who: [corvin, tamsin, juno, pell], do: walk_to, to: waystone, after: prev }
+      - { do: camera, shot: crane, target: waystone }
+      - { do: title, text: "FLOOR 1 CLEARED", sub: "ninety-nine bells to go", secs: 4, after: prev }
+      - { do: fade, to: black, secs: 2, after: prev }
