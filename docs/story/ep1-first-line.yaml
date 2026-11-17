@@ -111,9 +111,11 @@ scenes:
       - { do: camera, shot: follow, target: corvin }
       - { who: [corvin, tamsin, juno, pell], do: fight, target: warden, until: "warden_hp < 10%", after: prev }
       # the clutch Switch
-      - { who: [tamsin, juno, pell], do: hold, after: prev }
+      - { who: [juno, pell], do: hold, after: prev }
+      - { who: tamsin, do: fight, target: warden }   # keeps Corvin up (her own brain heals); nobody else can kill it (reserved for Pell)
       - { who: corvin, do: skill, skill: burst, target: warden, until: "warden_broken" }
       - { who: corvin, do: say, text: "Switch!", hold: 2, after: prev }
+      - { who: tamsin, do: hold }
       - { who: pell, do: run_to, to: warden }
       - { do: camera, shot: close_up, target: pell }
       - { who: pell, do: fight, target: warden, until: "warden_dead", after: prev }

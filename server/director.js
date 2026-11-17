@@ -388,6 +388,7 @@ export class Director {
     if (!rt) return false;
     const g = this.game;
     if (rt.c.do !== 'say' && rt.c.hold !== undefined && g.time - rt.t0 < rt.c.hold) return false;
+    if (rt.c.until !== undefined && !rt.slow && g.time - rt.t0 > 120) { rt.slow = true; this.log(`! ${rt.c.do} has waited 2 min for ${rt.c.until}.`); }
     let d;
     try { d = !!rt.done(); } catch (err) { throw new Error(`cue ${i + 1} (${rt.c.do}): ${err.message}`); }
     if (d && rt.c.until !== undefined) this.log(`${rt.c.do}${rt.c.who !== undefined ? ` ${whoList(rt.c.who).join('+')}` : ''}: ${rt.c.until} (${(g.time - rt.t0).toFixed(1)} s)`);
@@ -499,8 +500,9 @@ const VERBS_RUN = {
       const sk = skills[slot];
       const tgt = c.target !== undefined ? this.resolve(c.target) : null;
       const prev = a.mode;
-      if (tgt?.kind === 'mob' && (c.until !== undefined || !SELF_SKILLS.has(sk.id) || sk.id === 'taunt')) this.setMode(a, { k: 'fight', mob: tgt.m }); // close in (the brain fights meanwhile)
-      return { a, slot, sk, tgt, prev, pressed: 0 };
+      let set = null;
+      if (tgt?.kind === 'mob' && (c.until !== undefined || !SELF_SKILLS.has(sk.id) || sk.id === 'taunt')) set = this.setMode(a, { k: 'fight', mob: tgt.m }); // close in (the brain fights meanwhile)
+      return { a, slot, sk, tgt, prev, set, pressed: 0 };
     });
     const until = c.until !== undefined ? this.cond(c.until) : null;
     const t0 = g.time;
@@ -524,7 +526,7 @@ const VERBS_RUN = {
     return () => {
       for (const j of jobs) {
         if (until || !j.pressed) press(j);
-        if (!until && j.pressed && j.a.mode !== j.prev && j.a.mode.k === 'fight' && j.prev) { this.setMode(j.a, j.prev.k === 'fight' && j.prev.mob.dead ? { k: 'idle' } : j.prev); j.prev = null; }
+        if (!until && j.pressed && j.set && j.a.mode === j.set) { this.setMode(j.a, j.prev.k === 'fight' && j.prev.mob.dead ? { k: 'idle' } : j.prev); j.set = null; } // back to what it was doing (unless a later cue changed it)
       }
       if (until) return until();
       if (jobs.every(j => j.pressed || j.a.p.dead)) return true;
