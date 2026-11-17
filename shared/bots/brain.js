@@ -199,7 +199,7 @@ function onInvite(b, e) {
   const withHuman = b.party && b.players.some(p => p.party === b.party && p.id !== b.id && !isBot(b, p.id));
   if (b.party && (withHuman || !human)) {
     b.send({ type: 'decline' });
-    if (human) say(b, 'noTarget', {}, { force: true, text: `Sorry ${nameOf(b, e.from)}, I'm already in a party.` });
+    if (human) say(b, 'busy', {}, { force: true, ch: 's', text: `Sorry ${nameOf(b, e.from)}, I'm already in a party.` });
     return;
   }
   b.send({ type: 'accept', from: e.from });

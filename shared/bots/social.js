@@ -98,7 +98,7 @@ const CHATTY = { 1: 0.4, 2: 0.55, 3: 0.75, 4: 0.9, 5: 1 };
 // Rate-limited party chatter. key: a LINES key (and the cooldown bucket); p: chance; cd: seconds before this key again.
 // force: replies to orders (always said; orders come at human pace). Never global chat: party chat, or say chat
 // (heard nearby) when not in a party.
-export function say(b, key, vars = {}, { p = 1, cd = 20, force = false, text = null } = {}) {
+export function say(b, key, vars = {}, { p = 1, cd = 20, force = false, text = null, ch = null } = {}) {
   if (!b.me || b.closed) return false;
   const s = (b.talk ||= { next: 0, cd: {}, last: -9 });
   if (!force) {
@@ -110,7 +110,7 @@ export function say(b, key, vars = {}, { p = 1, cd = 20, force = false, text = n
     s.cd[key] = b.t + cd;
   }
   s.last = b.t;
-  b.send({ type: 'chat', text: (text ?? pick(key, { name: b.name, ...vars })).slice(0, 200), ch: b.party ? 'p' : 's' });
+  b.send({ type: 'chat', text: (text ?? pick(key, { name: b.name, ...vars })).slice(0, 200), ch: ch || (b.party ? 'p' : 's') });
   b.lastSaid = { key, t: b.t };
   return true;
 }

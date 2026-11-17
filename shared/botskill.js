@@ -1,4 +1,4 @@
-// Bot capability levels (1-5): how human-like a bot plays. Used by the bot brains in shared/teambots.js through a few
+// Bot capability levels (1-5): how human-like a bot plays. Applied per bot by the bot brain (shared/bots/) through a few
 // small hooks (perceive, skillReady, aimNoise, sweepError, potionAt); a bot without `skill` (or skill 5) plays exactly
 // as before: instant reactions, perfect-dodge timing, always parries, every skill on cooldown.
 //
