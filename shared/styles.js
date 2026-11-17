@@ -108,7 +108,7 @@ export const STYLES = {
     cls: 'cleric', name: 'Wand', noun: 'Wand',
     desc: 'Faster, longer bolts (12 m) with lower damage; still interrupts wind-ups.',
     passive: 'Bolts that hit a Broken enemy heal the ally who Broke it (5% of their health).',
-    tweak: 'Heal reaches 50% farther (22 m).',
+    tweak: 'Heal reaches 50% farther (22.5 m instead of 15 m).',
     mods: { healR: 1.5, wandAid: 0.05 },
     basic: {
       cd: 0.5, window: 1.0, aim: 12.5, threat: 1,
