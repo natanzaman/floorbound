@@ -39,6 +39,7 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Select a character (enemy or ally) | Hold Ctrl (Cmd on Mac) to preview, Ctrl+click to select; Ctrl+right-click to deselect | Lock on button (enemies) |
 | Lock on / cycle enemies | Tab (Esc to clear) | Lock on button |
 | Chat | Enter (`/p` party, `/s` nearby, `/b` bot orders) | Chat button |
+| Pose | Chat `/kneel`, `/sit`, `/bow`; `/stand`, moving, attacking, a skill, dodging, jumping or guarding stands you up | Chat button |
 | Party | Players button (P) → Find party, or Invite | Players button → Find party / Invite |
 | Order your party's bots | Hold V (command wheel), or chat `/b stay`, `/b Lyra: heal` (`/b help` lists them) | ⌘ Bot orders under the party frames |
 | Items | 4 potion, 5 tonic, 6 draught; B bag | Potion button; Bag button |
@@ -281,6 +282,7 @@ server/floor2.js Floor 2 AI (Shieldback, Wisp, Lurker, Matron, Sovereign), Sunke
 public/floor2world.js, public/floor2client.js  Floor 2 scene, models, effects, waystone UI
 server/game.js   authoritative simulation: combat, AI, boss, XP, parties
 server/combat.js posture/Break, perfect dodge, guard/parry, Horn Sweep, Quake Rings (mixed into Game)
+server/poses.js  kneel / sit / bow: setPose, /kneel /sit /bow /stand chat, cleared by moving or acting (public/poses.js on the client)
 server/index.js  static file server + WebSocket server (20 ticks/sec)
 server/shutdown.js  deploy drain on SIGTERM: "Update incoming", waits out a boss fight (4 min max), saves, exits
 public/          Three.js client (no build step): main.js, world.js, style.css
@@ -378,7 +380,9 @@ Teamwork comes from the party as each bot sees it, **real players included**:
 | leave | leave, dismiss | leaves the party (a bot a player added goes home: it's dismissed) |
 | status | status, report | answers with HP, level, potions and what it is doing |
 
-Chat channels: plain text goes to everyone, `/p text` to your party, `/s text` to players within 40 m.
+Chat channels: plain text goes to everyone, `/p text` to your party, `/s text` to players within 40 m. `/kneel`, `/sit`, `/bow` and `/stand` set a pose instead (never shown as chat).
+
+**Poses** (`server/poses.js`, `public/poses.js`): `setPose(p, 'kneel' | 'sit' | 'bow' | null)` stores `p.pose` and sends `{ t: 'pose', id, k }`; every snapshot lists held poses as `w.poses = [[id, k], ...]` (left out when nobody is posed; the player rows are unchanged), so late joiners and spectators see them. Moving, a used skill or attack, a dodge, a jump, guarding, a teleport or death clears the pose. The client eases the rig into a procedural pose over 0.4 s (bone rotations layered over the plain Idle clip, `POSES` in `public/world.js`, like the Warden's wind-ups) and drops it the moment your own character moves.
 
 **Class plug-ins** (`shared/bots/registry.js`): a class's bot logic is `registerClassBrain(cls, { role, name, parry, combat(b, tgt, ctx), idle(b, ctx), onEvent(b, e), onLevel(b, lvl, ctx) })`; the brain handles perception, dodging, party, targets, orders and chatter, the plug-in only plays its kit against the target it is given (`ctx`: `useSkill`, `moveToward`, `switchOpen`, `dodge`, `ready`, `anchor`, `tank`, `hurt`, `healFocus`, `party`, `say`...). Systems that run on level-up (talents, weapon styles) hook in with `registerBotHook('onLevel', (b, lvl, ctx) => ...)`.
 

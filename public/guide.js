@@ -32,6 +32,7 @@ const TIPS = {
   peril: 'Orange = perilous: dodge through it or parry (Guardian R). Shields won\'t save you.',
   rguard: 'R is the Guardian\'s guard: hold it to block, tap it just before a hit to parry.',
   bots: 'Bots in your party take orders: hold V for the order wheel, or type /b stay, /b follow, /b Lyra: heal (one bot). /b help lists them all; ordinary chat never gives orders.',
+  poses: 'Posed! Chat /kneel, /sit or /bow to strike a pose, /stand (or just move, attack, dodge or jump) to get up.',
 };
 
 export class Guide {

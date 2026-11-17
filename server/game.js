@@ -23,6 +23,7 @@ import { installStyles } from './styles.js';
 import { altStyle } from '../shared/styles.js';
 import { installTalents } from './talents.js';
 import { installTracking } from './trackgame.js';
+import { installPoses } from './poses.js';
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -1328,7 +1329,7 @@ export class Game {
     const g = this.gate;
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
     const gate = [g.open ? 1 : 0, waiting, g.ready.size, g.countAt ? r1(Math.max(0, g.countAt - this.time)) : 0];
-    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), gi: this.groundSnap() });
+    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), gi: this.groundSnap(), poses: this.posesSnap() }); // poses: [[id, k]], only while any is held (server/poses.js)
     this.events = [];
     return out;
   }
@@ -1359,5 +1360,6 @@ Object.assign(Game.prototype, F2Methods); // Floor 2 (server/floor2.js)
 installClassesB(Game); // Lancer, Bard skills + their hooks (server/classes-b.js)
 Object.assign(Game.prototype, ClassesAMethods); // Ranger and Berserker (server/classes-a.js)
 installStyles(Game); // weapon styles (server/styles.js)
+installPoses(Game); // kneel / sit / bow: setPose, /kneel chat, cleared by moving or acting (server/poses.js)
 installTracking(Game); // play-tracking hooks: boss fight rows, death / quit context (server/trackgame.js)
 installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js); keep it last
