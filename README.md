@@ -109,6 +109,10 @@ Every 6–10 minutes one named rare appears somewhere on Floor 1, announced to t
 
 Characters keep lifetime stats and earn titles (Warden Slayer, Last Attacker, Switch Master, Boarbane, Wolfsbane, Frontliner, Undying, Veteran). Pick the one you wear in the bag (B); it shows under your name. The stone **Hall of Clearers** in town (press F) lists the server's first Floor 1 clear, the fastest clears and the latest ones.
 
+The stone itself is engraved: its face carries the names of the latest Floor 1 clear (everyone who fought, the fallen too), updated live for everyone the moment a clear happens; it's blank until the first one. Its back reads *A HUNDRED BELLS. THEN HOME.* Floor 2 has a smaller stone by Mirelight Camp's Skill Shrine with the latest Floor 2 clear.
+
+**The Tower Bell.** The first time a floor is cleared on the server, a bell tolls for everyone on every floor: one deep, long synthesized toll, a slow camera sway and a banner (*THE FIRST BELL · Floor 1 has been cleared. Ninety-nine to go.*; *THE SECOND BELL* for Floor 2, and so on). Later clears don't ring it. Server: `ringBell(floor, { auto })` in `server/bell.js` (event `{ t: 'bell', floor, n }`); `game.bellAuto = false` holds the automatic ring so the scene director can ring it by hand. Client: `public/bell.js` (toll in `public/audio.js`), banner words in `shared/bell.js`. With `TEST_HOOKS=1`, a player's `{ type: 'test', clear: 1 | 2 }` kills that floor's boss at once (a scripted clear for tests). `node test/bell.js` checks the rules.
+
 ## Items
 
 - **Gear:** weapon (+damage), armour (+health, and less damage taken at Rare+), charm (crit, cooldowns or Switch damage). Rarities: Common, Uncommon, Rare, Epic, plus the gold Last Attack item. Weapons are class-specific and come in three **weapon styles** per class (see below).

@@ -3,6 +3,8 @@
 
 // The Hall of Clearers: a stone board in the Town of Beginnings (mirrors the merchant at x:9).
 export const HALL = { x: -9, z: 3, r: 3.5 };
+// Engraved stones (ROADMAP F6): each shows the names of its floor's latest clear. Floor 2's stands by Mirelight Camp's Skill Shrine.
+export const HALL_STONES = [{ floor: 1, ...HALL }, { floor: 2, x: 593.5, z: 7.5 }];
 
 export const STAT_KEYS = ['kills', 'boarKills', 'wolfKills', 'switches', 'deaths', 'wardenKills', 'lastAttacks', 'floorClearsFirst', 'flawlessWarden', 'maxLvl', 'floor2', 'sovereignKills'];
 

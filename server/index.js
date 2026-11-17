@@ -42,7 +42,7 @@ setInterval(() => { crashes = Math.max(0, crashes - 5); }, 60000).unref();
 
 const game = new Game();
 game.track = track.record;
-game.onClear = rec => hall.add(rec); // Hall of Clearers (DB insert + in-memory cache)
+game.onClear = rec => { hall.add(rec); broadcastHall(); }; // Hall of Clearers (DB insert + in-memory cache); the engraved stones update live
 const spectators = new Set(); // watch-only clients (?spectate=1)
 const bots = new BotManager(game, { url: () => `ws://127.0.0.1:${server.address().port}/ws` }); // admin-managed bots
 const playerBots = new PlayerBots(game, bots);
@@ -86,6 +86,11 @@ function broadcastRoster() {
   for (const p of game.players.values()) if (p.ws.readyState === 1) p.ws.send(msg);
   for (const ws of spectators) if (ws.readyState === 1) ws.send(msg);
 }
+function broadcastHall() { // everyone (spectators too) keeps the Hall in step: the engraved stones show the latest clear
+  const msg = JSON.stringify(hall.message());
+  for (const p of game.players.values()) if (p.ws?.readyState === 1) p.ws.send(msg);
+  for (const ws of spectators) if (ws.readyState === 1) ws.send(msg);
+}
 
 wss.on('connection', ws => {
   let player = null, joining = false;
@@ -124,9 +129,11 @@ wss.on('connection', ws => {
         spectators.add(ws);
         ws.send(JSON.stringify({ type: 'welcome', spectator: true }));
         ws.send(JSON.stringify({ type: 'roster', players: game.roster() }));
+        ws.send(JSON.stringify(hall.message())); // the engraved stones
         ws.send(JSON.stringify({ type: 'cine', state: game.cineState() })); // film view: the current shot, light, letterbox… (server/cine.js)
         return;
       }
+      if (msg.type === 'hall' && spectators.has(ws)) return ws.send(JSON.stringify(hall.message()));
       if (msg.type !== 'join' || joining) return;
       if (game.players.size >= MAX_PLAYERS) { ws.send(JSON.stringify({ type: 'full' })); return ws.close(); }
       joining = true;
@@ -138,6 +145,7 @@ wss.on('connection', ws => {
         ws.send(JSON.stringify(game.invFor(player))); player.invDirty = false;
         ws.send(JSON.stringify(game.masteryMsg(player))); player.masteryDirty = false; player.mSentT = game.time;
         ws.send(JSON.stringify(game.talentsMsg(player))); player.talentsDirty = false; // talent tree (server/talents.js)
+        ws.send(JSON.stringify(hall.message())); // the engraved stones
         ws.send(JSON.stringify({ type: 'cine', state: game.cineState() })); // players only use its light (public/cine.js)
         broadcastRoster();
       }).catch(err => { joining = false; console.error('join failed', err); ws.send(JSON.stringify({ type: 'denied', reason: 'Server error, try again.' })); });

@@ -160,7 +160,56 @@ export class Sound {
       case 'gate': this.tone(o, { f: 70, to: 50, dur: 1.6, vol: 0.3, type: 'sawtooth', attack: 0.1 }); this.noise(o, { dur: 1.6, vol: 0.2, type: 'lowpass', f: 300 }); break;
       case 'tick': this.tone(o, { f: 660, dur: 0.08, vol: 0.12, type: 'square' }); break;
       case 'clear': [60, 64, 67, 72, 67, 72, 76, 79].forEach((n, i) => this.tone(o, { f: NOTE(n), dur: 0.6, vol: 0.16, type: 'triangle', at: i * 0.12 })); break;
+      case 'bell': this.bell(o); break; // the Tower Bell (ROADMAP F6)
     }
+  }
+
+  // The Tower Bell: one deep toll from far above. A church bell's partials (hum, prime, tierce, quint, nominal and
+  // the upper ring), each a slightly detuned pair so it beats and wobbles, each with its own long exponential decay
+  // (the hum outlasts everything); a clapper strike on top, all sent through a big synthetic hall reverb.
+  bell(dest) {
+    const c = this.ctx, t = c.currentTime + this.offset + 0.02, f0 = 55; // hum at A1: a huge bell
+    const wet = this.bellVerb(), dry = c.createGain(); dry.gain.value = 0.75;
+    const send = c.createGain(); send.gain.value = 0.55;
+    dry.connect(dest); send.connect(wet).connect(dest);
+    const bus = c.createGain(); bus.connect(dry); bus.connect(send);
+    // [ratio to the hum, level, decay time constant (s), beat (Hz)]
+    const P = [[1, 0.42, 9, 0.11], [2.0, 0.34, 6.5, 0.23], [2.38, 0.36, 5.2, 0.37], [3.02, 0.14, 3.6, 0.5], [4.0, 0.4, 4.2, 0.61],
+      [5.03, 0.17, 2.6, 0.8], [5.35, 0.12, 2.2, 1.1], [6.03, 0.1, 1.7, 1.3], [8.12, 0.07, 1.1, 1.9], [10.3, 0.05, 0.7, 2.6], [12.7, 0.035, 0.45, 3.1]];
+    for (const [r, v, tau, beat] of P) {
+      for (const k of [-1, 1]) {
+        const o = c.createOscillator(), g = c.createGain();
+        o.frequency.value = f0 * r + k * beat / 2;
+        o.detune.setValueAtTime(-6, t); o.detune.linearRampToValueAtTime(0, t + 0.25); // the strike bends the pitch a hair
+        const att = r > 6 ? 0.002 : 0.006 + 0.004 * (1 / r);
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(v * 0.5, t + att);
+        g.gain.setTargetAtTime(0, t + att, tau);
+        const end = t + Math.min(26, tau * 4.5);
+        o.connect(g).connect(bus); o.start(t); o.stop(end);
+      }
+    }
+    this.noise(bus, { dur: 0.09, vol: 0.5, type: 'bandpass', f: 1800, to: 700, q: 0.8, at: 0.02 }); // clapper on bronze
+    this.noise(bus, { dur: 0.35, vol: 0.35, type: 'lowpass', f: 220, to: 80, at: 0.02 }); // the thud through the frame
+    if (this.music) { // the score holds its breath
+      const m = this.music.gain, base = 0.28;
+      m.cancelScheduledValues(t); m.setTargetAtTime(base * 0.2, t, 0.25); m.setTargetAtTime(base, t + 7, 2.5);
+    }
+  }
+
+  bellVerb() { // a long, dark stereo hall (impulse made once per context, a fresh convolver per toll)
+    const c = this.ctx;
+    if (this.verbIr?.sampleRate !== c.sampleRate || this.verbCtx !== c) {
+      const len = Math.floor(c.sampleRate * 5.5), ir = c.createBuffer(2, len, c.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = ir.getChannelData(ch);
+        let lp = 0;
+        for (let i = 0; i < len; i++) { lp += (Math.random() * 2 - 1 - lp) * 0.18; d[i] = lp * Math.exp(-i / (c.sampleRate * 1.4)) * (i < c.sampleRate * 0.03 ? i / (c.sampleRate * 0.03) : 1); }
+      }
+      this.verbIr = ir; this.verbCtx = c;
+    }
+    const v = c.createConvolver(); v.buffer = this.verbIr;
+    return v;
   }
 
   // ---------- music: a small generative score per area ----------

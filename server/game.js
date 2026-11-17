@@ -23,6 +23,7 @@ import { installStyles } from './styles.js';
 import { altStyle } from '../shared/styles.js';
 import { installTalents } from './talents.js';
 import { installTracking } from './trackgame.js';
+import { installBell } from './bell.js';
 import { installStaging } from './staging.js';
 import { installCine } from './cine.js'; // cinematic camera state for filming (F4)
 import { installPoses } from './poses.js';
@@ -323,6 +324,7 @@ export class Game {
       if (p !== killer) this.checkTitles(p);
     }
     this.bumpStat(killer, 'lastAttacks');
+    if (first) this.ringBell(1, { auto: true }); // the Tower Bell (server/bell.js)
     this.onClear?.({ floor: 1, secs: f ? Math.round(this.time - f.start) : 0, players: party, lastAttack: killer.name, deaths: f?.deaths || 0, first });
   }
 
@@ -1367,6 +1369,7 @@ Object.assign(Game.prototype, F2Methods); // Floor 2 (server/floor2.js)
 installClassesB(Game); // Lancer, Bard skills + their hooks (server/classes-b.js)
 Object.assign(Game.prototype, ClassesAMethods); // Ranger and Berserker (server/classes-a.js)
 installStyles(Game); // weapon styles (server/styles.js)
+installBell(Game); // the Tower Bell: ringBell, bellAuto (server/bell.js)
 installCine(Game); // cine(op, data), cineState(): filming camera, titles, fades, light (server/cine.js)
 installPoses(Game); // kneel / sit / bow: setPose, /kneel chat, cleared by moving or acting (server/poses.js)
 installTracking(Game); // play-tracking hooks: boss fight rows, death / quit context (server/trackgame.js)
