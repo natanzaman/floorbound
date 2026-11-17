@@ -101,7 +101,7 @@ One row per task. Whoever picks a task sets **Status** and **Owner** here first 
 | Task | Branch | Status | Owner | Merge |
 |---|---|---|---|---|
 | F1 Speech bubbles | `feat/bubbles` | in progress | agent bubbles | |
-| F2 Scene director | `feat/director` | todo | | |
+| F2 Scene director | `feat/director` | in progress | agent director | |
 | F3 Staging hooks | `feat/staging` | in progress | agent staging | |
 | F4 Cinematic camera | `feat/cinecam` | todo | | |
 | F5 Poses | `feat/poses` | in progress | agent poses | |
