@@ -3,6 +3,7 @@ import { CLASSES, CLASS_IDS, MAX_LEVEL, xpToNext } from '/shared/data.js';
 import { RARITY, SLOTS, CONSUMABLES, CONSUMABLE_IDS, statLabel } from '/shared/items.js';
 import { MATS, MAT_IDS } from '/shared/crafting.js';
 import { TITLES, STAT_KEYS } from '/shared/titles.js';
+import { MASTERY, BRANCHES, masteryLevel } from '/shared/mastery.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -195,7 +196,17 @@ function renderEditor() {
       <div>${STAT_KEYS.filter(k => k !== 'floor2').map(k => `<label class="f">${k}${num(`e-st-${k}`, st[k] || 0)}</label>`).join('')}</div>
     </div>
   </div>
-  <div class="sticky-save"><button class="primary" id="e-save">Save changes</button><span class="dim" style="font-size:12px">Saves level, XP, gold, consumables, materials, titles, stats and the Floor 2 flag.</span></div>
+  <div class="card" style="margin-top:16px"><h2>Skill mastery &amp; evolutions</h2>
+    <table><thead><tr><th>Skill</th><th>Mastery</th><th>Points</th><th>Evolution (Mastery ${MASTERY.evolveAt}+)</th></tr></thead><tbody>
+    ${Object.entries(c.mastery).map(([sk, e]) => { const def = CLASSES[c.cls].skills.find(s => s.id === sk), B = BRANCHES[sk]; return `<tr>
+      <td><b>${esc(def?.name || sk)}</b></td>
+      <td><select data-mlvl="${sk}">${[1, 2, 3, 4, 5].map(l => `<option ${masteryLevel(e.pts) === l ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
+      <td><input type="number" data-mpts="${sk}" value="${e.pts}" min="0" style="width:100px" /></td>
+      <td><select data-mbr="${sk}"><option value="">none</option>${B ? ['A', 'B'].map(k => `<option value="${k}" ${e.br === k ? 'selected' : ''}>${k}: ${esc(B[k].name)}</option>`).join('') : ''}</select></td></tr>`; }).join('')}
+    </tbody></table>
+    <div class="dim" style="font-size:12px;margin-top:6px">Picking a mastery level sets the points to that level's threshold (${MASTERY.need.slice(1).join(' / ')}); or type exact points.</div>
+  </div>
+  <div class="sticky-save"><button class="primary" id="e-save">Save changes</button><span class="dim" style="font-size:12px">Saves level, XP, gold, consumables, materials, titles, stats, mastery and the Floor 2 flag.</span></div>
   <div class="grid">
     <div class="card items"><h2>Equipped</h2>
       ${SLOTS.map(s => `<div class="it"><span class="slot">${s}</span>${inv.eq[s] ? `${itemLine(inv.eq[s])}<button class="small" data-uneq="${s}">To bag</button><button class="small danger" data-rmu="${inv.eq[s].u}">Remove</button>` : '<span class="nm dim">—</span>'}</div>`).join('')}
@@ -214,8 +225,8 @@ function renderEditor() {
     </div>
   </div>
   <div class="card"><h2>Advanced: raw JSON</h2>
-    <div class="dim" style="font-size:12px;margin-bottom:8px">Edit the stored inventory and stats directly (validated on the server; unknown stats keys, such as skill mastery, are kept).</div>
-    <div class="grid"><div><b>inv</b><textarea id="r-inv" spellcheck="false"></textarea></div><div><b>stats</b><textarea id="r-stats" spellcheck="false"></textarea></div></div>
+    <div class="dim" style="font-size:12px;margin-bottom:8px">Edit the stored inventory, stats and skill mastery directly (validated on the server; unknown stats keys are kept).</div>
+    <div class="grid"><div><b>inv</b><textarea id="r-inv" spellcheck="false"></textarea></div><div><b>stats</b><textarea id="r-stats" spellcheck="false"></textarea></div><div><b>mastery</b><textarea id="r-mastery" spellcheck="false"></textarea></div></div>
     <div class="row" style="margin-top:8px"><button id="r-apply" class="primary">Apply raw JSON</button><span id="r-err" class="dim"></span></div>
   </div>
   <div class="card" style="border-color:rgba(248,113,113,.35)"><h2 style="color:#fca5a5">Delete character</h2>
@@ -223,6 +234,7 @@ function renderEditor() {
   </div>`;
   $('r-inv').value = JSON.stringify(inv, null, 2);
   $('r-stats').value = JSON.stringify(st, null, 2);
+  $('r-mastery').value = JSON.stringify(c.mastery, null, 2);
   wireEditor();
 }
 
@@ -242,6 +254,11 @@ function wireEditor() {
       mats: Object.fromEntries(MAT_IDS.map(k => [k, +$(`e-mat-${k}`).value])),
       stats: Object.fromEntries(STAT_KEYS.filter(k => k !== 'floor2').map(k => [k, +$(`e-st-${k}`).value])),
       floor2: $('e-f2').checked, titles, activeTitle: titles.includes(active) ? active : null,
+      mastery: Object.fromEntries(Object.entries(c.mastery).map(([sk, e]) => {
+        const lvl = +document.querySelector(`[data-mlvl="${sk}"]`).value, pts = +document.querySelector(`[data-mpts="${sk}"]`).value;
+        const out = pts !== e.pts ? { pts } : { lvl }; // typed points win; otherwise the level picker
+        return [sk, { ...out, br: document.querySelector(`[data-mbr="${sk}"]`).value || null }];
+      })),
     });
   };
   for (const b of document.querySelectorAll('[data-rmu]')) b.onclick = () => patch({ ops: [{ op: 'removeItem', u: +b.dataset.rmu }] }, 'Item removed.');
@@ -256,8 +273,10 @@ function wireEditor() {
     let rawInv, rawStats;
     try { rawInv = JSON.parse($('r-inv').value); } catch (e) { $('r-err').textContent = `inv: ${e.message}`; return; }
     try { rawStats = JSON.parse($('r-stats').value); } catch (e) { $('r-err').textContent = `stats: ${e.message}`; return; }
+    let rawMastery;
+    try { rawMastery = JSON.parse($('r-mastery').value); } catch (e) { $('r-err').textContent = `mastery: ${e.message}`; return; }
     $('r-err').textContent = '';
-    patch({ rawInv, rawStats }, 'Raw JSON applied.');
+    patch({ rawInv, rawStats, rawMastery }, 'Raw JSON applied.');
   };
   $('d-go').onclick = async () => {
     if ($('d-name').value !== c.name) return flash('Type the exact character name to delete it.');

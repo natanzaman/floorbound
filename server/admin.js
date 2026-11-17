@@ -4,6 +4,7 @@
 // Every /api/admin/* route checks the bearer session belongs to an admin (401 signed out, 403 not an admin).
 //
 // Character edits go to the live player when the character is online (then saved), otherwise straight to the DB.
+// Skill mastery (characters.mastery, { skillId: { pts, br } }) is edited like the rest.
 import * as db from './db.js';
 import * as accounts from './accounts.js';
 import { CLASSES, MAX_LEVEL, xpToNext, areaName } from '../shared/data.js';
@@ -11,6 +12,7 @@ import { SLOTS, BAG_SIZE, RARITY, CONSUMABLE_IDS, makeItem, lastAttackItem, last
 import { MAT_IDS } from '../shared/crafting.js';
 import { STAT_KEYS, TITLE_BY_ID, newStats } from '../shared/titles.js';
 import { floorOf } from '../shared/floor2.js';
+import { MASTERY, BRANCHES, newMastery, masteryLevel } from '../shared/mastery.js';
 import { BEHAVIOURS } from './botmanager.js';
 
 const q = (...a) => db.q(...a);
@@ -55,7 +57,7 @@ const accountLabel = r => r.discord_name || (r.discord_id ? `discord ${r.discord
 
 // ---------- character model ----------
 async function loadFull(id) {
-  const [r] = await q(`SELECT c.id, c.name, c.cls, c.lvl, c.xp, c.gold, c.inv, c.stats, c.created_at, c.updated_at,
+  const [r] = await q(`SELECT c.id, c.name, c.cls, c.lvl, c.xp, c.gold, c.inv, c.stats, c.mastery, c.created_at, c.updated_at,
     a.id AS account_id, a.discord_id, a.discord_name, a.is_admin
     FROM characters c JOIN accounts a ON a.id = c.account_id WHERE c.id = $1`, [id]);
   return r || null;
@@ -68,7 +70,7 @@ function view(r) {
   inv.mats ||= {};
   return {
     id: r.id, name: p ? p.name : r.name, cls: p ? p.cls : r.cls, lvl: src.lvl, xp: src.xp, next: xpToNext(src.lvl), gold: src.gold,
-    inv, stats: { ...(src.stats || {}), ...newStats(src.stats) }, online: !!p,
+    inv, stats: { ...(src.stats || {}), ...newStats(src.stats) }, mastery: newMastery(src.mastery, p ? p.cls : r.cls), online: !!p,
     area: p ? areaName(p.x, p.z) : null, floor: p ? floorOf(p.x) : null, party: p ? partyNames(p) : [],
     account: { id: r.account_id, label: accountLabel(r), discord: r.discord_name || null, admin: !!r.is_admin },
     created_at: r.created_at, updated_at: r.updated_at,
@@ -126,6 +128,10 @@ function cleanStats(st) {
 function applyEdit(c, body, online) {
   if (body.rawInv !== undefined) c.inv = cleanInv(body.rawInv);
   if (body.rawStats !== undefined) c.stats = cleanStats(body.rawStats);
+  if (body.rawMastery !== undefined) {
+    if (!body.rawMastery || typeof body.rawMastery !== 'object' || Array.isArray(body.rawMastery)) throw new Bad('mastery must be an object.');
+    c.mastery = newMastery(body.rawMastery, c.cls);
+  }
   if (body.name !== undefined) {
     const name = String(body.name).trim().replace(/\s+/g, ' ');
     if (!NAME_RE.test(name)) throw new Bad('Names are 3–16 letters or numbers (spaces, _ . - allowed inside).');
@@ -135,6 +141,7 @@ function applyEdit(c, body, online) {
     if (!CLASSES[body.cls]) throw new Bad('Unknown class.');
     if (online) throw new Bad('Change the class while the character is offline.');
     c.cls = body.cls;
+    c.mastery = newMastery(c.mastery, c.cls); // the new class's skills (start fresh)
     const w = c.inv.eq.weapon; // a weapon for the old class goes back to the bag
     if (w?.cls && w.cls !== c.cls) {
       if (c.inv.bag.length >= BAG_SIZE) throw new Bad('Bag full: make room for the old weapon first.');
@@ -166,6 +173,19 @@ function applyEdit(c, body, online) {
     const t = body.activeTitle || null;
     if (t && !c.stats.titles.includes(t)) throw new Bad('The active title must be one the character has earned.');
     c.stats.activeTitle = t;
+  }
+  if (body.mastery) { // { skillId: { lvl (1..5) or pts, br: 'A' | 'B' | null } }
+    for (const [sk, v] of Object.entries(body.mastery)) {
+      const e = c.mastery[sk];
+      if (!e || !v || typeof v !== 'object') throw new Bad(`${sk} is not a ${CLASSES[c.cls].name} skill.`);
+      if (v.pts !== undefined) e.pts = int(v.pts, 0, 1e7, `${sk} points`);
+      if (v.lvl !== undefined) { const l = int(v.lvl, 1, MASTERY.max, `${sk} mastery`); if (masteryLevel(e.pts) !== l) e.pts = MASTERY.need[l]; }
+      if (v.br !== undefined) {
+        if (v.br !== null && v.br !== 'A' && v.br !== 'B') throw new Bad('Branch must be A, B or none.');
+        if (v.br && !BRANCHES[sk]) throw new Bad(`${sk} has no evolutions.`);
+        e.br = v.br;
+      }
+    }
   }
   for (const op of Array.isArray(body.ops) ? body.ops : []) applyOp(c, op);
 }
@@ -228,6 +248,7 @@ async function editCharacter(id, body) {
   const c = {
     name: p ? p.name : r.name, cls: p ? p.cls : r.cls, lvl: src.lvl, xp: src.xp, gold: src.gold,
     inv: clone(src.inv && Array.isArray(src.inv.bag) ? src.inv : newInventory()), stats: { ...clone(src.stats || {}), ...newStats(src.stats) },
+    mastery: newMastery(clone(src.mastery), p ? p.cls : r.cls),
   };
   c.inv.mats ||= {};
   applyEdit(c, body, !!p);
@@ -239,7 +260,8 @@ async function editCharacter(id, body) {
   if (p) {
     // Online: change the live player first (so the periodic save can't write old values back), then save.
     const lvlChanged = p.lvl !== c.lvl;
-    Object.assign(p, { name: c.name, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats });
+    Object.assign(p, { name: c.name, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats, mastery: c.mastery });
+    p.masteryDirty = p.masteryNow = true; // re-send the Skills panel data
     game.recompute(p);
     if (lvlChanged) p.hp = p.maxHp;
     game.invChanged(p);
@@ -248,8 +270,8 @@ async function editCharacter(id, body) {
     p.dirty = false;
     await accounts.saveCharacter(p);
   } else {
-    await q('UPDATE characters SET cls = $2, lvl = $3, xp = $4, gold = $5, inv = $6, stats = $7 WHERE id = $1',
-      [id, c.cls, c.lvl, c.xp, c.gold, JSON.stringify(c.inv), JSON.stringify(c.stats)]);
+    await q('UPDATE characters SET cls = $2, lvl = $3, xp = $4, gold = $5, inv = $6, stats = $7, mastery = $8 WHERE id = $1',
+      [id, c.cls, c.lvl, c.xp, c.gold, JSON.stringify(c.inv), JSON.stringify(c.stats), JSON.stringify(c.mastery)]);
   }
   return view(await loadFull(id));
 }

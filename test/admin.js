@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import pg from 'pg';
+import { MASTERY, masterySkills } from '../shared/mastery.js';
 
 const DB = process.env.DATABASE_URL;
 if (!DB) { console.log('skipped: set DATABASE_URL to run the admin tests'); process.exit(0); }
@@ -90,6 +91,15 @@ try {
   ok(r.status === 200, 'raw JSON accepted');
   [db] = await sql('SELECT inv, stats FROM characters WHERE id = $1', [off.id]);
   ok(db.inv.cons.tonic === 5 && db.stats.kills === 77 && db.stats.activeTitle === 'veteran' && db.stats.mastery?.swordsman?.slash === 3, 'raw JSON saved (unknown stats keys like mastery kept)');
+  const [sw1, sw2] = masterySkills('swordsman');
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { mastery: { [sw1]: { lvl: 3, br: 'B' } } });
+  [db] = await sql('SELECT mastery FROM characters WHERE id = $1', [off.id]);
+  ok(r.status === 200 && db.mastery?.[sw1]?.pts === MASTERY.need[3] && db.mastery[sw1].br === 'B', 'mastery: set a skill to Mastery 3 with branch B (DB)');
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { rawMastery: { ...r.body.character.mastery, [sw2]: { pts: 2000, br: 'A' } } });
+  [db] = await sql('SELECT mastery FROM characters WHERE id = $1', [off.id]);
+  ok(r.status === 200 && db.mastery[sw2].pts === 2000 && db.mastery[sw2].br === 'A' && db.mastery[sw1].br === 'B', 'raw mastery JSON saved');
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { mastery: { [sw1]: { br: 'C' } } });
+  ok(r.status === 400, 'bad branch rejected');
   r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { rawInv: { bag: 'nope' } });
   ok(r.status === 400, 'invalid raw inventory rejected (400)');
   r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { lvl: 99 });
@@ -105,17 +115,20 @@ try {
   await until(() => pc.last.welcome && pc.last.inv, 5000, 'character join');
   r = await call('GET', '/api/admin/players', adminTok);
   ok(r.body.players.find(p => p.id === on.id)?.online === true, 'online character shows as online with an area');
-  r = await call('PATCH', `/api/admin/characters/${on.id}`, adminTok, { lvl: 9, gold: 1234, floor2: true, ops: [{ op: 'addLastAttack', which: 2 }] });
+  const clSk = masterySkills('cleric')[0];
+  r = await call('PATCH', `/api/admin/characters/${on.id}`, adminTok, { lvl: 9, gold: 1234, floor2: true, mastery: { [clSk]: { lvl: 4, br: 'A' } }, ops: [{ op: 'addLastAttack', which: 2 }] });
   ok(r.status === 200 && r.body.character.online, 'edit an online character');
   await until(() => pc.last.inv?.gold === 1234 && pc.last.inv.bag.some(it => it.la === 2), 3000, 'live inv');
   ok(true, 'the player received the updated inventory (gold, Tidecloak)');
   await until(() => pc.last.snap?.me?.lvl === 9, 3000, 'live level');
   ok(pc.last.inv.life.floor2 === 1, 'the player sees level 9 and Floor 2 unlocked');
+  await until(() => pc.last.mastery?.m?.[clSk]?.pts === MASTERY.need[4] && pc.last.mastery.m[clSk].br === 'A', 3000, 'live mastery');
+  ok(true, 'the player received the updated skill mastery');
   await until(() => pc.sys.some(t => /admin updated your character/.test(t)), 3000, 'sys message');
   ok(true, 'the player got "An admin updated your character"');
   pc.ws.close(); await pc.closed; await sleep(400);
-  [db] = await sql('SELECT lvl, gold, inv, stats FROM characters WHERE id = $1', [on.id]);
-  ok(db.lvl === 9 && db.gold === 1234 && db.inv.bag.some(it => it.la === 2) && db.stats.floor2 === 1, 'after disconnect the DB keeps the admin values');
+  [db] = await sql('SELECT lvl, gold, inv, stats, mastery FROM characters WHERE id = $1', [on.id]);
+  ok(db.lvl === 9 && db.gold === 1234 && db.inv.bag.some(it => it.la === 2) && db.stats.floor2 === 1 && db.mastery[clSk].pts === MASTERY.need[4], 'after disconnect the DB keeps the admin values (incl. mastery)');
 
   // ---------- bots ----------
   const watcher = client({ type: 'join', name: `Watch${tag}`, cls: 'guardian' });
