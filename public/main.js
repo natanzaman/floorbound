@@ -16,6 +16,7 @@ import { initCombat } from '/combat.js';
 import { F2, inGateZone2, inArena2, onFloor2, floorOf, WAYSTONES } from '/shared/floor2.js';
 import { initFloor2Client } from '/floor2client.js';
 import { initMastery } from '/mastery.js';
+import { initStyles } from '/styles.js';
 
 const sfx = new Sound();
 
@@ -197,6 +198,8 @@ const mastery = initMastery({
   banner: (a, b) => banner(a, b), shake: a => shake(a), playAnim: (...a) => playSkillAnim(...a),
   rebuildBar: () => { if (state.joined && !state.spectator && mastery.barChanged()) buildSkillBar(); },
 });
+// weapon styles: held weapon models, styled basic attacks and their effects, bag text (public/styles.js)
+const styles = initStyles({ state, players, fx, sfx, shake: a => shake(a), floatNum, rebuildBar: () => { if (state.joined && !state.spectator) buildSkillBar(); } });
 
 // ---------------- networking ----------------
 function onMessage(msg) {
@@ -273,6 +276,7 @@ function onSnapshot({ me, w }) {
     let e = players.get(id);
     if (!e) e = addPlayerEntity(id, CLASS_IDS[ci], x, z);
     Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, lvl, party, dead: !!dead, buffs });
+    styles.snap(e, a[11], id === state.myId); // weapon style
     if (id === state.myId) {
       const wasDead = state.dead;
       Object.assign(state, { hp, maxHp, party, dead: !!dead });
@@ -298,6 +302,7 @@ function handleEvent(e) {
   f2.onEvent(e);
   if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
   if (mastery.event(e)) return; // evolved skills, mastery level-ups, evolutions
+  if (styles.event(e)) return; // weapon styles: styled basic attacks
   switch (e.t) {
     case 'tp':
       if (e.id === me) { state.x = e.x; state.z = e.z; state.seq = e.s; }
@@ -776,7 +781,7 @@ function buildSkillBar(lvl = state.lvl) {
   $('skills').innerHTML = order.map(i => {
     const s = skills[i];
     const locked = lvl < s.lvl, nm = mastery.name(i); // evolved name once a branch is active (public/mastery.js)
-    return `<button class="sk s${i} ${i === 0 ? 'basic' : ''} ${locked ? 'locked' : ''} ${mastery.evoId(i) ? 'evolved' : ''}" data-slot="${i}" title="${esc(nm)}: ${esc(mastery.desc(i))}${locked ? ` (unlocks at Lv ${s.lvl})` : ''}">
+    return `<button class="sk s${i} ${i === 0 ? 'basic' : ''} ${locked ? 'locked' : ''} ${mastery.evoId(i) ? 'evolved' : ''}" data-slot="${i}" title="${esc(nm)}: ${esc(mastery.desc(i))}${i === 0 ? esc(styles.barNote()) : ''}${locked ? ` (unlocks at Lv ${s.lvl})` : ''}">
       <span class="key">${i === 0 ? (isTouch ? '' : 'CLICK') : i}</span>${mastery.pip(i)}${esc(nm)}${locked ? `<br><small>Lv ${s.lvl}</small>` : ''}<span class="cd"></span><span class="cdt"></span></button>`;
   }).join('') + `<button class="sk sd" data-slot="dodge" title="Dodge roll: dash and avoid damage"><span class="key">${isTouch ? '' : 'SHIFT'}</span>Dodge<span class="cd"></span><span class="cdt"></span></button>`
     + `<button class="sk sj" data-slot="jump" title="Jump: hop over the boss's ground slams"><span class="key">${isTouch ? '' : 'SPACE'}</span>Jump<span class="cd"></span><span class="cdt"></span></button>`
@@ -966,10 +971,10 @@ function useSkill(slot) {
   const auto = ['slash', 'bash', 'rush', 'smite', 'burst'].includes(sk.id) || ['challenge', 'seismic'].includes(mastery.evoId(slot)); // aimed evolutions too
   if (auto) {
     const lm = lockedMob();
-    const t = lm && Math.hypot(lm.x - state.x, lm.z - state.z) < 14 ? lm : nearestMob(sk.id === 'smite' ? 11 : sk.id === 'rush' ? 9 : 6);
+    const t = lm && Math.hypot(lm.x - state.x, lm.z - state.z) < 14 ? lm : nearestMob((slot === 0 && styles.aim()) || (sk.id === 'smite' ? 11 : sk.id === 'rush' ? 9 : 6)); // (weapon styles: reach)
     if (t) state.face = angleTo(state.x, state.z, t.x, t.z);
   }
-  state.ready[slot] = now + mastery.cd(slot) * 1000; // mastery and branch cooldowns (the server corrects it)
+  state.ready[slot] = now + ((slot === 0 && styles.basicCd()) || mastery.cd(slot)) * 1000; // mastery and branch cooldowns, weapon styles (the server corrects it)
   state.lastPress[slot] = now;
   send({ type: 'skill', slot, face: state.face });
 }
@@ -1073,12 +1078,12 @@ function renderBag() {
   const inv = state.inv, near = nearMerchant();
   const shopping = near && state.shopOpen;
   const row = (it, slotName, actions) => it
-    ? `<div class="it"><span class="slot">${slotName}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}</b><small>${statsText(it)}</small></span>${actions}</div>`
+    ? `<div class="it" title="${esc(styles.title(it))}"><span class="slot">${slotName}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}</b><small>${statsText(it)}${styles.tag(it)}</small></span>${actions}</div>`
     : `<div class="it empty"><span class="slot">${slotName}</span><span class="nm"><small>Empty</small></span></div>`;
   let h = `<div class="top"><span>Bag <span class="gold">${inv.gold} gold</span></span><button class="x" data-a="close">✕</button></div>`;
   if (shopping) {
     h += `<div class="shop"><h4>Merchant</h4>${SHOP.map((s, i) => {
-      const name = s.kind === 'cons' ? CONSUMABLES[s.id].name : s.slot === 'weapon' ? 'Uncommon weapon (your class)' : 'Uncommon armour';
+      const name = s.kind === 'cons' ? CONSUMABLES[s.id].name : styles.shopName(s, state.cls) || (s.slot === 'weapon' ? 'Uncommon weapon (your class)' : 'Uncommon armour');
       const desc = s.kind === 'cons' ? CONSUMABLES[s.id].desc : s.slot === 'weapon' ? '+7–9% damage' : '+8–12% max health';
       const price = s.kind === 'cons' ? CONSUMABLES[s.id].price : s.price;
       return `<div class="it"><span class="nm"><b>${name}</b><small>${desc}</small></span><button data-a="buy" data-i="${i}" ${inv.gold < price ? 'disabled style="opacity:.4"' : ''}>${price}g</button></div>`;
@@ -1093,7 +1098,7 @@ function renderBag() {
     const cur = inv.eq[it.slot], diff = Math.round((mainStat(it) - mainStat(cur)) * 10) / 10; // refined stats have one decimal
     const cmp = it.slot !== 'charm' && cur ? (diff > 0 ? ` <span class="up">▲${diff}</span>` : diff < 0 ? ` <span class="down">▼${-diff}</span>` : '') : !cur ? ' <span class="up">new</span>' : '';
     const usable = !it.cls || it.cls === state.cls;
-    return `<div class="it"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}<button data-a="drop" data-u="${it.u}" title="Drop on the ground for anyone to pick up">Drop</button><button class="del" data-a="discard" data-u="${it.u}" title="Delete for good">Delete</button></div>`;
+    return `<div class="it" title="${esc(styles.title(it))}"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}${styles.tag(it)}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}<button data-a="drop" data-u="${it.u}" title="Drop on the ground for anyone to pick up">Drop</button><button class="del" data-a="discard" data-u="${it.u}" title="Delete for good">Delete</button></div>`;
   }).join('') : '<div class="it empty"><span class="nm"><small>Nothing yet. Enemies drop gear; the Warden always does.</small></span></div>';
   h += smith.matsHtml(inv);
   h += renderTitles(inv.life);
