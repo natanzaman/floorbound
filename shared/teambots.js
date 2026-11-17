@@ -15,8 +15,10 @@
 import { MOBS, MOB_IDS, PLAYER_SPEED, SPRINT_SPEED, DODGE, SWEEP, walkable, resolveCollision, inGateZone, inArena } from './data.js';
 import { F2, WAYSTONES, STAIRWAY, SOVEREIGN, inGateZone2, inArena2, onFloor2, floorUnlocked } from './floor2.js';
 import { MASTERY, BRANCHES, masteryLevel } from './mastery.js';
+import { TEAM_NAMES_A, isDpsA, onEventA, brainA } from './classes/bots-a.js';
 
 export const TEAM_NAMES = { guardian: 'Brann', swordsman: 'Kael', cleric: 'Lyra' };
+Object.assign(TEAM_NAMES, TEAM_NAMES_A); // Ranger, Berserker (shared/classes/bots-a.js)
 
 // names: optional name per role; join: extra fields for the join message (e.g. the server's bot key and a level).
 export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = ['guardian', 'swordsman', 'cleric'], suffix = '', inviteHumans = false, log = () => {}, floor = 1, branch = null, names = null, join = {}, behaviour = 'auto', follow = '' }) {
@@ -71,13 +73,14 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
         if (b.i === 0 && e.t === 'sys' && !e.to) log(`[sys] ${e.text}`);
         if (e.t === 'f2wave') b.waves.push({ x: e.x, z: e.z, start: b.t + e.d, sp: e.sp, w: e.w, max: e.max });
         if (e.t === 'stair') b.stair = { x: e.x, z: e.z, until: b.t + e.d };
+        onEventA(b, e); // Berserker Rage
       }
       b.fresh = true;
       tick();
     });
     return b;
   });
-  const tank = team.find(b => b.cls === 'guardian'), dps = team.find(b => b.cls === 'swordsman'), healer = team.find(b => b.cls === 'cleric');
+  const tank = team.find(b => b.cls === 'guardian'), dps = team.find(b => isDpsA(b.cls)), healer = team.find(b => b.cls === 'cleric');
   const invited = new Set();
 
   // The tank forms the party once everyone is in.
@@ -295,6 +298,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
     if (dodge) { evade(dps, ...dodge); return; }
     if (!tgt) { moveToward(dps, tank.x - 2.5, tank.z - 2.5, 1.2); return; }
     const ready = engagedAt !== null && tank.t - engagedAt > 1.2; // let the tank grab aggro first
+    if (brainA(dps, tgt, { useSkill, moveToward, switchOpen, d2, ready, anchor: tank })) return; // Ranger / Berserker (shared/classes/bots-a.js)
     // stand on the far side of the target from the tank, out of its frontal swing
     const tx = tgt.x - tank.x, tz = tgt.z - tank.z, tl = Math.hypot(tx, tz) || 1;
     const reach = tgt.def.radius + 1.3;
@@ -427,6 +431,7 @@ export function startTeam({ url, WebSocket: WS = globalThis.WebSocket, roles = [
     if (dodge) evade(b, ...dodge);
     if (b.cls === 'cleric' && soloHeal(b)) return;
     if (!tgt) { if (!dodge) soloIdle(b); return; }
+    if (brainA(b, tgt, { useSkill, moveToward, switchOpen, d2, ready: true, anchor: null, dodge })) return; // Ranger / Berserker
     const ranged = b.cls === 'cleric', reach = ranged ? 8 : tgt.def.radius + 1.5;
     if (!dodge) moveToward(b, tgt.x, tgt.z, reach - 0.4);
     const face = Math.atan2(tgt.x - b.x, tgt.z - b.z), d = d2(b.x, b.z, tgt.x, tgt.z);
