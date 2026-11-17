@@ -2,7 +2,7 @@
 
 A co-op 3D action RPG that runs in the browser. You and your friends are stuck in a 100-floor tower: fight through the field, beat the floor boss together, clear the floor.
 
-This is the **Floors 1–2 prototype**: town hub, open field with mobs, the Horned Warden boss, a second floor (the Glimmering Mire and the Drowned Sovereign), 3 classes, parties, levels 1–20, and a real-time authoritative server.
+This is the **Floors 1–2 prototype**: town hub, open field with mobs, the Horned Warden boss, a second floor (the Glimmering Mire and the Drowned Sovereign), 5 classes, parties, levels 1–20, and a real-time authoritative server.
 
 ## Run it
 
@@ -175,6 +175,10 @@ BRANCH=B node test/team.js                  # every skill evolved into branch B
 | Swordsman | Damage | Slash, Rush (dash strike), Whirl (spin), Burst Combo (Lv 3) |
 | Guardian | Tank | Bash, Taunt, Shield Wall, Ground Slam (Lv 3, stuns) |
 | Cleric | Healer | Smite (ranged), Heal, Blessing (+25% damage), Sanctuary (Lv 3) |
+| Ranger | Damage | Shot (bow; real arrows, every 3rd hits harder, weak point-blank), Piercing Shot (charged, pierces a line, big posture), Disengage (leap back + slowing caltrops), Hunter's Mark (Lv 3; party +15% damage, Switches +30% on the target) |
+| Berserker | Damage | Axe Chop (heavy 2H combo, big posture), Cleave (wide arc, up to 2x at full Rage), Leap Slam (telegraphed landing, stagger), Bloodrage (Lv 3; spends Rage + 10% health: lifesteal, faster swings, cuts through wind-ups) |
+
+**Rage** (Berserker): 0-100, built by dealing and taking damage, drains after 4 s out of combat; shown as a red bar under your health, in party frames and on nameplates. The Berserker has no guard and takes 10% more damage. Each Ranger / Berserker skill has two evolutions like the others (Rain of Arrows / Sniper Shot, Snare Trap / Tumble Volley, Pack Hunter / Deadeye; Whirling Axe / Executioner, Earthshatter / Pounce, Frenzy / Warblood). Data and tuning: `shared/classes/ranger.js`, `shared/classes/berserker.js`; server `server/classes-a.js`; client `public/classes-a.js`; bot brains `shared/classes/bots-a.js`; tests `node test/classes-a.js`.
 
 ## Project layout
 

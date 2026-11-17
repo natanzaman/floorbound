@@ -312,7 +312,7 @@ export function initClassesA(ctx) {
       const xp = $('me-xp')?.parentElement;
       if (xp) { mine = document.createElement('div'); mine.className = 'bar rage'; mine.id = 'me-rage'; mine.title = 'Rage'; mine.innerHTML = '<div></div>'; xp.parentElement.insertBefore(mine, xp); }
     }
-    if (mine) setRage(mine, me());
+    if (mine) { mine.style.display = state.cls === 'berserker' ? '' : 'none'; setRage(mine, me()); } // hidden after switching class
     for (const e of players.values()) {
       if (e.cls !== 'berserker' || !e.label) continue;
       if (!e.rgEl) { e.rgEl = document.createElement('div'); e.rgEl.className = 'rgbar'; e.rgEl.innerHTML = '<div></div>'; e.label.el.appendChild(e.rgEl); }
