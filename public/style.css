@@ -232,7 +232,8 @@ input { font: inherit; }
 .it .down { color: #f87171; }
 #bag .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; font-size: 12px; opacity: .85; }
 #bag .shop { border: 1px solid rgba(252,211,77,.35); border-radius: 10px; padding: 8px; margin-bottom: 8px; background: rgba(252,211,77,.05); }
-.r0 { color: #e5e7eb; } .r1 { color: #4ade80; } .r2 { color: #60a5fa; } .r3 { color: #c084fc; } .r4 { color: #fbbf24; }
+.r0 { color: #e5e7eb; } .r1 { color: #4ade80; } .r2 { color: #60a5fa; } .r3 { color: #c084fc; } .r4 { color: #fbbf24; } .r5 { color: #f0abfc; }
+#bag .it.keepsake .ks-desc { font-style: italic; color: #f5d0fe; opacity: .95; }
 
 .sk.it2 { width: 52px; height: 52px; align-self: flex-end; font-size: 10px; border-color: rgba(248,113,113,.45); }
 .sk.it2 .cnt { position: absolute; bottom: 3px; left: 5px; font-size: 11px; color: #fde68a; }
