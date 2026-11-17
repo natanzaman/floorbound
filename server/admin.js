@@ -18,6 +18,7 @@ import { MASTERY, BRANCHES, newMastery, masteryLevel } from '../shared/mastery.j
 import { newTalents, allocError, TREES, spendBlock, nodesOf, pointsAt } from '../shared/talents.js';
 import { BEHAVIOURS } from './botmanager.js';
 import * as hall from './hall.js';
+import * as track from './track.js';
 
 const q = (...a) => db.q(...a);
 const ADMIN_IDS = new Set((process.env.ADMIN_DISCORD_IDS || '').split(',').map(s => s.trim()).filter(Boolean));
@@ -388,6 +389,7 @@ export async function handle(req, res, url) {
 
     if (path === '/api/admin/players' && m === 'GET') return json(res, 200, await playersList()), true;
     if (path === '/api/admin/summary' && m === 'GET') return json(res, 200, summary()), true;
+    if (path === '/api/admin/stats' && m === 'GET') return json(res, 200, await track.detail(Number(url.searchParams.get('days')) || 7)), true; // stats dashboard (/stats.html)
 
     if ((mm = path.match(/^\/api\/admin\/characters\/(\d+)$/))) {
       const id = +mm[1];

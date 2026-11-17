@@ -33,9 +33,9 @@ export class BotManager {
     this.bots = []; // { bid, b (the bot and its brain), group (startTeam handle), behaviour, follow, team, lvl, at }
     this.nextBid = 1; this.nextTeam = 1;
     this.joining = false;
-    // Keep bots out of play tracking (sessions, deaths, ...): they're not players.
+    // Keep bots out of play tracking (sessions, ...): they're not players. Their deaths go in as 'bot_death' (stats dashboard).
     const track = game.track;
-    game.track = (p, ...a) => (p?.bot || this.joining ? undefined : track(p, ...a));
+    game.track = (p, kind, ...a) => (this.joining ? undefined : p?.bot ? (kind === 'death' ? track(p, 'bot_death', ...a) : undefined) : track(p, kind, ...a));
     this.timer = setInterval(() => this.upkeep(), 1000);
     this.timer.unref?.();
   }
