@@ -810,6 +810,10 @@ function buildSkillBar(lvl = state.lvl) {
 const canTarget = m => !!m && !m.dying && !m.hidden;
 const lockRing = new THREE.Mesh(new THREE.RingGeometry(1, 1.15, 40), new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
 lockRing.rotation.x = -Math.PI / 2; lockRing.visible = false; scene.add(lockRing);
+// A bobbing arrow over the selected character's head (gold = enemy, green = ally).
+const selArrow = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.6, 4), new THREE.MeshBasicMaterial({ color: 0xfbbf24, depthTest: false, transparent: true }));
+selArrow.rotation.x = Math.PI; selArrow.renderOrder = 10; selArrow.visible = false; scene.add(selArrow);
+let hovered = null; // what the mouse-look crosshair is over
 function cycleLock() {
   const fy = state.yaw, fx0 = Math.sin(fy), fz0 = Math.cos(fy);
   const list = [...mobs.values()]
@@ -824,11 +828,20 @@ function cycleLock() {
   state.lock = i === -1 ? list[0].id : (i + 1 < list.length ? list[i + 1].id : 0);
   state.focus = 0;
   sfx.play('ui');
+  announceTarget();
 }
 
 // Ctrl/Cmd + click a character (enemy or ally) to select it and lock the camera on it;
 // Ctrl/Cmd + click empty ground to clear the selection.
 function selectAt(sx, sy) {
+  const best = pickAt(sx, sy);
+  state.lock = best?.kind === 'mob' ? best.ent.id : 0;
+  state.focus = best?.kind === 'player' ? best.ent.id : 0;
+  sfx.play('ui');
+  announceTarget();
+}
+// What's on screen at (sx, sy)? Used by Ctrl+click and by the mouse-look crosshair preview.
+function pickAt(sx, sy) {
   let best = null, bd = Infinity;
   const consider = (ent, kind) => {
     const g = ent.model.group.position, h = ent.model.height;
@@ -842,9 +855,17 @@ function selectAt(sx, sy) {
   };
   for (const m of mobs.values()) if (canTarget(m)) consider(m, 'mob');
   for (const p of players.values()) if (p.id !== state.myId && !p.dead) consider(p, 'player');
-  state.lock = best?.kind === 'mob' ? best.ent.id : 0;
-  state.focus = best?.kind === 'player' ? best.ent.id : 0;
-  sfx.play('ui');
+  return best;
+}
+// A short line under the boss bar saying what you just selected.
+let selMsgT = 0;
+function announceTarget() {
+  const m = state.lock && mobs.get(state.lock), p = state.focus && players.get(state.focus);
+  const el = $('selmsg');
+  el.className = m ? 'foe' : p ? 'ally' : '';
+  el.innerHTML = m ? `Target: <b>${esc(m.def.name)}</b> <small>Lv ${m.def.level ?? ''}</small>` : p ? `Following: <b>${esc(p.name)}</b> <small>Lv ${p.lvl ?? ''}</small>` : 'Target cleared';
+  el.classList.add('show');
+  clearTimeout(selMsgT); selMsgT = setTimeout(() => el.classList.remove('show'), 1800);
 }
 function focusedAlly() {
   const p = state.focus && players.get(state.focus);
@@ -1441,6 +1462,9 @@ function animateEntity(e, dt) {
     if (e.kind === 'mob') combat.label(e); // posture bar
     if (e.kind === 'player') e.label.el.className = `lbl ${state.party && e.party === state.party ? 'party' : 'ally'}`;
     else if (e.def.elite && !e.label.el.classList.contains('elite')) e.label.el.classList.add('elite');
+    const isSel = (e.kind === 'mob' ? state.lock : state.focus) === e.id;
+    e.label.el.classList.toggle('sel', !!isSel);
+    e.label.el.classList.toggle('hov', !isSel && hovered === e);
   }
 }
 
@@ -1511,7 +1535,12 @@ function frame(now) {
     lockRing.visible = true; lockRing.position.set(gp.x, 0.12, gp.z);
     lockRing.material.color.setHex(lm ? 0xfbbf24 : 0x4ade80);
     lockRing.scale.setScalar(lm ? lm.def.radius + 0.6 : 0.9); lockRing.rotation.z += dt * 1.5;
-  } else lockRing.visible = false;
+    selArrow.visible = true; selArrow.material.color.setHex(lm ? 0xfbbf24 : 0x4ade80);
+    selArrow.position.set(gp.x, gp.y + sel.model.height + 2.3 + Math.sin(now / 180) * 0.15, gp.z); selArrow.rotation.y += dt * 2.5;
+  } else { lockRing.visible = false; selArrow.visible = false; }
+  // Mouse look: preview what Ctrl+click would select under the crosshair.
+  hovered = locked() ? pickAt(innerWidth / 2, innerHeight / 2)?.ent || null : null;
+  $('crosshair').className = hovered ? (hovered.kind === 'mob' ? 'foe' : 'ally') : '';
   updateTargetFrame(sel, !!lm);
 
   if (state.joined && !state.dead && !state.spectator) {

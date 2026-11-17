@@ -347,3 +347,16 @@ input { font: inherit; }
 #settings input[type=range] { width: 100%; }
 #crosshair { display: none; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,.85); box-shadow: 0 0 0 2px rgba(0,0,0,.35); pointer-events: none; }
 body.mlock #crosshair { display: block; }
+
+/* selection feedback */
+#selmsg { position: absolute; top: 124px; left: 50%; transform: translateX(-50%); padding: 5px 14px; border-radius: 8px; background: rgba(10,16,34,.8);
+  border: 1px solid rgba(160,200,255,.3); font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+#selmsg.show { opacity: 1; }
+#selmsg.foe { border-color: rgba(251,191,36,.7); color: #fde68a; }
+#selmsg.ally { border-color: rgba(74,222,128,.7); color: #bbf7d0; }
+#selmsg small { opacity: .7; }
+.lbl.sel { outline: 2px solid #fbbf24; outline-offset: 3px; border-radius: 6px; background: rgba(251,191,36,.12); }
+.lbl.ally.sel, .lbl.party.sel { outline-color: #4ade80; background: rgba(74,222,128,.12); }
+.lbl.hov { outline: 1px dashed rgba(255,255,255,.7); outline-offset: 3px; border-radius: 6px; }
+#crosshair.foe { background: #fbbf24; width: 10px; height: 10px; margin: -5px 0 0 -5px; }
+#crosshair.ally { background: #4ade80; width: 10px; height: 10px; margin: -5px 0 0 -5px; }
