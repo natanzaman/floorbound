@@ -17,6 +17,7 @@ import { initCombat } from '/combat.js';
 import { F2, inGateZone2, inArena2, onFloor2, floorOf, WAYSTONES } from '/shared/floor2.js';
 import { initFloor2Client } from '/floor2client.js';
 import { initMastery } from '/mastery.js';
+import { initPlayerBots } from '/playerbots.js';
 
 const sfx = new Sound();
 
@@ -198,6 +199,8 @@ const mastery = initMastery({
   banner: (a, b) => banner(a, b), shake: a => shake(a), playAnim: (...a) => playSkillAnim(...a),
   rebuildBar: () => { if (state.joined && !state.spectator && mastery.barChanged()) buildSkillBar(); },
 });
+// Players panel tabs + player-owned bots (public/playerbots.js)
+const pbots = initPlayerBots({ $, send, state, players, log: (a, b) => log(a, b), sfx, rerender: () => { lobby.html = ''; renderPlayers(); } });
 
 // ---------------- networking ----------------
 function onMessage(msg) {
@@ -236,6 +239,7 @@ function onMessage(msg) {
     return;
   }
   if (mastery.onMessage(msg)) return; // skill mastery
+  if (pbots.onMessage(msg)) return; // player-owned bots (Players panel → Bots tab)
   if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); smith.render(); return; }
   if (msg.type === 'hall') { state.hallData = msg; renderHall(); return; }
   if (msg.type === 'snap') {
@@ -1202,19 +1206,22 @@ $('sound-btn').onclick = () => { sfx.unlock(); $('sound-btn').textContent = sfx.
 $('lock-btn').onpointerdown = e => { e.preventDefault(); cycleLock(); };
 canvas.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
 $('chat-btn').onclick = () => { const t = prompt('Say something'); if (t && t.trim()) send({ type: 'chat', text: t.trim() }); };
-$('players-btn').onclick = () => { $('players').classList.toggle('hidden'); renderPlayers(); };
+$('players-btn').onclick = () => { $('players').classList.toggle('hidden'); lobby.html = ''; renderPlayers(); };
 function renderPlayers() {
   if ($('players').classList.contains('hidden')) return;
-  const rows = [], botRows = [];
+  const nBots = [...state.roster.values()].filter(r => r.bot).length, nReal = state.roster.size - nBots;
+  if (pbots.tab === 'bots') return pbots.render($('players'), nReal, nBots); // Bots tab (public/playerbots.js)
+  const rows = [];
   let online = 0;
   for (const [id, r] of state.roster) {
-    if (!r.bot) online++;
+    if (r.bot) continue; // bots: the Bots tab
+    online++;
     if (id === state.myId) continue;
     const p = players.get(id);
     const inParty = state.party && p?.party === state.party;
     const lfgTag = (p?.buffs || 0) & 4 ? '<span class="tag">LFG</span>' : '';
     const floorTag = p && onFloor2(p.tx ?? p.x) ? '<span class="tag f2">F2</span>' : '';
-    (r.bot ? botRows : rows).push(`<div class="p"><span>${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small>${r.bot ? '<span class="tag bot">BOT</span>' : ''}${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}</div>`);
+    rows.push(`<div class="p"><span>${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}</div>`);
   }
   const meE = players.get(state.myId), seeking = !!((meE?.buffs || 0) & 4);
   const lfgBtn = `<button class="lfg ${seeking ? 'on' : ''}">${state.party ? (seeking ? 'Recruiting via party finder ✓' : 'Recruit with party finder') : seeking ? 'Searching for a party… (cancel)' : 'Find party'}</button>`;
@@ -1222,15 +1229,17 @@ function renderPlayers() {
   if (acct.cfg.accounts && !state.spectator && Date.now() - (lobby.at || 0) > 30000) { lobby.at = Date.now(); fetch('/api/lobby').then(r => r.json()).then(b => { lobby.offline = b.offline || []; renderPlayers(); }).catch(() => {}); }
   const onlineNames = new Set([...state.roster.values()].map(r => r.name.toLowerCase()));
   const offline = (lobby.offline || []).filter(o => !onlineNames.has(o.name.toLowerCase()));
-  const botsHtml = botRows.length ? `<details class="sect" ${lobby.botsOpen ? 'open' : ''} data-sect="bots"><summary><b>Bots (${botRows.length})</b></summary>${botRows.join('')}</details>` : '';
   const offHtml = offline.length ? `<details class="sect" ${lobby.offOpen !== false ? 'open' : ''} data-sect="off"><summary><b>Offline (${offline.length})</b> <small style="opacity:.6">last 30 days</small></summary>${offline.map(o => `<div class="p off"><span>${esc(o.name)} <small style="opacity:.6">Lv ${o.lvl} ${CLASSES[o.cls]?.name || ''}</small></span><small style="opacity:.55">${seenAgo(o.seen)}</small></div>`).join('')}</details>` : '';
-  $('players').innerHTML = `${lfgBtn}<b>Online (${online})</b>${rows.join('') || '<div style="opacity:.6;font-size:13px;padding:6px 0">Nobody else yet. Share the link with friends!</div>'}${botsHtml}${offHtml}${state.party ? '<button class="leave">Leave party</button>' : ''}`;
-  for (const d of $('players').querySelectorAll('details[data-sect]')) d.ontoggle = () => { lobby[d.dataset.sect === 'bots' ? 'botsOpen' : 'offOpen'] = d.open; };
+  const html = `${pbots.tabsHtml(nReal, nBots)}${lfgBtn}<b>Online (${online})</b>${rows.join('') || '<div style="opacity:.6;font-size:13px;padding:6px 0">Nobody else yet. Share the link with friends!</div>'}${offHtml}${state.party ? '<button class="leave">Leave party</button>' : ''}`;
+  if (html === lobby.html) return; // unchanged: keep the DOM (buttons stay clickable)
+  $('players').innerHTML = lobby.html = html;
+  pbots.bindTabs($('players'));
+  for (const d of $('players').querySelectorAll('details[data-sect]')) d.ontoggle = () => { lobby.offOpen = d.open; };
   $('players').querySelector('.lfg').onclick = () => { send({ type: 'lfg' }); sfx.play('ui'); setTimeout(renderPlayers, 150); };
   for (const b of $('players').querySelectorAll('[data-inv]')) b.onclick = () => { send({ type: 'invite', id: +b.dataset.inv }); b.textContent = 'Sent'; b.disabled = true; };
   const lv = $('players').querySelector('.leave'); if (lv) lv.onclick = () => send({ type: 'leave' });
 }
-const lobby = { at: 0, offline: [], botsOpen: false, offOpen: true }; // Players panel: offline list + which sections are open
+const lobby = { at: 0, offline: [], offOpen: true, html: '' }; // Players panel: offline list + which sections are open
 const seenAgo = iso => { const s = (Date.now() - new Date(iso)) / 1000; return s < 3600 ? `${Math.max(1, Math.round(s / 60))}m ago` : s < 172800 ? `${Math.round(s / 3600)}h ago` : `${Math.round(s / 86400)}d ago`; };
 let rpT = 0;
 function renderPlayersThrottled() { const n = performance.now(); if (n - rpT > 1000) { rpT = n; renderPlayers(); } }
