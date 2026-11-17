@@ -25,6 +25,7 @@ import { initPlayerBots } from '/playerbots.js';
 import { snapPoses, poseFrame } from '/poses.js'; // kneel / sit / bow (F5)
 import { initTalents } from '/talents.js';
 import { initBotWheel } from '/botwheel.js';
+import { initBell } from '/bell.js'; // the Tower Bell and the engraved Hall stones
 import { initCine } from '/cine.js'; // film view camera, titles, fades, letterbox, light (F4)
 import { initBubbles } from '/bubbles.js';
 
@@ -249,6 +250,8 @@ const styles = initStyles({ state, players, fx, sfx, shake: a => shake(a), float
 const pbots = initPlayerBots({ $, send, state, players, log: (a, b) => log(a, b), sfx, rerender: () => { lobby.html = ''; renderPlayers(); } });
 // talent trees + the Skill Tree window (K): progression track, talents, abilities (public/talents.js)
 const talents = initTalents({ state, players, fx, sfx, send, floatNum, mastery, guide, isTouch, $ });
+// the Tower Bell (toll, sway, banner) and the engraved Hall stones (public/bell.js)
+const bell = initBell({ scene, sfx, guide, banner: (a, b, c) => banner(a, b, c) });
 
 // ---------------- networking ----------------
 function onMessage(msg) {
@@ -291,7 +294,7 @@ function onMessage(msg) {
   if (mastery.onMessage(msg)) return; // skill mastery
   if (pbots.onMessage(msg)) return; // player-owned bots (Players panel → Bots tab)
   if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); smith.render(); return; }
-  if (msg.type === 'hall') { state.hallData = msg; renderHall(); return; }
+  if (msg.type === 'hall') { state.hallData = msg; renderHall(); bell.hall(msg); return; }
   if (msg.type === 'snap') {
     const busy = msg.w.events.some(e => e.t === 'clear' || e.t === 'lvl');
     for (const e of msg.w.events) { // titles and the Hall of Clearers (kept out of handleEvent)
@@ -354,6 +357,7 @@ function handleEvent(e) {
   const me = state.myId;
   if (cine.event(e)) return; // shots, titles, fades, letterbox, clean feed, light
   f2.onEvent(e);
+  if (bell.event(e)) return; // the Tower Bell
   if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
   if (talents.event(e)) return; // talent points, learned talents, talent procs
   if (mastery.event(e)) return; // evolved skills, mastery level-ups, evolutions
@@ -1274,9 +1278,9 @@ function log(text, cls = '') {
 let bannerT = 0;
 // Banners queue up so two at once (e.g. a rare sighting and a title) don't overwrite each other.
 const bannerQ = []; let bannerBusy = false;
-function banner(title, sub = '') {
+function banner(title, sub = '', first = false) { // first: jump the queue (the Tower Bell)
   if (bannerQ.some(b => b[0] === title && b[1] === sub)) return;
-  bannerQ.push([title, sub]);
+  bannerQ[first ? 'unshift' : 'push']([title, sub]);
   if (!bannerBusy) nextBanner();
 }
 function nextBanner() {
@@ -1893,7 +1897,9 @@ function frame(now) {
 
   if (state.joined) updateHud(now);
   updateRareHint(now);
+  bell.before(camera); // the Tower Bell's camera sway, undone after the render
   renderer.render(scene, camera);
+  bell.after(camera);
 }
 requestAnimationFrame(frame);
 

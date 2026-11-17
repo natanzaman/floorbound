@@ -436,6 +436,7 @@ export const F2Methods = {
       p.stats.sovereignKills = (p.stats.sovereignKills || 0) + 1; p.dirty = true;
       this.checkTitles(p);
     }
+    if (first) this.ringBell(2, { auto: true }); // the Tower Bell (server/bell.js)
     this.onClear?.({ floor: 2, secs: f ? Math.round(this.time - f.start) : 0, players: party, lastAttack: killer.name, deaths: f?.deaths || 0, first });
   },
 
