@@ -17,6 +17,7 @@ import { TwistMethods } from './twists.js';
 import { installCombat } from './combat.js';
 import { MasteryMethods } from './mastery.js';
 import { MASTERY } from '../shared/mastery.js';
+import { installTalents } from './talents.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
@@ -101,6 +102,7 @@ export class Game {
     p.stats = newStats(saved?.stats); // lifetime stats + titles (memory-only for anonymous players)
     p.stats.maxLvl = Math.max(p.stats.maxLvl, p.lvl);
     this.initMastery(p, saved?.mastery); // skill mastery + evolutions (server/mastery.js)
+    this.initTalents(p, saved?.talents); // talent tree (server/talents.js)
     this.checkTitles(p);
     this.recompute(p);
     p.hp = p.maxHp;
@@ -129,6 +131,7 @@ export class Game {
     p.haste = Math.min(0.4, g.haste / 100);
     p.swPow = g.sw / 100;
     p.gearDr = Math.min(0.3, g.dr / 100);
+    this.talentStats?.(p); // talent tree bonuses (server/talents.js)
     if (p.hp !== undefined) p.hp = Math.max(1, Math.min(p.maxHp, Math.round(p.maxHp * frac)));
   }
 
@@ -174,6 +177,7 @@ export class Game {
       case 'leave': return this.leaveParty(p);
       case 'warp': return this.warp(p, msg.f); // waystones and the Stairway (server/floor2.js)
       case 'evolve': return this.chooseBranch(p, String(msg.sk), String(msg.br)); // skill evolutions (server/mastery.js)
+      case 'talent': return this.talentAction(p, msg); // talent tree: spend / refund / reset (server/talents.js)
     }
   }
 
@@ -800,6 +804,7 @@ export class Game {
     }
     if (guard) amount = Math.max(1, Math.round(amount * (1 - GUARD.dr)));
     if (!peril) amount = this.absorbHit(p, amount); // Aegis shields
+    amount = this.talentHurt?.(p, amount, guard, peril) ?? amount; // talents: guard block, ally auras, Guardian Spirit (server/talents.js)
     if (amount <= 0) { p.lastHurt = this.time; p.lastCombat = this.time; return; }
     p.hp -= amount;
     p.lastHurt = this.time; p.lastCombat = this.time;
@@ -1269,3 +1274,4 @@ Object.assign(Game.prototype, TwistMethods); // Warden twists (server/twists.js)
 installCombat(Game); // posture, perfect dodge, guard/parry, Horn Sweep (server/combat.js)
 Object.assign(Game.prototype, MasteryMethods); // skill mastery + evolutions (server/mastery.js)
 Object.assign(Game.prototype, F2Methods); // Floor 2 (server/floor2.js)
+installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js); keep it last
