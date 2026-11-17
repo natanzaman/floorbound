@@ -748,7 +748,7 @@ export class Game {
       if (this.giveItem(killer, lastAttackItem())) this.invChanged(killer);
       this.events.push({ t: 'la', id: killer.id, name: killer.name, x: r2(m.x), z: r2(m.z) });
       this.sys(`LAST ATTACK BONUS: ${killer.name} landed the final blow and earned the Horn of the Warden!`);
-      this.clearHounds();
+      this.clearHounds(); this.clearQuakes();
       this.floorClears++;
       this.events.push({ t: 'clear', names, n: this.floorClears });
       this.sys(`The Horned Warden has fallen! Floor 1 cleared by ${names.join(', ')}. The Stairway to Floor 2 has opened!`);
@@ -953,7 +953,7 @@ export class Game {
       m.windupAt = 0;
       if (def.boss && (m.hp < m.maxHp || m.engaged)) { // everyone left or died: reset the fight
         this.endFight('wipe', m);
-        m.hp = m.maxHp; m.phase = 0; m.contributors.clear(); this.clearHounds();
+        m.hp = m.maxHp; m.phase = 0; m.contributors.clear(); this.clearHounds(); this.clearQuakes();
         this.twistReset(m); // Warden twist hazards
       }
       m.engaged = false;
@@ -968,9 +968,9 @@ export class Game {
 
     if (def.boss && !m.engaged) { // scale the boss to the group that walks in
       m.engaged = true;
-      let n = 0; for (const p of this.players.values()) if (!p.dead && inArena(p.x, p.z)) n++;
-      m.maxHp = m.hp = WARDEN.hpBase + WARDEN.hpPer * Math.max(1, n);
+      this.scaleWarden(m);
       m.phase = 0; m.slamT = t + 5; m.busyUntil = 0; m.houndT = m.chargeT = m.spinT = m.rockT = Infinity;
+      m.quakeT = t + (this.twistW || WARDEN).quake.first[0]; this.clearQuakes();
       this.twistEngage(m); // Warden twist setup (before startFight records the fight's health)
       this.startFight(m);
     }
@@ -1164,15 +1164,22 @@ export class Game {
         this.sys('The Horned Warden is enraged! The ceiling is coming down.');
         m.spinT = t + 3; m.rockT = t + 6;
       }
+      m.quakeT = Math.min(m.quakeT ?? Infinity, t + W.quake.first[m.phase]); // more rings, sooner
     }
     const fighters = [...this.players.values()].filter(p => !p.dead && inArena(p.x, p.z));
     const pick = () => fighters[Math.floor(Math.random() * fighters.length)] || target;
 
-    // Ground slam on a random fighter (jump or roll out)
+    // Ground slam on a random fighter (jump or roll out); a bigger party gets one circle per W.slam.per fighters
     if (t >= m.slamT && t >= m.busyUntil) {
       m.slamT = t + W.slam.every[m.phase];
-      const v = pick(), { r, wind } = W.slam;
-      this.circleAttack(m, v.x, v.z, r, wind, m.def.atk * W.slam.mult, 'warden slam', true);
+      const { r, wind } = W.slam, n = Math.max(1, Math.ceil(fighters.length / (W.slam.per || 99)));
+      const vs = [...fighters].sort(() => Math.random() - 0.5).slice(0, n);
+      for (const v of vs.length ? vs : [target]) this.circleAttack(m, v.x, v.z, r, wind, m.def.atk * W.slam.mult, 'warden slam', true);
+    }
+    // Quake Ring: shockwaves roll out from the Warden (jump the wavefront, roll through it, or be out of reach)
+    if (t >= m.quakeT && t >= m.busyUntil && !m.windupAt) {
+      m.quakeT = t + W.quake.every[m.phase];
+      this.quakeRing(m);
     }
     if (m.phase >= 1) {
       // Hounds join the fight
@@ -1216,6 +1223,18 @@ export class Game {
       }
     }
     this.twistSpecials(m, pick); // Warden twist behaviour
+  }
+
+  // Health from the party's weight (fighters weighted by role, then raised to hpExp: a full party with three damage
+  // dealers and a Bard gets far more than twice the health a tank/damage/healer trio does, since talents, styles and
+  // support buffs multiply), damage from the party size, and both from the party's average level above the Warden's.
+  scaleWarden(m) {
+    const W = WARDEN, ps = [...this.players.values()].filter(p => !p.dead && inArena(p.x, p.z));
+    const weight = Math.max(0.5, ps.reduce((s, p) => s + (W.hpRole[CLASSES[p.cls]?.role] ?? 1), 0));
+    const avg = ps.length ? ps.reduce((s, p) => s + p.lvl, 0) / ps.length : m.def.level, over = Math.max(0, avg - MOBS.warden.level);
+    m.maxHp = m.hp = Math.round((W.hpBase + W.hpPer * Math.pow(weight, W.hpExp)) * (1 + W.hpLvl * over));
+    const atk = MOBS.warden.atk * (1 + W.atkLvl * over) * (1 + W.atkPer * Math.max(0, ps.length - 3));
+    m.def = { ...MOBS.warden, atk: Math.round(atk * 10) / 10 };
   }
 
   circleAttack(m, x, z, r, wind, amount, src, ground, kind) {

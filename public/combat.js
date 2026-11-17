@@ -1,5 +1,5 @@
 // Client side of the combat core: posture bars, perfect dodge / parry feedback, the Guardian's guard (R),
-// and the Warden's perilous Horn Sweep telegraph. main.js calls initCombat() once and routes events here first.
+// the Warden's perilous Horn Sweep telegraph and its Quake Rings. main.js calls initCombat() once and routes events here first.
 import * as THREE from 'three';
 import { GUARD } from '/shared/data.js';
 
@@ -29,6 +29,7 @@ const CSS = `
 
 export function initCombat(ctx) {
   const { state, players, mobs, fx, sfx, floatNum, slowMotion, shake, guide, send, bossShot } = ctx;
+  const callout = ctx.callout || (() => {});
   const style = document.createElement('style'); style.textContent = CSS; document.head.appendChild(style);
   const flash = document.createElement('div'); flash.id = 'cb-flash'; document.body.appendChild(flash);
   const whiteFlash = () => { flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go'); };
@@ -61,6 +62,16 @@ export function initCombat(ctx) {
     },
     guardUp: o => { sfx.tone(o, { f: 180, to: 140, dur: 0.15, vol: 0.25, type: 'triangle' }); sfx.noise(o, { dur: 0.08, vol: 0.2, type: 'lowpass', f: 800 }); },
     sweep: o => { sfx.noise(o, { dur: 0.6, vol: 0.6, type: 'bandpass', f: 400, to: 2400, q: 0.8, attack: 0.02 }); sfx.tone(o, { f: 80, to: 35, dur: 0.7, vol: 0.7 }); },
+    quakeWarn: o => { // the ground groaning: a low swelling rumble with a grinding edge, then two war-drum knocks
+      sfx.noise(o, { dur: 1.3, vol: 0.45, type: 'lowpass', f: 140, to: 420, attack: 0.5 });
+      sfx.tone(o, { f: 45, to: 70, dur: 1.3, vol: 0.45, type: 'sawtooth', attack: 0.4 });
+      [0.55, 0.95].forEach(at => sfx.tone(o, { f: 110, to: 50, dur: 0.22, vol: 0.4, type: 'triangle', at, attack: 0.005 }));
+    },
+    quake: o => { // the stomp: a deep thud and a rolling crack of stone
+      sfx.tone(o, { f: 70, to: 28, dur: 0.6, vol: 0.85, attack: 0.003 });
+      sfx.noise(o, { dur: 0.9, vol: 0.55, type: 'lowpass', f: 900, to: 160, attack: 0.005 });
+      sfx.noise(o, { dur: 0.25, vol: 0.3, type: 'bandpass', f: 2200, q: 1.2, attack: 0.002 });
+    },
   };
 
   // ---------- guard (Guardian, hold R) ----------
@@ -138,10 +149,87 @@ export function initCombat(ctx) {
     if (near(e.x, e.z, e.r + 6)) guide.tip('peril');
   }
 
+  // ---------- Quake Ring ----------
+  // Ring 0 of a volley: the wind-up (the Warden rears up and smashes down, a cracked amber disc spreads under it, and a
+  // dashed amber boundary marks how far the rings reach). Every ring: at its start, a low wall of rock and dust rolls
+  // out to that boundary. Jump over it as it reaches you, roll through it, or stand outside the boundary.
+  const isTouch = () => document.body.classList.contains('touch');
+  function band(mesh, inner, outer) { mesh.geometry.dispose(); mesh.geometry = new THREE.RingGeometry(Math.max(0.01, inner), outer, 96); }
+  function quakeWindup(e) {
+    const m = mobs.get(e.by), last = e.d + (e.n - 1) * (e.g ?? 1), life = last + e.max / e.sp + 0.2;
+    const g = new THREE.Group();
+    const reach = new THREE.Mesh(new THREE.RingGeometry(e.max - 0.18, e.max + 0.18, 128), fx.fadeMat(0xf59e0b, 0.8));
+    const ticks = new THREE.Group();
+    for (let i = 0; i < 36; i++) { // dashes just inside the boundary: "the rings stop here"
+      const a = (i / 36) * Math.PI * 2, d = new THREE.Mesh(new THREE.PlaneGeometry(0.35, 1.1), fx.fadeMat(0xfde68a, 0.75));
+      d.position.set(Math.sin(a) * (e.max - 0.9), Math.cos(a) * (e.max - 0.9), 0); d.rotation.z = -a; ticks.add(d);
+    }
+    const core = new THREE.Mesh(new THREE.CircleGeometry(3.2, 48), fx.fadeMat(0xb45309, 0.45));
+    const coreEdge = new THREE.Mesh(new THREE.RingGeometry(3.0, 3.3, 48), fx.fadeMat(0xfbbf24, 0.9));
+    for (const o of [reach, ticks, core, coreEdge]) { o.rotation.x = -Math.PI / 2; g.add(o); }
+    core.position.y = coreEdge.position.y = 0.02;
+    g.position.set(e.x, 0.09, e.z);
+    let t = 0;
+    fx.add(g, life, (mesh, k, dt) => {
+      t += dt || 0;
+      const wind = Math.min(1, t / Math.max(0.1, e.d)), pulse = 0.5 + 0.5 * Math.sin(t * (10 + wind * 18));
+      core.scale.setScalar(0.2 + 0.8 * wind);
+      core.material.opacity = t < e.d ? 0.25 + 0.3 * pulse : Math.max(0, 0.45 * (1 - (t - e.d) / 0.6));
+      coreEdge.scale.setScalar(0.2 + 0.8 * wind); coreEdge.material.opacity = t < last + 0.2 ? 0.55 + 0.4 * pulse : 0;
+      reach.material.opacity = (k > 0.85 ? (1 - k) / 0.15 : 1) * (0.5 + 0.35 * pulse);
+      ticks.rotation.z += (dt || 0) * 0.15;
+      for (const d of ticks.children) d.material.opacity = reach.material.opacity * 0.9;
+    });
+    const pos = m?.model.group.position || { x: e.x, z: e.z };
+    sfx.play('quakeWarn', pos, 1.5);
+    if (m) { bossShot(m.id, 'Cheer', 1.5); bossShot(m.id, '2H_Melee_Attack_Chop', 1.5, Math.max(0, e.d - 0.4)); }
+    const mine = !state.spectator && near(e.x, e.z, e.max + 4);
+    if (mine || (state.spectator && near(e.x, e.z, 60))) {
+      callout(e.n > 1 ? `QUAKE RINGS ×${e.n}` : 'QUAKE RING', `${isTouch() ? 'Jump' : 'Jump (Space)'} as the wave reaches you, roll through it, or get outside the amber ring`, e.d + 0.5);
+    }
+    if (mine) guide.tip('quake');
+  }
+  // The wavefront is placed by the wall clock, not effect time: slow motion (a perfect dodge on the first ring) or a
+  // slow frame must never make the next ring look later than it really is.
+  function quakeRing(e) {
+    const m = mobs.get(e.by), t0 = performance.now() / 1000 + Math.max(0, e.d), life = e.max / e.sp;
+    if (e.i > 0 && m) bossShot(m.id, '2H_Melee_Attack_Chop', 1.6, Math.max(0, e.d - 0.4)); // stomps again for each ring
+    setTimeout(() => {
+      const g = new THREE.Group();
+      const glowMat = c => { const mt = fx.fadeMat(c, 0.9); mt.blending = THREE.AdditiveBlending; return mt; };
+      const wall = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 96, 1, true), fx.fadeMat(0xea580c, 0.8));
+      const crest = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.14, 96, 1, true), glowMat(0xfff1c2));
+      const glow = new THREE.Mesh(new THREE.RingGeometry(0.5, 1, 96), glowMat(0xffb020));
+      const wake = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.5, 96), fx.fadeMat(0x5b3412, 0.5));
+      glow.rotation.x = wake.rotation.x = -Math.PI / 2; glow.position.y = 0.07; wake.position.y = 0.05;
+      g.add(wake, wall, glow, crest); g.position.set(e.x, 0, e.z);
+      let shook = false, entry = null;
+      fx.add(g, life + 2, mesh => {
+        const k = (performance.now() / 1000 - t0) / life;
+        if (k >= 1) { mesh.visible = false; fx.end(entry); return; }
+        const r = Math.max(0.3, k * e.max), h = 1.0 * (1 - 0.35 * k);
+        wall.scale.set(r, h, r); wall.position.y = h / 2; crest.scale.set(r, 1, r); crest.position.y = h;
+        band(glow, r - e.w, r + e.w); band(wake, Math.max(0, r - e.w - 2.4), r - e.w);
+        const a = k > 0.82 ? (1 - k) / 0.18 : 1;
+        wall.material.opacity = 0.8 * a; crest.material.opacity = 0.9 * a; glow.material.opacity = 0.9 * a; wake.material.opacity = 0.5 * a;
+        if (!shook && !state.dead && Math.abs(Math.hypot(state.x - e.x, state.z - e.z) - r) < e.w + 0.3) { shook = true; shake(0.22); }
+      });
+      entry = lastFx();
+      for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; fx.sparks(e.x + Math.sin(a) * 2.6, 0.4, e.z + Math.cos(a) * 2.6, 4, 0xd6b98c, 0.3, 5); }
+      fx.ring(e.x, e.z, 3.5, 0xfbbf24, 0.35);
+      sfx.play('quake', m?.model.group.position || { x: e.x, z: e.z }, 1.4);
+      if (near(e.x, e.z, 30)) shake(0.35);
+    }, Math.max(0, e.d) * 1000);
+  }
+
   // ---------- events ----------
   function event(e) {
     const me = state.myId;
     switch (e.t) {
+      case 'quake':
+        if (e.i === 0) quakeWindup(e);
+        quakeRing(e);
+        return true;
       case 'tele':
         if (e.k !== 'sweep') return false;
         sweepTelegraph(e);

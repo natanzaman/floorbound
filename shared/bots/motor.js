@@ -1,9 +1,9 @@
-// Bot "body": moving, rolling out of telegraphs, the Horn Sweep, Tidal Waves, pressing skills. Shared by every bot brain.
-// Capability levels (shared/botskill.js) hook in here: skill cadence, positioning noise, Horn Sweep timing error.
-import { CLASSES, PLAYER_SPEED, DODGE, SWEEP, walkable, resolveCollision } from '../data.js';
+// Bot "body": moving, rolling out of telegraphs, the Horn Sweep, Tidal Waves, Quake Rings, pressing skills. Shared by every bot brain.
+// Capability levels (shared/botskill.js) hook in here: skill cadence, positioning noise, Horn Sweep / Quake Ring timing error.
+import { CLASSES, PLAYER_SPEED, DODGE, JUMP, SWEEP, walkable, resolveCollision } from '../data.js';
 import { F2, SOVEREIGN, inArena2, onFloor2 } from '../floor2.js';
-import { skillReady, pressed, aimNoise, sweepError } from '../botskill.js';
-import { brainFor } from './registry.js';
+import { skillReady, pressed, aimNoise, sweepError, quakeError } from '../botskill.js';
+import { brainFor, registerBotHook } from './registry.js';
 
 export const DT = 0.05; // one snapshot (20 Hz)
 export const d2 = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
@@ -64,13 +64,57 @@ function waveEta(b) {
   return best;
 }
 const waveSoon = (b, secs) => waveEta(b) < secs;
-// Roll INTO the wave just before it arrives: the i-frames carry us through.
+// Roll INTO the wave just before it arrives: the i-frames carry us through. (Quake Rings first: see quakeDodge.)
 export function waveDodge(b) {
+  if (quakeDodge(b)) return true;
   b.waves = b.waves.filter(w => (b.t - w.start) * w.sp < w.max);
   const eta = waveEta(b);
   if (eta > 0.22 || eta < -0.08 || b.roll || b.dodgeCd > 0) return false;
   const w = b.waves.find(w => { const r = (b.t - w.start) * w.sp; return r - w.w <= d2(b.x, b.z, w.x, w.z); });
   roll(b, Math.atan2(w.x - b.x, w.z - b.z));
+  return true;
+}
+
+// The Warden's Quake Rings (event 'quake', after capability perception): remembered here, cleared once they're gone.
+// Timed on the wall clock, not b.t (one DT per snapshot): the server steps by real elapsed time, so under load its
+// ticks get longer and a snapshot count runs slow, which is enough to mistime a jump. (A bot may bring its own b.clock.)
+const clock = b => (b.clock ? b.clock() : performance.now() / 1000);
+registerBotHook('onEvent', (b, e) => {
+  if (e.t === 'quake') (b.quakes ||= []).push({ x: e.x, z: e.z, start: clock(b) + e.d, sp: e.sp, w: e.w, max: e.max });
+});
+// Seconds until the nearest Quake Ring's wavefront reaches us (tIn) and has passed (tOut); null if none will.
+export function quakeEta(b, now = clock(b)) {
+  let best = null;
+  for (const q of b.quakes || []) {
+    const r = (now - q.start) * q.sp, d = d2(b.x, b.z, q.x, q.z);
+    if (d > q.max + q.w || r - q.w > d) continue; // out of its reach, or already past us
+    const tIn = (d - q.w - r) / q.sp, tOut = (d + q.w - r) / q.sp;
+    if (!best || tIn < best.tIn) best = { q, tIn, tOut };
+  }
+  return best;
+}
+// Jump the wavefront (airborne from JUMP.airFrom to JUMP.airTo after the press: press ~0.27 s before it reaches us,
+// then hold still until it has passed, so walking doesn't change when it arrives), or roll through it when the jump
+// isn't ready. Capability adds timing error (quakeError). Returns true while it takes over the bot's turn.
+export function quakeDodge(b) {
+  if (!b.quakes?.length) return false;
+  const now = clock(b);
+  b.quakes = b.quakes.filter(q => (now - q.start) * q.sp < q.max + q.w);
+  if (b.qHold && b.qHold.until > now) return true; // airborne: let it pass under us
+  b.qHold = null;
+  const e = quakeEta(b, now);
+  if (!e || b.roll || e.q.jumped) return false;
+  const lead = JUMP.airFrom + (JUMP.airTo - JUMP.airFrom - (e.tOut - e.tIn)) / 2 + quakeError(b, e.q); // ~0.27 s
+  if (e.tIn > lead || e.tIn < -0.1) return false;
+  if ((b.jumpT ?? -9) + JUMP.cd <= now) {
+    e.q.jumped = true; b.jumpT = now;
+    b.send({ type: 'jump' });
+    b.qHold = { until: now + Math.min(JUMP.airTo, e.tOut + 0.1) };
+    return true;
+  }
+  if (e.tIn > 0.15 || b.dodgeCd > 0) return false; // jump on cooldown: roll through it instead
+  e.q.jumped = true;
+  roll(b, Math.atan2(e.q.x - b.x, e.q.z - b.z));
   return true;
 }
 

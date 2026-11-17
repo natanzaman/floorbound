@@ -3,9 +3,11 @@
 //  - Perfect dodge: a roll that starts just before a hit lands -> slow-mo, posture damage to the attacker, a counter window.
 //  - Guardian guard (hold R): frontal hits take much less damage; pressing just before a hit PARRIES it.
 //  - The Warden's perilous Horn Sweep: dodge through it or parry it; shields don't help.
-import { DODGE, SWITCH, POSTURE, PERFECT, GUARD, SWEEP, postureMax, angleTo, wrapAngle, inArena } from '../shared/data.js';
+//  - The Warden's Quake Ring: shockwave rings rolling out along the floor; jump over the wavefront or roll through it.
+import { DODGE, SWITCH, POSTURE, PERFECT, GUARD, SWEEP, WARDEN, postureMax, angleTo, wrapAngle, inArena } from '../shared/data.js';
 import { MASTERY } from '../shared/mastery.js';
 
+const QSTATS = !!process.env.QUAKE_STATS; // test/wardenskill.js: count Quake Ring hits / evades
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r2 = v => Math.round(v * 100) / 100;
 
@@ -127,10 +129,12 @@ const methods = {
       }
     }
     for (const p of this.players.values()) if (p.dead && p.guarding) this.guard(p, false); // the guard drops on death
+    this.updateQuakes();
     const b = this.boss;
     if (!b || b.dead || !b.engaged || !b.threat.size) return;
     if (b.sweepFight !== this.fight) { b.sweepFight = this.fight; b.sweepT = t + SWEEP.first; } // a new attempt
     if (t < b.sweepT || t < b.stunUntil || t < (b.busyUntil || 0) || b.windupAt) return;
+    if (this.quakes?.some(q => q.m === b && q.r < SWEEP.r + 1)) return; // never a Horn Sweep on top of a Quake Ring still near it
     const near = [...this.players.values()].some(p => !p.dead && inArena(p.x, p.z) && dist(p, b) <= SWEEP.r + 4);
     if (!near) { b.sweepT = t + 2; return; }
     b.sweepT = t + SWEEP.every[b.phase] * (0.85 + Math.random() * 0.3);
@@ -153,5 +157,52 @@ const methods = {
     });
   },
 };
+
+// ---------- the Warden's Quake Ring ----------
+// Wind-up (it rears up, the reach of the rings shows on the floor), then 1-3 rings `gap` s apart roll out from where it
+// stands. A ring hurts anyone on the ground as its wavefront (a band `w` m either side of its radius) passes them:
+// airborne (jump) or rolling (i-frames) = no damage ("Jumped!" / "Dodged!", rolls can be perfect dodges), and beyond
+// `max` m it never reaches you. Each ring hits a player at most once.
+Object.assign(methods, {
+  quakeRing(m, n) {
+    const Q = (this.twistW || WARDEN).quake, t = this.time;
+    n = Math.max(1, n ?? Q.rings[m.phase] ?? 1);
+    m.windupAt = 0;
+    m.busyUntil = Math.max(m.busyUntil || 0, t + Q.wind + Q.gap * (n - 1) + 0.35);
+    const x = m.x, z = m.z, atk = m.def.atk * Q.mult;
+    for (let i = 0; i < n; i++) {
+      const q = { id: this.id(), x, z, start: t + Q.wind + i * Q.gap, r: 0, sp: Q.speed, w: Q.w, max: Q.max, atk, hit: new Set(), ev: new Set(), m };
+      (this.quakes ||= []).push(q);
+      // d: seconds until this ring starts rolling; i/n: its place in the volley (the client winds up on ring 0)
+      this.events.push({ t: 'quake', id: q.id, by: m.id, x: r2(x), z: r2(z), d: r2(q.start - t), sp: q.sp, w: q.w, max: q.max, g: Q.gap, i, n });
+    }
+  },
+
+  updateQuakes() {
+    if (!this.quakes?.length) return;
+    const t = this.time;
+    for (const q of this.quakes) {
+      if (t < q.start || q.m.dead) continue;
+      const prev = q.r;
+      q.r = Math.min(q.max, (t - q.start) * q.sp);
+      for (const p of this.players.values()) {
+        if (p.dead || q.hit.has(p.id) || !inArena(p.x, p.z)) continue;
+        const d = Math.hypot(p.x - q.x, p.z - q.z);
+        if (d < prev - q.w || d > q.r + q.w) continue; // the wavefront isn't on you this tick
+        const opts = { ground: true, src: 'warden quake', mob: q.m };
+        if (t < p.iframeUntil || (t >= p.airFrom && t < p.airUntil)) { // over it or rolling through: evaded (once per ring)
+          if (!q.ev.has(p.id)) { q.ev.add(p.id); this.damagePlayer(p, q.atk, opts); if (QSTATS) console.log(`[quake] evade ${t < p.iframeUntil ? 'roll' : 'jump'}`); }
+          continue;
+        }
+        q.hit.add(p.id);
+        this.damagePlayer(p, q.atk, opts);
+        if (QSTATS) console.log('[quake] hit');
+      }
+    }
+    this.quakes = this.quakes.filter(q => q.r < q.max && !q.m.dead && q.m.engaged);
+  },
+
+  clearQuakes() { this.quakes = []; },
+});
 
 export function installCombat(Game) { Object.assign(Game.prototype, methods); }

@@ -151,7 +151,7 @@ export const MOBS = {
   alpha: { name: 'Alpha Wolf', hp: 480, atk: 15, speed: 6.6, aggro: 14, range: 2.4, atkCd: 1.4, xp: 150, radius: 1.2, level: 7, elite: true },
   spitter: { name: 'Bramble Spitter', hp: 80, atk: 10, speed: 0, aggro: 17, range: 15, atkCd: 2.2, xp: 30, radius: 0.9, level: 4, ranged: true },
   hound: { name: "Warden's Hound", hp: 90, atk: 12, speed: 6.6, aggro: 30, range: 2.0, atkCd: 1.2, xp: 15, radius: 0.8, level: 8 },
-  warden: { name: 'The Horned Warden', hp: 2400, atk: 26, speed: 4.2, aggro: 18, range: 4.2, atkCd: 2.0, xp: 600, radius: 2.2, level: 10, boss: true },
+  warden: { name: 'The Horned Warden', hp: 2400, atk: 34, posture: 1200, speed: 4.2, aggro: 18, range: 4.2, atkCd: 2.0, xp: 600, radius: 2.2, level: 10, boss: true },
   // Rare named elites: one at a time, announced server-wide, temporary (see RARE).
   oldtusk: { name: 'Old Tusk', hp: 600, atk: 14, speed: 5.0, aggro: 10, range: 2.2, atkCd: 1.5, xp: 160, radius: 1.4, level: 6, elite: true, rare: true },
   ghostfang: { name: 'Ghostfang', hp: 750, atk: 16, speed: 7.2, aggro: 14, range: 2.4, atkCd: 1.2, xp: 200, radius: 1.3, level: 8, elite: true, rare: true, howl: true },
@@ -169,13 +169,22 @@ export const BITE = { boar: [2.6, 0.7], wolf: [2.8, 0.6], alpha: [3.4, 0.85], ho
 Object.assign(BITE, F2_BITE);
 export const PACK = { auraRange: 12, auraAtk: 0.25, howlEvery: 12, howlRange: 16, frenzy: 6 };
 // The Warden's three phases: 100-66% (cleave + slams), 66-33% (+ hounds, horn charge), <33% (+ spin, rockfall).
+// Quake Rings and the Horn Sweep come in every phase (more rings / more often later).
 export const WARDEN = {
-  phases: [0.66, 0.33], hpBase: 2400, hpPer: 900,
-  slam: { every: [8, 6, 4.5], r: 5.5, wind: 1.2, mult: 2.0 },
-  charge: { every: 11, len: 15, width: 2.4, wind: 1.1, mult: 2.2 },
-  hounds: { every: 28, n: 2, max: 3 },
-  spin: { every: 9, r: 8, wind: 1.4, mult: 1.6 },
-  rock: { every: 7, r: 3.2, wind: 1.3, extra: 3, mult: 1.5 },
+  // Scaled to the fighters in the chamber when it engages (server/game.js scaleWarden). Party weight = the sum of each
+  // fighter's role weight (hpRole: a damage dealer counts more than a healer); health = (hpBase + hpPer * weight^hpExp)
+  // * (1 + hpLvl * levels above 10); damage = atk * (1 + atkLvl * levels above 10) * (1 + atkPer * fighters above 3).
+  phases: [0.66, 0.33], hpBase: 2400, hpPer: 800, hpExp: 1.8, hpLvl: 0.12, atkLvl: 0.06, atkPer: 0.12,
+  hpRole: { Tank: 0.6, Healer: 0.5, Support: 0.8, Damage: 1.2 },
+  slam: { every: [7, 5.5, 4], r: 5.5, wind: 1.2, mult: 2.4, per: 3 }, // one slam circle per `per` fighters (on different ones)
+  charge: { every: 9.5, len: 15, width: 2.4, wind: 1.1, mult: 2.4 },
+  hounds: { every: 24, n: 2, max: 3 },
+  spin: { every: 8, r: 8, wind: 1.4, mult: 1.7 },
+  rock: { every: 6, r: 3.2, wind: 1.3, extra: 3, mult: 1.8 },
+  // Quake Ring: the Warden rears up and stomps; shockwave rings roll out along the floor from where it stands.
+  // Jump over the wavefront (airborne as it passes you), roll through it (i-frames), or be beyond `max` m.
+  // rings per phase, `gap` s apart; `w`: half-thickness of the wavefront (m); speed in m/s.
+  quake: { every: [15, 12, 9.5], first: [9, 5, 4], wind: 1.5, speed: 9, w: 0.55, max: 15, mult: 2.2, rings: [1, 2, 3], gap: 0.95 },
 };
 export const THORN = { speed: 16, radius: 0.6, wind: 0.75 };
 // Rare named spawns: at most one alive; first after `first` s, then `every` s after the last one is gone.
@@ -217,4 +226,4 @@ export const PERFECT = { window: 0.2, counter: 1.5, dmg: 1.5, posture: 2 };
 // Guardian guard (hold R): frontal hits (within `arc` rad of facing) take `dr` less damage; a press <= `parry` s before a hit negates it.
 export const GUARD = { arc: (70 * Math.PI) / 180, dr: 0.7, parry: 0.2, speed: 0.5, repress: 0.6 };
 // The Warden's perilous Horn Sweep: dodge (i-frames) or parry it; shields, guard, gear and jumping don't help.
-export const SWEEP = { r: 9, wind: 0.9, frac: 0.8, every: [18, 13, 10], first: 12 };
+export const SWEEP = { r: 9, wind: 0.9, frac: 0.8, every: [15, 11, 8.5], first: 10 };
