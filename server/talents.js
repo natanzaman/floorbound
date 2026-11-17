@@ -142,7 +142,7 @@ export const TalentMethods = {
     const t = this.time, s = o.shield;
     hp = Math.round(hp);
     if (s && t < s.until && s.hp > 0) { s.hp = Math.max(s.hp, hp); s.max = Math.max(s.max, hp); s.until = Math.max(s.until, t + d); return; }
-    o.shield = { hp, max: hp, until: t + d, by: 0 };
+    o.shield = { hp, max: hp, until: t + d, by: 0, k: 'talent' }; // k: shown as "Shield", not Aegis
     this.events.push({ t: 'buff', id: o.id, k: 'aegis', d });
   },
 

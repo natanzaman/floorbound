@@ -277,6 +277,21 @@ const evolve = (p, sk, br) => { p.mastery[sk] = { pts: MASTERY.need[3], br }; };
   assert.equal(ally.shield.hp, Math.round(ally.maxHp * SONG.crescendo.shield));
   assert.ok(Math.abs(ally.dmg.v - SONG.crescendo.dmg) < 1e-9 && ally.dmg.until > g.time);
   assert.equal(far.shield, null, 'out of range');
+  { // HUD buff bits: Crescendo has its own (4096 +damage, 8192 shield), never Blessed (2) or Aegis (32)
+    const row = JSON.parse(g.snapshot()).players.find(r => r[0] === ally.id), bits = row[10];
+    assert.ok(bits & 4096 && bits & 8192, 'Crescendo bits set');
+    assert.ok(!(bits & 2) && !(bits & 32), 'not shown as Blessed or Aegis');
+    const keep = { dmg: ally.dmg, shield: ally.shield };
+    ally.dmg = { until: g.time + 8, v: 0.25, by: 0 }; ally.shield = { hp: 9, max: 9, until: g.time + 8, by: 0 }; // Bless + Aegis
+    const b2 = JSON.parse(g.snapshot()).players.find(r => r[0] === ally.id)[10];
+    assert.ok(b2 & 2 && b2 & 32 && !(b2 & 4096) && !(b2 & 8192), 'Bless and Aegis keep their own bits');
+    g.talentShield(ally, 10, 5);
+    assert.ok(JSON.parse(g.snapshot()).players.find(r => r[0] === ally.id)[10] & 32, 'a talent shield on top of Aegis tops it up');
+    ally.shield = null; g.talentShield(ally, 10, 5);
+    const b3 = JSON.parse(g.snapshot()).players.find(r => r[0] === ally.id)[10];
+    assert.ok(b3 & 16384 && !(b3 & 32), 'a talent shield alone shows as Shield, not Aegis');
+    Object.assign(ally, keep);
+  }
   const brk = id => ev('stagger', e => e.id === id && e.by === bard.id).length;
   assert.equal(brk(ready.id), 1, '3 stacks: BROKEN');
   assert.equal(brk(weak.id), 0, '1 stack: not broken');
@@ -296,7 +311,7 @@ const evolve = (p, sk, br) => { p.mastery[sk] = { pts: MASTERY.need[3], br }; };
   reset(); use(bard, 'crescendo'); advance(1); bard.dead = true; advance(2.5);
   assert.equal(cb('crescBurst').length, 0); assert.ok(cb('crescFizzle').length); assert.equal(ally.shield, null);
   bard.dead = false;
-  ok('Crescendo: builds 3 s, then shields (20%) and +15% damage for allies in 12 m, BREAKS enemies with 3+ Discord (bosses 5+); fizzles if the bard falls');
+  ok('Crescendo: builds 3 s, then shields (20%) and +15% damage for allies in 12 m (its own HUD label, not Blessed), BREAKS enemies with 3+ Discord (bosses 5+); fizzles if the bard falls');
 }
 
 // ---------- evolutions ----------

@@ -1,8 +1,9 @@
 // One brain per bot, party teamwork and party commands, end to end.
 // A human client gets a team of 3 server-run bots (admin API, follow) into its party, then checks: greetings, the bots
-// follow it, assist on its target (the tank taunts what's on it), the healer heals it, chat + command-wheel orders
-// (stay / follow / attack my target / status / heal me), an outsider can't order them, and editing one bot leaves the
-// others alone. Also unit-checks the chat command parser.
+// follow it, assist on its target (the tank taunts what's on it), the healer heals it, /b chat + command-wheel orders
+// (stay / follow / attack my target / status / heal me; plain chat never orders), an outsider can't order them, editing
+// one bot leaves the others alone, and admin Respawn as… keeps a bot in the party with its order. Also unit-checks
+// the /b parser.
 // Starts its own server on PORT (default 3632) against DATABASE_URL (required for the admin API; skipped without).
 // Usage: DATABASE_URL=postgresql://... node test/botbrain.js
 import { spawn } from 'node:child_process';
@@ -11,22 +12,23 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import pg from 'pg';
 import { MOB_IDS, MOBS, CLASS_IDS } from '../shared/data.js';
-import { parseCommand } from '../shared/bots/social.js';
+import { parseBotChat, botHelp, BOT_COMMANDS } from '../shared/bots/social.js';
 import { moveToward } from '../shared/bots/motor.js';
 
 let n = 0, failed = 0;
 function ok(cond, what) { n++; if (cond) console.log(`  ok ${n} - ${what}`); else { failed++; console.log(`  NOT OK ${n} - ${what}`); } }
 
-// ---------- the chat parser ----------
-const P = (t, names = ['Brann', 'Kael', 'Lyra']) => parseCommand(t, names);
-ok(P('Brann follow me')?.cmd === 'follow' && P('Brann follow me').names.join() === 'brann' && !P('Brann follow me').all, '"Brann follow me": follow, addressed to Brann');
-ok(P('all stay')?.cmd === 'stay' && P('all stay').all, '"all stay": stay, everyone');
-ok(P('bots attack my target')?.cmd === 'attack' && P('bots attack my target').all, '"bots attack my target"');
-ok(P('Lyra, HEAL ME!!')?.cmd === 'heal' && P('Lyra, HEAL ME!!').names[0] === 'lyra', 'case-insensitive, punctuation tolerated');
-ok(P('hold here')?.cmd === 'stay' && P('come here')?.cmd === 'come' && P('regroup')?.cmd === 'come', 'hold here / come here / regroup');
-ok(P("let's do the boss")?.cmd === 'boss' && P('go to the warden')?.cmd === 'boss' && P('go farm')?.cmd === 'farm', 'boss / warden / farm');
-ok(P('ready up')?.cmd === 'ready' && P('use potion')?.cmd === 'potion' && P('leave party')?.cmd === 'leave' && P('Kael status')?.cmd === 'status', 'ready / potion / leave / status');
-ok(P('nice weather today') === null && P('gg') === null, 'ordinary chat is not a command');
+// ---------- the /b parser: only /b lines are orders ----------
+const P = parseBotChat;
+ok(['all stay', 'Brann follow me', 'Lyra heal me', 'hold here', "let's do the boss", 'use potion', 'leave party', 'stop', 'gg', 'follow'].every(t => P(t) === null), 'plain chat is never an order ("all stay", "Lyra heal me", "follow", ...)');
+ok(P('/p stay') === null && P('/bob hi') === null && P('/boss') === null, 'other slash commands and words starting with /b are not orders');
+ok(P('/b stay')?.cmd === 'stay' && P('/b stay').name === '' && P('/bots follow')?.cmd === 'follow' && P('/bot regroup')?.cmd === 'come', '/b stay, /bots follow, /bot regroup: every bot');
+ok(P('/b Lyra: heal me')?.cmd === 'heal' && P('/b Lyra: heal me').name === 'Lyra', '/b Lyra: heal me (one bot)');
+ok(P('/b Brann 2 hold')?.cmd === 'stay' && P('/b Brann 2 hold').name === 'Brann 2' && P('/B KAEL STATUS')?.name === 'KAEL', '/b <name> <order> without a colon, any case');
+ok(P('/b all: attack')?.cmd === 'attack' && P('/b all: attack').name === '' && P('/b pot')?.cmd === 'potion' && P('/b warden')?.cmd === 'boss' && P('/b farm')?.cmd === 'farm' && P('/b ready')?.cmd === 'ready' && P('/b leave')?.cmd === 'leave', 'aliases: all, pot, warden, farm, ready, leave');
+ok(P('/b')?.help && P('/b help')?.help && P('/b ?')?.help, '/b and /b help: the listing');
+ok(/isn't a bot order/.test(P('/b dance')?.error || ''), '/b dance: an error, not chat');
+ok(Object.keys(BOT_COMMANDS).every(id => P(`/b ${id}`)?.cmd === id) && botHelp().length === Object.keys(BOT_COMMANDS).length + 1, 'every order has its own word and a help line');
 
 const DB = process.env.DATABASE_URL;
 if (!DB) { console.log(failed ? `${failed} of ${n} checks failed` : `all ${n} parser checks passed (set DATABASE_URL for the live tests)`); process.exit(failed ? 1 : 0); }
@@ -141,20 +143,30 @@ try {
   await until(() => H.since(t0).some(e => e.t === 'fx' && e.k === 'heal' && e.by === heal.id && e.id === H.id), 6000, 'heal');
   ok(true, 'the healer heals the human when hurt');
 
-  // ---------- orders by chat ----------
+  // ---------- orders by chat: plain chat does nothing, /b does ----------
   t0 = Date.now();
-  H.say('all stay');
+  H.say('all stay'); H.say('hold here', undefined);
+  await H.walkTo(H.x + 5, H.z - 4);
+  await sleep(1200);
+  ok(list.every(b => dist(H.pl.get(b.id), H) < 8) && !pchat(t0).some(e => /hold|stay/i.test(e.text)), 'plain "all stay" / "hold here": no order (they keep following)');
+  ok(!H.since(t0).some(e => e.t === 'botcmd'), '...and no order event');
+  t0 = Date.now();
+  H.say('/b help');
+  await until(() => H.since(t0).some(e => e.t === 'sys' && e.to === H.id && /\/b follow/.test(e.text)), 3000, '/b help');
+  ok(!H.since(t0).some(e => e.t === 'chat' && /\/b/.test(e.text)), '/b help lists the orders (to me only, never as chat)');
+  t0 = Date.now();
+  H.say('/b stay');
   await sleep(600);
   const spots = new Map(list.map(b => [b.id, { ...H.pl.get(b.id) }]));
   await H.walkTo(H.x, H.z - 18);
   await sleep(1500);
-  ok(list.every(b => dist(H.pl.get(b.id), spots.get(b.id)) < 4.5 && dist(H.pl.get(b.id), H) > 12), '"all stay": they hold while the human walks off');
+  ok(list.every(b => dist(H.pl.get(b.id), spots.get(b.id)) < 4.5 && dist(H.pl.get(b.id), H) > 12), '"/b stay": they hold while the human walks off');
   ok(pchat(t0).some(e => /hold|stay/i.test(e.text)), `...and one of them acknowledges ("${pchat(t0)[0]?.text}")`);
   r = await call('GET', '/api/admin/bots', adminTok);
   ok(r.body.bots.every(b => b.order?.cmd === 'stay' && /Holding/.test(b.goal)), 'the admin view shows the order and goal');
 
   t0 = Date.now();
-  O.say('Brann follow me', undefined); // an outsider (global chat) ...
+  O.say(`/b ${tank.name}: follow`, undefined); // an outsider (global chat) ...
   O.send({ type: 'botcmd', cmd: 'follow' }); // ... and from the wheel (not in a party: refused by the server)
   await O.walkTo(O.x + 6, O.z + 4).catch(() => {});
   await sleep(1500);
@@ -162,22 +174,22 @@ try {
   ok(!H.since(t0).some(e => e.t === 'botcmd' && e.by === O.id), 'the server drops wheel orders from players without a party');
 
   t0 = Date.now();
-  H.say('follow me');
+  H.say('/b follow');
   await until(() => list.every(b => dist(H.pl.get(b.id), H) < 8), 9000, 'follow again');
-  ok(true, '"follow me": they come back and follow');
+  ok(true, '"/b follow": they come back and follow');
 
   t0 = Date.now();
-  H.say('Lyra status');
+  H.say(`/b ${heal.name.slice(0, 3)}: status`); // a unique start of the name is enough
   await until(() => pchat(t0, heal).some(e => /HP \d+\/\d+ · Lv \d+/.test(e.text)), 4000, 'status');
-  ok(true, `"Lyra status": only Lyra answers: "${pchat(t0, heal)[0].text}"`);
+  ok(true, `"/b ${heal.name.slice(0, 3)}: status": only ${heal.name} answers: "${pchat(t0, heal)[0].text}"`);
   await sleep(500);
-  ok(!pchat(t0).some(e => e.id === tank.id || e.id === dps.id), '...the others stay quiet (the order named Lyra)');
+  ok(!pchat(t0).some(e => e.id === tank.id || e.id === dps.id), '...the others stay quiet (the order named one bot)');
 
   t0 = Date.now();
-  H.say('Lyra heal me');
+  H.say(`/b ${heal.name} heal me`);
   await until(() => pchat(t0, heal).length, 3000, 'heal ack');
   r = await call('GET', '/api/admin/bots', adminTok);
-  ok(r.body.bots.find(b => b.bid === heal.bid) && pchat(t0, heal).length, `"Lyra heal me": the healer answers ("${pchat(t0, heal)[0].text}")`);
+  ok(r.body.bots.find(b => b.bid === heal.bid) && pchat(t0, heal).length, `"/b ${heal.name} heal me": the healer answers ("${pchat(t0, heal)[0].text}")`);
   H.send({ type: 'test', hurt: 0.85 });
   await until(() => H.since(t0).some(e => e.t === 'fx' && e.k === 'heal' && e.by === heal.id && e.id === H.id), 6000, 'priority heal');
   ok(true, '...and keeps the human topped up (heals at 85%, the normal threshold is 78%)');
@@ -201,10 +213,22 @@ try {
   ok(r.status === 200 && r.body.bot.skill === 2 && r.body.bot.behaviour === 'field', 'PATCH one bot: capability 2, behaviour field');
   ok(before.filter(b => b.bid !== dps.bid).every(same), 'the other two keep their own capability and behaviour');
 
+  // ---------- admin Respawn as…: the tank comes back as another class, in the same party, with its order ----------
+  t0 = Date.now();
+  H.say(`/b ${tank.name}: stay`);
+  await until(() => pchat(t0, tank).length, 3000, 'tank holds');
+  r = await call('POST', `/api/admin/bots/${tank.bid}/respawn`, adminTok, { cls: 'berserker' });
+  ok(r.status === 200 && r.body.bot.bid === tank.bid && r.body.bot.cls === 'berserker', 'respawn the tank as a Berserker: same bot id');
+  let nb = null;
+  for (let i = 0; i < 80 && !(nb && H.pl.get(nb.id)?.party === H.party()); i++) { await sleep(100); nb = (await bots()).find(b => b.bid === tank.bid && b.id && b.id !== tank.id); }
+  ok(nb && H.pl.get(nb.id)?.party === H.party(), `...back in ${H.name}'s party`);
+  await sleep(1200);
+  ok((await bots()).find(b => b.bid === tank.bid)?.order?.cmd === 'stay', '...still on its "stay" order');
+
   // ---------- admin orders ----------
   t0 = Date.now();
   r = await call('POST', `/api/admin/bots/${tank.bid}/command`, adminTok, { cmd: 'status' });
-  await until(() => pchat(t0, tank).some(e => /HP \d+/.test(e.text)), 4000, 'admin status');
+  await until(() => pchat(t0).some(e => e.id === nb?.id && /HP \d+/.test(e.text)), 4000, 'admin status');
   ok(r.status === 200, 'admin order through the API (status answered in party chat)');
   ok((await call('POST', `/api/admin/bots/${tank.bid}/command`, adminTok, { cmd: 'dance' })).status === 400, 'unknown order: 400');
   await call('DELETE', '/api/admin/bots', adminTok);

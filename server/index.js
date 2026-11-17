@@ -12,6 +12,7 @@ import * as hall from './hall.js';
 import * as admin from './admin.js';
 import { BotManager } from './botmanager.js';
 import { PlayerBots } from './playerbots.js';
+import { drain } from './shutdown.js';
 import { TICK_RATE } from '../shared/data.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -197,6 +198,28 @@ if (process.env.LOCKSTEP) {
     }
   }, 15000);
 }
+
+// Deploys (Render sends SIGTERM to the old instance): warn everyone, let a boss fight finish (up to 4 min), save, exit.
+let stopping = false;
+async function shutdown(sig) {
+  if (stopping) { console.log(`${sig} again: exiting now`); process.exit(1); } // (a second Ctrl+C doesn't wait)
+  stopping = true;
+  console.log(`${sig}: draining before exit`);
+  try {
+    await drain({
+      game,
+      notify: text => game.sys(text), // (sent with the next snapshot)
+      save: async () => {
+        if (db.enabled) await Promise.allSettled([...game.players.values()].filter(p => p.charId).map(p => accounts.saveCharacter(p)));
+        await track.flush().catch(() => {});
+      },
+    });
+  } catch (e) { console.error('shutdown', e); }
+  await new Promise(r => setTimeout(r, 300)); // let the last snapshot (with the notice) go out
+  console.log('saved, exiting');
+  process.exit(0);
+}
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => void shutdown(sig));
 
 admin.init({ game, bots });
 server.on('error', err => { console.error('Server error', err); if (err.code === 'EADDRINUSE' || err.code === 'EACCES') process.exit(1); }); // can't listen: don't linger

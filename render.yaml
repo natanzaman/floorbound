@@ -4,5 +4,8 @@ services:
     runtime: node
     plan: free
     buildCommand: npm install
-    startCommand: npm start
+    startCommand: node server/index.js # (not npm: SIGTERM must reach the server)
     healthCheckPath: /status
+    # On a deploy the old instance gets SIGTERM and keeps serving while it drains (server/shutdown.js: a running boss
+    # fight may finish, up to 4 min), then saves and exits. Render's limit is 300 s (default 30).
+    maxShutdownDelaySeconds: 300

@@ -590,7 +590,7 @@ function handleEvent(e) {
     case 'gdrop': if (e.id === me) sfx.play('ui'); break;
     case 'gpick': if (e.id === me) sfx.play('coin', null, 0.6); break;
     case 'equip': if (e.id === me) sfx.play('shield', null, 0.5); break;
-    case 'pjoin': if (e.id === me) { guide.did('party'); sfx.play('ui'); } break;
+    case 'pjoin': if (e.id === me) { guide.did('party'); sfx.play('ui'); } if (e.party && e.party === state.party && state.roster.get(e.id)?.bot) guide.tip('bots'); break;
     case 'gate':
       if (e.s === 'count' && inGateZone(state.x, state.z)) { for (let i = 0; i < e.d; i++) setTimeout(() => sfx.play('tick'), i * 1000); }
       if (e.s === 'open') { sfx.play('gate', { x: 0, z: 161 }, 1.5); if (Math.abs(state.x) < 30 && state.z > 120) banner('THE RAID GATE OPENS', 'The Horned Warden awaits'); }
@@ -1270,8 +1270,9 @@ $('sound-btn').textContent = sfx.on ? 'Sound on' : 'Sound off';
 $('sound-btn').onclick = () => { sfx.unlock(); $('sound-btn').textContent = sfx.toggle() ? 'Sound on' : 'Sound off'; };
 $('lock-btn').onpointerdown = e => { e.preventDefault(); cycleLock(); };
 canvas.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
-$('chat-btn').onclick = () => { const t = prompt('Say something (/p party, /s nearby)'); if (t) sendChat(t); };
-// Chat channels: "/p text" party, "/s text" say (nearby); anything else goes to everyone.
+$('chat-btn').onclick = () => { const t = prompt('Say something (/p party, /s nearby, /b bot orders: /b help)'); if (t) sendChat(t); };
+// Chat channels: "/p text" party, "/s text" say (nearby); anything else goes to everyone ("/b ..." bot orders: the server
+// reads them, shared/bots/social.js parseBotChat; they never show as chat).
 function sendChat(raw) {
   let t = String(raw || '').trim(), ch;
   const m = t.match(/^\/(p|party|s|say)\s+([\s\S]*)$/i);

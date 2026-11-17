@@ -24,7 +24,7 @@ export function initBotWheel({ send, state, players, log }) {
     }).join('')}<div class="hub"><b>${bots.length ? 'ORDERS' : 'NO BOTS'}</b><small>${bots.length ? esc(who || 'all bots') : 'in your party'}</small></div></div>
     <div class="who">${bots.length ? `<button data-w="" class="${who ? '' : 'on'}">All bots</button>${bots.map(b => `<button data-w="${esc(b.name)}" class="${who === b.name ? 'on' : ''} ${b.dead ? 'dead' : ''}">${esc(b.name)}</button>`).join('')}<button data-c="leave" class="dismiss" title="Ask ${esc(who || 'every bot')} to leave the party">Dismiss</button>`
       : '<span>Invite bots from the Players panel (P), or ask an admin for a party of bots.</span>'}</div>
-    <div class="hint">Release V on an order or click it · Esc to close · chat works too: "Brann follow me", "all stay", "Lyra heal me"</div>`;
+    <div class="hint">Release V on an order or click it · Esc to close · or type /b stay, /b Lyra: heal (/b help)</div>`;
   }
 
   function open() {

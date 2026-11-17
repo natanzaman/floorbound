@@ -351,8 +351,11 @@ export function initClassesB(ctx) {
   mastery.buffTags = b => {
     const now = performance.now(), mine = buffs.get(me()) || {};
     let html = baseTags(b);
-    if ((mine.cresc || 0) > now) html = html.replace('>Aegis<', '>Crescendo shield<'); // the shield bit is shared with Aegis
-    for (const k of ['anthem', 'march', 'cresc']) if ((mine[k] || 0) > now) html += `<span class="evo">${BUFF_NAME[k]} ${Math.ceil((mine[k] - now) / 1000)}s</span>`;
+    const left = k => ((mine[k] || 0) > now ? ` ${Math.ceil((mine[k] - now) / 1000)}s` : '');
+    // Crescendo has its own buff bits (4096 +damage, 8192 shield), so it never shows as Blessed or Aegis
+    if (b & 4096) html += `<span class="evo cresc" title="Crescendo: +damage">♪ Crescendo${left('cresc')}</span>`;
+    if (b & 8192) html += '<span class="evo cresc" title="Crescendo: damage shield">♫ Crescendo shield</span>';
+    for (const k of ['anthem', 'march']) if ((mine[k] || 0) > now) html += `<span class="evo">${BUFF_NAME[k]}${left(k)}</span>`;
     return html;
   };
 

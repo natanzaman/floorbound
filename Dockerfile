@@ -5,4 +5,5 @@ RUN npm ci --omit=dev
 COPY . .
 ENV PORT=3000
 EXPOSE 3000
-CMD ["npm", "start"]
+# node directly (not npm) so SIGTERM on a deploy reaches the server, which drains and saves (server/shutdown.js)
+CMD ["node", "server/index.js"]

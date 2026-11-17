@@ -393,7 +393,7 @@ export function initMastery(ctx) {
   }
 
   // Buff tags for the HUD (snapshot buff bits 32+).
-  const buffTags = b => `${b & 32 ? '<span class="evo">Aegis</span>' : ''}${b & 64 ? '<span class="evo">Bulwark</span>' : ''}${b & 128 ? '<span class="evo">Iron Skin</span>' : ''}${b & 256 ? '<span class="evo">Renew</span>' : ''}${b & 512 ? '<span class="evo">War Cry</span>' : ''}${b & 1024 ? '<span class="evo">Zeal</span>' : ''}${b & 2048 ? '<span class="evo">Purified</span>' : ''}`;
+  const buffTags = b => `${b & 32 ? '<span class="evo">Aegis</span>' : ''}${b & 64 ? '<span class="evo">Bulwark</span>' : ''}${b & 128 ? '<span class="evo">Iron Skin</span>' : ''}${b & 256 ? '<span class="evo">Renew</span>' : ''}${b & 512 ? '<span class="evo">War Cry</span>' : ''}${b & 1024 ? '<span class="evo">Zeal</span>' : ''}${b & 2048 ? '<span class="evo">Purified</span>' : ''}${b & 16384 ? '<span class="evo">Shield</span>' : ''}`; // 16384: a talent shield (not Aegis)
 
   return { onMessage, event, toggle, isOpen, near, frame, lift, name, desc, cd, pip, evoId, barChanged, buffTags, render };
 }

@@ -1,13 +1,15 @@
 // Player-owned bots end-to-end over the WebSocket ({ type: 'pbot' }): add (every setup, premade loadout at the
 // owner's level, joins the owner's party, follows), the per-player limit, the party-full check, ownership (others
 // can't edit/dismiss), owner edits (skill / behaviour / name), dismiss, reconnect within the grace period, and
-// removal after the owner leaves. With DATABASE_URL set it also checks that an admin can manage anyone's bot.
+// removal after the owner leaves; bots level with their owner (gear / mastery follow), "/b name: leave" sends a bot
+// home (plain chat never orders). With DATABASE_URL set it also checks that an admin can manage anyone's bot, and
+// that admin Respawn as… / edit / remove never leave a player's bot detached (same bot id, party, owner link, orders).
 // Starts its own server on PORT (default 3641). Usage: node test/playerbots.js
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
-import { CLASSES, CLASS_IDS, statsFor, resolveCollision, walkable } from '../shared/data.js';
+import { CLASSES, CLASS_IDS, statsFor, resolveCollision, walkable, xpToNext } from '../shared/data.js';
 import { setups, loadoutFor } from '../shared/playerbots.js';
 
 const PORT = Number(process.env.PORT) || 3641;
@@ -62,7 +64,7 @@ function client(name, cls = 'swordsman', join = {}) {
   return c;
 }
 
-const env = { ...process.env, PORT: String(PORT), START_LEVEL: '8', PLAYER_BOT_GRACE: '2', MAX_BOTS: '12' };
+const env = { ...process.env, PORT: String(PORT), START_LEVEL: '8', PLAYER_BOT_GRACE: '2', MAX_BOTS: '12', TEST_HOOKS: '1' };
 if (!DB) delete env.DATABASE_URL;
 const srv = spawn(process.execPath, [path.join(root, 'server/index.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
 let log = '';
@@ -146,11 +148,36 @@ try {
   await sleep(1200);
   ok(A.pl.get(botIds()[0])?.party === A.me().party, 'still in Ann\'s party after the behaviour changes');
 
+  // ---------- they level with Ann: on her level-up they take her level and that level's premade setup ----------
+  A.send({ type: 'test', xp: xpToNext(8) + xpToNext(9) }); // Lv 8 -> 10
+  await until(() => A.me()?.lvl === 10 && botIds().every(id => A.pl.get(id)?.lvl === 10), 5000, 'bots at Lv 10');
+  ok(true, 'Ann reaches Lv 10: her bots are Lv 10 too');
+  L = await A.list();
+  const w10 = loadoutFor(10);
+  ok(L.bots.filter(b => b.mine).every(b => b.lvl === 10 && b.kit.gear.every(g => g.r === w10.rarity) && b.kit.mastery.every(m => m.lvl === w10.mastery && m.br)), `...with the Lv 10 setup (${w10.rarityName} gear, Mastery ${w10.mastery}, evolved)`);
+
   // ---------- dismiss ----------
   r = await A.pbot({ op: 'dismiss', bid: added[2] });
   ok(r.ok && !r.list.bots.some(b => b.bid === added[2]) && r.list.mine === 2, `dismiss: ${r.msg}`);
   await until(() => !A.roster.some(x => x.name === `Kael${tag}`), 3000, 'dismissed bot gone from roster');
   ok(true, 'dismissed bot left the world');
+
+  // ---------- chat orders: only /b; a bot told to leave the party goes home (never left detached) ----------
+  const leaver = (await A.list()).bots.find(b => b.bid === added[1]);
+  A.send({ type: 'chat', text: 'leave party', ch: 'p' });
+  A.send({ type: 'chat', text: `${leaver.name} leave` });
+  await sleep(1500);
+  ok((await A.list()).mine === 2, 'plain chat ("leave party", "<name> leave") gives no order');
+  const s0 = A.sys.length;
+  A.send({ type: 'chat', text: `/b ${leaver.name}: leave`, ch: 'p' });
+  await until(() => A.sys.slice(s0).some(t => /went home/.test(t)), 5000, 'bot went home');
+  L = await A.list();
+  ok(L.mine === 1 && !L.bots.some(b => b.bid === added[1]), `"/b ${leaver.name}: leave": it leaves and goes home (slot freed)`);
+  await sleep(5000); // (the order rate limit)
+  r = await A.pbot({ op: 'add', cls: picks[1].cls, skill: 3 });
+  ok(r.ok, 'Ann adds a bot again');
+  added[1] = r.bid;
+  await until(() => botIds().length === 2 && botIds().every(id => A.pl.get(id)?.party === A.me().party && A.pl.get(id)?.lvl === 10), 6000, 'new bot in party at Lv 10');
 
   // ---------- party full ----------
   const extra = [client(`Cy${tag}`), client(`Di${tag}`), client(`Ed${tag}`)];
@@ -202,6 +229,37 @@ try {
     ok(r.ok, 'admin dismisses Bob\'s bot');
     await until(() => B2.sys.some(t => /admin dismissed/.test(t)), 3000, 'Bob told');
     ok(true, 'Bob is told an admin dismissed it');
+
+    // admin Respawn as… on Ann's bot: same bot id, still hers, in her party, at her level, same order
+    const H = await A.pbot({ op: 'edit', bid: added[0], mode: 'stay' });
+    ok(H.ok, 'Ann tells a bot to stay');
+    const before = (await A.list()).bots.find(b => b.bid === added[0]);
+    const cls2 = CLASS_IDS.find(c => c !== before.cls && c !== 'bard');
+    const rs = await call('POST', `/api/admin/bots/${added[0]}/respawn`, tok, { cls: cls2 });
+    ok(rs.bot?.bid === added[0] && rs.bot.cls === cls2 && rs.bot.owner === A.name, `respawn as ${cls2}: same bot id, still Ann's`);
+    await until(() => { const r0 = A.roster.find(x => x.bot && x.cls === cls2 && x.owner === A.name); return r0 && r0.id !== before.id && A.pl.get(r0.id)?.party === A.me().party; }, 8000, 'respawned bot back in Ann\'s party');
+    ok(true, '...back in Ann\'s party');
+    await sleep(1200);
+    L = await A.list();
+    const after = L.bots.find(b => b.bid === added[0]);
+    ok(L.mine === 2 && after.mine && after.mode === 'stay' && after.lvl === 10 && after.kit?.gear.every(g => g.r === loadoutFor(10).rarity), 'Ann still has 2 of 3 bots; it keeps its mode, her level and the premade setup');
+    const adm = (await call('GET', '/api/admin/bots', tok)).bots.find(b => b.bid === added[0]);
+    ok(adm.order?.cmd === 'stay' && adm.party.includes(A.name), 'it keeps its "stay" order (admin view) and its party');
+    // other admin actions don't detach it either
+    let e1 = await fetch(`http://localhost:${PORT}/api/admin/bots/${added[0]}`, { method: 'PATCH', headers: { 'content-type': 'application/json', authorization: `Bearer ${tok}` }, body: JSON.stringify({ behaviour: 'follow', follow: B2.name }) });
+    ok(e1.status === 400, 'admin edit: a player-added bot can\'t be sent to follow someone outside its party');
+    e1 = await fetch(`http://localhost:${PORT}/api/admin/bots/${added[0]}`, { method: 'PATCH', headers: { 'content-type': 'application/json', authorization: `Bearer ${tok}` }, body: JSON.stringify({ lvl: 3 }) });
+    ok(e1.status === 400, 'admin edit: its level follows its owner (400)');
+    e1 = await fetch(`http://localhost:${PORT}/api/admin/bots/${added[0]}`, { method: 'PATCH', headers: { 'content-type': 'application/json', authorization: `Bearer ${tok}` }, body: JSON.stringify({ behaviour: 'field' }) });
+    await sleep(1200);
+    ok(e1.status === 200 && (await A.list()).bots.find(b => b.bid === added[0]).mode === 'field' && A.pl.get(A.roster.find(x => x.bot && x.cls === cls2 && x.owner === A.name).id)?.party === A.me().party, 'admin edit to "farm the field": still in Ann\'s party, her Bots tab says Farm nearby');
+    await A.pbot({ op: 'edit', bid: added[0], mode: 'follow' });
+    // admin removes a player's bot from the admin page: the slot is freed and the owner is told
+    const rb = await B2.pbot({ op: 'add', cls: picks[0].cls });
+    await sleep(600);
+    const del = await fetch(`http://localhost:${PORT}/api/admin/bots/${rb.bid}`, { method: 'DELETE', headers: { authorization: `Bearer ${tok}` } });
+    await until(() => B2.sys.some(t => /was removed by an admin/.test(t)), 3000, 'owner told about the removal');
+    ok(del.status === 200 && (await B2.list()).mine === 0, 'admin page removes Bob\'s bot: his slot is freed and he is told');
   } else console.log('  (admin checks skipped: set DATABASE_URL)');
 
   // ---------- owner leaves: bots go after the grace period ----------
