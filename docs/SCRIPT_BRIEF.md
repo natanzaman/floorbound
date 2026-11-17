@@ -1,116 +1,148 @@
 # Brief: write a short script that Floorbound's bots can act out
 
-Paste this whole file into the scriptwriting chat.
+Paste this whole file into the scriptwriting chat. It describes what the game can stage today and the **cue sheet format v1** that the in-game scene director (`server/director.js`) plays.
 
 ## What we're doing
-**Floorbound** is our co-op 3D browser game, inspired by Sword Art Online. Players are trapped in a tower of floors, clearing each floor's boss to climb. We want a **short scene (2–4 minutes on screen)** that the game's AI bots can act out live in the game while we film it. We'll then improve the game where the script needs it.
+**Floorbound** is our co-op 3D browser game, inspired by Sword Art Online. Players are trapped in a tower of floors, clearing each floor's boss to climb. We film **short episodes (2–4 minutes on screen)** acted live in the game by bot actors, from a spectator "film view". The story bible is `docs/story/STORY.md`; Episode 1 is `docs/story/ep1-first-line.md` (screenplay) and `.yaml` (cue sheet).
 
 Please write:
-1. **A readable screenplay version** (scene heading, action lines, dialogue).
-2. **A cue sheet** in the exact format at the bottom, which we'll turn into an in-game "director" that drives the bots.
+1. **A readable screenplay** (scene heading, action lines, dialogue).
+2. **A cue sheet** in the format below. It runs as written: the director validates it and reports every problem with its scene and cue number.
 
-Keep it **in the spirit of SAO with original characters, names and places**, not Kirito/Asuna or scenes copied from the show. The tone can echo it: trapped in a game, death is real, a raid party forms, a sacrifice, a clutch "Switch!".
+Keep it **in the spirit of SAO with original characters, names and places**. The tone can echo it: trapped in a game, death is real, a raid party forms, a sacrifice, a clutch "Switch!".
 
 ## Cast: what a character can be
-- **Up to 6 actors.** Each is a bot or a real player.
-- **Classes and their look:**
+- **Up to 6 actors.** Each is a server bot with your chosen name (2–16 letters, digits, spaces, `_ . -`), class, level (1–20), weapon style and capability (1–5; 5 = flawless, the default). All actors are in one party.
+- **Classes and weapon styles** (style ids in brackets; the first is the default):
 
-| Class | Role | Look |
+| Class | Role | Styles |
 |---|---|---|
-| Swordsman | damage | knight, one-handed sword |
-| Guardian | tank | shield |
-| Cleric | healer | mage robe, staff |
-| Ranger | damage | bow |
-| Berserker | damage | barbarian, greataxe |
-| Lancer | damage | spear |
-| Bard | support | lyre |
+| Swordsman | damage | One-Handed Sword (`sword`), Dual Blades (`dual`), Rapier (`rapier`) |
+| Guardian | tank | Sword & Shield (`shield`), Mace & Shield (`mace`), Spear & Shield (`spear`) |
+| Cleric | healer | Staff (`staff`), Tome (`tome`), Wand (`wand`) |
+| Ranger | damage | Longbow (`longbow`), Crossbow (`crossbow`), Twin Daggers (`daggers`) |
+| Berserker | damage | Greataxe (`greataxe`), Twin Axes (`twinaxes`), Warhammer (`warhammer`) |
+| Lancer | damage | Lance (`lance`), Halberd (`halberd`), Glaive (`glaive`) |
+| Bard | support | Lyre (`lyre`), War Drum (`drum`), Flute (`flute`) |
 
-- **Weapon variants:** each class can carry a different weapon style, e.g. a Ranger with twin daggers or a crossbow, a Bard with a war drum or flute, a Berserker with a warhammer.
-- **Each actor shows:** a name and a level above their head, and a health bar. Players' names are freely chosen.
+- **Each actor shows** a name and level above their head and a health bar. Actors get premade gear for their level and gain no XP during a show (levels hold).
+- **Skills by id** (for the `skill` verb): Swordsman `rush`, `whirl`, `burst` (Lv 3, Breaks); Guardian `taunt`, `wall`, `gslam` (Lv 3, Breaks); Cleric `heal`, `bless`, `sanct` (Lv 3); the newer classes' ids are in `shared/classes/*.js`. Or a slot number 1–3.
 
-## Places (sets)
-- **Town of Beginnings** (Floor 1): the safe town where everyone starts.
-  - Merchant, Smith (forge).
-  - Skill Shrine.
-  - Hall of Clearers: a monument listing every party that beat a boss.
-  - Warp to Floor 2.
-- **The fields and forest** outside town: grassland and trees.
-- **The raid gate:** a large gate before the boss arena. It opens 20 s after a party readies up.
-- **The Warden's arena:** a circular boss room with stone pillars.
-- **Floor 2, the Glimmering Mire:** a swamp with glowing light.
-  - Mirelight Camp: a safe camp.
-  - The Drowned Sovereign's lair: the Floor 2 boss.
-- **Lighting:** we can do normal daylight, or the "Eclipse" look (dark sky and dimmed arena). Other times of day or weather would be new work.
+## Places (sets) and landmarks
+**Scene places:** `town`, `raid_gate`, `warden_arena`, `fields` (Floor 1); `mire`, `mire_camp`, `drowned_wood`, `sunken_gate`, `sovereign_lair` (Floor 2).
+
+**Landmarks** (for `to:`, `marks`, `target:`):
+
+| Landmark | Where |
+|---|---|
+| `town_square` | the plaza north of the fountain |
+| `fountain` | around the town fountain (actors stand in a ring) |
+| `merchant`, `smith`, `skill_shrine`, `hall_of_clearers`, `waystone` | in front of each (actors stand in a row facing it) |
+| `north_road` | the road out of town to the fields |
+| `raid_gate` | before the Warden's raid gate (inside its ready zone) |
+| `arena_edge`, `arena_center` | the Warden's arena: just inside, facing the centre; the centre |
+| `mire_camp`, `mire_shrine` | Mirelight Camp's fire; its Skill Shrine (Floor 2) |
+| `drowned_wood`, `sunken_gate`, `sovereign_court` | Floor 2's woods, raid gate, and the Sunken Court's edge |
+
+A target can also be an **actor id** (walk to them, face them), **`warden`**, **`sovereign`**, a **spawn label**, or a point **`[x, z]`**.
+
+- **The raid gate** opens after a ready check: once everyone at the gate is ready (or 20 s after the first one readies), it **counts down 5 s** and rises.
+- **Lighting:** `day` or `eclipse` (dark sky, dimmed world), per scene.
+- **The Hall of Clearers** is a stone tablet in town; the latest Floor 1 clear is engraved on its face (blank until someone clears). Its back reads *"A HUNDRED BELLS. THEN HOME."*
+- **The Tower Bell** rings across every floor the first time a floor is cleared (the director rings it by hand during a show).
 
 ## Creatures
-- **Floor 1:**
-  - **Field enemies:** Forest Boar, Dire Wolf, Alpha Wolf (elite), Bramble Spitter (stationary plant that spits).
-  - **Rare elites:** Old Tusk, Ghostfang, Thornmother.
-  - **Boss: The Horned Warden** (horned giant beast).
-    - Attacks: charges, ground slams, a spinning Horn Sweep you must dodge or block, falling rocks, and expanding shockwave rings ("Quake Ring") that you jump over.
-    - Calls in hounds.
-    - Three phases.
-- **Floor 2:**
-  - **Field enemies:** Mire Shieldback, Bog Lurker, Mire Matron.
-  - **Boss:** The Drowned Sovereign.
+- **Floor 1:** Forest Boar, Dire Wolf, Alpha Wolf (elite), Bramble Spitter; rares Old Tusk, Ghostfang, Thornmother. **Boss: the Horned Warden**: three phases (66%, 33%), hounds from phase 2; slams, horn charges, a spinning **Horn Sweep** (dodge through it or parry it; shields don't help), rockfall, and **Quake Rings** (jump them). Mob ids for `spawn`: `boar`, `wolf`, `alpha`, `spitter`, `hound`, `oldtusk`, `ghostfang`, `thornmother`.
+- **Floor 2:** Mire Shieldback (`shieldback`), Will-o'-Wisp (`wisp`), Bog Lurker (`lurker`), Mire Matron (`matron`, elite: calls lurkers up), Drowned Thrall (`thrall`). **Boss: the Drowned Sovereign**: trident sweeps and geysers; from 66% the **Tidal Wave** (roll through it), thralls and mire pools; below 33% the **Deluge** (the outer court floods) and homing orb volleys.
 
-## What actors can do today
-- **Move:**
-  - walk or run to a spot, follow someone, face someone, stand still;
-  - dodge-roll, jump;
-  - hold position, regroup.
-- **Fight:**
-  - attack a target, use their class skills (e.g. Swordsman Rush/Whirl/Burst Combo, Guardian Taunt/Shield Wall, Cleric Heal/Blessing/Sanctuary, Bard songs);
-  - guard, and the Guardian's parry;
-  - Break a boss and call "Switch!" (one fighter staggers the boss, another steps in for the big hit);
-  - land the Last Attack.
-- **Animations:** idle, walk, run, several sword swings, two-handed swings and spins, stab, block, block-attack, cast and raise-staff spells, dodge roll, jump, two hit reactions, a death collapse, and a "Cheer" (arms raised). No sitting, kneeling, hugging, crying or waving yet: those would be new work.
-- **Talk:** party chat with names. We will add **speech bubbles above heads** for chat lines.
-- **Die and respawn:** a character can be killed and respawns in town.
-- **Items:** potions, equipping gear, buying from the merchant, crafting at the Smith.
-- **Camera:** a free spectator camera follows the action. Specific camera moves (pans, close-ups, slow-motion) are new work, so mark them separately.
+## What actors can do
+- **Move:** walk or run to a spot, follow someone, face someone, stand still, dodge-roll, jump, appear somewhere (teleport).
+- **Fight:** fight a target with their own combat brain (they dodge, heal and use skills as players would), press a given skill, guard and parry (Guardian), drink a potion, ready up at a raid gate. Break a boss and Switch; land the Last Attack.
+- **Body:** speech bubbles above heads (`say`); emotes (`cheer`, `block`, `cast`, `hit`, `die`); poses (`kneel`, `sit`, `bow`).
+- **Die:** a scripted death stays down (no respawn) until revived. During a show nobody else dies: actors never drop below 10% health unless a cue kills them.
+- **Staging:** force a boss move now, reserve a boss's Last Attack for one actor, set the Warden's twist (or none), spawn a labelled mob, give a keepsake item (no stats, can't be sold or dropped).
+- **Picture:** camera shots, slow motion, title cards, fades, letterbox, a clean feed (no HUD), day/Eclipse light.
 
 ## Constraints that make it actable
-- **Few lines per beat.** Each line is shown in a speech bubble for 2–5 s, so aim for about 12 words per line or fewer.
-- **Combat is live, not choreographed.** Write beats like "they fight the Warden until its health is half", not exact swing-by-swing moves. Bosses and enemies act on their own AI.
-- **Endings must be achievable.** Defeating a boss works. Fake deaths need a cue, which we can script, e.g. "Rook collapses (scripted death)".
-- **Mark anything we'd need to build** with `[NEW]`, e.g. kneel animation, camera close-up, rain, a cutscene title card, a non-hostile NPC, a custom item.
+- **Few words per line.** Bubbles hold 2–5 s (1.6 s + 0.07 s per character), so aim for about 12 words or fewer.
+- **Combat is live, not choreographed.** Write beats like "they fight the Warden until it's below half"; bosses and enemies act on their own AI. Use staging verbs for the beats that must happen (a forced Horn Sweep, a reserved Last Attack, a scripted death).
+- **Endings must be achievable:** defeating a boss works (it's live, so it takes as long as it takes: ~1–3 min for the Warden); a death needs a `die` cue.
+- **Mark anything the game can't do yet** with `"[NEW]": true` on the cue and a note in the screenplay. The director refuses unknown verbs, so a `[NEW]` cue has to be built or cut before the sheet runs.
 
-## Cue sheet format
-Give the cue sheet as YAML in this shape. Times are optional; `after` chains cues.
+## Cue sheet format v1
 
 ```yaml
-title: "The Third Bell"
+title: "First Line"
+episode: 1
 cast:
-  - { id: rook,  name: "Rook",  class: guardian, style: default, level: 10 }
-  - { id: wren,  name: "Wren",  class: cleric,   level: 10 }
-  - { id: kade,  name: "Kade",  class: swordsman, style: dual, level: 10 }
-set: { place: town, light: day }            # town | fields | raid_gate | warden_arena | mire | mire_camp | sovereign_lair; light: day | eclipse
+  - { id: corvin, name: "Corvin", class: swordsman, style: sword, level: 13 }      # skill: capability 1-5 (default 5)
+  - { id: bram,   name: "Bram",   class: guardian,  style: shield, level: 12 }
 scenes:
   - id: s1
-    place: town
+    place: town                  # see Places
+    light: day                   # day | eclipse
+    marks: { corvin: hall_of_clearers, bram: fountain }   # actors appear here when the scene starts (a small fan if they share a spot)
+    absent: []                   # actors left out of this scene (parked out of view; the dead stay where they lie)
     cues:
-      - { who: kade, do: walk_to, to: hall_of_clearers }
-      - { who: kade, do: say, text: "Nobody's cleared it. Not in forty days.", hold: 3 }
-      - { who: rook, do: walk_to, to: kade, after: prev }
-      - { who: rook, do: say, text: "Then we'll be the first." }
-      - { who: all,  do: emote, anim: cheer }
-      - { do: camera, shot: wide_on, target: kade, "[NEW]": true }
-  - id: s2
-    place: warden_arena
-    cues:
-      - { who: all, do: fight, target: warden, until: "warden_hp < 50%" }
-      - { who: rook, do: say, text: "Switch!" }
-      - { who: kade, do: skill, skill: burst, target: warden }
+      - { do: fade, to: in, secs: 1.5 }
+      - { who: corvin, do: face, to: hall_of_clearers }
+      - { who: corvin, do: say, text: "Forty-one days.", hold: 4, after: prev, delay: 1 }
+      - { id: arrive, who: bram, do: walk_to, to: corvin }
+      - { who: bram, do: say, text: "Three raids tried.", after: arrive }
 ```
 
-Allowed `do` verbs:
-- **Movement:** `walk_to`, `run_to`, `follow`, `face`, `hold`, `dodge`, `jump`.
-- **Combat:** `fight`, `skill`, `guard`, `parry`, `use_item`.
-- **Talk and body:** `say`, `emote` (anim: cheer, block, cast, hit, die).
-- **Lifecycle and staging:** `die` (scripted), `respawn`, `wait`, `camera`.
-- **Anything else:** mark it `[NEW]`.
+**Top:** `title`, `episode` (optional), `cast`, `scenes`. **Scene:** `id`, `place`, `light`, `marks`, `absent`, `cues`.
 
-Places for `to:` can be a character id or a landmark:
-- `town_square`, `merchant`, `smith`, `skill_shrine`, `hall_of_clearers`, `warp`;
-- `raid_gate`, `arena_center`, `mire_camp`.
+**Cue fields:** `who` (an actor id, a list `[a, b]`, `all` (everyone present), or for `boss_move` a boss/spawn label; director cues have none), `do` (the verb), the verb's arguments, and optionally:
+- `id`: a label other cues can wait for;
+- `after`: `prev` or a label;
+- `delay`: seconds to wait after the trigger;
+- `hold`: seconds the cue lasts at least (for `say`: how long the bubble holds; default by length).
+
+**Timing:**
+- A cue **starts together with the previous cue**.
+- `after: prev` starts it when the previous cue **finishes**; `after: <label>` when that cue finishes. A label must be on an earlier cue in the same scene.
+- `delay` waits that long after the trigger.
+- A cue **finishes** when its action is done: a move when the actor arrives; `say` after its hold; `fight`/`skill`/`wait` when their `until` is true; `fade`/`title`/`slowmo` after `secs`; `boss_move` when the move has landed; `dodge`/`jump` after the roll or jump; everything else at once. What an actor is doing carries on until a later cue changes it (after a `fight` ends, they keep fighting until told to `hold`, move, etc.).
+- A scene ends when all its cues have finished; then the next scene starts.
+
+**Conditions** (`until`): `<target>_hp < N%` (also `<=`, `>`, `>=`), `<target>_dead`, `<target>_broken` (staggered by a Break: the Switch window), `gate_open` (this floor's raid gate), `t > N` (seconds into the scene). Targets: `warden`, `sovereign`, actor ids, spawn labels.
+
+**Verbs** (arguments; `*` = required):
+
+| Group | Verb | Arguments | Notes |
+|---|---|---|---|
+| Movement | `walk_to`, `run_to` | `to*` | walk 3.4 m/s, run 7 m/s; to an actor or mob: stops in front of them |
+| | `follow` | `to*` (actor or mob), `dist` | keeps following until another cue |
+| | `face` | `to*` | |
+| | `hold` | | stand still (stops fighting) |
+| | `dodge` | `to` or `dir` (`left`/`right`/`back`/`forward`) | a dodge roll |
+| | `jump` | | |
+| | `teleport` | `to*` | appear there |
+| Combat | `fight` | `target*` (boss/spawn), `until` | the actor's own brain fights, focused on the target |
+| | `skill` | `skill*` (id or slot 1–3), `target`, `until` | closes in, presses it when ready; with `until`, fights and re-presses until true |
+| | `guard` | `on` (default true) | Guardian only |
+| | `parry` | | Guardian: a quick guard tap |
+| | `use_item` | `item` (`potion` default, `tonic`, `draught`) | |
+| | `ready` | | at a raid gate |
+| Body | `say` | `text*`, `ch` (`say` default, heard nearby; `party`) | a speech bubble |
+| | `emote` | `anim*` (`cheer`, `block`, `cast`, `hit`, `die`) | |
+| | `pose` | `k*` (`kneel`, `sit`, `bow`, `none`) | clears when the actor moves |
+| Lifecycle | `die` | `respawn` (default false) | scripted death: stays down |
+| | `revive` | | |
+| | `wait` | `secs` or `until` | a director cue |
+| Staging | `boss_move` | `move*`, `target` | `who: warden`: `horn_sweep`, `slam`, `charge`, `quake`, `rockfall`; `who: sovereign`: `tidal_wave`, `geyser`, `trident`, `deluge` |
+| | `reserve_last_attack` | `target*`, `for` (actor; none clears it) | nobody else's damage takes it below 1 HP |
+| | `twists` | `set*` (`off`, `random`, or a twist id) | the Warden's twist |
+| | `spawn` | `type*`, `at*`, `label*` | a labelled mob; `who:`/`target:` can then name it |
+| | `give_item` | `name*`, `slot` (`charm` default), `desc` | a keepsake |
+| | `protect` | `min` (fraction, default 0.1; 0 = off) | actors are protected by default |
+| Picture | `camera` | `shot*`, `target`, `from`, `secs` | shots: `close_up`, `medium`, `wide`, `over_shoulder` (+ `from`), `follow`, `orbit`, `crane`, `free`; `secs` = how long the camera takes to get there (0 = cut); the cue itself finishes at once |
+| | `slowmo` | `secs`, `scale` | |
+| | `title` | `text*`, `sub`, `secs` | |
+| | `fade` | `to*` (`in`, `black`), `secs` | |
+| | `letterbox`, `clean` | `on` (default true) | clean = no HUD (nameplates, bars and bubbles stay) |
+| | `light` | `to*` (`day`, `eclipse`) | (or per scene: `light:`) |
+| World | `bell` | `floor` (default 1) | the Tower Bell |
+
+Unknown fields are warnings; unknown verbs, actors, landmarks, conditions and labels are errors, and so is a verb whose game module isn't on the server.

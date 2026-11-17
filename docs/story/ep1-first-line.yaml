@@ -111,7 +111,7 @@ scenes:
       - { do: camera, shot: follow, target: corvin }
       - { who: [corvin, tamsin, juno, pell], do: fight, target: warden, until: "warden_hp < 10%", after: prev }
       # the clutch Switch
-      - { who: [tamsin, juno, pell], do: hold }
+      - { who: [tamsin, juno, pell], do: hold, after: prev }
       - { who: corvin, do: skill, skill: burst, target: warden, until: "warden_broken" }
       - { who: corvin, do: say, text: "Switch!", hold: 2, after: prev }
       - { who: pell, do: run_to, to: warden }

@@ -195,13 +195,14 @@ if (process.env.FULL) {
     ok(ld.status === 200 && hard.length === 0, `ep1 loads on the server (${apiErr.length} cues need a missing module)`);
     const lacking = Object.entries((await call('GET', '/api/admin/director')).body.apis || {}).filter(([, v]) => !v).map(([k]) => k);
     if (lacking.length) console.log(`    NOTE: missing on main: ${lacking.join(', ')}; those cues are skipped (force) and the checks that need them may fail`);
-    const run = await call('POST', '/api/admin/director/run', { from: 0, force: true });
+    const run = await call('POST', '/api/admin/director/run', { from: process.env.FULL_FROM || 0, force: true });
     ok(run.status === 200, `run starts (${run.body.error || run.body.state})`);
     let st = null, lastScene = '', t0 = Date.now();
     const limit = Number(process.env.FULL_SECS || 600) * 1000;
     while (Date.now() - t0 < limit) {
       st = (await call('GET', '/api/admin/director')).body;
       if (st.scene && st.scene.id !== lastScene) { lastScene = st.scene.id; console.log(`    scene ${lastScene} at ${st.elapsed}s`); }
+      if (process.env.FULL_LOG && st.bosses?.length && Math.round(st.elapsed) % 10 === 0) console.log(`    ${st.elapsed}s ${st.bosses.map(b => `${b.id} ${Math.round(b.hp / b.maxHp * 100)}% posture ${b.posture}%${b.broken ? ' BROKEN' : ''}`).join(' ')} | ${st.actors.map(a => `${a.id} ${a.maxHp ? Math.round(a.hp / a.maxHp * 100) : 0}% ${a.doing}`).join(', ')}`);
       if (['done', 'error', 'stopped'].includes(st.state)) break;
       await sleep(1000);
     }

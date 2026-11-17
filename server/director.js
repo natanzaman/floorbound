@@ -388,7 +388,10 @@ export class Director {
     if (!rt) return false;
     const g = this.game;
     if (rt.c.do !== 'say' && rt.c.hold !== undefined && g.time - rt.t0 < rt.c.hold) return false;
-    try { return !!rt.done(); } catch (err) { throw new Error(`cue ${i + 1} (${rt.c.do}): ${err.message}`); }
+    let d;
+    try { d = !!rt.done(); } catch (err) { throw new Error(`cue ${i + 1} (${rt.c.do}): ${err.message}`); }
+    if (d && rt.c.until !== undefined) this.log(`${rt.c.do}${rt.c.who !== undefined ? ` ${whoList(rt.c.who).join('+')}` : ''}: ${rt.c.until} (${(g.time - rt.t0).toFixed(1)} s)`);
+    return d;
   }
 
   cond(s) {
@@ -416,6 +419,8 @@ export class Director {
       elapsed: this.running || this.state === 'done' ? r2(g.time - this.t0) : 0,
       running: tl ? tl.running().map(i => { const c = S.sc.cues[i]; return { n: i + 1, do: c.do, who: c.who ?? null, id: c.id ?? null, secs: r2(g.time - tl.startedAt[i]), text: c.text || c.until || c.to || c.target || c.shot || '' }; }) : [],
       actors: [...this.actors.values()].map(a => ({ id: a.id, name: a.name, cls: a.def.class, pid: a.p?.id || 0, lvl: a.p?.lvl || 0, hp: a.p?.hp ?? 0, maxHp: a.p?.maxHp ?? 0, dead: !!a.p?.dead, absent: !!a.absent, doing: a.mode?.k || '' })),
+      bosses: ['warden', 'sovereign', ...this.spawns.keys()].map(k => [k, this.mob(k)]).filter(([, m]) => m && S && floorOf(m.x) === (PLACES[S.sc.place]?.floor || 1))
+        .map(([k, m]) => ({ id: k, name: m.def.name, hp: m.hp, maxHp: m.maxHp, dead: !!m.dead, phase: m.phase || 0, posture: Math.round(g.posturePct?.(m) ?? 0), broken: g.time < (m.staggerUntil || 0), engaged: !!m.threat?.size })),
       checks: this.checks || null,
       log: this.lines.slice(-60),
       apis: Object.fromEntries(API_NAMES.map(n => [n, this.has(n)])),
