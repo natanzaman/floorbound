@@ -9,6 +9,8 @@ import * as db from './db.js';
 import * as accounts from './accounts.js';
 import * as track from './track.js';
 import * as hall from './hall.js';
+import * as admin from './admin.js';
+import { BotManager } from './botmanager.js';
 import { TICK_RATE } from '../shared/data.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -27,6 +29,7 @@ const game = new Game();
 game.track = track.record;
 game.onClear = rec => hall.add(rec); // Hall of Clearers (DB insert + in-memory cache)
 const spectators = new Set(); // watch-only clients (?spectate=1)
+const bots = new BotManager(game, { url: () => `ws://127.0.0.1:${server.address().port}/ws` }); // admin-managed bots
 
 const server = http.createServer(async (req, res) => {
   if (res.handled) return;
@@ -37,6 +40,7 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify(body));
   }
   if (full.pathname.startsWith('/api/') || full.pathname.startsWith('/auth/')) {
+    if (await admin.handle(req, res, full)) return; // /api/admin/* and /api/lobby (server/admin.js)
     if (await accounts.handle(req, res, full)) return;
   }
   const url = decodeURIComponent(full.pathname);
@@ -86,6 +90,7 @@ wss.on('connection', ws => {
       }
       return game.addPlayer(ws, c.name, c.cls, { charId: c.id, accountId: acct.id, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats, mastery: c.mastery });
     }
+    if (bots.isBotJoin(msg)) return bots.addBotPlayer(ws, msg); // server-run bot (server/botmanager.js)
     return game.addPlayer(ws, msg.name, msg.cls);
   }
   let budget = 60; // simple flood guard: messages per second
@@ -176,6 +181,7 @@ if (process.env.LOCKSTEP) {
   }, 15000);
 }
 
+admin.init({ game, bots });
 db.migrate()
   .then(() => hall.load())
   .then(() => { game.hadFirstClear = hall.hasFirst(); game.hadFirstClear2 = hall.hasFirst(2); })

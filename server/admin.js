@@ -1,0 +1,361 @@
+// Admin API (/api/admin/*) for the admin page (/admin.html), plus the public lobby list (/api/lobby).
+//
+// Admins: accounts with is_admin = true, or whose Discord user id is listed in ADMIN_DISCORD_IDS (comma-separated).
+// Every /api/admin/* route checks the bearer session belongs to an admin (401 signed out, 403 not an admin).
+//
+// Character edits go to the live player when the character is online (then saved), otherwise straight to the DB.
+import * as db from './db.js';
+import * as accounts from './accounts.js';
+import { CLASSES, MAX_LEVEL, xpToNext, areaName } from '../shared/data.js';
+import { SLOTS, BAG_SIZE, RARITY, CONSUMABLE_IDS, makeItem, lastAttackItem, lastAttackItem2, newInventory } from '../shared/items.js';
+import { MAT_IDS } from '../shared/crafting.js';
+import { STAT_KEYS, TITLE_BY_ID, newStats } from '../shared/titles.js';
+import { floorOf } from '../shared/floor2.js';
+import { BEHAVIOURS } from './botmanager.js';
+
+const q = (...a) => db.q(...a);
+const ADMIN_IDS = new Set((process.env.ADMIN_DISCORD_IDS || '').split(',').map(s => s.trim()).filter(Boolean));
+const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _.-]{1,14}[A-Za-z0-9]$/; // same rule as accounts.js
+const LOBBY_DAYS = 30;
+
+let game = null, bots = null;
+export function init(ctx) { game = ctx.game; bots = ctx.bots; }
+
+const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
+const readBody = req => new Promise(resolve => {
+  let s = ''; req.on('data', c => { s += c; if (s.length > 512 * 1024) req.destroy(); });
+  req.on('end', () => { try { resolve(JSON.parse(s || '{}')); } catch { resolve(null); } });
+});
+const bearer = req => (req.headers.authorization || '').replace(/^Bearer /, '');
+class Bad extends Error { constructor(msg, code = 400) { super(msg); this.code = code; } }
+const int = (v, lo, hi, what) => {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < lo || n > hi) throw new Bad(`${what} must be a whole number from ${lo} to ${hi}.`);
+  return n;
+};
+const clone = v => JSON.parse(JSON.stringify(v ?? null));
+
+// Is this request from an admin? Returns the account, or null after answering 401/403.
+async function requireAdmin(req, res) {
+  const a = await accounts.accountFromToken(bearer(req));
+  if (!a) { json(res, 401, { error: 'Signed out.' }); return null; }
+  if (!(await isAdmin(a))) { json(res, 403, { error: 'Admins only.' }); return null; }
+  return a;
+}
+export async function isAdmin(a) {
+  if (a.discord_id && ADMIN_IDS.has(String(a.discord_id))) return true;
+  const [row] = await q('SELECT is_admin FROM accounts WHERE id = $1', [a.id]);
+  return !!row?.is_admin;
+}
+
+const livePlayers = () => [...game.players.values()];
+const liveChar = id => livePlayers().find(p => p.charId === id) || null;
+const partyNames = p => { const pa = p.party && game.parties.get(p.party); return pa ? pa.members.filter(id => id !== p.id).map(id => game.players.get(id)?.name).filter(Boolean) : []; };
+const accountLabel = r => r.discord_name || (r.discord_id ? `discord ${r.discord_id}` : `guest #${r.account_id}`);
+
+// ---------- character model ----------
+async function loadFull(id) {
+  const [r] = await q(`SELECT c.id, c.name, c.cls, c.lvl, c.xp, c.gold, c.inv, c.stats, c.created_at, c.updated_at,
+    a.id AS account_id, a.discord_id, a.discord_name, a.is_admin
+    FROM characters c JOIN accounts a ON a.id = c.account_id WHERE c.id = $1`, [id]);
+  return r || null;
+}
+
+function view(r) {
+  const p = liveChar(r.id);
+  const src = p || r;
+  const inv = src.inv && Array.isArray(src.inv.bag) ? src.inv : newInventory();
+  inv.mats ||= {};
+  return {
+    id: r.id, name: p ? p.name : r.name, cls: p ? p.cls : r.cls, lvl: src.lvl, xp: src.xp, next: xpToNext(src.lvl), gold: src.gold,
+    inv, stats: { ...(src.stats || {}), ...newStats(src.stats) }, online: !!p,
+    area: p ? areaName(p.x, p.z) : null, floor: p ? floorOf(p.x) : null, party: p ? partyNames(p) : [],
+    account: { id: r.account_id, label: accountLabel(r), discord: r.discord_name || null, admin: !!r.is_admin },
+    created_at: r.created_at, updated_at: r.updated_at,
+  };
+}
+
+// Validate one gear item (from the raw JSON editor). Returns a clean copy.
+function cleanItem(it, where) {
+  if (!it || typeof it !== 'object' || Array.isArray(it)) throw new Bad(`${where}: not an item object.`);
+  if (!SLOTS.includes(it.slot)) throw new Bad(`${where}: slot must be one of ${SLOTS.join(', ')}.`);
+  if (!Number.isInteger(it.r) || !RARITY[it.r]) throw new Bad(`${where}: r (rarity) must be 0..${RARITY.length - 1}.`);
+  if (typeof it.name !== 'string' || !it.name) throw new Bad(`${where}: needs a name.`);
+  if (!it.st || typeof it.st !== 'object' || Object.values(it.st).some(v => typeof v !== 'number' || !isFinite(v))) throw new Bad(`${where}: st must be an object of numbers.`);
+  if (it.cls !== undefined && !CLASSES[it.cls]) throw new Bad(`${where}: unknown class ${it.cls}.`);
+  return clone(it);
+}
+
+// Normalise and validate a whole inventory; gives every item a unique u.
+function cleanInv(inv) {
+  if (!inv || typeof inv !== 'object' || Array.isArray(inv)) throw new Bad('inv must be an object.');
+  if (!Array.isArray(inv.bag)) throw new Bad('inv.bag must be an array.');
+  if (inv.bag.length > BAG_SIZE) throw new Bad(`The bag holds at most ${BAG_SIZE} items.`);
+  if (!inv.eq || typeof inv.eq !== 'object') throw new Bad('inv.eq must be an object.');
+  const out = { ...clone(inv), bag: inv.bag.map((it, i) => cleanItem(it, `bag[${i}]`)), eq: {}, cons: {}, mats: {} };
+  for (const s of SLOTS) {
+    const it = inv.eq[s];
+    if (it == null) { out.eq[s] = null; continue; }
+    const c = cleanItem(it, `eq.${s}`);
+    if (c.slot !== s) throw new Bad(`eq.${s} holds a ${c.slot}.`);
+    out.eq[s] = c;
+  }
+  for (const k of Object.keys(inv.cons || {})) if (!CONSUMABLE_IDS.includes(k)) throw new Bad(`Unknown consumable ${k}.`);
+  for (const k of CONSUMABLE_IDS) out.cons[k] = int(inv.cons?.[k] ?? 0, 0, 999, `cons.${k}`);
+  for (const k of Object.keys(inv.mats || {})) if (!MAT_IDS.includes(k)) throw new Bad(`Unknown material ${k}.`);
+  for (const k of MAT_IDS) { const n = int(inv.mats?.[k] ?? 0, 0, 99999, `mats.${k}`); if (n) out.mats[k] = n; }
+  const seen = new Set();
+  let u = Date.now() % 1e6 + 5e5;
+  for (const it of [...out.bag, ...SLOTS.map(s => out.eq[s]).filter(Boolean)]) {
+    if (!Number.isInteger(it.u) || seen.has(it.u)) it.u = ++u;
+    while (seen.has(it.u)) it.u = ++u;
+    seen.add(it.u);
+  }
+  return out;
+}
+
+// Lifetime stats: known keys normalised (numbers, titles), anything else (e.g. skill mastery) kept as-is.
+function cleanStats(st) {
+  if (!st || typeof st !== 'object' || Array.isArray(st)) throw new Bad('stats must be an object.');
+  for (const k of STAT_KEYS) if (st[k] !== undefined && (typeof st[k] !== 'number' || st[k] < 0)) throw new Bad(`stats.${k} must be a number ≥ 0.`);
+  if (st.titles !== undefined && !Array.isArray(st.titles)) throw new Bad('stats.titles must be an array.');
+  return { ...clone(st), ...newStats(st) };
+}
+
+// Apply an edit body to a working copy c = { name, cls, lvl, xp, gold, inv, stats }.
+function applyEdit(c, body, online) {
+  if (body.rawInv !== undefined) c.inv = cleanInv(body.rawInv);
+  if (body.rawStats !== undefined) c.stats = cleanStats(body.rawStats);
+  if (body.name !== undefined) {
+    const name = String(body.name).trim().replace(/\s+/g, ' ');
+    if (!NAME_RE.test(name)) throw new Bad('Names are 3–16 letters or numbers (spaces, _ . - allowed inside).');
+    c.name = name;
+  }
+  if (body.cls !== undefined && body.cls !== c.cls) {
+    if (!CLASSES[body.cls]) throw new Bad('Unknown class.');
+    if (online) throw new Bad('Change the class while the character is offline.');
+    c.cls = body.cls;
+    const w = c.inv.eq.weapon; // a weapon for the old class goes back to the bag
+    if (w?.cls && w.cls !== c.cls) {
+      if (c.inv.bag.length >= BAG_SIZE) throw new Bad('Bag full: make room for the old weapon first.');
+      c.inv.bag.push(w); c.inv.eq.weapon = null;
+    }
+  }
+  if (body.lvl !== undefined) c.lvl = int(body.lvl, 1, MAX_LEVEL, 'Level');
+  if (body.xp !== undefined) c.xp = int(body.xp, 0, 1e9, 'XP');
+  if (c.lvl >= MAX_LEVEL) c.xp = 0; else c.xp = Math.min(c.xp, xpToNext(c.lvl) - 1);
+  if (body.gold !== undefined) c.gold = int(body.gold, 0, 1e9, 'Gold');
+  if (body.cons) for (const [k, v] of Object.entries(body.cons)) { if (!CONSUMABLE_IDS.includes(k)) throw new Bad(`Unknown consumable ${k}.`); c.inv.cons[k] = int(v, 0, 999, k); }
+  if (body.mats) for (const [k, v] of Object.entries(body.mats)) {
+    if (!MAT_IDS.includes(k)) throw new Bad(`Unknown material ${k}.`);
+    const n = int(v, 0, 99999, k);
+    c.inv.mats ||= {};
+    if (n) c.inv.mats[k] = n; else delete c.inv.mats[k];
+  }
+  if (body.stats) for (const [k, v] of Object.entries(body.stats)) {
+    if (!STAT_KEYS.includes(k)) throw new Bad(`Unknown stat ${k}.`);
+    c.stats[k] = int(v, 0, 1e9, k);
+  }
+  if (body.floor2 !== undefined) c.stats.floor2 = body.floor2 ? 1 : 0;
+  if (body.titles !== undefined) {
+    if (!Array.isArray(body.titles)) throw new Bad('titles must be a list.');
+    c.stats.titles = [...new Set(body.titles.filter(id => TITLE_BY_ID[id]))];
+    if (c.stats.activeTitle && !c.stats.titles.includes(c.stats.activeTitle)) c.stats.activeTitle = null;
+  }
+  if (body.activeTitle !== undefined) {
+    const t = body.activeTitle || null;
+    if (t && !c.stats.titles.includes(t)) throw new Bad('The active title must be one the character has earned.');
+    c.stats.activeTitle = t;
+  }
+  for (const op of Array.isArray(body.ops) ? body.ops : []) applyOp(c, op);
+}
+
+function freeU(inv) {
+  const used = new Set([...inv.bag, ...SLOTS.map(s => inv.eq[s]).filter(Boolean)].map(it => it.u));
+  let u = Date.now() % 1e6 + 7e5;
+  while (used.has(u)) u++;
+  return u;
+}
+function giveToBag(c, it) {
+  if (c.inv.bag.length >= BAG_SIZE) throw new Bad('The bag is full.');
+  it.u = freeU(c.inv);
+  c.inv.bag.push(it);
+}
+
+function applyOp(c, op) {
+  switch (op?.op) {
+    case 'addItem': {
+      if (!SLOTS.includes(op.slot)) throw new Bad('Pick a slot.');
+      const r = int(op.r, 0, 3, 'Rarity');
+      const cls = op.slot === 'weapon' ? (CLASSES[op.cls] ? op.cls : c.cls) : undefined;
+      const charm = ['crit', 'haste', 'sw'].includes(op.charm) ? op.charm : undefined;
+      return giveToBag(c, makeItem(op.slot, r, cls, Math.random, charm));
+    }
+    case 'addLastAttack': return giveToBag(c, op.which === 2 ? lastAttackItem2() : lastAttackItem());
+    case 'removeItem': {
+      const u = op.u | 0;
+      const i = c.inv.bag.findIndex(it => it.u === u);
+      if (i >= 0) return void c.inv.bag.splice(i, 1);
+      const s = SLOTS.find(s => c.inv.eq[s]?.u === u);
+      if (s) return void (c.inv.eq[s] = null);
+      throw new Bad('No such item.');
+    }
+    case 'equip': { // bag -> worn (whatever was worn goes to the bag)
+      const i = c.inv.bag.findIndex(it => it.u === (op.u | 0));
+      if (i < 0) throw new Bad('No such bag item.');
+      const it = c.inv.bag[i];
+      if (it.cls && it.cls !== c.cls) throw new Bad(`Only a ${CLASSES[it.cls].name} can use that.`);
+      c.inv.bag.splice(i, 1);
+      if (c.inv.eq[it.slot]) c.inv.bag.push(c.inv.eq[it.slot]);
+      c.inv.eq[it.slot] = it;
+      return;
+    }
+    case 'unequip': {
+      if (!SLOTS.includes(op.slot) || !c.inv.eq[op.slot]) throw new Bad('Nothing worn there.');
+      if (c.inv.bag.length >= BAG_SIZE) throw new Bad('The bag is full.');
+      c.inv.bag.push(c.inv.eq[op.slot]); c.inv.eq[op.slot] = null;
+      return;
+    }
+    default: throw new Bad(`Unknown op ${op?.op}.`);
+  }
+}
+
+async function editCharacter(id, body) {
+  const r = await loadFull(id);
+  if (!r) throw new Bad('No such character.', 404);
+  let p = liveChar(id);
+  const src = p || r;
+  const c = {
+    name: p ? p.name : r.name, cls: p ? p.cls : r.cls, lvl: src.lvl, xp: src.xp, gold: src.gold,
+    inv: clone(src.inv && Array.isArray(src.inv.bag) ? src.inv : newInventory()), stats: { ...clone(src.stats || {}), ...newStats(src.stats) },
+  };
+  c.inv.mats ||= {};
+  applyEdit(c, body, !!p);
+  if (c.name !== (p ? p.name : r.name)) { // rename (names are unique, case-insensitive)
+    try { await q('UPDATE characters SET name = $2 WHERE id = $1', [id, c.name]); }
+    catch (e) { if (e.code === '23505') throw new Bad('That name is taken.', 409); throw e; }
+  }
+  p = liveChar(id); // (it may have come online meanwhile)
+  if (p) {
+    // Online: change the live player first (so the periodic save can't write old values back), then save.
+    const lvlChanged = p.lvl !== c.lvl;
+    Object.assign(p, { name: c.name, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats });
+    game.recompute(p);
+    if (lvlChanged) p.hp = p.maxHp;
+    game.invChanged(p);
+    game.rosterDirty = true; // name / title
+    game.sys('An admin updated your character.', p.id);
+    p.dirty = false;
+    await accounts.saveCharacter(p);
+  } else {
+    await q('UPDATE characters SET cls = $2, lvl = $3, xp = $4, gold = $5, inv = $6, stats = $7 WHERE id = $1',
+      [id, c.cls, c.lvl, c.xp, c.gold, JSON.stringify(c.inv), JSON.stringify(c.stats)]);
+  }
+  return view(await loadFull(id));
+}
+
+async function deleteCharacter(id) {
+  const p = liveChar(id);
+  if (p) { // kick them first (no save: the row is about to go)
+    p.charId = 0;
+    if (p.ws.readyState === 1) p.ws.send(JSON.stringify({ type: 'denied', reason: 'This character was deleted by an admin.' }));
+    game.removePlayer(p);
+    game.rosterDirty = true;
+    p.ws.close();
+  }
+  const rows = await q('DELETE FROM characters WHERE id = $1 RETURNING id', [id]);
+  return rows.length > 0;
+}
+
+// ---------- players list ----------
+async function playersList() {
+  const rows = await q(`SELECT c.id, c.name, c.cls, c.lvl, c.created_at, c.updated_at,
+    a.id AS account_id, a.discord_id, a.discord_name, a.is_admin
+    FROM characters c JOIN accounts a ON a.id = c.account_id ORDER BY c.updated_at DESC LIMIT 5000`);
+  const live = new Map(livePlayers().filter(p => p.charId).map(p => [p.charId, p]));
+  const out = rows.map(r => {
+    const p = live.get(r.id);
+    return {
+      id: r.id, name: p ? p.name : r.name, cls: r.cls, lvl: p ? p.lvl : r.lvl, account: accountLabel(r), accountId: r.account_id, admin: !!r.is_admin,
+      online: !!p, area: p ? areaName(p.x, p.z) : null, floor: p ? floorOf(p.x) : null, party: p ? partyNames(p) : [],
+      lastSeen: p ? new Date().toISOString() : r.updated_at, created: r.created_at,
+    };
+  });
+  // Anonymous (unsaved) players who are online right now
+  const anon = livePlayers().filter(p => !p.charId && !p.bot).map(p => ({ gameId: p.id, name: p.name, cls: p.cls, lvl: p.lvl, area: areaName(p.x, p.z), floor: floorOf(p.x) }));
+  const nbots = livePlayers().filter(p => p.bot).length;
+  return { players: out, anon, bots: nbots };
+}
+
+// ---------- routes ----------
+export async function handle(req, res, url) {
+  const path = url.pathname;
+  if (path === '/api/lobby') { // public: recently seen characters for the in-game Players panel (no account details)
+    if (!db.enabled) return json(res, 200, { offline: [] }), true;
+    try {
+      const online = new Set(livePlayers().filter(p => p.charId).map(p => p.charId));
+      const rows = await q(`SELECT id, name, cls, lvl, updated_at FROM characters WHERE updated_at > now() - interval '${LOBBY_DAYS} days' ORDER BY updated_at DESC LIMIT 60`);
+      return json(res, 200, { offline: rows.filter(r => !online.has(r.id)).slice(0, 40).map(r => ({ name: r.name, cls: r.cls, lvl: r.lvl, seen: r.updated_at })) }), true;
+    } catch (e) { console.error('lobby error', e); return json(res, 500, { error: 'Server error' }), true; }
+  }
+  if (!path.startsWith('/api/admin/')) return false;
+  if (!db.enabled) return json(res, 503, { error: 'Admin needs accounts (set DATABASE_URL).' }), true;
+  try {
+    if (path === '/api/admin/me') {
+      const a = await accounts.accountFromToken(bearer(req));
+      if (!a) return json(res, 401, { admin: false, error: 'Signed out.' }), true;
+      return json(res, 200, { admin: await isAdmin(a), account: { id: a.id, discord: a.discord_name || null } }), true;
+    }
+    if (!(await requireAdmin(req, res))) return true;
+    const m = req.method;
+    let mm;
+
+    if (path === '/api/admin/players' && m === 'GET') return json(res, 200, await playersList()), true;
+
+    if ((mm = path.match(/^\/api\/admin\/characters\/(\d+)$/))) {
+      const id = +mm[1];
+      if (m === 'GET') {
+        const r = await loadFull(id);
+        return r ? json(res, 200, { character: view(r) }) : json(res, 404, { error: 'No such character.' }), true;
+      }
+      if (m === 'PATCH' || m === 'POST') {
+        const body = await readBody(req);
+        if (!body) return json(res, 400, { error: 'Bad JSON.' }), true;
+        return json(res, 200, { character: await editCharacter(id, body) }), true;
+      }
+      if (m === 'DELETE') {
+        const body = await readBody(req);
+        const r = await loadFull(id);
+        if (!r) return json(res, 404, { error: 'No such character.' }), true;
+        if (body?.confirm !== r.name) return json(res, 400, { error: 'Type the character name to confirm.' }), true;
+        return json(res, 200, { ok: await deleteCharacter(id) }), true;
+      }
+    }
+
+    if (path === '/api/admin/bots' && m === 'GET') {
+      return json(res, 200, {
+        bots: bots.list(), max: bots.max, behaviours: BEHAVIOURS,
+        players: bots.realPlayers().map(p => ({ id: p.id, name: p.name, cls: p.cls, lvl: p.lvl })),
+      }), true;
+    }
+    if (path === '/api/admin/bots' && m === 'POST') {
+      const b = await readBody(req) || {};
+      return json(res, 200, { added: bots.add({ cls: b.cls, name: b.name, lvl: b.lvl, behaviour: b.behaviour, follow: b.follow }) }), true;
+    }
+    if (path === '/api/admin/bots/team' && m === 'POST') {
+      const b = await readBody(req) || {};
+      return json(res, 200, { added: bots.addTeam({ lvl: b.lvl, behaviour: b.behaviour || 'auto', follow: b.follow }) }), true;
+    }
+    if (path === '/api/admin/bots' && m === 'DELETE') return json(res, 200, { removed: bots.removeAll() }), true;
+    if ((mm = path.match(/^\/api\/admin\/bots\/(\d+)$/)) && m === 'DELETE') {
+      return bots.remove(+mm[1]) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'No such bot.' }), true;
+    }
+    return json(res, 404, { error: 'Unknown admin route.' }), true;
+  } catch (e) {
+    if (e instanceof Bad) return json(res, e.code, { error: e.message }), true;
+    if (e.message && /^(Pick|Unknown behaviour|Bot limit)/.test(e.message)) return json(res, 400, { error: e.message }), true;
+    console.error('admin error', e);
+    json(res, 500, { error: 'Server error' });
+    return true;
+  }
+}

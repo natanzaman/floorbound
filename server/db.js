@@ -54,4 +54,5 @@ async function setup() {
     id BIGSERIAL PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT now(), account_id INT, char_id INT, sid TEXT,
     kind TEXT NOT NULL, data JSONB)`);
   await q(`CREATE INDEX IF NOT EXISTS play_events_kind_at ON play_events (kind, at)`);
+  await q(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false`); // admin page (server/admin.js)
 }

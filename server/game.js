@@ -1258,7 +1258,7 @@ export class Game {
   }
 
   roster() {
-    return [...this.players.values()].map(p => ({ id: p.id, name: p.name, cls: p.cls, title: p.stats?.activeTitle || null }));
+    return [...this.players.values()].map(p => ({ id: p.id, name: p.name, cls: p.cls, title: p.stats?.activeTitle || null, ...(p.bot ? { bot: 1 } : {}) }));
   }
 }
 
