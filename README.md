@@ -306,6 +306,7 @@ shared/classes/   Lancer and Bard data, tuning, evolutions (lancer.js, bard.js) 
 server/classes-b.js, public/classes-b.js  Lancer / Bard skills (mixed into Game) and their rigs + visuals; test/classes-b.js
 shared/styles.js, server/styles.js, public/styles.js  weapon styles; test/styles.js, test/newclass.js (newer classes)
 shared/talents.js, server/talents.js, public/talents.js  talent trees and the Skill Tree window; test/talents.js
+server/director.js, server/director-sheet.js  the scene director (filming): plays a YAML cue sheet with bot actors (format: docs/SCRIPT_BRIEF.md); routes in server/director-admin.js, the admin page's Director tab public/admin-director.js, the bots' script layer shared/bots/script.js; test/director.js
 server/staging.js  staging hooks for the scene director (filming): forceBossMove, reserveLastAttack, scriptDeath/scriptRevive, protect, setTwistOverride, spawnMob, giveKeepsake, clearStaging; test/staging.js
 server/admin.js  admin API (/api/admin/*) and /api/lobby; server/botmanager.js runs bots inside the server; public/admin.html the admin page
 ```
@@ -324,7 +325,7 @@ Without `DATABASE_URL` the game runs in anonymous mode (pick a name and play, no
 
 ## Admin
 
-Open **/admin.html** in the browser where you play (it uses the game's saved session). It needs accounts (`DATABASE_URL`).
+Open **/admin.html** in the browser where you play (it uses the game's saved session). It needs accounts (`DATABASE_URL`); the one exception is the **Director** tab (scene director, see Testing), which a server without a database serves to localhost.
 
 **Becoming an admin**, either way:
 
@@ -467,6 +468,13 @@ node test/team.js                           # Brann (tank), Kael (DPS), Lyra (he
 - `shot` `{ shot, target, from, secs }`: `close_up` (~3 m, head and shoulders), `medium` (~6 m), `wide` (~16 m, high), `over_shoulder` (behind `from`, looking at `target`), `follow` (behind and above), `orbit` (slow circle), `crane` (rises and pulls back over ~7 s), `free` (back to the auto framing). Targets: `{ pid }` a player, `{ mid }` a mob, `{ x, z }` a point. `secs` is how long the camera takes to get there (0 = cut); the shot holds until the next one. Giants (the Warden) get a wider frame.
 - `slowmo` `{ secs, scale }`, `title` `{ text, sub, secs }`, `fade` `{ to: 'black' | 'in', secs }`, `letterbox` `{ on }` (2.39:1 bars), `clean` `{ on }` (hides the HUD, chat, skill bar, party frames and head markers; keeps nameplates, health bars, bubbles and banners), `light` `{ light: 'eclipse' | 'day' | null }` (the Eclipse darkness everywhere, forced daylight, or back to normal), `reset`.
 - Plain spectators ignore shots, letterbox and clean, but get light, titles, fades and slow motion. Players only get the light.
+
+**Scene director** (`server/director.js`, filming the Season 1 episodes): plays a cue sheet (YAML, format v1 in `docs/SCRIPT_BRIEF.md`; Episode 1 is `docs/story/ep1-first-line.yaml`) with bot actors inside the server.
+- **Actors:** each cast member is a server bot with its exact name, class, level, weapon style and capability, all in one party, with premade gear for its level and no XP. A script layer on the bot brain (`b.script`, `shared/bots/script.js`) makes them stand, walk, run, face, follow and talk on cue; a `fight` cue hands them back to their normal brain, focused on the target (they still dodge and heal). They never wander, chatter on their own or ready up unless told.
+- **Cues:** a cue starts together with the previous one, `after: prev` when it finishes, `after: <id>` when that cue finishes, plus `delay`; `until` conditions (`warden_hp < 66%`, `warden_dead`, `warden_broken`, `gate_open`, `t > 10`). Verbs cover movement, combat, speech (bubbles), emotes, poses, scripted deaths, staging (`server/staging.js`), the camera (`server/cine.js`) and the bell.
+- **Safety for takes:** while a show runs, actors can't drop below 10% health unless a cue kills them, the automatic first-clear bell is held, twists follow the sheet; Stop (or an error) removes the actors and resets staging, poses and the picture.
+- **Admin page → Director:** pick a sheet from `docs/story/*.yaml` or paste one, Validate (every problem with its scene and cue), Run (from any scene), Stop, live status. A server without a database (the filming setup) shows only this tab, from localhost. How to film: `docs/story/FILMING.md`.
+- **Test:** `node test/director.js` (sheet validation, timing rules, a short in-process show); `FULL=1 node test/director.js` plays Episode 1 end to end on its own server (port 3712, about 4 min).
 
 Other testing aids: `SPAWN_AT=0,172` spawns players at the chamber gate. `TEST_HOOKS=1` lets a client set its own health (`{ type: 'test', hurt: 0.4 }`, for test/botbrain.js) or gain XP (`{ type: 'test', xp: 850 }`, for the bot level sync in test/playerbots.js and test/shutdown.js). `WARDEN_TWIST=<id>` forces a Warden twist (see above). `MAX_PLAYERS` caps the server (default 64).
 

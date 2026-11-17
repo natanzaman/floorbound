@@ -25,6 +25,7 @@ import { brainFor, roleOf, runHooks } from './registry.js';
 import { basicProfile } from './style.js';
 import { STYLE_IDS } from '../styles.js';
 import { say } from './social.js';
+import { scriptTurn } from './script.js'; // the scene director's script layer (b.script; nothing without it)
 import './classes.js'; // built-in class plug-ins (Guardian, Swordsman, Cleric, generic)
 import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
 
@@ -358,6 +359,7 @@ function followed(b) { // the player named by the 'follow' behaviour, as seen in
 // ---------------- the loop ----------------
 function think(b) {
   if (!b.me) return;
+  if (b.script && scriptTurn(b)) return; // a scripted actor (server/director.js): its scripted action this turn
   const P = partyView(b);
   social(b, P);
   if (b.dead) { b.goal = 'down'; return; }
@@ -382,7 +384,7 @@ function social(b, P) {
 
 function upkeep(b, P, M) {
   // Raid gate: ready up once the party is all at the gate (with humans: once someone readied, or when ordered).
-  if (!b.gateOpen && (inGateZone(b.x, b.z) || inGateZone2(b.x, b.z)) && !b.me.ready && b.t - (b.readyT || -9) > 1) {
+  if (!b.script && !b.gateOpen && (inGateZone(b.x, b.z) || inGateZone2(b.x, b.z)) && !b.me.ready && b.t - (b.readyT || -9) > 1) { // (scripted actors ready only when told)
     const zone = (x, z) => inGateZone(x, z) || inGateZone2(x, z);
     const there = P.all.filter(p => !p.dead).every(p => zone(p.x, p.z));
     const ordered = b.cmd?.k === 'boss';

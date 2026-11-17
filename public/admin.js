@@ -81,8 +81,10 @@ const segHtml = cur => [1, 2, 3, 4, 5].map(s => `<button type="button" data-s="$
 // ---------- gate ----------
 let me = null;
 async function boot() {
+  if (!token && await localDirector()) return;
   if (!token) return gate('You are not signed in. Open the game, sign in (guest or Discord), then come back to /admin.html.');
   try { me = await api('/api/admin/me'); } catch (e) {
+    if (e.status === 503 && await localDirector()) return; // no accounts: a local filming server (Director tab only)
     return gate(e.status === 401 ? 'Your session expired. Open the game and sign in again.' : e.status === 503 ? 'This server runs without a database, so there are no accounts or admins.' : `Could not reach the server (${e.message}).`);
   }
   if (!me.admin) return gate(`Your account (#${me.account.id}${me.account.discord ? `, ${me.account.discord}` : ', guest'}) is not an admin. The server owner can set accounts.is_admin = true for it, or list your Discord user id in ADMIN_DISCORD_IDS.`);
@@ -93,7 +95,17 @@ async function boot() {
   refreshSummary(); setInterval(() => { if (!document.hidden) refreshSummary(); }, 5000);
   refreshPlayers(true); setInterval(() => { if (!document.hidden && tab !== 'players') refreshPlayers(true); }, 15000);
   const m = location.hash.match(/^#edit=(\d+)/);
-  if (m) openEditor(+m[1]); else show(location.hash === '#players' ? 'players' : 'bots');
+  if (m) openEditor(+m[1]); else show(location.hash === '#players' ? 'players' : location.hash === '#director' ? 'director' : 'bots');
+}
+// A server without a database answers the Director from localhost (docs/story/FILMING.md): show just that tab.
+async function localDirector() {
+  const r = await fetch('/api/admin/director').catch(() => null);
+  if (!r?.ok) return false;
+  $('tabs').classList.remove('hidden'); $('app').classList.remove('hidden');
+  for (const b of $('tabs').querySelectorAll('button')) if (b.dataset.tab !== 'director') b.classList.add('hidden');
+  $('who').textContent = 'local filming server (no accounts)';
+  show('director');
+  return true;
 }
 function gate(text) { $('gate-text').textContent = text; $('gate').classList.remove('hidden'); }
 
@@ -102,7 +114,8 @@ let tab = 'bots';
 function show(name) {
   tab = name;
   for (const b of $('tabs').querySelectorAll('button')) b.classList.toggle('on', b.dataset.tab === name);
-  for (const t of ['bots', 'players', 'edit']) $(`tab-${t}`).classList.toggle('hidden', t !== name);
+  for (const t of ['bots', 'players', 'director', 'edit']) $(`tab-${t}`).classList.toggle('hidden', t !== name);
+  window.dispatchEvent(new CustomEvent('admin-tab', { detail: name })); // (the Director tab polls only while shown)
   if (name === 'bots') refreshBots();
   if (name === 'players') refreshPlayers();
   if (name !== 'edit') history.replaceState(null, '', name === 'bots' ? location.pathname : `#${name}`);

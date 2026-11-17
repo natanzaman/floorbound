@@ -57,11 +57,7 @@ They walk off toward the north road. FADE OUT.
 
 ### 2. EXT. THE RAID GATE — DAY  *(~30 s)*
 
-FADE IN. The party at the portcullis. They ready up. The 5-second countdown starts. `[F2 ready]`
-
-**TAMSIN:** Five seconds. Last chance to turn back.
-
-Nobody moves. PELL steps in behind BRAM.
+FADE IN. The party at the portcullis. PELL steps in behind BRAM.
 
 **BRAM:** When it spins its horns, you get behind me.
 
@@ -71,7 +67,11 @@ Nobody moves. PELL steps in behind BRAM.
 
 **CORVIN:** Nobody dies today. That's the only order.
 
-The gate rises. They walk through. FADE OUT.
+They ready up. The 5-second countdown starts. `[F2 ready]`
+
+**TAMSIN:** Five seconds. Last chance to turn back.
+
+Nobody moves. The gate rises. They walk through. FADE OUT.
 
 ---
 

@@ -628,8 +628,10 @@ function handleEvent(e) {
       if (e.ch === 's') { if (state.spectator || Math.hypot(e.x - state.x, e.z - state.z) < 40) log(`${e.from} says: ${e.text}`, e.id === me ? 'me' : 'say'); break; }
       log(`${e.from}: ${e.text}`, e.id === me ? 'me' : ''); break;
     case 'sys': if (!e.to || e.to === me) log(e.text, 'sys'); break;
+    case 'emote': { const p = players.get(e.id), x = EMOTES[e.a]; if (p?.model.anim && x && !p.model.anim.dead) p.model.anim.shot(x[0], x[1], { clamp: !!x[2] }); break; } // scene director (server/director.js)
   }
 }
+const EMOTES = { cheer: ['Cheer', 1.2], block: ['Block', 1, true], cast: ['Spellcast_Long', 1.2], hit: ['Hit_A', 1.2], die: ['Death_A', 1, true] };
 
 // ---------------- character animation ----------------
 const SKILL_ANIM = {
