@@ -40,7 +40,7 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Chat | Enter | Chat button |
 | Party | Players button (P) → Find party, or Invite | Players button → Find party / Invite |
 | Items | 4 potion, 5 tonic, 6 draught; B bag | Potion button; Bag button |
-| Skills panel (mastery, evolutions) | K, or the Skills button | Skills button |
+| Skill Tree (progression, talents, mastery, evolutions) | K, or the Skills button (Esc closes) | Skills button |
 | Interact (merchant, Smith, Skill Shrine, raid gate) | F | Trade / Forge / Skills / Ready button |
 | Sound on/off | Sound button | Sound button |
 
@@ -168,6 +168,34 @@ MASTERY=3 START_LEVEL=10 SPAWN_AT=0,150 npm start
 BRANCH=B node test/team.js                  # every skill evolved into branch B
 ```
 
+## Talent tree
+
+Every level from 2 gives a **talent point** (19 at level 20). Spend them in your class's tree: press **K** (or the Skills button; F at a Skill Shrine) to open the **Skill Tree** window. It has three panes:
+
+- **Progression:** levels 1–20 on a track with what each one brings (skills, talent points, when each tier can open, the Raid Gate, the Warden and Floor 2, the Sovereign), your level and XP, and the class's growth. Click a level for its details.
+- **Talents:** the class's three branches as a star chart. Hover a node for its exact numbers now and at the next rank; click to learn it (anywhere); right-click to refund a rank. **Respec** (refund everything) and refunds are free but only at a **Skill Shrine** in town, like changing an evolution.
+- **Abilities:** each skill's unlock level, mastery and progress, both evolutions (pick or switch them here) and every talent that changes it, with its current cooldown.
+
+Rules: each branch has 5 tiers; a tier opens after 0 / 3 / 6 / 10 / 14 points in the tiers above it. A line means a node needs a point in a node it hangs from. Nodes have 1–3 ranks. The diamond at the bottom of each branch is its **keystone**, which changes how you play. A gold badge on the Skills button counts unspent points, and the first point shows a one-time tip.
+
+| Class | Branch | Theme | Keystone |
+| --- | --- | --- | --- |
+| Swordsman | Blade | damage, crits, finishers | **Executioner**: +35% damage to enemies below 35% health; every kill resets Rush |
+| | Tempo | dodges, speed, cooldowns, counters | **Flowing Blade**: each roll takes 1 s off your cooldowns; a perfect dodge resets Rush and Whirl |
+| | Link | Switch damage, set-ups, party buffs | **Relay Strike** (co-op): landing a Switch gives you and allies within 12 m +15% damage for 6 s and resets Burst Combo |
+| Guardian | Bulwark | guard, parry, damage reduction | **Unbreakable**: a parry heals 10% and strikes back for 2x attack (Shield Riposte above it: parries open a counter window) |
+| | Warlord | threat, taunts, posture | **Juggernaut**: Taunt fills 25% posture of everything it taunts; +40% posture on enemies attacking you |
+| | Vanguard | shield-bash offense, protecting allies, Switch set-ups | **Rallying Bash** (co-op): the Bash finisher stuns and fills posture; your Breaks shield allies within 10 m (10% health) |
+| Cleric | Mercy | healing and shields | **Overflow**: overhealing becomes a shield (up to 25% health) |
+| | Judgement | Smite, damage, interrupts | **Wrath**: Smite pierces everything in a 14 m line |
+| | Grace | buffs, party support, cleansing | **Guardian Spirit** (co-op): once a minute an ally within 15 m who would die is saved at 30% health; Cleansing Light makes Blessing purify |
+
+Other nodes give stats (attack, health, crit, cooldown speed, damage reduction, Switch damage, posture damage, healing, move speed, dodge cooldown, counter damage, threat, guard block, damage to Broken enemies), per-skill changes (cooldown, damage, finisher, radius, duration for skills 1–3 and the basic attack) and party auras (allies within 12 m deal more, take less, or Switch harder).
+
+Talents are saved with the character (a `talents` JSONB column, `{ nodeId: rank }`); anonymous players keep them until they leave. Lowering a character's level below the points it has spent (admin) refunds them. The bot party spends along a role path (tank: Bulwark, DPS: Blade, healer: Mercy). The admin editor has a Talents section and the raw JSON editor includes them.
+
+**Adding a class or changing a tree is data only:** add an entry to `TREES` in `shared/talents.js` (branches → nodes with `tier`, `x`, `max`, `req`, `fx`, optional `touches` for the Abilities pane, plus a `bot` path); a class without an entry just shows "no talent tree yet". Effect kinds are listed at the top of that file; keystones are `{ key }` rules in `server/talents.js`. The server applies everything (hooks in `recompute`, `addPosture`, `damagePlayer` and `addPlayer`, plus wrappers around `useSkill`, `skillCd`, `damageMob`, `healPlayer`, `hitCircle`/`hitArc`, `dodge`, `evadeHit`, `guardHit`, `breakMob`, `killMob` and `giveXp`, installed last in `game.js`). The window is `public/talents.js`. Tests: `node test/talents.js` (add `DATABASE_URL=...` for the save/load round trip).
+
 ## Classes
 
 | Class | Role | Skills |
@@ -192,6 +220,7 @@ test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
 shared/teambots.js  bot brains: role-playing party (tank / DPS / healer) and single bots; used by test/team.js, public/bots.html and server/botmanager.js
 shared/mastery.js, server/mastery.js, public/mastery.js  skill mastery and evolutions; test/evolve.js
+shared/talents.js, server/talents.js, public/talents.js  talent trees and the Skill Tree window; test/talents.js
 server/admin.js  admin API (/api/admin/*) and /api/lobby; server/botmanager.js runs bots inside the server; public/admin.html the admin page
 ```
 

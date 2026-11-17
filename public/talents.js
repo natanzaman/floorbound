@@ -25,6 +25,7 @@ const CSS = `
   border: 1px solid color-mix(in srgb, var(--cc) 40%, #2a3550); border-radius: 14px; color: var(--ink);
   box-shadow: 0 24px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.03) inset; font-size: 13px; overflow: hidden; user-select: none; }
 #talentsp.hidden { display: none; }
+body.tree-open #rare-hint { display: none !important; } /* the rare-enemy pointer sits over the window's tabs */
 #talentsp h3, #talentsp .serif { font-family: ${SERIF}; font-weight: 600; letter-spacing: .01em; }
 #talentsp .hd { display: flex; align-items: center; gap: 14px; padding: 12px 16px 10px; border-bottom: 1px solid rgba(255,255,255,.06); }
 #talentsp .emb { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font: 600 20px ${SERIF};
@@ -275,6 +276,7 @@ export function initTalents(ctx) {
     if (tab) S.tab = tab;
     else if (open && S.m && CLASSES[cls()]?.skills.slice(1).some(s => S.m[s.id] && !S.m[s.id].br && masteryLevel(S.m[s.id].pts) >= MASTERY.evolveAt && state.lvl >= s.lvl)) S.tab = 'abilities'; // an evolution waits
     panel.classList.toggle('hidden', !open);
+    document.body.classList.toggle('tree-open', open);
     if (open) { S.sel = null; render(); sfx.play('ui'); }
     else hideTip();
   }

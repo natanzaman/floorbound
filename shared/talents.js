@@ -12,6 +12,9 @@
 //   { sk: 'basic' | <skill id of slots 1-3>, cd | dmg | fin | radius | dur: v }   (percent; cd is negative = faster)
 //   { aura: 'atk' | 'dr' | 'sw', v }   you and every ally within TALENTS.auraR metres (the strongest aura of a kind counts)
 //   { key: '<id>' }                    a custom rule run by server/talents.js (keystones and a few special nodes)
+// Optional node fields: desc (tooltip text for key rules), keystone, coop, icon, touches: ['basic' | skill id, ...]
+//   (skills a key rule changes, so the Abilities pane lists the node under them; sk effects are found on their own).
+// A class without an entry here simply has no tree yet (the window says so; nothing else changes).
 import { CLASSES, MAX_LEVEL } from './data.js';
 
 export const TALENTS = {
@@ -58,7 +61,7 @@ export const TREES = {
           { id: 'sw_burst', name: 'Sword Art: Burst', icon: '✦', tier: 1, x: 1, max: 2, req: ['sw_precision'], fx: [{ sk: 'burst', dmg: 10 }, { sk: 'burst', cd: -6 }] },
           { id: 'sw_wide', name: 'Wide Arc', icon: '◌', tier: 2, x: 0, max: 2, req: ['sw_finale', 'sw_burst'], fx: [{ sk: 'whirl', radius: 12 }, { sk: 'whirl', dmg: 8 }] },
           { id: 'sw_instinct', name: 'Killer Instinct', icon: '☠', tier: 3, x: 0, max: 3, req: ['sw_wide'], fx: [{ stat: 'atk', v: 2 }, { stat: 'crit', v: 2 }] },
-          { id: 'sw_exec', name: 'Executioner', icon: '⚚', tier: 4, x: 0, max: 1, keystone: true, req: ['sw_instinct'], fx: [{ key: 'exec' }],
+          { id: 'sw_exec', name: 'Executioner', icon: '⚚', tier: 4, x: 0, max: 1, keystone: true, req: ['sw_instinct'], fx: [{ key: 'exec' }], touches: ['rush'],
             desc: 'Your hits deal +35% damage to enemies below 35% health, and every kill resets Rush\'s cooldown: dash from one finish to the next.' },
         ],
       },
@@ -72,7 +75,7 @@ export const TREES = {
           { id: 'sw_tempo', name: 'Battle Tempo', icon: '⧗', tier: 2, x: 0, max: 3, req: ['sw_rush', 'sw_riposte'], fx: [{ stat: 'haste', v: 3 }] },
           { id: 'sw_cyclone', name: 'Cyclone', icon: '❂', tier: 3, x: -1, max: 2, req: ['sw_tempo'], fx: [{ sk: 'whirl', cd: -10 }] },
           { id: 'sw_evasion', name: 'Evasion', icon: '◇', tier: 3, x: 1, max: 2, req: ['sw_tempo'], fx: [{ stat: 'dr', v: 4 }] },
-          { id: 'sw_flow', name: 'Flowing Blade', icon: '∞', tier: 4, x: 0, max: 1, keystone: true, req: ['sw_cyclone', 'sw_evasion'], fx: [{ key: 'flow' }],
+          { id: 'sw_flow', name: 'Flowing Blade', icon: '∞', tier: 4, x: 0, max: 1, keystone: true, req: ['sw_cyclone', 'sw_evasion'], fx: [{ key: 'flow' }], touches: ['rush', 'whirl'],
             desc: 'Every dodge roll takes 1 s off your skill cooldowns, and a PERFECT dodge resets Rush and Whirl at once. Roll in, strike, roll out.' },
         ],
       },
@@ -85,7 +88,7 @@ export const TREES = {
           { id: 'sw_breaker', name: 'Breaker', icon: '✕', tier: 1, x: 1, max: 2, req: ['sw_pressure'], fx: [{ sk: 'burst', cd: -10 }] },
           { id: 'sw_rhythm', name: 'Battle Rhythm', icon: '♪', tier: 2, x: 0, max: 2, req: ['sw_opening', 'sw_breaker'], fx: [{ aura: 'atk', v: 3 }] },
           { id: 'sw_shared', name: 'Shared Opening', icon: '⚭', tier: 3, x: 0, max: 3, req: ['sw_rhythm'], fx: [{ stat: 'sw', v: 10 }, { stat: 'posture', v: 5 }] },
-          { id: 'sw_relay', name: 'Relay Strike', icon: '⚡', tier: 4, x: 0, max: 1, keystone: true, coop: true, req: ['sw_shared'], fx: [{ key: 'relay' }],
+          { id: 'sw_relay', name: 'Relay Strike', icon: '⚡', tier: 4, x: 0, max: 1, keystone: true, coop: true, req: ['sw_shared'], fx: [{ key: 'relay' }], touches: ['burst'],
             desc: 'Landing a Switch gives you and every ally within 12 m +15% damage for 6 s and resets your Burst Combo: Break, Switch, Break again.' },
         ],
       },
@@ -120,7 +123,7 @@ export const TREES = {
           { id: 'gu_quake', name: 'Earthshaker', icon: '◉', tier: 1, x: 1, max: 2, req: ['gu_crush'], fx: [{ sk: 'gslam', radius: 10 }, { sk: 'gslam', dmg: 10 }] },
           { id: 'gu_heavy', name: 'Heavy Bash', icon: '✊', tier: 2, x: 0, max: 2, req: ['gu_provoke', 'gu_quake'], fx: [{ sk: 'basic', dmg: 10 }, { sk: 'basic', fin: 15 }] },
           { id: 'gu_monger', name: 'Warmonger', icon: '⚔', tier: 3, x: 0, max: 3, req: ['gu_heavy'], fx: [{ stat: 'atk', v: 3 }, { stat: 'posture', v: 5 }] },
-          { id: 'gu_jugg', name: 'Juggernaut', icon: '♜', tier: 4, x: 0, max: 1, keystone: true, req: ['gu_monger'], fx: [{ key: 'jugg' }],
+          { id: 'gu_jugg', name: 'Juggernaut', icon: '♜', tier: 4, x: 0, max: 1, keystone: true, req: ['gu_monger'], fx: [{ key: 'jugg' }], touches: ['taunt'],
             desc: 'Taunt (and its evolutions) fills 25% of every taunted enemy\'s posture (8% on bosses), and enemies attacking YOU take +40% posture from your hits. Hold aggro, then Break it.' },
         ],
       },
@@ -133,7 +136,7 @@ export const TREES = {
           { id: 'gu_steadfast', name: 'Steadfast', icon: '⚓', tier: 1, x: 1, max: 2, req: ['gu_cover'], fx: [{ sk: 'wall', cd: -8 }, { stat: 'hp', v: 3 }] },
           { id: 'gu_partner', name: 'Switch Partner', icon: '⇄', tier: 2, x: 0, max: 2, req: ['gu_setup', 'gu_steadfast'], fx: [{ stat: 'sw', v: 10 }] },
           { id: 'gu_charge', name: 'Lead the Charge', icon: '➹', tier: 3, x: 0, max: 3, req: ['gu_partner'], fx: [{ stat: 'atk', v: 3 }, { stat: 'speed', v: 3 }] },
-          { id: 'gu_rally', name: 'Rallying Bash', icon: '✺', tier: 4, x: 0, max: 1, keystone: true, coop: true, req: ['gu_charge'], fx: [{ key: 'rally' }],
+          { id: 'gu_rally', name: 'Rallying Bash', icon: '✺', tier: 4, x: 0, max: 1, keystone: true, coop: true, req: ['gu_charge'], fx: [{ key: 'rally' }], touches: ['basic'],
             desc: 'Your Bash finisher stuns for 0.8 s and fills 12% posture (4% on bosses). Whenever you Break an enemy, allies within 10 m get a shield worth 10% of their health for 5 s.' },
         ],
       },
@@ -153,7 +156,7 @@ export const TREES = {
           { id: 'cl_wide', name: 'Wide Sanctuary', icon: '◯', tier: 1, x: 1, max: 2, req: ['cl_vigor'], fx: [{ sk: 'sanct', radius: 12 }, { sk: 'sanct', dur: 15 }] },
           { id: 'cl_devotion', name: 'Devotion', icon: '☀', tier: 2, x: 0, max: 2, req: ['cl_mend', 'cl_wide'], fx: [{ stat: 'heal', v: 5 }, { stat: 'haste', v: 3 }] },
           { id: 'cl_bloom', name: 'Lifebloom', icon: '❀', tier: 3, x: 0, max: 3, req: ['cl_devotion'], fx: [{ stat: 'heal', v: 6 }] },
-          { id: 'cl_overflow', name: 'Overflow', icon: '❖', tier: 4, x: 0, max: 1, keystone: true, req: ['cl_bloom'], fx: [{ key: 'overflow' }],
+          { id: 'cl_overflow', name: 'Overflow', icon: '❖', tier: 4, x: 0, max: 1, keystone: true, req: ['cl_bloom'], fx: [{ key: 'overflow' }], touches: ['heal', 'sanct'],
             desc: 'Overhealing from your heals becomes a shield on the target (up to 25% of their health, 6 s). Heal early: nothing is wasted.' },
         ],
       },
@@ -166,7 +169,7 @@ export const TREES = {
           { id: 'cl_silence', name: 'Silence', icon: '▼', tier: 1, x: 1, max: 2, req: ['cl_insight'], fx: [{ stat: 'posture', v: 12 }] },
           { id: 'cl_hammer', name: 'Hammer of Light', icon: '⚒', tier: 2, x: 0, max: 2, req: ['cl_searing', 'cl_silence'], fx: [{ sk: 'basic', cd: -8 }] },
           { id: 'cl_verdict', name: 'Verdict', icon: '⚖', tier: 3, x: 0, max: 3, req: ['cl_hammer'], fx: [{ stat: 'broken', v: 6 }, { stat: 'atk', v: 2 }] },
-          { id: 'cl_wrath', name: 'Wrath', icon: '✷', tier: 4, x: 0, max: 1, keystone: true, req: ['cl_verdict'], fx: [{ key: 'wrath' }],
+          { id: 'cl_wrath', name: 'Wrath', icon: '✷', tier: 4, x: 0, max: 1, keystone: true, req: ['cl_verdict'], fx: [{ key: 'wrath' }], touches: ['basic'],
             desc: 'Smite pierces: the bolt flies 14 m and strikes every enemy in its path (70% damage after the first). Line them up.' },
         ],
       },
@@ -175,7 +178,7 @@ export const TREES = {
         nodes: [
           { id: 'cl_presence', name: 'Graceful Presence', icon: '☂', tier: 0, x: -1, max: 3, fx: [{ aura: 'dr', v: 2 }] },
           { id: 'cl_inspire', name: 'Inspire', icon: '✧', tier: 0, x: 1, max: 3, fx: [{ sk: 'bless', dur: 12 }] },
-          { id: 'cl_cleanse', name: 'Cleansing Light', icon: '❄', tier: 1, x: -1, max: 1, req: ['cl_presence'], fx: [{ key: 'cleanse' }],
+          { id: 'cl_cleanse', name: 'Cleansing Light', icon: '❄', tier: 1, x: -1, max: 1, req: ['cl_presence'], fx: [{ key: 'cleanse' }], touches: ['bless'],
             desc: 'Blessing (and Zeal, Aegis) also purifies the allies it touches for 3 s: immune to lingering ground hazards (mire pools, cracked ground, the Deluge).' },
           { id: 'cl_swift', name: 'Swift Blessing', icon: '⇡', tier: 1, x: 1, max: 2, req: ['cl_inspire'], fx: [{ sk: 'bless', cd: -10 }] },
           { id: 'cl_unity', name: 'Unity', icon: '⚭', tier: 2, x: 0, max: 2, req: ['cl_cleanse', 'cl_swift'], fx: [{ aura: 'sw', v: 10 }] },
@@ -312,8 +315,7 @@ export function nodeLines(cls, n, rank) {
 
 // Talent nodes that touch a skill (for the Abilities pane). key: 'basic' or a skill id.
 export function nodesForSkill(cls, key) {
-  const extra = { exec: ['rush'], flow: ['rush', 'whirl'], relay: ['burst'], jugg: ['taunt'], rally: ['basic'], wrath: ['basic'], cleanse: ['bless'], overflow: ['heal', 'sanct'] };
-  return nodesOf(cls).filter(n => n.fx.some(e => e.sk === key || (e.key && extra[e.key]?.includes(key))));
+  return nodesOf(cls).filter(n => n.touches?.includes(key) || n.fx.some(e => e.sk === key));
 }
 
 // Level milestones for the Progression track (besides skills, points and tiers, which come from the data).
