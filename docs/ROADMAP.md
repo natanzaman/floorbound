@@ -105,7 +105,7 @@ One row per task. Whoever picks a task sets **Status** and **Owner** here first 
 | F3 Staging hooks | `feat/staging` | done | agent staging | 497be53 |
 | F4 Cinematic camera | `feat/cinecam` | done | agent cinecam | b343ff6 |
 | F5 Poses | `feat/poses` | done | agent poses | 901b9d4 |
-| F6 The Tower Bell and the engraved Hall | `feat/bell` | in progress | agent bell | |
+| F6 The Tower Bell and the engraved Hall | `feat/bell` | done | agent bell | f767ad7 |
 | F7 Episode 1 dress rehearsal | (on `main`) | todo (after F1–F6) | | |
 
 ### Shared contracts (read before starting any F task)
