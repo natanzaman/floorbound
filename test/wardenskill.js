@@ -20,7 +20,7 @@ async function run(i) {
   let log = '';
   srv.stdout.on('data', d => { log += d; }); srv.stderr.on('data', d => { log += d; });
   for (let k = 0; k < 150 && !/running on/.test(log); k++) await sleep(100);
-  const g = startTeam({ url: `ws://localhost:${PORT}/ws`, WebSocket, skill: SKILL });
+  const g = startTeam({ url: `ws://localhost:${PORT}/ws`, WebSocket, skill: SKILL, ...(process.env.ROLES ? { roles: process.env.ROLES.split(',') } : {}), log: m => { if (process.env.LOG_TALENTS && m.startsWith('[talent]')) console.log(m); } });
   const lead = g.team[0];
   const res = { run: i + 1, result: 'timeout', secs: 0, deaths: 0, twist: (log.match(/Warden twist: (\w+)/) || [])[1] || '?' };
   let start = null, hit = false, done = false;

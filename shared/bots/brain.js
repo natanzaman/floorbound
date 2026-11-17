@@ -18,6 +18,7 @@
 import { MOBS, MOB_IDS, CLASS_IDS, PLAYER_SPEED, SPRINT_SPEED, inGateZone, inArena } from '../data.js';
 import { F2, WAYSTONES, STAIRWAY, inGateZone2, inArena2, onFloor2, floorUnlocked } from '../floor2.js';
 import { MASTERY, BRANCHES, masteryLevel } from '../mastery.js';
+import { TREES, spendBlock } from '../talents.js';
 import { perceive, potionAt, setSkill, clampSkill } from '../botskill.js';
 import { DT, d2, useSkill, moveToward, evade, stepRoll, waveDodge, dodgeSpot, perilous, switchOpen, travelToBoss } from './motor.js';
 import { brainFor, roleOf, runHooks } from './registry.js';
@@ -73,7 +74,19 @@ function onMessage(b, msg) {
   if (msg.type === 'inv') { b.life = msg.life; b.cons = msg.cons; }
   if (msg.type === 'roster') { b.roster = msg.players; b.names = new Map(msg.players.map(r => [r.id, r])); }
   if (msg.type === 'mastery') evolve(b, msg.m);
+  if (msg.type === 'talents') spendTalent(b, msg);
   if (msg.type === 'snap') onSnap(b, msg);
+}
+
+// Talents: spend the next unspent point along the class's `bot` path (one rank per round trip; the server answers with a new 'talents').
+function spendTalent(b, msg) {
+  const r = msg.r || {}, path = TREES[b.cls]?.bot || [], want = {};
+  for (const id of path) {
+    want[id] = (want[id] || 0) + 1;
+    if ((r[id] | 0) >= want[id]) continue;
+    if (!spendBlock(b.cls, r, (msg.pts | 0) + 1, id)) { b.send({ type: 'talent', op: 'spend', id }); b.log?.(`[talent] ${b.name}: ${id}`); }
+    return;
+  }
 }
 
 // Evolve any skill that reached Mastery 3 (`branch` 'A' / 'B', random when unset).
