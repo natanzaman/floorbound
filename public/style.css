@@ -411,3 +411,32 @@ body.mlock #crosshair { display: block; }
 .pb-why { font-size: 11px; color: #fca5a5; margin-top: 4px; }
 .pb-why:empty { display: none; }
 .pb-sub { margin: 10px 0 4px; }
+/* party chat, say chat, bot orders (public/botwheel.js) */
+#log .party { color: #86efac; }
+#log .say { color: #e2e8f0; font-style: italic; }
+#party .bottag { font-size: 9px; padding: 0 4px; border-radius: 4px; background: rgba(148,163,184,.25); color: #cbd5e1; letter-spacing: .05em; }
+#party .pbtn { pointer-events: auto; align-self: flex-start; font: 600 12px system-ui, sans-serif; color: #e2e8f0; padding: 5px 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid rgba(134,239,172,.4); background: rgba(10,16,34,.78); }
+#party .pbtn small { opacity: .6; margin-left: 4px; border: 1px solid rgba(255,255,255,.3); border-radius: 3px; padding: 0 3px; }
+#party .pbtn:hover { background: rgba(34,197,94,.22); }
+#botwheel { position: absolute; inset: 0; z-index: 12; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+  background: radial-gradient(circle at 50% 46%, rgba(4,8,20,.55), rgba(4,8,20,.15) 60%); }
+#botwheel.hidden { display: none; }
+#botwheel .ring { position: relative; width: 400px; height: 400px; border-radius: 50%; border: 1px solid rgba(160,200,255,.18);
+  background: radial-gradient(circle, rgba(10,16,34,.85) 0 26%, rgba(10,16,34,.45) 27% 100%); }
+#botwheel .wcmd { position: absolute; transform: translate(-50%, -50%); margin: 200px 0 0 200px; width: 88px; padding: 8px 4px; border-radius: 12px;
+  border: 1px solid rgba(160,200,255,.3); background: rgba(15,23,42,.92); color: #e2e8f0; font: 600 12px system-ui, sans-serif; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 3px; transition: transform .08s, background .08s; }
+#botwheel .wcmd .ic { font-size: 18px; color: #86efac; line-height: 1; }
+#botwheel .wcmd:hover:not([disabled]) { background: rgba(34,197,94,.28); border-color: #86efac; transform: translate(-50%, -50%) scale(1.08); }
+#botwheel .wcmd[disabled] { opacity: .35; cursor: default; }
+#botwheel .hub { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; color: #e2e8f0; pointer-events: none; }
+#botwheel .hub b { display: block; letter-spacing: .18em; font-size: 13px; }
+#botwheel .hub small { opacity: .7; font-size: 12px; }
+#botwheel .who { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-width: 520px; color: #cbd5e1; font-size: 13px; }
+#botwheel .who button { font: 600 12px system-ui, sans-serif; padding: 5px 12px; border-radius: 999px; cursor: pointer; color: #e2e8f0;
+  border: 1px solid rgba(160,200,255,.3); background: rgba(15,23,42,.85); }
+#botwheel .who button.on { background: rgba(34,197,94,.3); border-color: #86efac; }
+#botwheel .who button.dead { opacity: .5; }
+#botwheel .who .dismiss { border-color: rgba(248,113,113,.45); color: #fecaca; }
+#botwheel .hint { font-size: 12px; opacity: .7; color: #e2e8f0; text-shadow: 0 1px 2px #000; text-align: center; padding: 0 12px; }

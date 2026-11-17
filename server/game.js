@@ -22,6 +22,7 @@ import { ClassesAMethods } from './classes-a.js';
 import { installStyles } from './styles.js';
 import { altStyle } from '../shared/styles.js';
 import { installTalents } from './talents.js';
+import { BOT_COMMANDS } from '../shared/bots/social.js'; // party orders for bots (botCommand)
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
@@ -151,15 +152,26 @@ export class Game {
   handle(p, msg) {
     switch (msg.type) {
       case 'input': return this.onInput(p, msg);
-      case 'skill': return this.useSkill(p, msg.slot | 0, msg.face);
+      case 'skill': p.healTid = msg.tid | 0; return this.useSkill(p, msg.slot | 0, msg.face); // tid: a heal's preferred target (bots)
       case 'dodge': return this.dodge(p, msg.face);
       case 'jump': return this.jump(p);
       case 'guard': return this.guard(p, msg.on);
-      case 'chat': {
+      case 'chat': { // ch: 'p' party chat, 's' say (heard nearby); otherwise everyone
         const text = String(msg.text || '').slice(0, 200).trim();
-        if (text) this.events.push({ t: 'chat', from: p.name, id: p.id, text });
+        if (!text) return;
+        const ch = msg.ch === 'p' && p.party ? { ch: 'p', party: p.party } : msg.ch === 's' ? { ch: 's', x: r2(p.x), z: r2(p.z) } : {};
+        this.events.push({ t: 'chat', from: p.name, id: p.id, text, ...ch, ...(p.admin ? { adm: 1 } : {}) });
         return;
       }
+      case 'target': { // the mob a player has locked (party bots assist it)
+        const id = msg.id | 0;
+        if (id !== (p.target || 0)) { p.target = id; this.events.push({ t: 'ptgt', id: p.id, m: id }); }
+        return;
+      }
+      case 'botcmd': return this.botCommand(p, msg);
+      case 'test': // testing aid (TEST_HOOKS=1 only): { hurt: fraction } sets your health, for the bot tests
+        if (process.env.TEST_HOOKS && msg.hurt > 0 && msg.hurt <= 1 && !p.dead) p.hp = Math.max(1, Math.round(p.maxHp * msg.hurt));
+        return;
       case 'invite': return this.invite(p, msg.id);
       case 'ready': return this.toggleReady(p);
       case 'lfg': return this.toggleLfg(p);
@@ -477,6 +489,15 @@ export class Game {
   // ---------- parties ----------
   partyOf(p) { return p.party ? this.parties.get(p.party) : null; }
 
+  // An order for the bots in the sender's party (the command wheel). Admins can also order any bot by name.
+  // Bots read it from the snapshot's events (shared/bots/brain.js) and check the party themselves.
+  botCommand(p, msg) {
+    const cmd = String(msg.cmd || ''), name = msg.name ? String(msg.name).slice(0, 16) : '';
+    if (!BOT_COMMANDS[cmd]) return;
+    if (!p.party && !(p.admin && name)) return this.sys('Invite some bots into your party first.', p.id);
+    this.events.push({ t: 'botcmd', by: p.id, byName: p.name, party: p.party || 0, cmd, ...(name ? { name } : {}), tgt: p.target || 0, ...(p.admin ? { adm: 1 } : {}) });
+  }
+
   invite(p, targetId) {
     const t = this.players.get(targetId);
     if (!t || t === p) return;
@@ -597,6 +618,8 @@ export class Game {
       }
       case 'heal': {
         let target = p, low = p.hp / p.maxHp;
+        const want = p.healTid && this.players.get(p.healTid); // a bot healer's pick (its party's most hurt / "heal me")
+        if (want && !want.dead && dist(want, p) <= 15 && want.hp < want.maxHp) low = -1, target = want;
         for (const o of this.players.values()) {
           if (o.dead || dist(o, p) > 15 * this.styleNum(p, 'healR', 1)) continue; // Wand: +50% range
           const f = o.hp / o.maxHp;

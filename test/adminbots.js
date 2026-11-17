@@ -105,7 +105,10 @@ try {
   ok(r.body.bot.behaviour === 'field' && r.body.bot.follow === '', 'behaviour back to field: leaves the party');
   r = await call('PATCH', `/api/admin/bots/${team[0].bid}`, adminTok, { behaviour: 'warden' });
   const tb = (await bots()).bots.filter(b => team.some(t => t.bid === b.bid));
-  ok(r.status === 200 && tb.every(b => b.behaviour === 'warden'), "a team member's behaviour applies to the whole team");
+  ok(r.status === 200 && tb.find(b => b.bid === team[0].bid).behaviour === 'warden' && tb.filter(b => b.bid !== team[0].bid).every(b => b.behaviour === 'field'),
+    "a team member's behaviour is its own (one brain per bot): the rest of the team keeps theirs");
+  await until(() => team.every(t => pos(tb.find(b => b.bid === t.bid).id)?.party) && new Set(tb.map(b => pos(b.id).party)).size === 1, 5000, 'team party');
+  ok(true, 'Add team puts the three bots into one party');
 
   // ---------- actions ----------
   r = await call('POST', `/api/admin/bots/${a.bid}/teleport`, adminTok, { to: 'gate' });

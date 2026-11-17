@@ -1,12 +1,14 @@
 // Live bot editing for the admin page (installed on BotManager in server/botmanager.js):
 //   edit(bid, { name, lvl, skill, behaviour, follow })  rename (unique), level (stats recomputed), capability 1-5,
-//                                                       behaviour / follow target (a team's behaviour is the whole team's)
+//                                                       behaviour / follow target; only ever this one bot (own brain)
 //   action(bid, act, body)                              teleport (to: player | town | gate), kill (stays down until revived),
-//                                                       revive, heal, respawn (as another class: remove + re-add, same settings)
+//                                                       revive, heal, respawn (as another class: remove + re-add, same settings),
+//                                                       command ({ cmd, name }: a party order from the admin, see shared/bots/social.js)
 import { CLASSES, MAX_LEVEL, walkable, resolveCollision } from '../shared/data.js';
 import { BOT_SKILLS } from '../shared/botskill.js';
 import { floorOf } from '../shared/floor2.js';
 import { BEHAVIOURS } from './botmanager.js';
+import { BOT_COMMANDS } from '../shared/bots/social.js';
 
 export class BotError extends Error { constructor(msg, code = 400) { super(msg); this.name = 'BotError'; this.code = code; } }
 const int = (v, lo, hi, what) => {
@@ -59,16 +61,12 @@ export const BotEditMethods = {
       g.recompute(p);
       if (!p.dead) p.hp = p.maxHp;
     }
-    if (skill !== undefined) e.group.setSkill(e.b, skill);
-    if (follow !== undefined && (behaviour !== e.behaviour || follow !== e.follow)) {
-      const mates = e.team ? this.bots.filter(x => x.group === e.group) : [e]; // a team shares one brain
-      e.group.configure({ behaviour, follow });
-      for (const x of mates) {
-        const xp = this.livePlayer(x);
-        if (xp && x.behaviour === 'follow' && !x.team && xp.party) g.leaveParty(xp); // stop tagging along with the old player
-        x.behaviour = behaviour; x.follow = follow; x.partied = false;
-        if (xp && (behaviour === 'floor2' || behaviour === 'follow')) xp.stats.floor2 = 1; // waystones
-      }
+    if (skill !== undefined) e.b.setSkill(skill);
+    if (follow !== undefined && (behaviour !== e.behaviour || follow !== e.follow)) { // this bot only: one brain per bot
+      e.b.configure({ behaviour, follow });
+      if (e.behaviour === 'follow' && p.party) g.leaveParty(p); // stop tagging along with the old player
+      e.behaviour = behaviour; e.follow = follow; e.partied = false;
+      if (behaviour === 'floor2' || behaviour === 'follow') p.stats.floor2 = 1; // waystones
     }
     return this.view(e);
   },
@@ -114,6 +112,16 @@ export const BotEditMethods = {
         const name = p.name;
         this.remove(e.bid);
         return this.start([body.cls], [name], keep)[0];
+      }
+      case 'command': { // an order, as if from its party (admins can order any bot)
+        const cmd = String(body.cmd || '');
+        if (!BOT_COMMANDS[cmd]) throw new BotError(`Unknown command. Try: ${Object.keys(BOT_COMMANDS).join(', ')}.`);
+        if (p.dead) throw new BotError('Revive it first.');
+        let t = null;
+        if (cmd === 'follow' || cmd === 'come' || cmd === 'heal') t = this.findPlayerAny(body.name);
+        if (cmd === 'attack') throw new BotError('Attack orders come from a player with a target locked.');
+        e.b.command({ k: cmd, by: t?.id || 0, byName: t?.name || 'Admin', followId: t?.id, adm: true, group: [e.b.id] });
+        break;
       }
       default: throw new BotError('Unknown action.', 404);
     }

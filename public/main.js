@@ -22,6 +22,7 @@ import { initClassesA } from '/classes-a.js';
 import { initStyles } from '/styles.js';
 import { initPlayerBots } from '/playerbots.js';
 import { initTalents } from '/talents.js';
+import { initBotWheel } from '/botwheel.js';
 
 const sfx = new Sound();
 
@@ -193,6 +194,7 @@ async function join(joinMsg) {
 }
 const send = o => state.ws?.readyState === 1 && state.ws.send(JSON.stringify(o));
 const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
+const wheel = initBotWheel({ send, state, players, log }); // orders for the bots in your party: hold V (public/botwheel.js)
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
@@ -566,7 +568,10 @@ function handleEvent(e) {
       if (e.s === 'open') { sfx.play('gate', { x: 0, z: 161 }, 1.5); if (Math.abs(state.x) < 30 && state.z > 120) banner('THE RAID GATE OPENS', 'The Horned Warden awaits'); }
       break;
     case 'invite': if (e.to === me) showInvite(e.from, e.name); break;
-    case 'chat': log(`${e.from}: ${e.text}`, e.id === me ? 'me' : ''); break;
+    case 'chat': // ch 'p': party chat (only your party sees it), 's': say (heard within 40 m)
+      if (e.ch === 'p') { if (state.party && e.party === state.party) log(`[Party] ${e.from}: ${e.text}`, e.id === me ? 'me party' : 'party'); break; }
+      if (e.ch === 's') { if (state.spectator || Math.hypot(e.x - state.x, e.z - state.z) < 40) log(`${e.from} says: ${e.text}`, e.id === me ? 'me' : 'say'); break; }
+      log(`${e.from}: ${e.text}`, e.id === me ? 'me' : ''); break;
     case 'sys': if (!e.to || e.to === me) log(e.text, 'sys'); break;
   }
 }
@@ -651,7 +656,7 @@ addEventListener('keydown', e => {
   if (!state.joined) return;
   const chat = $('chat-input');
   if (document.activeElement === chat) {
-    if (e.key === 'Enter') { const t = chat.value.trim(); if (t) send({ type: 'chat', text: t }); chat.value = ''; chat.blur(); }
+    if (e.key === 'Enter') { sendChat(chat.value); chat.value = ''; chat.blur(); }
     if (e.key === 'Escape') chat.blur();
     return;
   }
@@ -665,7 +670,8 @@ addEventListener('keydown', e => {
   if (k === 'k' && !e.repeat) talents.toggle(); // Skill Tree window (public/talents.js)
   if (k === 'r' && !e.repeat) combat.guard(true);
   if (k === 'tab') { e.preventDefault(); cycleLock(); }
-  if (k === 'escape') { state.lock = 0; state.focus = 0; }
+  if (k === 'escape') { if (wheel.isOpen()) wheel.close(); else { state.lock = 0; state.focus = 0; } }
+  if (k === 'v' && !e.repeat) wheel.keydown(e); // bot command wheel
   if (k === 'p') $('players-btn').click();
   if (k === 'b' || k === 'i') toggleBag();
   if (k === 'f') interact();
@@ -677,6 +683,7 @@ addEventListener('keyup', e => {
   keys.delete(k);
   if (k === 'j') attackHeld = false;
   if (k === 'r') combat.guard(false);
+  if (k === 'v') wheel.keyup();
 });
 addEventListener('blur', () => { keys.clear(); attackHeld = false; combat.guard(false); });
 
@@ -698,7 +705,7 @@ addEventListener('mousemove', e => {
   state.pitch = Math.min(1.25, Math.max(0.12, state.pitch + e.movementY * s * (settings.invertY ? -1 : 1)));
 });
 // Panels need the cursor: free it whenever one is open.
-const CURSOR_PANELS = ['players', 'bag', 'hall', 'warp', 'smith', 'skillsp', 'settings', 'talentsp'];
+const CURSOR_PANELS = ['players', 'bag', 'hall', 'warp', 'smith', 'skillsp', 'settings', 'talentsp', 'botwheel'];
 function cursorPanelOpen() { return CURSOR_PANELS.some(id => { const el = $(id); return el && !el.classList.contains('hidden'); }); }
 // Top-right chips: lay them out right-to-left by their real widths, so a long gold count never overlaps a neighbour.
 function layoutChips() {
@@ -1190,6 +1197,8 @@ function updateGateBox(force) {
 
 // ---------------- HUD ----------------
 const logEl = $('log');
+let hudParty = '';
+$('party').addEventListener('pointerdown', e => { if (e.target.closest('#bots-btn')) { e.preventDefault(); if (wheel.isOpen()) wheel.close(); else wheel.open(); } });
 function log(text, cls = '') {
   const d = document.createElement('div');
   d.className = cls; d.textContent = text;
@@ -1225,7 +1234,14 @@ $('sound-btn').textContent = sfx.on ? 'Sound on' : 'Sound off';
 $('sound-btn').onclick = () => { sfx.unlock(); $('sound-btn').textContent = sfx.toggle() ? 'Sound on' : 'Sound off'; };
 $('lock-btn').onpointerdown = e => { e.preventDefault(); cycleLock(); };
 canvas.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
-$('chat-btn').onclick = () => { const t = prompt('Say something'); if (t && t.trim()) send({ type: 'chat', text: t.trim() }); };
+$('chat-btn').onclick = () => { const t = prompt('Say something (/p party, /s nearby)'); if (t) sendChat(t); };
+// Chat channels: "/p text" party, "/s text" say (nearby); anything else goes to everyone.
+function sendChat(raw) {
+  let t = String(raw || '').trim(), ch;
+  const m = t.match(/^\/(p|party|s|say)\s+([\s\S]*)$/i);
+  if (m) { ch = m[1][0].toLowerCase(); t = m[2].trim(); }
+  if (t) send({ type: 'chat', text: t, ...(ch ? { ch } : {}) });
+}
 $('players-btn').onclick = () => { $('players').classList.toggle('hidden'); lobby.html = ''; renderPlayers(); };
 function renderPlayers() {
   if ($('players').classList.contains('hidden')) return;
@@ -1296,10 +1312,11 @@ function updateHud(now) {
 
   // party frames
   const mates = state.spectator ? [...players.values()] : state.party ? [...players.values()].filter(p => p.party === state.party && p.id !== state.myId) : [];
-  $('party').innerHTML = mates.map(p => {
-    const pc = (p.hp / p.maxHp) * 100;
-    return `<div class="frame ${p.dead ? 'dead' : ''}"><div class="row" style="font-size:12px;margin:0"><span>${esc(p.name)}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div>${classesA.frameBar(p)}</div>`;
-  }).join('');
+  const partyHtml = mates.map(p => {
+    const pc = (p.hp / p.maxHp) * 100, bot = state.roster.get(p.id)?.bot;
+    return `<div class="frame ${p.dead ? 'dead' : ''}"><div class="row" style="font-size:12px;margin:0"><span>${esc(p.name)}${bot ? ' <small class="bottag">BOT</small>' : ''}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div>${classesA.frameBar(p)}</div>`;
+  }).join('') + (!state.spectator && mates.some(p => state.roster.get(p.id)?.bot) ? `<button id="bots-btn" class="pbtn" title="Orders for your bots (hold V)">⌘ Bot orders <small>V</small></button>` : '');
+  if (partyHtml !== hudParty) { hudParty = partyHtml; $('party').innerHTML = partyHtml; }
 
   // boss bar (the boss of the floor you're on)
   const onF2 = state.x > F2.split;
@@ -1579,6 +1596,7 @@ function spectatorCamera(dt) {
 }
 
 let hitStop = 0;
+let sentLock = 0; // the locked mob last reported to the server (`target`)
 const projFx = new Map(); // thorn id -> effect
 function frame(now) {
   requestAnimationFrame(frame);
@@ -1589,6 +1607,7 @@ function frame(now) {
   const lm = state.joined && !state.spectator ? lockedMob() : null;
   const la = !lm && state.joined && !state.spectator ? focusedAlly() : null;
   const sel = lm || la;
+  if (state.joined && !state.spectator && (state.lock || 0) !== sentLock) { sentLock = state.lock || 0; send({ type: 'target', id: sentLock }); } // party bots assist your target
   if (cursorPanelOpen()) freeCursor();
   if (settings.camera === 'classic' && state.joined && !state.spectator && !isTouch && mouse.inside && mouse.onCanvas && drag.id === null && document.activeElement !== $('chat-input')) {
     const edge = Math.max(40, innerWidth * 0.06);

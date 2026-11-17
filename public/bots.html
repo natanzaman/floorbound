@@ -10,8 +10,8 @@
     h1 { margin: 0 0 4px; letter-spacing: .12em; }
     p { opacity: .8; margin: 0 0 16px; max-width: 640px; }
     button, a.btn { font: inherit; color: #fff; padding: 9px 16px; border-radius: 8px; border: 1px solid rgba(160,200,255,.35); background: rgba(120,170,255,.15); cursor: pointer; text-decoration: none; display: inline-block; margin: 0 6px 6px 0; }
-    .team { margin: 14px 0; padding: 12px 14px; border-radius: 10px; background: rgba(255,255,255,.05); border: 1px solid rgba(160,200,255,.18); max-width: 640px; }
-    .bot { display: grid; grid-template-columns: 150px 120px 1fr 60px; gap: 10px; align-items: center; padding: 3px 0; font-size: 14px; }
+    .team { margin: 14px 0; padding: 12px 14px; border-radius: 10px; background: rgba(255,255,255,.05); border: 1px solid rgba(160,200,255,.18); max-width: 760px; }
+    .bot { display: grid; grid-template-columns: 110px 120px 1fr 50px 190px; gap: 10px; align-items: center; padding: 3px 0; font-size: 14px; }
     .bar { height: 8px; border-radius: 4px; background: rgba(255,255,255,.1); overflow: hidden; }
     .bar div { height: 100%; background: #4ade80; }
     .dead { opacity: .45; }
@@ -21,7 +21,7 @@
 </head>
 <body>
   <h1>BOT PARTIES</h1>
-  <p>Each party is a tank (Brann), a DPS (Kael) and a healer (Lyra), each its own connection like a real player. They level up on boars, then wolves, then take on the Warden. Keep this tab open: closing it disconnects the bots.</p>
+  <p>Each party is a tank (Brann), a DPS (Kael) and a healer (Lyra), each its own connection and its own brain, like a real player. They level up on boars, then wolves, then take on the Warden. Invite yourself in and they follow your lead (hold V in the game for orders). Keep this tab open: closing it disconnects the bots.</p>
   <label><input type="checkbox" id="invite" /> Invite me into the first party</label>
   <div style="margin-top:10px">
     <button id="add">Add a party</button>
@@ -50,7 +50,7 @@
     function render() {
       document.getElementById('teams').innerHTML = teams.map((t, i) => `<div class="team"><b>Party ${i + 1}</b>${t.team.map(b => {
         const pct = Math.round((b.hp / b.maxHp) * 100) || 0;
-        return `<div class="bot ${b.dead ? 'dead' : ''}"><span>${b.name}</span><span>${CLASSES[b.cls].name} · ${CLASSES[b.cls].role}</span><div class="bar"><div style="width:${pct}%"></div></div><span>Lv ${b.me?.lvl ?? 1}</span></div>`;
+        return `<div class="bot ${b.dead ? 'dead' : ''}"><span>${b.name}</span><span>${CLASSES[b.cls].name} · ${CLASSES[b.cls].role}</span><div class="bar"><div style="width:${pct}%"></div></div><span>Lv ${b.me?.lvl ?? 1}</span><span style="opacity:.7;font-size:12px">${b.goal || ''}</span></div>`;
       }).join('')}</div>`).join('');
     }
     setInterval(render, 500);
