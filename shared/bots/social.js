@@ -96,13 +96,13 @@ export const pick = (key, vars = {}) => {
 const CHATTY = { 1: 0.4, 2: 0.55, 3: 0.75, 4: 0.9, 5: 1 };
 
 // Rate-limited party chatter. key: a LINES key (and the cooldown bucket); p: chance; cd: seconds before this key again.
-// force: replies to commands (still at most one line per 0.8 s per bot). Never global chat: party chat, or say chat
+// force: replies to orders (always said; orders come at human pace). Never global chat: party chat, or say chat
 // (heard nearby) when not in a party.
 export function say(b, key, vars = {}, { p = 1, cd = 20, force = false, text = null } = {}) {
   if (!b.me || b.closed) return false;
   const s = (b.talk ||= { next: 0, cd: {}, last: -9 });
-  if (b.t - s.last < 0.8) return false;
   if (!force) {
+    if (b.t - s.last < 0.8) return false;
     if (b.quiet || b.t < s.next || b.t < (s.cd[key] || 0)) return false;
     if (b.t - (b.partyChatT ?? -99) < 3) return false; // someone else just spoke
     if (Math.random() > p * (CHATTY[b.skill] ?? 1)) { s.cd[key] = b.t + cd / 3; return false; }

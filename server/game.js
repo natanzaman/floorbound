@@ -162,6 +162,9 @@ export class Game {
         return;
       }
       case 'botcmd': return this.botCommand(p, msg);
+      case 'test': // testing aid (TEST_HOOKS=1 only): { hurt: fraction } sets your health, for the bot tests
+        if (process.env.TEST_HOOKS && msg.hurt > 0 && msg.hurt <= 1 && !p.dead) p.hp = Math.max(1, Math.round(p.maxHp * msg.hurt));
+        return;
       case 'invite': return this.invite(p, msg.id);
       case 'ready': return this.toggleReady(p);
       case 'lfg': return this.toggleLfg(p);

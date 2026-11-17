@@ -199,6 +199,8 @@ async function refreshBots() {
   renderBotCards(live);
 }
 
+const ORDERS = { follow: 'Follow', come: 'Regroup', stay: 'Hold here', attack: 'Attack', heal: 'Heal', farm: 'Go farm', boss: 'Do the boss', ready: 'Ready up', potion: 'Use potion', status: 'Status (party chat)', leave: 'Leave party' };
+const ROLE_NAMES = { tank: 'Tank ·', dps: 'DPS ·', healer: 'Healer ·', support: 'Support ·' };
 // Keyed cards: built once per bot, then only the live parts are updated (so open selects / typing aren't disturbed).
 const cards = new Map(); // bid -> element
 function renderBotCards(list) {
@@ -223,9 +225,10 @@ function buildCard(b) {
   el.style.setProperty('--cc', clsColor(b.cls));
   el.innerHTML = `
     <div class="top">${clsIcon(b.cls)}<input class="nm" data-k="name" maxlength="16" title="Rename: type, then Enter" spellcheck="false" />
-      <span class="pill bot">BOT</span>${b.team ? `<span class="pill team" title="Team ${b.team}: one brain; behaviour applies to the whole team">TEAM ${b.team}</span>` : ''}<span class="grow"></span><span data-k="skilltag"></span></div>
+      <span class="pill bot">BOT</span>${b.team ? `<span class="pill team" title="Added as team ${b.team}: three bots in one party, each with its own brain">TEAM ${b.team}</span>` : ''}<span class="grow"></span><span data-k="skilltag"></span></div>
     <div class="meta"><span class="cls-name">${esc(clsName(b.cls))}</span><span class="sep">·</span><span data-k="where"></span><span data-k="party"></span></div>
     <div class="hp"><div data-k="hpbar"></div><span data-k="hptext"></span></div>
+    <div class="goal" data-k="goal"></div>
     <div class="ctl">
       <span>Level</span><span><span class="step"><button type="button" data-d="-1" title="Level down">−</button><input type="number" data-k="lvl" min="1" max="${MAX_LEVEL}" /><button type="button" data-d="1" title="Level up">+</button></span></span>
       <span>Capability</span><span><span class="seg" data-k="seg"></span></span>
@@ -236,6 +239,7 @@ function buildCard(b) {
       <button class="small" data-a="kill" data-k="killbtn"></button>
       <select data-k="tp" title="Teleport"></select>
       <select data-k="respawn" title="Remove and re-add as another class (same name, level, capability, behaviour)"></select>
+      <select data-k="order" title="Give this bot an order, as its party would"></select>
       <span class="grow"></span>
       <button class="small danger icon" data-a="remove" title="Remove this bot"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>`;
@@ -261,7 +265,7 @@ function buildCard(b) {
       const first = botData.players[0]?.name;
       if (!first) { toast('Nobody is online to follow.'); q('beh').value = el.dataset.beh; return; }
       patch({ behaviour: 'follow', follow: first }, `Following ${first}.`);
-    } else patch({ behaviour: v }, r => `${r.bot.name}${r.bot.team ? ' and team' : ''}: ${botData.behaviours[v].split(' (')[0]}.`);
+    } else patch({ behaviour: v }, r => `${r.bot.name}: ${botData.behaviours[v].split(' (')[0]}.`);
   };
   q('follow').onchange = () => patch({ follow: q('follow').value }, `Following ${q('follow').value}.`);
   // actions
@@ -276,6 +280,12 @@ function buildCard(b) {
     if (!v) return;
     const [to, name] = v.split(':');
     post('teleport', { to, name }, `${nm.dataset.v} teleported to ${to === 'player' ? name : to === 'gate' ? 'the Warden gate' : 'town'}.`);
+  };
+  q('order').onchange = () => {
+    const v = q('order').value; q('order').value = '';
+    if (!v) return;
+    const [cmd, name] = v.split(':');
+    post('command', { cmd, name }, `${nm.dataset.v}: ${ORDERS[cmd]}${name ? ` (${name})` : ''}.`);
   };
   q('respawn').onchange = () => {
     const c = q('respawn').value; q('respawn').value = '';
@@ -304,7 +314,17 @@ function updateCard(el, b, force = false) {
   if (!focused(lv) && !el.lvPending) lv.value = b.lvl;
   const beh = q('beh');
   if (!focused(beh) && beh.dataset.v !== b.behaviour) { beh.innerHTML = behOptions(b.behaviour); beh.dataset.v = b.behaviour; }
-  beh.title = b.team ? 'Applies to the whole team' : botData?.behaviours[b.behaviour] || '';
+  beh.title = `${botData?.behaviours[b.behaviour] || ''} (this bot only; in a party the leader's course wins: a human, else the tank)`;
+  const order = b.order ? ` · <span class="ord">order: ${esc(ORDERS[b.order.cmd] || b.order.cmd)}${b.order.by ? ` (${esc(b.order.by)})` : ''}</span>` : '';
+  const goalHtml = b.status === 'online' ? `<span class="dim">${esc(ROLE_NAMES[b.role] || '')}</span> ${esc(b.goal || '')}${order}` : '';
+  if (q('goal').dataset.v !== goalHtml) { q('goal').innerHTML = goalHtml; q('goal').dataset.v = goalHtml; }
+  const od = q('order'), okey = (botData?.players || []).map(p => p.name).join(',');
+  if (!focused(od) && od.dataset.v !== okey) {
+    const ps = botData?.players || [];
+    od.innerHTML = `<option value="">⌘ Order…</option>${['stay', 'ready', 'potion', 'farm', 'boss', 'status', 'leave'].map(c => `<option value="${c}">${esc(ORDERS[c])}</option>`).join('')}${ps.length ? `<optgroup label="Follow / regroup on">${ps.map(p => `<option value="follow:${esc(p.name)}">Follow ${esc(p.name)}</option><option value="come:${esc(p.name)}">Come to ${esc(p.name)}</option>`).join('')}</optgroup>` : ''}`;
+    od.dataset.v = okey;
+  }
+  od.disabled = !!b.dead || b.status !== 'online';
   const fol = q('follow'), players = botData?.players || [];
   fol.classList.toggle('hidden', b.behaviour !== 'follow');
   const fkey = `${b.follow}|${players.map(p => p.name).join(',')}`;
