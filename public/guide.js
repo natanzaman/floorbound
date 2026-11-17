@@ -31,6 +31,7 @@ const TIPS = {
   perfect: 'PERFECT dodge! Rolling just before a hit lands staggers the attacker\'s posture, and your next hit does +50% damage.',
   peril: 'Orange = perilous: dodge through it or parry (Guardian R). Shields won\'t save you.',
   rguard: 'R is the Guardian\'s guard: hold it to block, tap it just before a hit to parry.',
+  bell: 'The Tower Bell: someone cleared a floor for the first time on this server. One bell per floor; a hundred bells and the tower lets you go. Their names are carved on the Hall of Clearers stone in town.',
   bots: 'Bots in your party take orders: hold V for the order wheel, or type /b stay, /b follow, /b Lyra: heal (one bot). /b help lists them all; ordinary chat never gives orders.',
 };
 

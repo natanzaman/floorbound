@@ -23,6 +23,7 @@ import { installStyles } from './styles.js';
 import { altStyle } from '../shared/styles.js';
 import { installTalents } from './talents.js';
 import { installTracking } from './trackgame.js';
+import { installBell } from './bell.js';
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -320,6 +321,7 @@ export class Game {
       if (p !== killer) this.checkTitles(p);
     }
     this.bumpStat(killer, 'lastAttacks');
+    if (first) this.ringBell(1, { auto: true }); // the Tower Bell (server/bell.js)
     this.onClear?.({ floor: 1, secs: f ? Math.round(this.time - f.start) : 0, players: party, lastAttack: killer.name, deaths: f?.deaths || 0, first });
   }
 
@@ -1359,5 +1361,6 @@ Object.assign(Game.prototype, F2Methods); // Floor 2 (server/floor2.js)
 installClassesB(Game); // Lancer, Bard skills + their hooks (server/classes-b.js)
 Object.assign(Game.prototype, ClassesAMethods); // Ranger and Berserker (server/classes-a.js)
 installStyles(Game); // weapon styles (server/styles.js)
+installBell(Game); // the Tower Bell: ringBell, bellAuto (server/bell.js)
 installTracking(Game); // play-tracking hooks: boss fight rows, death / quit context (server/trackgame.js)
 installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js); keep it last

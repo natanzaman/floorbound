@@ -197,10 +197,7 @@ export function createWorld(scene) {
   const crest = new THREE.Mesh(new THREE.OctahedronGeometry(0.28), goldM); crest.position.y = 4.85; hall.add(crest);
   const frame = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.2, 0.05), goldM); frame.position.set(0, 2.15, 0.2); hall.add(frame);
   const face = new THREE.Mesh(new THREE.BoxGeometry(2.0, 2.0, 0.06), mat(0x3f3c48)); face.position.set(0, 2.15, 0.22); hall.add(face);
-  for (let i = 0; i < 6; i++) { // engraved names
-    const w = i === 0 ? 1.3 : 0.9 + ((i * 37) % 7) / 10;
-    const line = new THREE.Mesh(new THREE.BoxGeometry(w, i === 0 ? 0.12 : 0.07, 0.03), goldM); line.position.set(0, 2.9 - i * 0.28 - (i ? 0.12 : 0), 0.26); hall.add(line);
-  }
+  // the engraved names (face) and the motto (back) are canvas textures added by public/bell.js
   for (const sx of [-1.65, 1.65]) { // braziers
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 1.4, 8), darkStone); post.position.set(sx, 0.7, 0.55); hall.add(post);
     const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.18, 0.25, 10), darkStone); bowl.position.set(sx, 1.5, 0.55); hall.add(bowl);
@@ -211,6 +208,7 @@ export function createWorld(scene) {
   hall.traverse(m => { if (m.isMesh) m.castShadow = true; });
   root.add(hall);
   hall.userData.crest = crest;
+  hall.name = 'hall_of_clearers';
 
   return { sun, crystal, occluders, treeFader, gate: raidGate, stall, hall, root };
 }
