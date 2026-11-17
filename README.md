@@ -189,8 +189,9 @@ public/          Three.js client (no build step): main.js, world.js, style.css
 public/models/   rigged character models (glTF) with shared animations
 test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
-shared/teambots.js  role-playing party bots (tank / DPS / healer), used by test/team.js and public/bots.html
+shared/teambots.js  bot brains: role-playing party (tank / DPS / healer) and single bots; used by test/team.js, public/bots.html and server/botmanager.js
 shared/mastery.js, server/mastery.js, public/mastery.js  skill mastery and evolutions; test/evolve.js
+server/admin.js  admin API (/api/admin/*) and /api/lobby; server/botmanager.js runs bots inside the server; public/admin.html the admin page
 ```
 
 Tuning lives in `shared/data.js` (class HP/ATK, cooldowns, mob stats). New skills are a `case` in `Game.useSkill` plus an entry in `CLASSES`.
@@ -204,6 +205,27 @@ Set `DATABASE_URL` (any Postgres; the live game uses Neon) to turn on accounts. 
 - Up to 4 characters per account; names are unique. Level and XP save every 15 s, on level-up and on disconnect.
 
 Without `DATABASE_URL` the game runs in anonymous mode (pick a name and play, nothing saved), which is handy for local development.
+
+## Admin
+
+Open **/admin.html** in the browser where you play (it uses the game's saved session). It needs accounts (`DATABASE_URL`).
+
+**Becoming an admin**, either way:
+
+- Set the flag in the database: `UPDATE accounts SET is_admin = true WHERE id = <your account id>;` (the admin page shows your account id when you're not an admin yet; for a Discord account you can match on `discord_id`).
+- Or list Discord user ids in `ADMIN_DISCORD_IDS` (comma-separated), e.g. `ADMIN_DISCORD_IDS=123456789012345678,234567890123456789`. Those accounts are admins while the variable is set.
+
+Every `/api/admin/*` route checks that the session belongs to an admin (401 signed out, 403 otherwise). Nothing admin-only goes over the game WebSocket.
+
+The page has three tabs:
+
+- **Bots:** bots that run inside the server (no browser tab needed). Add one bot (class, optional name, starting level, behaviour: *follow* an online player, fighting alongside them in their party; *farm the field* near town; *go fight the Warden*; *Floor 2*; or the classic *level up, then the Warden*), or a whole team (Guardian, Swordsman, Cleric). Each bot shows its level, health, floor/area, party and behaviour, with a Remove button; *Remove all bots* clears them. Bots are anonymous (never saved), marked as bots in the roster (BOT tag in the game), left out of play tracking, and capped at 30 (`MAX_BOTS`). A follower that falls far behind (or is on another floor) appears next to its player.
+- **Players:** every saved character merged with the live game: class, level, account (Discord name or `guest #id`), online/offline, current floor and area, last seen and created. Search, filter and sort (click a column).
+- **Edit** (click a character): level and XP, gold, consumables, materials, equipped and bag items (remove, equip, add any slot/rarity/class, add the Last Attack items), titles earned and worn, lifetime stats, the Floor 2 unlock, rename, class change (offline only; a weapon for the old class goes back to the bag), delete (type the name to confirm), and an **Advanced: raw JSON** editor for the stored inventory and stats (validated; unknown stats keys are kept). If the character is online, the edit is applied to the live player straight away (they get "An admin updated your character") and saved.
+
+The in-game **Players** panel (P) lists real players online, the bots (collapsed), and characters seen in the last 30 days (`GET /api/lobby`: name, class, level, last seen, no account details).
+
+Code: `server/admin.js` (routes), `server/botmanager.js` (bots), `public/admin.html` + `public/admin.js`. Test: `DATABASE_URL=... node test/admin.js` (starts its own server on port 3572).
 
 ## Testing
 

@@ -330,3 +330,7 @@ input { font: inherit; }
 #smith .cost i { font-style: normal; opacity: .6; }
 .it button.del { border-color: rgba(248,113,113,.35); background: rgba(248,113,113,.08); padding: 4px 7px; }
 .it button.del.armed { background: #b91c1c; color: #fff; }
+#players .tag.bot { background: rgba(251,191,36,.25); color: #fde68a; }
+#players details.sect { margin-top: 8px; }
+#players details.sect summary { cursor: pointer; padding: 4px 0; }
+#players .p.off { opacity: .75; }
