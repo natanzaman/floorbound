@@ -216,7 +216,7 @@ export const TalentMethods = {
     }
     const i = slotOf(p, K.reset);
     if (i > 0) p.cds[i] = t;
-    this.events.push({ t: 'tproc', k: 'relay', id: p.id, x: r2(p.x), z: r2(p.z), r: K.r });
+    this.events.push({ t: 'tproc', k: 'relay', id: p.id, to: p.id, x: r2(p.x), z: r2(p.z), r: K.r });
   },
 };
 
@@ -298,7 +298,7 @@ export function installTalents(Game) {
     orig.call(this, p, src, mob);
     if ((p.perfects || 0) > n && p.tal?.keys.flow) { // Flowing Blade: a perfect dodge resets Rush and Whirl
       for (const id of KEYS.flow.reset) { const i = slotOf(p, id); if (i > 0) p.cds[i] = this.time; }
-      this.events.push({ t: 'tproc', k: 'flow', id: p.id, x: r2(p.x), z: r2(p.z) });
+      this.events.push({ t: 'tproc', k: 'flow', id: p.id, to: p.id, x: r2(p.x), z: r2(p.z) });
     }
   });
 
@@ -310,7 +310,7 @@ export function installTalents(Game) {
       this.healPlayer(p, p.maxHp * KEYS.unbreak.heal, p, null);
       const a = this.attackerOf(p, src, mob);
       if (a && this.targetable(a)) this.damageMob(a, p, p.atk * this.dmgMult(p) * KEYS.unbreak.hit, { heavy: true, threat: 2 });
-      this.events.push({ t: 'tproc', k: 'unbreak', id: p.id, x: r2(p.x), z: r2(p.z) });
+      this.events.push({ t: 'tproc', k: 'unbreak', id: p.id, to: p.id, x: r2(p.x), z: r2(p.z) });
     }
     if (K.parryCounter) p.counterUntil = this.time + PERFECT.counter; // Shield Riposte: a counter window like a perfect dodge
     return res;
@@ -322,7 +322,7 @@ export function installTalents(Game) {
     if (p?.tal?.keys.rally && this.time >= (p.rallyT || 0)) { // Rallying Bash: shields for the allies around
       p.rallyT = this.time + K.every;
       for (const o of this.players.values()) if (!o.dead && dist(o, p) <= K.r) this.talentShield(o, o.maxHp * K.shield, K.d);
-      this.events.push({ t: 'tproc', k: 'rally', id: p.id, x: r2(p.x), z: r2(p.z), r: K.r });
+      this.events.push({ t: 'tproc', k: 'rally', id: p.id, to: p.id, x: r2(p.x), z: r2(p.z), r: K.r });
     }
     return out;
   });
@@ -331,7 +331,7 @@ export function installTalents(Game) {
     const out = orig.call(this, m, killer);
     if (killer?.tal?.keys.exec) { // Executioner: a kill resets Rush
       const i = slotOf(killer, 'rush');
-      if (i > 0 && killer.cds[i] > this.time) { killer.cds[i] = this.time; this.events.push({ t: 'tproc', k: 'exec', id: killer.id, x: r2(killer.x), z: r2(killer.z) }); }
+      if (i > 0 && killer.cds[i] > this.time) { killer.cds[i] = this.time; this.events.push({ t: 'tproc', k: 'exec', id: killer.id, to: killer.id, x: r2(killer.x), z: r2(killer.z) }); }
     }
     return out;
   });
@@ -377,7 +377,7 @@ export const TalentMethodsNew = {
   },
   cdCut(p, skId, secs) { const i = slotOf(p, skId); if (i > 0 && p.cds[i] > this.time) p.cds[i] = Math.max(this.time, p.cds[i] - secs); },
   cdReset(p, skId) { const i = slotOf(p, skId); if (i > 0) p.cds[i] = Math.min(p.cds[i], this.time); },
-  tproc(p, k, extra = {}) { this.events.push({ t: 'tproc', k, id: p.id, x: r2(p.x), z: r2(p.z), ...extra }); },
+  tproc(p, k, extra = {}) { this.events.push({ t: 'tproc', k, id: p.id, to: p.id, x: r2(p.x), z: r2(p.z), ...extra }); },
 
   afterSkillNew(p, sk, slot, ev0) {
     if (!['ranger', 'berserker', 'lancer', 'bard'].includes(p.cls)) return;
@@ -425,7 +425,7 @@ export const TalentMethodsNew = {
   mineBlast(tr) {
     const p = this.players.get(tr.owner), K = KEYS.minefield;
     if (!p?.tal?.keys.minefield || p.dead) return;
-    this.events.push({ t: 'tproc', k: 'minefield', id: p.id, x: r2(tr.x), z: r2(tr.z), r: r2(tr.r) });
+    this.events.push({ t: 'tproc', k: 'minefield', id: p.id, to: p.id, x: r2(tr.x), z: r2(tr.z), r: r2(tr.r) });
     for (const m of [...this.mobs.values()]) {
       if (!this.targetable(m) || Math.hypot(m.x - tr.x, m.z - tr.z) > tr.r + m.def.radius) continue;
       this.damageMob(m, p, p.atk * this.dmgMult(p) * K.mult, { sk: tr.sk, heavy: true, frac: K.frac, threat: 0.8 });
@@ -485,7 +485,7 @@ function installTalentsNew(P, wrap) {
         this.events.push({ t: 'markA', id: m.id, by: rg.id, d: r2(mk.until - t), k: '' });
         this.cdReset(rg, PK.reset);
         for (const o of this.players.values()) if (!o.dead && dist(o, m) <= PK.r + m.def.radius) this.teamBuff(o, PK.dmg, PK.d);
-        this.events.push({ t: 'tproc', k: 'packlead', id: rg.id, x: r2(m.x), z: r2(m.z), r: PK.r });
+        this.events.push({ t: 'tproc', k: 'packlead', id: rg.id, to: rg.id, x: r2(m.x), z: r2(m.z), r: PK.r });
       }
       for (const b of this.players.values()) {
         if (!b.tal?.keys.symphony || b.dead || b === p || dist(b, p) > KEYS.symphony.r) continue;
@@ -531,7 +531,7 @@ function installTalentsNew(P, wrap) {
     if (K.massacre) { this.gainRageA(killer, KEYS.massacre.rage); this.cdReset(killer, KEYS.massacre.reset); this.tproc(killer, 'massacre'); }
     if (K.sanguine && this.raging?.(killer)) {
       killer.brA.until += KEYS.sanguine.ext;
-      this.events.push({ t: 'brA', id: killer.id, k: killer.brA.k, d: r2(killer.brA.until - this.time) });
+      this.events.push({ t: 'brA', id: killer.id, to: killer.id, k: killer.brA.k, d: r2(killer.brA.until - this.time) });
     }
     return out;
   });

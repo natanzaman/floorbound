@@ -273,7 +273,7 @@ export function initTalents(ctx) {
       else if (e.k === 'maestro') { if (pos) notes(pos); return true; } // frequent: a small flourish only
       else if (e.k === 'spirit') fx.beam(e.x, e.z, 0xc4b5fd, 1.6);
       else if (pos) fx.ring(pos.x, pos.z, 2, e.k === 'flow' ? 0x22d3ee : 0x60a5fa, 0.45);
-      if (pos && (mine || e.k === 'spirit')) floatNum(pos, 3.1, say, 'talent');
+      if (pos && (mine || e.k === 'spirit')) floatNum(pos, 3.1, say, 'talent'); // your procs only for you (`to`); Guardian Spirit's save for all
       if (mine) sfx.play(e.k === 'spirit' ? 'evolve' : 'chime');
       return true;
     }

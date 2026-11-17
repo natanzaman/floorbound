@@ -118,7 +118,7 @@ export function initFloor2Client(ctx) {
       }
       case 'blocked': { // a Shieldback's front shell soaked the hit
         const m = mobs.get(e.id);
-        if (!m || (e.by !== myId && !state.spectator)) break;
+        if (!m || (e.to ?? e.by) !== myId) break; // your hit was blocked: only you see it
         const now = performance.now();
         if (now - (lastBlock.get(e.id) || 0) < 300) break;
         lastBlock.set(e.id, now);

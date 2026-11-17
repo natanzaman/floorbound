@@ -181,14 +181,14 @@ const SKILLS = {
     p.rage = 0;
     g.payHpA(p, B.hp);
     p.brA = { until: c.t + dur, ls: B.ls * c.pow, haste: B.haste, cut: true, k: 'bloodrage' };
-    g.events.push({ t: 'brA', id: p.id, k: 'bloodrage', d: r2(dur) });
+    g.events.push({ t: 'brA', id: p.id, to: p.id, k: 'bloodrage', d: r2(dur) });
     g.fxA(p, 'roar', { s: 'bloodrage' });
   },
   frenzy(g, p, c) {
     const F = BT.frenzy;
     g.payHpA(p, F.hp);
     p.brA = { until: c.t + F.dur, ls: 0, haste: F.haste, cut: true, k: 'frenzy' };
-    g.events.push({ t: 'brA', id: p.id, k: 'frenzy', d: F.dur });
+    g.events.push({ t: 'brA', id: p.id, to: p.id, k: 'frenzy', d: F.dur });
     g.fxA(p, 'roar', { s: 'bloodrage', frenzy: 1 });
   },
   warblood(g, p, c) {
@@ -198,7 +198,7 @@ const SKILLS = {
     g.healPlayer(p, p.maxHp * W.heal * rage * c.pow, p, c.S);
     for (const o of g.allyList(p, W.r)) {
       o.lsA = { until: c.t + W.dur, v: W.ls * c.pow, by: p.id };
-      g.events.push({ t: 'brA', id: o.id, k: 'warblood', d: W.dur });
+      g.events.push({ t: 'brA', id: o.id, to: o.id, k: 'warblood', d: W.dur });
     }
     g.fxA(p, 'warblood', { s: 'bloodrage', r: W.r });
   },

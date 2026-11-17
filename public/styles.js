@@ -225,12 +225,12 @@ export function initStyles(ctx) {
       return true;
     }
     if (e.ev === 'reset') { // Twin Daggers: a kill readied Disengage
-      if (ent) floatNum(ent.model.group.position, 2.6, 'Disengage ready', 'cdr');
+      if (ent && (e.to ?? e.id) === me) floatNum(ent.model.group.position, 2.6, 'Disengage ready', 'cdr'); // a proc: only for you
       if (e.id === me) state.ready[2] = performance.now();
       return true;
     }
     if (e.ev === 'cdr') { // Dual Blades: a Switch cut the cooldowns
-      if (ent) floatNum(ent.model.group.position, 2.6, `−${e.a}s CD`, 'cdr');
+      if (ent && (e.to ?? e.id) === me) floatNum(ent.model.group.position, 2.6, `−${e.a}s CD`, 'cdr');
       if (e.id === me) for (let i = 1; i < 4; i++) state.ready[i] = Math.max(performance.now(), (state.ready[i] || 0) - e.a * 1000);
       return true;
     }

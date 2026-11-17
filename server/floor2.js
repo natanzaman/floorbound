@@ -126,7 +126,7 @@ export const F2Methods = {
     if (m.hidden) return 0;
     if (m.def.shell && this.time >= m.staggerUntil) {
       const rel = Math.abs(wrapAngle(angleTo(m.x, m.z, p.x, p.z) - m.face));
-      if (rel < 1.05) { this.events.push({ t: 'blocked', id: m.id, by: p.id }); return base * m.def.shell; }
+      if (rel < 1.05) { this.events.push({ t: 'blocked', id: m.id, by: p.id, to: p.id }); return base * m.def.shell; }
     }
     return base;
   },

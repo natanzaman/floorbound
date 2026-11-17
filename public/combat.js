@@ -34,6 +34,8 @@ export function initCombat(ctx) {
   const flash = document.createElement('div'); flash.id = 'cb-flash'; document.body.appendChild(flash);
   const whiteFlash = () => { flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go'); };
   const near = (x, z, r) => Math.hypot(x - state.x, z - state.z) < r;
+  const shakeNear = ctx.shakeNear || ((x, z, a, r) => near(x, z, r) && shake(a));
+  const mineTo = e => (e.to ?? e.id) === state.myId; // a reaction you performed: only you see its text (docs/ROADMAP.md A2)
 
   // ---------- extra sounds (same building blocks as audio.js) ----------
   const basePlay = sfx.play.bind(sfx);
@@ -218,7 +220,7 @@ export function initCombat(ctx) {
       for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; fx.sparks(e.x + Math.sin(a) * 2.6, 0.4, e.z + Math.cos(a) * 2.6, 4, 0xd6b98c, 0.3, 5); }
       fx.ring(e.x, e.z, 3.5, 0xfbbf24, 0.35);
       sfx.play('quake', m?.model.group.position || { x: e.x, z: e.z }, 1.4);
-      if (near(e.x, e.z, 30)) shake(0.35);
+      shakeNear(e.x, e.z, 0.35, 30); // the stomp that throws the ring
     }, Math.max(0, e.d) * 1000);
   }
 
@@ -240,7 +242,7 @@ export function initCombat(ctx) {
         fx.ring(e.x, e.z, e.r, 0xfbbf24, 0.6); fx.ring(e.x, e.z, e.r * 0.7, 0xfb923c, 0.5); fx.ring(e.x, e.z, e.r * 1.1, 0xffffff, 0.35);
         for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; fx.sparks(e.x + Math.sin(a) * e.r * 0.9, 0.6, e.z + Math.cos(a) * e.r * 0.9, 5, 0xfde68a, 0.3, 6); }
         sfx.play('sweep', { x: e.x, z: e.z }, 1.3);
-        if (near(e.x, e.z, 30)) shake(0.5);
+        shakeNear(e.x, e.z, 0.5, 30);
         return true;
       case 'pcancel': {
         for (const f of sweeps.get(e.id) || []) fx.end(f);
@@ -255,7 +257,7 @@ export function initCombat(ctx) {
         else if (state.spectator && p) slowMotion(0.3, 0.35);
         if (p && (e.id === me || state.spectator || near(p.x, p.z, 25))) {
           const g = p.model.group.position;
-          floatNum(g, 2.6, 'PERFECT', 'perfect', e.id === me || state.spectator ? 1 : 0.6);
+          if (mineTo(e)) floatNum(g, 2.6, 'PERFECT', 'perfect');
           fx.ring(g.x, g.z, 2.2, 0xffffff, 0.45); fx.ring(g.x, g.z, 3.4, 0x93c5fd, 0.55);
           fx.sparks(g.x, 1.2, g.z, 10, 0xe0f2fe, 0.25, 6);
           sfx.play('perfect', g, e.id === me ? 1.1 : 0.6);
@@ -271,7 +273,7 @@ export function initCombat(ctx) {
         fx.sparks(fx0, 1.3, fz0, 16, 0xfde68a, 0.32, 9); fx.sparks(fx0, 1.3, fz0, 8, 0xffffff, 0.4, 5);
         fx.ring(fx0, fz0, 2.4, 0xfbbf24, 0.4);
         sfx.play('parry', g, e.id === me ? 1.2 : 0.8);
-        floatNum(g, 2.6, 'PARRY!', 'parry', e.id === me || state.spectator ? 1 : 0.7);
+        if (mineTo(e)) floatNum(g, 2.6, 'PARRY!', 'parry');
         p.model.anim?.shot('Block_Attack', 1.6);
         if (e.id === me || state.spectator) { slowMotion(0.3, 0.3); shake(0.3); }
         const m = mobs.get(e.m);
@@ -284,7 +286,7 @@ export function initCombat(ctx) {
         return true;
       case 'counter': {
         const m = mobs.get(e.id);
-        if (m && (e.by === me || state.spectator)) floatNum(m.model.group.position, m.model.height * 0.95, 'COUNTER', 'counter');
+        if (m && (e.to ?? e.by) === me) floatNum(m.model.group.position, m.model.height * 0.95, 'COUNTER', 'counter');
         return true;
       }
     }
