@@ -13,9 +13,9 @@ import * as admin from './admin.js';
 import { BotManager } from './botmanager.js';
 import { PlayerBots } from './playerbots.js';
 import { drain } from './shutdown.js';
-import { installAI } from './ai/index.js';
+import { installAI } from './ai/index.js'; // AI companions (off unless AI_PROVIDER + key are set), server/ai/
 import { Director } from './director.js'; // the scene director (filming), server/director.js
-import { installDirectorAdmin } from './director-admin.js'; // AI companions (off unless AI_PROVIDER + key are set), server/ai/
+import { installDirectorAdmin } from './director-admin.js';
 import { TICK_RATE } from '../shared/data.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -45,8 +45,8 @@ game.track = track.record;
 game.onClear = rec => { hall.add(rec); broadcastHall(); }; // Hall of Clearers (DB insert + in-memory cache); the engraved stones update live
 const spectators = new Set(); // watch-only clients (?spectate=1)
 const bots = new BotManager(game, { url: () => `ws://127.0.0.1:${server.address().port}/ws` }); // admin-managed bots
-const playerBots = new PlayerBots(game, bots);
-game.director = new Director(game, bots); // plays cue sheets with bot actors (docs/ROADMAP.md F2) // bots players add in game (P → Bots), server/playerbots.js
+const playerBots = new PlayerBots(game, bots); // bots players add in game (P → Bots), server/playerbots.js
+game.director = new Director(game, bots); // plays cue sheets with bot actors (docs/ROADMAP.md F2)
 
 const server = http.createServer(async (req, res) => {
   if (res.handled) return;
