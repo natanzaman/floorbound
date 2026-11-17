@@ -214,7 +214,7 @@ try {
   ok(true, 'after the grace period Ann\'s bots are removed');
 
   // ---------- every other class (classes added later) ----------
-  const rest = setups().filter(s => !picks.includes(s));
+  const rest = setups().filter(s => !picks.some(x => x.cls === s.cls));
   if (rest.length) {
     const G = client(`Gus${tag}`); clients.push(G);
     await until(() => G.id, 4000, 'Gus joined');
