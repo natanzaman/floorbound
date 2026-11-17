@@ -14,14 +14,14 @@ export const MASTERY = {
   // the amount divided by the user's attack power, so the pace doesn't change with level or gear.
   // Measured with the bot party (BOTS: ~10-14 points/min of fighting for a skill used on cooldown), a skill you
   // use often reaches Mastery 3 after ~30-45 min of normal play, Mastery 5 after ~4 hours.
-  need: [0, 0, 120, 420, 1300, 2800],
+  need: [0, 0, 150, 600, 1800, 4000],
   cd2: 0.9,  // Mastery 2+: cooldown x0.9
   pow4: 1.1, // Mastery 4+: damage, healing, shields and buffs x1.1
   // Points per "attack unit" (amount / the user's attack) for each kind of effective use.
-  w: { dmg: 1, posture: 0.35, heal: 0.7, prevent: 0.7, buff: 1 },
-  brk: [3, 8],  // flat points: the skill caused a Break (normal / elite, boss)
-  setup: 3,     // a teammate landed a Switch on an enemy this skill broke
-  sw: 3,        // the skill itself landed a Switch
+  w: { dmg: 1, posture: 0.2, heal: 0.9, prevent: 1, buff: 1.2 },
+  brk: [1, 3],  // flat points: the skill caused a Break (normal / elite, boss)
+  setup: 1.5,   // a teammate landed a Switch on an enemy this skill broke
+  sw: 1.5,      // the skill itself landed a Switch
   shrineUse: 3.4, // how close to a Skill Shrine you need to stand to re-pick
 };
 
