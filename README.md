@@ -240,9 +240,44 @@ The page has three tabs:
 
 Bot API (admin only): `GET/POST/DELETE /api/admin/bots`, `POST /api/admin/bots/team` (both take `skill` 1-5), `PATCH /api/admin/bots/:bid` (`name`, `lvl`, `skill`, `behaviour`, `follow`), `POST /api/admin/bots/:bid/{teleport|kill|revive|heal|respawn}` (`teleport`: `{ to: 'town' | 'gate' | 'player', name }`; `respawn`: `{ cls }`), `DELETE /api/admin/bots/:bid`; `GET /api/admin/summary` for the strip.
 
-The in-game **Players** panel (P) lists real players online, the bots (collapsed), and characters seen in the last 30 days (`GET /api/lobby`: name, class, level, last seen, no account details).
+The in-game **Players** panel (P) has two tabs: **Players** (real players online, and characters seen in the last 30 days: `GET /api/lobby`, name, class, level, last seen, no account details) and **Bots** (see [Bots in game](#bots-in-game)).
 
 Code: `server/admin.js` (routes), `server/botmanager.js` (bots), `server/botedit.js` (live bot edits and actions), `shared/botskill.js` (capability levels), `public/admin.html` + `public/admin.js`. Tests: `DATABASE_URL=... node test/admin.js` (own server on port 3572), `DATABASE_URL=... node test/adminbots.js` (bot edits/actions, port 3624), `node test/botskill.js` (capability profile).
+
+## Bots in game
+
+Players can add their own bots from the **Players** panel (P) → **Bots** tab, no admin page needed:
+
+- **The list** shows every bot in the world, your own first: name (class colour), level, class, skill level, owner (or *server bot* for admin-added ones), party, area and what it's doing (*Following Ann*, *Farming the field*, *Heading for the Warden*, *Holding position*, *Down*, *Waiting for Ann (42 s)*). Your bots also show their gear and mastery. The header reads **Your bots (n/3)** and how many bots the server runs.
+- **Add a bot:** pick a setup (one per class, labelled by role: *Tank · Guardian*, *Healer · Cleric*, *Damage · Swordsman*, and any class added later), a skill level 1-5 (*Novice, Casual, Average, Skilled, Perfect*; default 4, see the capability table above) and optionally a name. The bot joins **at your level**, with a **premade loadout**, **joins your party** (one is made if you have none) and **follows you**.
+- **Your bots:** change the skill level, the behaviour (*Follow me*, *Farm nearby*, *Go to the Warden*, *Stay here*: holds its ground and fights what comes close), **Rename**, **Dismiss** (click twice). Admins (`accounts.is_admin` / `ADMIN_DISCORD_IDS`) can manage any bot from this tab.
+- **Limits:** up to 3 bots per player (`PLAYER_BOT_MAX`), counted against the server's `MAX_BOTS` (30); not past a full party (6). Anonymous players can add bots too, with the same limits. Bots stay in your party: when you join another party they follow you into it (if there's room); leaving the party yourself is respected.
+- **When you leave**, your bots wait `PLAYER_BOT_GRACE` seconds (60) for you to come back (same character, or the same name for an anonymous player), then they're removed.
+
+Premade loadout by level (gear: class weapon, armour, and a charm for the role: *Haste* for tanks and healers, *Keenness* (crit) for damage; mid-roll stats):
+
+| Level | Gear | Skill mastery |
+|---|---|---|
+| 1-4 | Common | 1 |
+| 5 | Uncommon | 1 |
+| 6-9 | Uncommon | 2 (-10% cooldowns) |
+| 10-14 | Rare | 3, evolved |
+| 15-17 | Epic | 3, evolved |
+| 18-20 | Epic | 4 (+10% effect) |
+
+Evolutions picked for how bots play: Shoulder Charge, Vortex, Finisher; War Cry, Iron Skin, Quake; Renew, Zeal, Haven (other skills: their co-op branch). If the game has a talent system, `game.autoSpendTalents(p)` is called for the new bot.
+
+Protocol (WebSocket, validated server-side: ownership, limits, class, skill, name, behaviour; 10 orders per 5 s):
+
+```
+→ { type: 'pbot', op: 'list' }
+→ { type: 'pbot', op: 'add', cls, skill?, name? }
+→ { type: 'pbot', op: 'edit', bid, skill?, mode?: 'follow' | 'field' | 'warden' | 'stay', name? }
+→ { type: 'pbot', op: 'dismiss', bid }
+← { type: 'pbot', op, ok, msg | error, list: { bots: [...], mine, max, total, cap, admin, partyMax } }
+```
+
+Roster entries of owned bots carry `owner` (name) and `mode`. Code: `server/playerbots.js` (on top of `BotManager`'s add / edit / remove), `shared/playerbots.js` (setups, behaviours, loadout table), `public/playerbots.js` (tabs and the Bots tab). Test: `node test/playerbots.js` (own server on port 3641; with `DATABASE_URL` it also checks admin access).
 
 ## Testing
 

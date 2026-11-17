@@ -151,8 +151,8 @@ export class PlayerBots {
     if (name !== undefined && name !== e.b.name) { try { this.mgr.edit(e.bid, { name }); } catch (err) { fail(err.message); } said.push(`renamed to ${name}`); }
     if (skill !== undefined && skill !== e.b.skill) { this.mgr.edit(e.bid, { skill }); said.push(`skill ${skillName(skill)}`); }
     if (mode !== undefined) {
-      const who = rec ? this.ownerOf(rec)?.name || rec.ownerName : p.name;
-      this.setMode(e, mode, who);
+      const owner = rec ? this.ownerOf(rec) : p; // a server bot follows the admin who told it to
+      this.setMode(e, mode, owner?.name || rec?.ownerName || p.name, { by: owner || p, adm: !this.isMine(p, rec) });
       if (rec) { rec.mode = mode; rec.wantParty = true; }
       said.push(MODES[mode].name.toLowerCase());
     }
@@ -161,14 +161,20 @@ export class PlayerBots {
   }
 
   // A mode is a BotManager behaviour + follow target. Set on the bot's brain directly (BotManager.edit would make a
-  // follower leave the party, and 'stay' has no follow target): the same calls BotManager.edit makes.
-  setMode(e, mode, followName) {
+  // follower leave the party, and 'stay' has no follow target): the same calls BotManager.edit makes. A brain that
+  // takes party orders (b.command: follow / stay / farm / boss) also gets the matching order, so it holds even with
+  // a human in its party.
+  setMode(e, mode, followName, { by = null, adm = false } = {}) {
     const M = MODES[mode];
     const follow = M.follow ? followName : '';
     e.group.configure({ behaviour: M.behaviour, follow });
     e.behaviour = M.behaviour; e.follow = follow; e.partied = true;
     const p = this.mgr.livePlayer(e);
     if (p && M.behaviour === 'follow') p.stats.floor2 = 1; // followers use the waystones
+    if (typeof e.b.command === 'function' && p && by) {
+      const k = { follow: 'follow', stay: 'stay', field: 'farm', warden: 'boss' }[mode];
+      try { e.b.command({ k, by: by.id, byName: by.name, followId: by.id, adm, group: [p.id] }); } catch (err) { console.error('pbot order', err); }
+    }
   }
 
   dismiss(p, msg, admin) {
@@ -250,7 +256,7 @@ export class PlayerBots {
       }
       if (rec.goneAt || owner.id !== rec.ownerId) { // the owner is back
         rec.goneAt = 0; rec.ownerId = owner.id; rec.ownerName = owner.name; rec.wantParty = true; rec.lastParty = 0;
-        if (rec.mode === 'follow') this.setMode(e, 'follow', owner.name);
+        if (rec.mode === 'follow') this.setMode(e, 'follow', owner.name, { by: owner });
         g.rosterDirty = true;
       }
       if (!b) continue;
