@@ -33,7 +33,7 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Basic attack | Left click or J (hold) | Big round button (hold) |
 | Skills | 1, 2, 3 | Small buttons |
 | Dodge roll | Shift | Dodge button |
-| Jump | Space (hop over the boss's slams) | Jump button |
+| Jump | Space (hop over the boss's slams and Quake Rings) | Jump button |
 | Guard / parry (Guardian) | Hold R to guard; tap R just before a hit to parry | — |
 | Select a character (enemy or ally) | Hold Ctrl (Cmd on Mac) to preview, Ctrl+click to select; Ctrl+right-click to deselect | Lock on button (enemies) |
 | Lock on / cycle enemies | Tab (Esc to clear) | Lock on button |
@@ -56,7 +56,7 @@ Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 
 | Bramble Spitter | 4 | Rooted plant. Draws a red line, then fires a thorn along it: sidestep or roll. |
 | Alpha Wolf (elite) | 7 | Leads a pack: nearby wolves hit 25% harder. Howls to send the pack into a frenzy. |
 | Warden's Hound | 8 | Summoned by the Warden in phase 2. Stays in the chamber. |
-| The Horned Warden (boss) | 10 | Three phases. 100–66%: cleaves and ground slams. 66–33%: adds hounds and a horn charge down a red lane. Below 33%: enraged spin and rockfall circles under everyone. In every phase (more often later): the perilous **Horn Sweep**. |
+| The Horned Warden (boss) | 10 | Three phases. 100–66%: cleaves and ground slams. 66–33%: adds hounds and a horn charge down a red lane. Below 33%: enraged spin and rockfall circles under everyone. In every phase (more often later): the perilous **Horn Sweep** and the **Quake Ring**: it rears up and stomps (an amber circle marks how far the rings reach), then a low shockwave rolls out across the floor; **jump** as the wavefront reaches you (airborne = no damage, "Jumped!"), roll through it, or stand outside the amber circle. One ring per stomp in phase 1, two in phase 2, three in phase 3. |
 
 ## Floor 2 — The Glimmering Mire
 
@@ -80,7 +80,7 @@ Behind the Sunken Gate (same ready check as Floor 1's raid gate), the Sovereign'
 
 ## The raid gate and the Last Attack Bonus
 
-A portcullis blocks the corridor to the Warden's chamber. Everyone standing at the gate presses **F** (or taps Ready); when all of them are ready, it counts down 5 seconds and rises. It closes again once the chamber is empty. Boss health scales with the number of players inside when the fight starts. Whoever lands the killing blow gets the **Last Attack Bonus**: the unique *Horn of the Warden* charm.
+A portcullis blocks the corridor to the Warden's chamber. Everyone standing at the gate presses **F** (or taps Ready); when all of them are ready, it counts down 5 seconds and rises. It closes again once the chamber is empty. The Warden scales to the fighters inside when the fight starts: health by the party's size and make-up (each fighter weighted by role, damage dealers most, then raised to a power, so a full party of six with three damage dealers and a Bard faces about 3.3× the health of a Guardian/Swordsman/Cleric trio), damage by size (+12% per fighter above three), and both by level when the party's average is above 10 (+12% health and +6% damage per level). Slams target one fighter per three in the chamber. Tuning: `WARDEN` in `shared/data.js`. Whoever lands the killing blow gets the **Last Attack Bonus**: the unique *Horn of the Warden* charm.
 
 ## Warden twists
 
@@ -90,11 +90,11 @@ Every time the Horned Warden spawns (server start, and each respawn after a kill
 | --- | --- | --- |
 | Packmaster | Hounds from the start of the fight, up to 5 at once; the Warden's howl sends them into a frenzy. | +1 loot roll |
 | Twin Horns | Horn charges come in pairs (the second re-aims at someone else) and start in phase 1. | +50% gold |
-| Quaking | Every ground slam leaves cracked ground for 6 s that hurts while you stand in it. | +50% gold |
+| Quaking | Every ground slam leaves cracked ground for 6 s that hurts while you stand in it, and every Quake Ring stomp sends one more ring. | +50% gold |
 | Thornbound | The Warden raises stone Thorn Totems at the chamber edge; they shoot thorns until you break them (or 45 s pass). | +1 loot roll |
 | Ironhide | Takes 40% less damage unless Broken; Broken windows last 1.6 s longer. Break it, then Switch. | +1 loot roll |
 | Berserk | Enraged from the first second (every phase-3 attack), but 25% less health. | +1 loot roll, +50% gold |
-| Eclipse | The chamber goes dark and every telegraph gives 25% less warning. | +2 loot rolls, +100% gold |
+| Eclipse | The chamber goes dark and every telegraph gives 15% less warning. | +2 loot rolls, +100% gold |
 | Echo | Every slam and rockfall strikes again in the same spot 1.5 s later (purple circle). | +1 loot roll |
 
 The table lives in `shared/twists.js`, server behaviour in `server/twists.js`, client visuals in `public/twists.js`. `WARDEN_TWIST=<id>` forces one (testing aid), e.g. `WARDEN_TWIST=eclipse START_LEVEL=10 SPAWN_AT=0,150 npm start`.
@@ -140,7 +140,7 @@ With a database, the server records play events (session start/end, first kill, 
 - **Switch:** the first hit from a *teammate* on a broken enemy does 2.5x damage, and follow-up hits do 1.4x. You can't Switch your own Break. Charms of the Switch boost this further.
 - **Perfect dodge:** start a roll at most ~0.2 s before a hit lands and it's PERFECT: a brief slow-motion flash, heavy posture damage to the attacker, and for 1.5 s your next hit does +50% damage and double posture damage.
 - **Guard and parry (Guardian, R):** hold R to guard: hits from the front (±70°) take 70% less damage, but you can't attack and you move at half speed. Press R at most ~0.2 s before a frontal hit lands to **parry** it: no damage at all, and big posture damage to the attacker. Mashing R doesn't parry.
-- **Perilous attacks:** the Warden's **Horn Sweep** shows an orange/gold circle around it with a "!" glint and its own warning horn (about 0.9 s). Anyone inside takes about 80% of their max health: Shield Wall, Taunt, guarding, gear and jumping don't reduce it. Roll through it (i-frames) or parry it. Breaking the Warden during the wind-up cancels it. It comes every ~18 s in phase 1, more often later.
+- **Perilous attacks:** the Warden's **Horn Sweep** shows an orange/gold circle around it with a "!" glint and its own warning horn (about 0.9 s). Anyone inside takes about 80% of their max health: Shield Wall, Taunt, guarding, gear and jumping don't reduce it. Roll through it (i-frames) or parry it. Breaking the Warden during the wind-up cancels it. It comes every ~15 s in phase 1, more often later (never while a Quake Ring is still rolling out near the Warden).
 
 ## Skill mastery and evolutions
 
@@ -276,12 +276,13 @@ shared/floor2.js Floor 2: map, waystones, enemies, Sovereign tuning (appended in
 server/floor2.js Floor 2 AI (Shieldback, Wisp, Lurker, Matron, Sovereign), Sunken Gate, waystones/Stairway
 public/floor2world.js, public/floor2client.js  Floor 2 scene, models, effects, waystone UI
 server/game.js   authoritative simulation: combat, AI, boss, XP, parties
-server/combat.js posture/Break, perfect dodge, guard/parry, Horn Sweep (mixed into Game)
+server/combat.js posture/Break, perfect dodge, guard/parry, Horn Sweep, Quake Rings (mixed into Game)
 server/index.js  static file server + WebSocket server (20 ticks/sec)
 public/          Three.js client (no build step): main.js, world.js, style.css
 public/models/   rigged character models (glTF) with shared animations
 test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
+test/warden3.js  in-process checks for the Quake Ring (jump / roll / out of reach), Warden scaling and bot jump timing per capability
 shared/bots/     one brain per bot: brain.js (decision loop, party teamwork, orders), motor.js (moving, dodging), registry.js (per-class plug-ins), classes.js (Guardian, Swordsman, Cleric), social.js (orders, chatter)
 shared/teambots.js  startTeam(): a few bots in one party; used by test/team.js, public/bots.html and server/botmanager.js
 public/botwheel.js  the bot command wheel (V)
@@ -322,17 +323,17 @@ The page has three tabs:
 
 - **Bots:** bots that run inside the server (no browser tab needed), shown as cards with class-colour accents. **Presets** add common setups in one click: *Party of 3 for me* (a Guardian, Swordsman and Cleric that follow your online character at its level), *Warden test team* (Lv 10, straight to the Warden), *Field farmers* (one of each class, Lv 3), *Novice crowd* (four Lv 1 newcomers at capability 1-2). Or add one bot (class, optional name, starting level, **capability**, behaviour: *follow* an online player, fighting alongside them in their party; *farm the field* near town; *go fight the Warden*; *Floor 2*; or *level up, then the Warden*), or a whole team (three bots, one per role, put into one party: each still has its own brain). Bots are anonymous (never saved), marked as bots in the roster (BOT tag in the game), left out of play tracking, and capped at 30 (`MAX_BOTS`). A follower that falls far behind (or is on another floor) appears next to its player.
   - **Edit live** on each card: rename (click the name, Enter; names are unique), level stepper (stats recomputed, healed to full), capability 1-5, behaviour and follow target (only that bot: every bot has its own brain). Each card shows the bot's role, current goal (*Following Natan*, *Fighting The Horned Warden with Brann*, *Waiting at the raid gate*…), the order it is on and its party. Actions: **⌘ Order…** (follow / regroup on a player, hold here, ready up, use a potion, go farm, do the boss, status, leave party: the same orders a party gives), **Heal** to full, **Kill** (stays down until **Revive**d), **Teleport** to town, the Warden gate or any player, **Respawn as…** another class (removes the bot and re-adds it with the same name, level, capability and behaviour; it stays in its party), Remove. *Remove all* clears them.
-  - **Capability levels** (`shared/botskill.js`, default 4) make bots play like people of different skill, for boss tuning and for a livelier world. The bot brain stays the same; capability adds reaction delays to everything it *sees* (telegraphs, charge lanes, Tidal Waves, the Horn Sweep, a teammate's Break), misjudged or missed dodges, Horn Sweep roll/parry timing error, slower skill rotations, a minimum gap between presses, positioning error in fights, a lower potion threshold (and forgetting potions), and missing Switch windows:
+  - **Capability levels** (`shared/botskill.js`, default 4) make bots play like people of different skill, for boss tuning and for a livelier world. The bot brain stays the same; capability adds reaction delays to everything it *sees* (telegraphs, charge lanes, Tidal Waves, Quake Rings, the Horn Sweep, a teammate's Break), misjudged or missed dodges, Horn Sweep roll/parry and Quake Ring jump timing error, slower skill rotations, a minimum gap between presses, positioning error in fights, a lower potion threshold (and forgetting potions), and missing Switch windows:
 
-    | Level | Name | Reaction | Misjudged telegraphs (half missed outright) | Horn Sweep perfect / safe | Skills pressed after | Notes |
-    |---|---|---|---|---|---|---|
-    | 5 | Perfect | instant | 0% | 100% / 100% | at once | the classic bots |
-    | 4 | Skilled | 0.15-0.25 s | 10% | ~46% / ~92% | 0.1-0.5 s | good rotations, potions at 35% |
-    | 3 | Average | 0.25-0.38 s | 25% | ~22% / ~80% | 0.5-1.5 s | ±1.4 m positioning, forgets potions 20% of the time, misses 40% of Switches |
-    | 2 | Casual | 0.38-0.52 s | 45% | ~12% / ~60% | 1.2-3 s | potions at 20%, rarely Switches |
-    | 1 | Novice | 0.6-0.85 s | 70% | ~6% / ~31% | 2.5-6 s | mashes the basic attack, ±3 m positioning, stands in fire |
+    | Level | Name | Reaction | Misjudged telegraphs (half missed outright) | Horn Sweep perfect / safe | Quake Ring cleared | Skills pressed after | Notes |
+    |---|---|---|---|---|---|---|---|
+    | 5 | Perfect | instant | 0% | 100% / 100% | 100% | at once | the classic bots |
+    | 4 | Skilled | 0.15-0.25 s | 10% | ~46% / ~92% | ~86% | 0.1-0.5 s | good rotations, potions at 35% |
+    | 3 | Average | 0.25-0.38 s | 25% | ~22% / ~80% | ~60% | 0.5-1.5 s | ±1.4 m positioning, forgets potions 20% of the time, misses 40% of Switches |
+    | 2 | Casual | 0.38-0.52 s | 45% | ~12% / ~60% | ~33% | 1.2-3 s | potions at 20%, rarely Switches |
+    | 1 | Novice | 0.6-0.85 s | 70% | ~6% / ~31% | ~12% | 2.5-6 s | mashes the basic attack, ±3 m positioning, stands in fire |
 
-    Test runners take it too: `BOT_SKILL=3 node test/team.js`, and `BOT_SKILL=3 RUNS=2 node test/wardenskill.js` (its own server, Lv 10 party at the raid gate; prints kill/wipe, fight time and deaths per run).
+    Test runners take it too: `BOT_SKILL=3 node test/team.js`, and `BOT_SKILL=3 RUNS=2 node test/wardenskill.js` (its own server, Lv 10 party at the raid gate; prints kill/wipe, fight time, deaths and Quake Rings jumped / rolled / hit per run; `ROLES=guardian,ranger,berserker,lancer,bard,cleric` for a full party).
 - **Players:** every saved character merged with the live game: class (icon and colour), level, account (Discord name or `guest #id`), online/offline, current floor and area, last seen and created. Search, filter by status, class and level range, and sort (click a column).
 - **Edit** (click a character), in sections with a jump bar and a sticky *Save changes* bar: level and XP, gold, consumables, materials, equipped and bag items (remove, equip, add any slot/rarity/class, add the Last Attack items), titles earned and worn, lifetime stats, skill mastery (level/points and evolution branch per skill), the Floor 2 unlock, rename, class change (offline only; a weapon for the old class goes back to the bag), delete (type the name to confirm), and an **Advanced: raw JSON** editor for the stored inventory, stats and mastery (validated; unknown stats keys are kept). If the character is online, the edit is applied to the live player straight away (they get "An admin updated your character") and saved.
 

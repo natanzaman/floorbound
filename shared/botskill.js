@@ -39,7 +39,7 @@ const st = b => (b.sk ||= { q: [], seen: [], next: 0, off: [0, 0], offT: -9, pot
 
 // ---------- perception ----------
 // Events a capability level delays / may miss. 'tele' covers red circles, wedges, charge lanes and the Horn Sweep.
-const PERCEIVED = new Set(['tele', 'pcancel', 'f2wave', 'stagger']);
+const PERCEIVED = new Set(['tele', 'pcancel', 'f2wave', 'quake', 'stagger']);
 
 // One reaction outcome for a telegraph: { drop } (missed), or { delay } in seconds. Exported for the unit test.
 export function reaction(level, rng = Math.random) {
@@ -81,6 +81,17 @@ export function sweepError(b, s) {
   else if (Math.random() < P.sweepFail) s.err = Math.random() < 0.5 ? -9 : 0.3 + Math.random() * 0.35; // frozen, or panicked far too early
   else s.err = Math.random() * P.sweepSlop;
   return s.err;
+}
+
+// Quake Ring jump/roll timing error (seconds; + = early, - = late; -9 = frozen, never reacts). Cached on the ring.
+// Uses the Horn Sweep profile, both ways and a bit wider: a jump has to cover the whole wavefront.
+export function quakeError(b, q) {
+  if (q.err !== undefined) return q.err;
+  const P = prof(b);
+  if (perfect(b)) q.err = 0;
+  else if (Math.random() < P.sweepFail) q.err = Math.random() < 0.5 ? -9 : 0.3 + Math.random() * 0.35;
+  else q.err = (Math.random() * 2 - 1) * P.sweepSlop * 1.2;
+  return q.err;
 }
 
 // ---------- actions ----------

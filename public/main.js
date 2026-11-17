@@ -226,7 +226,7 @@ const wheel = initBotWheel({ send, state, players, log }); // orders for the bot
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
-const combat = initCombat({ state, players, mobs, fx, sfx, guide, send, floatNum, slowMotion, shake: a => shake(a), bossShot: (...a) => bossShot(...a), lockedMob: () => lockedMob(), nearestMob: r => nearestMob(r) });
+const combat = initCombat({ state, players, mobs, fx, sfx, guide, send, floatNum, slowMotion, shake: a => shake(a), bossShot: (...a) => bossShot(...a), lockedMob: () => lockedMob(), nearestMob: r => nearestMob(r), callout: (a, b, c) => callout(a, b, c) });
 // skill mastery + evolutions: Skills panel (K), Skill Shrines, evolved skill visuals (public/mastery.js)
 const mastery = initMastery({
   state, players, mobs, fx, sfx, send, log, floatNum, project, isTouch, scene, floor1, $,
@@ -552,9 +552,9 @@ function handleEvent(e) {
       break;
     }
     case 'phase':
-      if (e.n === 1) { if (boss) { bossShot(boss.id, 'Cheer', 1.2); sfx.play('howl', boss.model.group.position, 1.3); } banner('THE HOUNDS ARE LOOSE', 'Phase 2: hounds and horn charges. Get out of the red lanes'); }
+      if (e.n === 1) { if (boss) { bossShot(boss.id, 'Cheer', 1.2); sfx.play('howl', boss.model.group.position, 1.3); } banner('THE HOUNDS ARE LOOSE', 'Phase 2: hounds, horn charges, Quake Rings in pairs. Get out of the red lanes'); }
       break;
-    case 'enrage': if (boss) { bossShot(boss.id, 'Cheer', 1.2); sfx.play('roar', boss.model.group.position, 1.4); } banner('THE WARDEN IS ENRAGED', 'Phase 3: spins and falling rocks. Keep moving'); break;
+    case 'enrage': if (boss) { bossShot(boss.id, 'Cheer', 1.2); sfx.play('roar', boss.model.group.position, 1.4); } banner('THE WARDEN IS ENRAGED', 'Phase 3: spins, falling rocks, triple Quake Rings. Keep moving'); break;
     case 'twist': twists.announce(e); updateGateBox(true); break;
     case 'la': {
       fx.beam(e.x, e.z, 0xfbbf24, 4.5); sfx.play('loot', { x: e.x, z: e.z }, 1.3);

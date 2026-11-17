@@ -12,7 +12,7 @@ const STEPS = [
   { id: 'party', title: 'Find a party', text: () => `Floorbound is built for groups. ${touch() ? 'Tap Players' : 'Press P'} → Find party to be matched with other players, or invite someone.`, skip: 'Play solo for now' },
   { id: 'switch', title: 'Learn to Switch', text: () => 'At level 3 you unlock a Break skill. Break an enemy (it shows BROKEN), then a DIFFERENT teammate hits it for a SWITCH: 2.5× damage.', skip: 'Skip' },
   { id: 'gate', title: 'The Raid Gate', text: () => `At level 5 or so, follow the road north to the Raid Gate. Everyone there ${touch() ? 'taps Ready' : 'presses F'}; it opens after a 5-second countdown.` },
-  { id: 'boss', title: 'Defeat the Horned Warden', text: () => 'It gets nastier at 66% and 33% health. Whoever lands the final blow earns the Last Attack Bonus.' },
+  { id: 'boss', title: 'Defeat the Horned Warden', text: () => `It gets nastier at 66% and 33% health. When it stomps, ${touch() ? 'Jump' : 'jump (Space)'} over the Quake Ring as it reaches you (or roll through it). Whoever lands the final blow earns the Last Attack Bonus.` },
 ];
 
 const TIPS = {
@@ -21,6 +21,7 @@ const TIPS = {
   slam: 'Red circle: a ground slam. Roll out, or jump just as it lands.',
   lane: 'Charge lane! Get out sideways, fast.',
   rock: 'Rockfall: a circle drops under everyone. Keep moving.',
+  quake: 'Quake Ring! A shockwave rolls out from the Warden: jump just as it reaches you, roll through it, or stand outside the amber circle.',
   lowhp: 'Low health! Drink a potion (4) or back off; you heal out of combat.',
   broken: 'BROKEN: the next hit from a different player is a SWITCH for 2.5× damage.',
   loot: 'You found gear! Open your bag (B) to equip it.',

@@ -21,10 +21,11 @@ export const TWISTS = {
   },
   quaking: {
     name: 'Quaking', color: '#fbbf24',
-    desc: 'Every ground slam leaves cracked ground for 6 s. Standing in it hurts.',
-    short: 'Slams leave cracked ground: step out',
+    desc: 'Every ground slam leaves cracked ground for 6 s (standing in it hurts), and every Quake Ring volley has one more ring.',
+    short: 'Slams crack the ground, one more Quake Ring',
     reward: { gold: 0.5 },
     crack: { d: 6, rk: 0.75, tick: 0.5, mult: 0.3 }, // duration, radius vs slam, tick, damage per tick (x Warden atk)
+    rings: 1,                                   // extra Quake Rings per volley
   },
   thornbound: {
     name: 'Thornbound', color: '#a3e635',
@@ -49,10 +50,10 @@ export const TWISTS = {
   },
   eclipse: {
     name: 'Eclipse', color: '#a5b4fc',
-    desc: 'The chamber goes dark and every telegraph gives 25% less warning.',
+    desc: 'The chamber goes dark and every telegraph gives 15% less warning.',
     short: 'Darkness, faster telegraphs',
     reward: { loot: 2, gold: 1 },
-    wind: 0.75,
+    wind: 0.85,
   },
   echo: {
     name: 'Echo', color: '#d8b4fe',

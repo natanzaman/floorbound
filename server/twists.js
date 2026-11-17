@@ -18,6 +18,7 @@ export const TwistMethods = {
     // The Warden's attack config for this twist (bossSpecials and hornCharge read this.twistW).
     const W = { ...WARDEN };
     if (id === 'packmaster') W.hounds = { ...WARDEN.hounds, ...T.hounds };
+    if (id === 'quaking') W.quake = { ...WARDEN.quake, rings: WARDEN.quake.rings.map(n => n + T.rings) };
     if (id === 'eclipse') {
       for (const [k, v] of Object.entries(WARDEN)) if (v && typeof v.wind === 'number') W[k] = { ...v, wind: r2(v.wind * T.wind) };
     }
