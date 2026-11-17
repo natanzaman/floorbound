@@ -121,6 +121,7 @@ wss.on('connection', ws => {
         spectators.add(ws);
         ws.send(JSON.stringify({ type: 'welcome', spectator: true }));
         ws.send(JSON.stringify({ type: 'roster', players: game.roster() }));
+        ws.send(JSON.stringify({ type: 'cine', state: game.cineState() })); // film view: the current shot, light, letterbox… (server/cine.js)
         return;
       }
       if (msg.type !== 'join' || joining) return;
@@ -134,6 +135,7 @@ wss.on('connection', ws => {
         ws.send(JSON.stringify(game.invFor(player))); player.invDirty = false;
         ws.send(JSON.stringify(game.masteryMsg(player))); player.masteryDirty = false; player.mSentT = game.time;
         ws.send(JSON.stringify(game.talentsMsg(player))); player.talentsDirty = false; // talent tree (server/talents.js)
+        ws.send(JSON.stringify({ type: 'cine', state: game.cineState() })); // players only use its light (public/cine.js)
         broadcastRoster();
       }).catch(err => { joining = false; console.error('join failed', err); ws.send(JSON.stringify({ type: 'denied', reason: 'Server error, try again.' })); });
       return;
