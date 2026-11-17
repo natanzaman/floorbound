@@ -48,7 +48,7 @@ function ranger(b, tgt, h) {
   b.face = face;
   if (d > 23 + tgt.def.radius) return true;
   if (h.switchOpen(b, tgt) && useSkill(b, 1, face)) return true;                            // Switch in with Piercing Shot
-  if ((b.me?.lvl || 1) >= 3 && (tgt.engaged || tgt.def.boss) && (tgt.def.boss || tgt.def.elite || tgt.hp > 150) && useSkill(b, 3, face)) return true; // Hunter's Mark
+  if ((b.me?.lvl || 1) >= 3 && (tgt.engaged || tgt.def.boss) && (tgt.def.boss || tgt.def.elite || tgt.maxHp >= 100) && useSkill(b, 3, face)) return true; // Hunter's Mark
   if (!tgt.staggered && useSkill(b, 1, face)) return true;                                  // Piercing Shot
   useSkill(b, 0, face);                                                                       // Shot
   return true;
