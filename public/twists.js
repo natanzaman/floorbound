@@ -6,13 +6,17 @@ import { TWISTS, TOTEM, rewardText } from '/shared/twists.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const STONE = new THREE.Color(0x8a8578);
-const DARK = { fog: new THREE.Color(0x07080f), bg: new THREE.Color(0x05060b), near: 8, far: 62, hemi: 0.22, sun: 0.3 };
+// Eclipse: night sky and dark distance outside the chamber; the chamber itself only a little dimmer, with a cool
+// moonlight fill so the fight stays readable. (Tune here.)
+const DARK = { fog: new THREE.Color(0x14172b), bg: new THREE.Color(0x090b18), near: 34, far: 115, hemi: 0.7, sun: 0.8, fill: 0.4 };
 
 export class TwistClient {
   constructor({ scene, fx, banner }) {
     Object.assign(this, { scene, fx, banner, id: null, dark: 0 });
     this.hemi = scene.children.find(o => o.isHemisphereLight);
     this.sun = scene.children.find(o => o.isDirectionalLight);
+    this.fill = new THREE.AmbientLight(0x9fb2ff, 0); // moonlight fill, only during Eclipse
+    scene.add(this.fill);
     this.base = {
       fog: scene.fog.color.clone(), near: scene.fog.near, far: scene.fog.far,
       bg: scene.background?.isColor ? scene.background.clone() : null,
@@ -124,5 +128,6 @@ export class TwistClient {
     if (B.bg && s.background?.isColor) s.background.copy(B.bg).lerp(DARK.bg, d);
     if (this.hemi) this.hemi.intensity = B.hemi + (DARK.hemi - B.hemi) * d;
     if (this.sun) this.sun.intensity = B.sun + (DARK.sun - B.sun) * d;
+    this.fill.intensity = DARK.fill * d;
   }
 }
