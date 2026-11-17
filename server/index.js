@@ -98,7 +98,9 @@ wss.on('connection', ws => {
         other.ws.close();
         c = await accounts.loadCharacter(acct.id, msg.character);
       }
-      return game.addPlayer(ws, c.name, c.cls, { charId: c.id, accountId: acct.id, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats, mastery: c.mastery });
+      const p = game.addPlayer(ws, c.name, c.cls, { charId: c.id, accountId: acct.id, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats, mastery: c.mastery });
+      admin.isAdmin(acct).then(v => { p.admin = v; }).catch(() => {}); // admins can order any bot (botcmd with a name)
+      return p;
     }
     if (bots.isBotJoin(msg)) return bots.addBotPlayer(ws, msg); // server-run bot (server/botmanager.js)
     return game.addPlayer(ws, msg.name, msg.cls);

@@ -1,15 +1,17 @@
 // Server-side bots, run inside the server process and managed from the admin page (/admin.html).
 //
-// Each bot is a real WebSocket connection to this server's own /ws (the `ws` package), driven by the brains in
-// shared/teambots.js: a single bot (any class) with a behaviour, or a role-playing party (tank, DPS, healer).
+// Each bot is a real WebSocket connection to this server's own /ws (the `ws` package) with its OWN brain
+// (shared/bots/brain.js via shared/teambots.js): its own class role, behaviour, capability level and goal. "Add team"
+// adds three such bots put into one party; editing one bot never changes another. Party members command their bots
+// in chat or with the command wheel; admins also through POST /api/admin/bots/:bid/command.
 // Bots join with a secret key generated at startup, so only this module can create them: the server marks them
 // p.bot = true (shown in the roster, left out of the real-player lists), gives them their starting level, and never
 // saves them (they're anonymous players).
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { startTeam } from '../shared/teambots.js';
-import { CLASSES, MAX_LEVEL, PARTY_MAX, areaName, walkable, resolveCollision } from '../shared/data.js';
-import { floorOf } from '../shared/floor2.js';
+import { CLASSES, MAX_LEVEL, PARTY_MAX, areaName, walkable, resolveCollision, inArena } from '../shared/data.js';
+import { floorOf, inArena2 } from '../shared/floor2.js';
 import { clampSkill, skillName } from '../shared/botskill.js'; // capability levels 1-5
 import { BotEditMethods } from './botedit.js'; // live edits + actions (admin page)
 
@@ -18,7 +20,7 @@ export const BEHAVIOURS = {
   field: 'Farm the field near town',
   warden: 'Go fight the Warden',
   floor2: 'Floor 2 (the Mire, then the Sovereign)',
-  auto: 'Level up, then the Warden (classic party run)',
+  auto: 'Level up, then the Warden (boars, wolves, then the boss)',
 };
 const NAMES = ['Rook', 'Wren', 'Tamsin', 'Orin', 'Sable', 'Dax', 'Mira', 'Corin', 'Ash', 'Nell', 'Vex', 'Juno', 'Pell', 'Iris', 'Bram', 'Cass', 'Edda', 'Fenn', 'Hale', 'Lark'];
 const ROLES = ['guardian', 'swordsman', 'cleric'];
@@ -28,7 +30,7 @@ export class BotManager {
   constructor(game, { url, max = Number(process.env.MAX_BOTS) || 30 } = {}) {
     this.game = game; this.url = url; this.max = max;
     this.key = crypto.randomBytes(18).toString('base64url'); // only this process knows it
-    this.bots = []; // { bid, b (teambots bot), group, behaviour, follow, team, lvl, at }
+    this.bots = []; // { bid, b (the bot and its brain), group (startTeam handle), behaviour, follow, team, lvl, at }
     this.nextBid = 1; this.nextTeam = 1;
     this.joining = false;
     // Keep bots out of play tracking (sessions, deaths, ...): they're not players.
@@ -126,22 +128,28 @@ export class BotManager {
       dead: !!p?.dead, area: p ? areaName(p.x, p.z) : 'joining…', floor: p ? floorOf(p.x) : 0,
       party: party ? party.members.filter(id => id !== p.id).map(id => g.players.get(id)?.name).filter(Boolean) : [],
       behaviour: e.behaviour, follow: e.follow, team: e.team, skill: e.b.skill, skillName: skillName(e.b.skill), status: e.b.closed ? 'gone' : p ? 'online' : 'joining', since: e.at,
+      goal: p?.dead ? 'Down' : e.b.goal || '', role: e.b.role, order: e.b.cmd ? { cmd: e.b.cmd.k, by: e.b.cmd.byName || '' } : null, partyLead: e.b.anchor?.name || '',
     };
   }
 
   list() { return this.bots.map(e => this.view(e)); }
 
-  // ---------- once a second: prune, and keep followers with their player ----------
+  // ---------- once a second: prune, followers join their player's party, and nobody gets left behind ----------
   upkeep() {
-    const g = this.game;
     this.bots = this.bots.filter(e => !(e.b.closed && Date.now() - e.at > 3000));
     for (const e of this.bots) {
-      if (e.behaviour !== 'follow') continue;
       const p = this.livePlayer(e);
-      const t = p && this.realPlayers().find(o => o.name.toLowerCase() === e.follow.toLowerCase());
-      if (!p || !t || p.dead || t.dead) continue;
-      if (!e.partied && !(p.party && p.party === t.party)) this.joinParty(p, t), e.partied = true; // once: they can leave it
-      if (floorOf(p.x) !== floorOf(t.x) || Math.hypot(p.x - t.x, p.z - t.z) > 45) this.catchUp(p, t);
+      if (!p || p.dead) continue;
+      let t = null;
+      if (e.behaviour === 'follow') {
+        t = this.realPlayers().find(o => o.name.toLowerCase() === e.follow.toLowerCase());
+        if (t && !t.dead && !e.partied && !(p.party && p.party === t.party)) this.joinParty(p, t), e.partied = true; // once: they can leave it
+      }
+      // the human this bot's brain is sticking with (its party, or a follow / come order)
+      const a = e.b.anchor && !e.b.anchor.bot ? this.game.players.get(e.b.anchor.id) : null;
+      if (a && !a.bot) t = a;
+      const busy = e.b.tgtId && (inArena(p.x, p.z) || inArena2(p.x, p.z)); // don't pull it out of a boss fight
+      if (t && !t.dead && !busy && Date.now() - (e.caughtUp || 0) > 8000 && (floorOf(p.x) !== floorOf(t.x) || Math.hypot(p.x - t.x, p.z - t.z) > 45)) { e.caughtUp = Date.now(); this.catchUp(p, t); }
     }
   }
 
