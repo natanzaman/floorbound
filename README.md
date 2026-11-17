@@ -35,7 +35,7 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Dodge roll | Shift | Dodge button |
 | Jump | Space (hop over the boss's slams) | Jump button |
 | Guard / parry (Guardian) | Hold R to guard; tap R just before a hit to parry | — |
-| Select a character (enemy or ally) | Ctrl+click it (Cmd+click on Mac); Ctrl+click empty ground to clear | Lock on button (enemies) |
+| Select a character (enemy or ally) | Hold Ctrl (Cmd on Mac) to preview, Ctrl+click to select; Ctrl+right-click to deselect | Lock on button (enemies) |
 | Lock on / cycle enemies | Tab (Esc to clear) | Lock on button |
 | Chat | Enter | Chat button |
 | Party | Players button (P) → Find party, or Invite | Players button → Find party / Invite |

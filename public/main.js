@@ -714,7 +714,8 @@ let mouseAttack = false;
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse') {
-    if (e.button === 0 && (e.ctrlKey || e.metaKey)) { if (locked()) selectAim(); else selectAt(e.clientX, e.clientY); return; } // mouse look: select what the crosshair is aimed at
+    if (e.button === 0 && (e.ctrlKey || e.metaKey)) { if (locked()) selectAim(); else selectAt(e.clientX, e.clientY); return; } // Ctrl+click: select (mouse look: what the crosshair is aimed at)
+    if (e.button === 2 && (e.ctrlKey || e.metaKey)) { clearSelection(); return; } // Ctrl+right-click: deselect
     if (e.button === 0 && mouseLook() && !locked()) { lockCursor(); return; } // the first click captures the cursor
     if (e.button === 0) { mouseAttack = true; attackHeld = true; return; }
     if (locked()) return; // no right-drag needed while the camera follows the mouse
@@ -832,6 +833,7 @@ function cycleLock() {
 // Ctrl/Cmd + click empty ground to clear the selection.
 function selectAt(sx, sy) {
   const best = pickAt(sx, sy);
+  if (!best) return; // clicking nothing keeps your selection (Ctrl+right-click clears it)
   state.lock = best?.kind === 'mob' ? best.ent.id : 0;
   state.focus = best?.kind === 'player' ? best.ent.id : 0;
   sfx.play('ui');
@@ -858,8 +860,15 @@ function pickAim() {
   for (const p of players.values()) if (p.id !== state.myId && !p.dead) consider(p, 'player');
   return best;
 }
+function clearSelection() {
+  if (!state.lock && !state.focus) return;
+  state.lock = 0; state.focus = 0;
+  sfx.play('ui');
+  announceTarget();
+}
 function selectAim() {
   const best = pickAim();
+  if (!best) return;
   state.lock = best?.kind === 'mob' ? best.ent.id : 0;
   state.focus = best?.kind === 'player' ? best.ent.id : 0;
   sfx.play('ui');
@@ -1564,7 +1573,9 @@ function frame(now) {
     selArrow.position.set(gp.x, gp.y + sel.model.height + 2.3 + Math.sin(now / 180) * 0.15, gp.z); selArrow.rotation.y += dt * 2.5;
   } else { lockRing.visible = false; selArrow.visible = false; }
   // Mouse look: preview what Ctrl+click would select under the crosshair.
-  hovered = locked() ? pickAim()?.ent || null : null;
+  // Hold Ctrl to preview what a click would select (crosshair in mouse look, cursor otherwise).
+  const ctrlHeld = keys.has('control') || keys.has('meta');
+  hovered = !ctrlHeld || !state.joined || state.spectator ? null : locked() ? pickAim()?.ent || null : mouse.inside ? pickAt(mouse.x, mouse.y)?.ent || null : null;
   $('crosshair').className = hovered ? (hovered.kind === 'mob' ? 'foe' : 'ally') : '';
   updateTargetFrame(sel, !!lm);
 
