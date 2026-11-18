@@ -2,9 +2,15 @@
 // opened with /?spectate=1&film=1: it obeys every `cine` event (shots, slow motion, titles, fades, letterbox, clean
 // feed, light). Other spectators keep their auto framing but still get light, titles, fades and slow motion; players
 // only get the light. main.js hooks: cine.onMessage (state on join), cine.event (snapshot events), cine.frame (camera).
+// POV view (F8): /?spectate=1&pov=<name> rides one character: their own game camera (behind and above, looking where
+// they look); add &eyes=1 for first person. It gets the picture like the film view (light, fades, titles, letterbox,
+// clean feed) but keeps its own camera, so one window per character records a multi-camera take. The director can also
+// cut the film view into a character with the shots `pov` and `eyes`.
 import * as THREE from 'three';
 
-const FILM = new URLSearchParams(location.search).has('film');
+const Q = new URLSearchParams(location.search);
+const POV = (Q.get('pov') || '').trim().toLowerCase() || null;
+const FILM = Q.has('film') || !!POV;
 const ease = u => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
 const lerpA = (a, b, k) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * k;
 const BASE_FOV = 60;
@@ -20,10 +26,16 @@ const SHOTS = {
   follow: { dist: 8, camY: 4.5, lookY: 0.5, fov: 55, az: Math.PI },
   orbit: { dist: 10, camY: 3.5, lookY: 0.5, fov: 50, az: null, spin: 0.12 },
   crane: { dist: 4, camY: 1.6, lookY: 0.5, fov: 50, az: null, to: { dist: 18, camY: 14, lookY: 0.3 }, len: 7 },
+  // F8: a character's own view. pov: their game camera (behind, a little above, over the right shoulder, looking ahead);
+  // eyes: first person (their model is hidden). Both turn with the character, smoothed; when they fall, the camera
+  // rises out of them and looks down at the body.
+  pov: { dist: 5.5, camY: 1.55, lookY: 0.7, fov: 58, ahead: 6, side: 0.6, turn: 3, pov: true },
+  eyes: { dist: -0.25, camY: 0.93, lookY: 0.86, fov: 72, ahead: 12, side: 0, turn: 5, pov: true, hide: true },
 };
+const RISE = { dist: 4, camY: 6, lookY: 0.15, secs: 3 }; // a POV whose character is down
 
-export function initCine({ camera, state, players, mobs, slowMotion, twists }) {
-  const S = { markers: true, shot: null, t: 0, u: 1, dur: 0, az: null, from: null, last: null, active: false, fov: BASE_FOV };
+export function initCine({ camera, state, players, mobs, slowMotion, twists, occluders = [] }) {
+  const S = { markers: true, shot: null, t: 0, u: 1, dur: 0, az: null, from: null, last: null, active: false, fov: BASE_FOV, hidden: null, down: 0, base: null, side: null, off: null, spin: 0, chk: 0, flip: 0, d: 0, clr: 0, hb: null };
   const pos = new THREE.Vector3(), look = new THREE.Vector3(), want = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: BASE_FOV };
   const known = new Map(); // last seen place of each target (a mob that died and vanished keeps its spot)
 
@@ -64,8 +76,10 @@ body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-
   function clean(on) { view.clean = !!on; document.body.classList.toggle('cine-clean', view.clean); }
   function light(v) { view.light = v || null; twists.light = view.light; }
   function shot(e, cut) {
+    if (POV) return; // the POV view keeps its own camera
     if (e.shot === 'free' && !S.active) { S.shot = null; return; }
-    S.shot = e; S.t = 0; S.u = 0; S.dur = cut ? 0 : Math.max(0, e.secs ?? 1.5); S.az = null;
+    S.shot = e; S.t = 0; S.u = 0; S.dur = cut ? 0 : Math.max(0, e.secs ?? 1.5);
+    Object.assign(S, { az: null, base: null, side: null, off: null, spin: 0, chk: 0, flip: 0, down: 0, d: 0, clr: 0, hb: null });
     S.from = S.active ? { pos: pos.clone(), look: look.clone(), fov: S.fov } : null; // null: start from the auto camera
   }
 
@@ -98,43 +112,207 @@ body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-
   }
 
   // ---------- camera ----------
-  function find(t) { // -> { x, z, h, face } or null
+  if (POV) S.shot = { shot: Q.has('eyes') ? 'eyes' : 'pov', target: { name: POV }, secs: 0 };
+  function find(t) { // -> { x, z, h, face, dead, ent } or null
     if (!t) return null;
     if (t.x !== undefined) return { x: t.x, z: t.z, h: 2, face: null };
-    const key = t.pid !== undefined ? `p${t.pid}` : `m${t.mid}`;
-    const e = t.pid !== undefined ? players.get(t.pid) : mobs.get(t.mid);
+    let e, key;
+    if (t.name !== undefined) { // the POV view names its character (F8)
+      for (const p of players.values()) if (p.name?.toLowerCase() === t.name) { e = p; break; }
+      key = `n${t.name}`;
+    } else {
+      key = t.pid !== undefined ? `p${t.pid}` : `m${t.mid}`;
+      e = t.pid !== undefined ? players.get(t.pid) : mobs.get(t.mid);
+    }
     if (e) {
       const g = e.model.group.position;
-      known.set(key, { x: g.x, z: g.z, h: e.model.height || 2, face: e.model.group.rotation.y });
+      known.set(key, { x: g.x, z: g.z, h: e.model.height || 2, face: e.model.group.rotation.y, dead: !!e.dead, boss: !!e.def?.boss });
       if (known.size > 200) known.delete(known.keys().next().value);
     }
-    return known.get(key) || null;
+    const k = known.get(key);
+    return k ? { ...k, ent: e || null } : null;
   }
+  // F8: a character's own view (pov / eyes). Turns with them (smoothed); while they're down the camera rises out of
+  // them to look at the body, and comes back down when they get up.
+  function aimPov(D, T, dt) {
+    if (S.az === null) S.az = T.face ?? 0;
+    if (T.face !== null) S.az = lerpA(S.az, T.face, Math.min(1, dt * D.turn));
+    S.down = Math.max(0, Math.min(1, S.down + (T.dead ? dt : -dt) / RISE.secs));
+    const c = ease(S.down), fx = Math.sin(S.az), fz = Math.cos(S.az), rx = -fz, rz = fx;
+    const dist = D.dist + (RISE.dist - D.dist) * c, side = D.side * (1 - c), ahead = D.ahead * (1 - c);
+    const cy = T.h * D.camY + (RISE.camY - T.h * D.camY) * c;
+    let d = dist; // never inside a big body (a boss in melee range): pull the camera in along the arm
+    if (d > 0) for (let i = 0; i < 8 && insideBig(V5.set(T.x - fx * d + rx * side, cy, T.z - fz * d + rz * side)); i++) d *= 0.75;
+    want.pos.set(T.x - fx * d + rx * side, cy, T.z - fz * d + rz * side);
+    if (D.dist > 0) arm(V4.set(T.x, T.h * 0.8 + (RISE.camY * 0.5 - T.h * 0.8) * c, T.z).clone(), want.pos, dt); // like the game camera: never behind a wall
+    want.look.set(T.x + fx * ahead, T.h * (D.lookY + (RISE.lookY - D.lookY) * c), T.z + fz * ahead);
+    want.fov = D.fov + (55 - D.fov) * c;
+    hide(D.hide && c < 0.5 ? T.ent : null); // in their eyes: don't draw their own head
+    return true;
+  }
+  function hide(ent) { // runs after main.js has drawn the entities this frame, so it wins until the next one
+    if (S.hidden && S.hidden !== ent) S.hidden.model.group.visible = true;
+    S.hidden = ent || null;
+    if (!S.hidden) return;
+    S.hidden.model.group.visible = false;
+    if (S.hidden.label) S.hidden.label.el.style.display = 'none';
+  }
+  // ---------- framing helpers (Ep 1 dress rehearsal fixes) ----------
+  // A shot keeps a clear line to what it films: no wall, pillar or other body in between, and never the camera inside a
+  // body (the Warden filled the screen when a close-up landed on its side of Bram). In a boss fight, close-ups,
+  // mediums and follows frame the boss with their subject, and a character who falls is followed down to the ground.
+  const ray = new THREE.Raycaster(), V1 = new THREE.Vector3(), V2 = new THREE.Vector3(), V3 = new THREE.Vector3(), V4 = new THREE.Vector3(), V5 = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+  const OFFS = [0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4, 1.85, -1.85, 2.4, -2.4, Math.PI];
+  const BOSS_NEAR = 22; // m: a boss this close shares the frame
+  const bodyR = (e, big) => big ? Math.max(e.def?.radius || 0.8, (e.model.height || 2) * 0.38) : 0.45;
+  // How badly the view from p to l is blocked: a wall or pillar 2, another body 1 (a big one 2), the camera inside a
+  // body 5. `bodies: false` (wide, crane) only counts walls and the camera inside a big body.
+  function blockers(p, l, skip, bodies) {
+    let n = 0;
+    const len = p.distanceTo(l);
+    if (occluders.length && len > 0.6) {
+      ray.set(l, V1.copy(p).sub(l).normalize()); ray.near = 0; ray.far = len - 0.2;
+      if (ray.intersectObjects(occluders, true).length) n += 2;
+    }
+    const sx = p.x - l.x, sz = p.z - l.z, L2 = sx * sx + sz * sz || 1e-6;
+    for (const map of [players, mobs]) for (const e of map.values()) {
+      const big = map === mobs && (e.def?.boss || (e.model.height || 2) > 3);
+      if (skip.includes(e) || e.dead || !e.model?.group || (!bodies && !big)) continue;
+      const g = e.model.group.position, r = bodyR(e, big), h = e.model.height || 2;
+      if (Math.hypot(p.x - g.x, p.z - g.z) < r + 0.5 && p.y < h + 0.4) { n += 5; continue; }
+      const u = ((g.x - l.x) * sx + (g.z - l.z) * sz) / L2;
+      if (u < 0.1 || u > 1) continue; // beside or behind the subject, or behind the camera
+      const y = l.y + (p.y - l.y) * u;
+      if (Math.hypot(l.x + sx * u - g.x, l.z + sz * u - g.z) < r && y < h) n += big ? 2 : 1;
+    }
+    return n;
+  }
+  // Are all these points inside the picture (the letterboxed part when the bars are on)?
+  function fits(p, l, fov, pts) {
+    V1.copy(l).sub(p).normalize(); V2.crossVectors(V1, UP).normalize(); V3.crossVectors(V2, V1);
+    const tv = Math.tan(fov * Math.PI / 360), th = tv * camera.aspect, tvv = view.letterbox ? Math.min(tv, th / 2.39) : tv;
+    for (const q of pts) {
+      V4.copy(q).sub(p); const z = V4.dot(V1);
+      if (z < 0.3 || Math.abs(V4.dot(V2)) / z > th * 0.9 || Math.abs(V4.dot(V3)) / z > tvv * 0.86) return false;
+    }
+    return true;
+  }
+  function bossNear(T) { // the nearest live boss to a (non-boss) subject
+    let best = null, bd = BOSS_NEAR;
+    for (const m of mobs.values()) {
+      if (!m.def?.boss || m.dead || m === T.ent) continue;
+      const g = m.model.group.position, d = Math.hypot(g.x - T.x, g.z - T.z);
+      if (d < bd) { bd = d; best = { x: g.x, z: g.z, h: m.model.height || 6, ent: m }; }
+    }
+    return best;
+  }
+  function insideBig(p) {
+    for (const m of mobs.values()) {
+      if (m.dead || !(m.def?.boss || (m.model.height || 2) > 3)) continue;
+      const g = m.model.group.position;
+      if (Math.hypot(p.x - g.x, p.z - g.z) < bodyR(m, true) + 0.4 && p.y < (m.model.height || 6) + 0.4) return true;
+    }
+    return false;
+  }
+  // Spring arm: how far from the look point the camera can sit along this direction before a wall gets in the way.
+  function wallClamp(l, p, d) {
+    if (!occluders.length || d < 1) return d;
+    ray.set(l, V1.copy(p).sub(l).normalize()); ray.near = 0; ray.far = d;
+    const hit = ray.intersectObjects(occluders, true)[0];
+    return hit ? Math.max(0.6, hit.distance - 0.6) : d;
+  }
+  // Pull the camera at p in front of any wall between it and the pivot l, easing only the pulled-in amount.
+  function arm(l, p, dt) {
+    const full = p.distanceTo(l), pull = full - wallClamp(l, p, full);
+    S.d += (pull - S.d) * Math.min(1, dt * (pull > S.d ? 6 : 1.5));
+    if (full > 0.01) p.sub(l).multiplyScalar(Math.max(0.6, full - S.d) / full).add(l);
+  }
+  function pushOut(p) { // never leave the camera inside a big body
+    for (const m of mobs.values()) {
+      if (m.dead || !(m.def?.boss || (m.model.height || 2) > 3)) continue;
+      const g = m.model.group.position, r = bodyR(m, true) + 0.6, d = Math.hypot(p.x - g.x, p.z - g.z);
+      if (d < r && p.y < (m.model.height || 6) + 0.4) { const a = d > 0.01 ? Math.atan2(p.x - g.x, p.z - g.z) : 0; p.x = g.x + Math.sin(a) * r; p.z = g.z + Math.cos(a) * r; }
+    }
+  }
+  const sideOf = (a, b) => (Math.atan2(Math.sin(a - b), Math.cos(a - b)) < 0 ? -1 : 1);
+  const mix = (a, b, c) => a + (b - a) * c;
+
   // Where the shot wants the camera this frame (into `want`); false while its target isn't known yet.
   function aim(dt) {
     const e = S.shot, D = SHOTS[e.shot], T = find(e.target);
     if (!D || !T) return false;
-    const k = Math.sqrt(Math.max(1, T.h / 1.95)); // giants get a wider frame
+    if (D.pov) return aimPov(D, T, dt);
+    S.down = Math.max(0, Math.min(1, S.down + (T.dead ? dt : -dt) / 1.2));
+    const down = ease(S.down); // the subject is lying on the ground
     const cp = S.active ? pos : camera.position, bearing = Math.atan2(cp.x - T.x, cp.z - T.z); // the side the camera is on now
+    S.chk -= dt; const check = S.chk <= 0; if (check) S.chk = 0.4;
+    const skip = [T.ent].filter(Boolean);
     if (e.shot === 'over_shoulder') {
       const F = find(e.from);
       if (!F) return false;
       let dx = T.x - F.x, dz = T.z - F.z; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
-      want.pos.set(F.x - dx * D.dist + dz * 0.75, F.h * D.camY, F.z - dz * D.dist - dx * 0.75);
-      want.look.set(T.x, T.h * D.lookY, T.z);
-      want.fov = D.fov;
+      const at = (side, v) => v.set(F.x - dx * D.dist + dz * 0.75 * side, F.h * D.camY, F.z - dz * D.dist - dx * 0.75 * side);
+      want.look.set(T.x, mix(T.h * D.lookY, 0.3, down), T.z);
+      if (F.ent) skip.push(F.ent);
+      if (S.side === null || (check && S.t > S.flip)) { // the clearer shoulder (a reverse cut at most every 2 s)
+        const cur = blockers(at(S.side || 1, V3).clone(), want.look, skip, true), oth = blockers(at(-(S.side || 1), V3).clone(), want.look, skip, true);
+        if (S.side === null) S.side = oth < cur ? -1 : 1;
+        else if (oth < cur) { S.side = -S.side; S.flip = S.t + 2; }
+      }
+      at(S.side, want.pos); want.fov = D.fov;
       return true;
     }
-    if (S.az === null) S.az = D.az === null || T.face === null ? bearing : T.face + D.az;
-    if (e.shot === 'follow' && T.face !== null) S.az = lerpA(S.az, T.face + Math.PI, Math.min(1, dt * 1.2));
-    if (D.spin) S.az += D.spin * dt;
+    const B = (e.shot === 'close_up' || e.shot === 'medium' || e.shot === 'follow') && !T.boss ? bossNear(T) : null;
+    let base, rate = 2.5;
+    if (B) { // fighting a boss: the camera behind the subject's shoulder, the boss beyond them (follow), or side-on (close-up / medium)
+      const bb = Math.atan2(T.x - B.x, T.z - B.z); // 0 = straight behind the subject (away from the boss), PI = between them
+      if (S.side === null) S.side = sideOf(bearing, bb);
+      base = bb + S.side * (e.shot === 'follow' ? 0.45 : e.shot === 'close_up' ? 1.6 : 1.35); rate = 1.4;
+      skip.push(B.ent);
+    } else if (e.shot === 'follow') { base = T.face !== null ? T.face + Math.PI : bearing; rate = 1.2; }
+    else { if (S.base === null) S.base = D.az === null || T.face === null ? bearing : T.face + D.az; base = S.base; }
+    if (D.spin) { S.spin += D.spin * dt; base += S.spin; }
+    const k = Math.sqrt(Math.max(1, T.h / 1.95)); // giants get a wider frame
     let { dist, camY, lookY } = D;
     if (D.to) { const c = ease(S.t / Math.max(D.len, e.secs || 0)); dist += (D.to.dist - dist) * c; camY += (D.to.camY - camY) * c; lookY += (D.to.lookY - lookY) * c; }
-    const lx = e.shot === 'follow' && T.face !== null ? Math.sin(T.face) * 2 : 0, lz = e.shot === 'follow' && T.face !== null ? Math.cos(T.face) * 2 : 0;
-    const cy = D.eye ? T.h * camY : camY * k;
-    want.pos.set(T.x + Math.sin(S.az) * dist * k, cy, T.z + Math.cos(S.az) * dist * k);
-    want.look.set(T.x + lx, T.h * lookY, T.z + lz);
+    dist *= k;
+    let cy = D.eye ? T.h * camY : camY * k;
+    // what it looks at: ahead of a follow's subject, between subject and boss in a fight, down at a fallen one
+    const w = B ? (e.shot === 'follow' ? 0.45 : 0.3) : 0;
+    let lx = T.x, lz = T.z, ly = T.h * lookY;
+    if (B) { lx = mix(T.x, B.x, w); lz = mix(T.z, B.z, w); ly = mix(ly, B.h * 0.42, w); }
+    else if (e.shot === 'follow' && T.face !== null) { lx += Math.sin(T.face) * 2; lz += Math.cos(T.face) * 2; }
+    ly = mix(ly, 0.3, down); cy = mix(cy, Math.max(cy, 1.8, dist * 0.55), down);
+    want.look.set(lx, ly, lz);
     want.fov = D.fov;
+    const place = (az, d, y, v) => v.set(T.x + Math.sin(az) * d, y, T.z + Math.cos(az) * d);
+    if (S.az === null) S.az = base + (S.off || 0);
+    // widen until the subject (and the boss) fit
+    const pts = [];
+    if (B) {
+      pts.push(V4.set(T.x, T.h * (1 - down * 0.8), T.z).clone(), V4.set(T.x, e.shot === 'close_up' ? T.h * 0.45 : 0.05, T.z).clone());
+      pts.push(V4.set(B.x, B.h * (e.shot === 'close_up' ? 0.55 : 0.95), B.z).clone());
+      if (e.shot !== 'close_up') pts.push(V4.set(B.x, 0.2, B.z).clone());
+      for (let i = 0; i < 12 && !fits(place(S.az, dist, cy, V5), want.look, want.fov, pts); i++) { dist *= 1.12; if (!D.eye) cy *= 1.04; else cy += 0.15; }
+    }
+    // a clear line of sight: keep the current angle if it's clear, else swing to the clearest one nearby
+    if (S.hb !== null && S.hb !== !!B) S.off = null; // a boss came into or left range: the base angle means something else now
+    S.hb = !!B;
+    if (S.off === null || check) {
+      const bodies = !(e.shot === 'wide' || e.shot === 'crane' || e.shot === 'orbit');
+      // a boss two-shot prefers its own band (within ~1.1 rad), but a wall anywhere in it is worse than a wider angle
+      const score = off => blockers(place(base + off, dist, cy, V3).clone(), want.look, skip, bodies) + Math.abs(off) * 0.01 + (B && Math.abs(off) > 1.1 ? 1.2 : 0);
+      let best = S.off ?? 0, bs = score(best);
+      if (best !== 0) { S.clr = score(0) < 0.5 ? S.clr + 0.4 : 0; if (S.clr >= 1) { best = 0; bs = 0; S.clr = 0; } } // the own angle is clear again
+      if (bs >= 0.5) for (const o of OFFS) { const sc = score(o); if (sc < bs - 0.5) { bs = sc; best = o; } }
+      if (S.off === null) S.az = base + best;
+      S.off = best;
+    }
+    S.az = lerpA(S.az, base + S.off, Math.min(1, dt * rate));
+    // the camera's distance from the look point, pulled in front of any wall, eased (in fast, out slowly) so it never pops
+    place(S.az, dist, cy, want.pos);
+    arm(want.look, want.pos, dt);
+    pushOut(want.pos);
     return true;
   }
 
@@ -146,6 +324,7 @@ body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-
       for (const e of mobs.values()) if (e.model.cursor) e.model.cursor.visible = !view.clean;
       S.markers = !view.clean;
     }
+    if (!SHOTS[S.shot?.shot]?.hide) hide(null);
     if (!FILM || !state.spectator || !S.shot) { S.active = false; return null; }
     S.t += dt;
     const free = S.shot.shot === 'free';
@@ -165,6 +344,6 @@ body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-
   }
   function setFov(f) { if (Math.abs(camera.fov - f) > 0.01) { camera.fov = f; camera.updateProjectionMatrix(); } }
 
-  const api = { film: FILM, view, onMessage, event, frame, get shot() { return S.shot?.shot || 'free'; }, get active() { return S.active; }, want, pos, look };
+  const api = { film: FILM, pov: POV, view, onMessage, event, frame, get shot() { return S.shot?.shot || 'free'; }, get active() { return S.active; }, want, pos, look };
   return api;
 }

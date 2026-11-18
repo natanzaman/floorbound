@@ -53,6 +53,8 @@ scenes:
       - { who: a, do: skill, skill: burst }
       - { who: a, do: say, text: "hi", after: later, colour: red }
       - { do: camera, shot: dolly, target: a }
+      - { do: camera, shot: pov, target: fountain }
+      - { do: camera, shot: eyes, target: a }
 `).sheet;
 const vb = validateSheet(bad, { has: k => k !== 'cine' });
 const has = (re, sc, cue) => vb.errors.some(e => re.test(e.msg) && (sc === undefined || e.scene === sc) && (cue === undefined || e.cue === cue));
@@ -67,6 +69,7 @@ ok(has(/Burst Combo unlocks at 3/, 1, 4), 'error: skill above the actor\'s level
 ok(has(/no earlier cue with id "later"/, 1, 5), 'error: after an unknown label (cue 5)');
 ok(vb.warnings.some(w => /unknown field "colour"/.test(w.msg) && w.cue === 5), 'warning: unknown field');
 ok(has(/"dolly" isn't one of/, 1, 6) && vb.errors.some(e => e.api && e.cue === 6), 'error: unknown shot, and camera needs cine (api)');
+ok(has(/camera pov needs an actor as target/, 1, 7) && !has(/needs an actor/, 1, 8), 'error: a pov shot whose target isn\'t an actor (F8); eyes on an actor is fine');
 ok(parseCond('warden_hp < 66%')?.v === 0.66 && parseCond('pell_dead')?.kind === 'dead' && parseCond('t > 12')?.v === 12 && parseCond('gate_open')?.kind === 'gate', 'conditions parse');
 ok(Math.abs(sayHold('Every second.') - 2.51) < 0.01 && sayHold('x'.repeat(200)) === 5 && sayHold('') === 2, 'say holds 2-5 s by length');
 
@@ -161,6 +164,8 @@ scenes:
   const st = dir.status();
   if (st.state !== 'done') console.log(st.log.map(l => `    ${l.t} ${l.text}`).join('\n'));
   ok(st.state === 'done', `the show finishes (${st.elapsed} s)`);
+  ok(st.cast.join() === [...dir.actors.values()].map(a => a.name).join() && st.cast.includes('Wren'), 'status().cast lists the names the actors play under (POV links, F8)');
+  { const d2 = new Director(game, S.bots); d2.sheet = { cast: 'Pell', scenes: 'x' }; let c; try { c = d2.status().cast; } catch { c = null; } ok(Array.isArray(c) && !c.length, 'status() survives a sheet whose cast is not a list'); }
   const wren = dir.actors.get('wren').p, kade = dir.actors.get('kade').p;
   ok(wren.name === 'Wren' && wren.cls === 'cleric' && wren.lvl === 4 && kade.lvl === 4 && dir.actors.get('kade').b.skill === 3, 'actors join with their name, class, level and capability');
   ok(kade.inv.eq.weapon?.style === 'dual' && !wren.inv.eq.weapon?.style, 'an actor carries a weapon of its style (the default style: none)');

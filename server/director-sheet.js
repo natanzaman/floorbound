@@ -59,7 +59,7 @@ export const BOSSES = { warden: 'warden', sovereign: 'sovereign' }; // name in a
 const LOC = 'loc', TGT = 'tgt', MOB = 'mob', COND = 'cond', NUM = 'num', STR = 'str', BOOL = 'bool';
 const en = (...v) => ({ enum: v });
 export const MOVES = ['horn_sweep', 'slam', 'charge', 'quake', 'rockfall', 'tidal_wave', 'geyser', 'trident', 'deluge'];
-export const SHOTS = ['close_up', 'medium', 'wide', 'over_shoulder', 'follow', 'orbit', 'crane', 'free'];
+export const SHOTS = ['close_up', 'medium', 'wide', 'over_shoulder', 'follow', 'orbit', 'crane', 'pov', 'eyes', 'free']; // pov / eyes: a character's own view (F8)
 export const EMOTES = ['cheer', 'block', 'cast', 'hit', 'die'];
 export const VERBS = {
   // movement
@@ -277,6 +277,7 @@ export function validateSheet(sheet, { has = () => true } = {}) {
       if (c.do === 'guard' || c.do === 'parry') for (const a of actors) if (cast.get(a)?.class !== 'guardian') warn(S, C, `${c.do}: only a Guardian can guard (${a} is a ${cast.get(a)?.class}).`);
       if (c.do === 'camera' && c.shot === 'over_shoulder' && !c.from) err(S, C, 'camera over_shoulder needs from (an actor).');
       if (c.do === 'camera' && c.shot !== 'free' && c.target === undefined) err(S, C, `camera ${c.shot} needs a target.`);
+      if (c.do === 'camera' && (c.shot === 'pov' || c.shot === 'eyes') && c.target !== undefined && !isActor(c.target)) err(S, C, `camera ${c.shot} needs an actor as target (whose view).`);
     });
   });
   return { errors, warnings };

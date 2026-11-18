@@ -137,7 +137,7 @@ scenes:
 | | `spawn` | `type*`, `at*`, `label*` | a labelled mob; `who:`/`target:` can then name it |
 | | `give_item` | `name*`, `slot` (`charm` default), `desc` | a keepsake |
 | | `protect` | `min` (fraction, default 0.1; 0 = off) | actors are protected by default |
-| Picture | `camera` | `shot*`, `target`, `from`, `secs` | shots: `close_up`, `medium`, `wide`, `over_shoulder` (+ `from`), `follow`, `orbit`, `crane`, `free`; `secs` = how long the camera takes to get there (0 = cut); the cue itself finishes at once |
+| Picture | `camera` | `shot*`, `target`, `from`, `secs` | shots: `close_up`, `medium`, `wide`, `over_shoulder` (+ `from`), `follow`, `orbit`, `crane`, `free`, `pov` and `eyes` (F8: that actor's own game camera, or first person; `target` must be an actor); `secs` = how long the camera takes to get there (0 = cut); the cue itself finishes at once |
 | | `slowmo` | `secs`, `scale` | |
 | | `title` | `text*`, `sub`, `secs` | |
 | | `fade` | `to*` (`in`, `black`), `secs` | |

@@ -66,7 +66,7 @@ const state = {
 const players = new Map(); // id -> entity
 const mobs = new Map();
 let boss = null;
-const cine = initCine({ camera, state, players, mobs, slowMotion: (a, b) => slowMotion(a, b), twists }); // public/cine.js
+const cine = initCine({ camera, state, players, mobs, slowMotion: (a, b) => slowMotion(a, b), twists, occluders }); // public/cine.js
 // Floor 2 — The Glimmering Mire (floor2client.js): world, waystones, Stairway, hazards and its events.
 const f2 = initFloor2Client({
   scene, sun, occluders, fx, sfx, state, mobs, players, isTouch,

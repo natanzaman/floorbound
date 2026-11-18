@@ -25,6 +25,10 @@ const take = (g, op) => { const e = g.events.filter(x => x.t === 'cine' && (!op 
   assert.equal(g.cine('shot', { shot: 'dolly_zoom' }), false);
   assert.equal(g.cine('zoom', {}), false);
   ok('every shot name is accepted; unknown shots and ops are refused');
+  assert.ok(SHOTS.includes('pov') && SHOTS.includes('eyes'));
+  g.cine('shot', { shot: 'eyes', target: 'Bram', secs: 0 });
+  assert.deepEqual(take(g, 'shot').at(-1), { t: 'cine', op: 'shot', shot: 'eyes', target: { pid: p.id }, secs: 0 });
+  ok('F8: the pov and eyes shots ride a character');
 
   take(g);
   g.cine('shot', { shot: 'close_up', target: { pid: p.id }, secs: 4 });

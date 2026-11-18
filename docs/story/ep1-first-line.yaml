@@ -23,8 +23,8 @@ scenes:
       - { do: title, text: "DAY 41", secs: 3 }
       - { do: camera, shot: close_up, target: hall_of_clearers, secs: 4 }
       - { who: corvin, do: face, to: hall_of_clearers }
-      - { who: corvin, do: say, text: "Forty-one days. Not one name on this stone.", hold: 4, after: prev, delay: 1 }
-      - { do: camera, shot: wide, target: corvin }
+      - { who: corvin, do: say, text: "Forty-one days. Not one name on this stone.", hold: 4, after: prev, delay: 3 }
+      - { do: camera, shot: wide, target: corvin, after: prev }
       - { who: bram, do: walk_to, to: corvin, after: prev }
       - { who: bram, do: face, to: hall_of_clearers, after: prev }
       - { who: bram, do: say, text: "Three raids tried.", hold: 2.5, after: prev }
