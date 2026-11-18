@@ -3,8 +3,9 @@
 //   downedTurn(b, P)       this bot is down: crawl to the nearest standing partymate (true = turn taken)
 //   reviveTurn(b, P)       a partymate is down and this bot is the one to go: walk over, hold the revive (true = turn taken)
 // Who goes (every bot works it out the same way, one reviver per body): the party's Cleric (healer) within 20 m first,
-// then the closest bot that isn't the tank, then the tank. Capability (BOT_REVIVE) sets the reaction delay and how often
-// the bot keeps channelling inside a telegraph instead of stepping out.
+// then the closest bot that isn't the tank, then the tank. A careful bot waits while a boss stands over the body (the
+// downed bot crawls out from under it). Capability (BOT_REVIVE) sets the reaction delay and how often the bot keeps
+// channelling inside a telegraph or next to the boss instead of stepping out.
 import { DOWNED, BOT_REVIVE } from '../revive.js';
 import { clampSkill } from '../botskill.js';
 import { CLASSES, SPRINT_SPEED, walkable, resolveCollision } from '../data.js';
@@ -13,14 +14,17 @@ import { say } from './social.js';
 
 const prof = b => BOT_REVIVE[clampSkill(b.skill ?? 5)] || BOT_REVIVE[5];
 const between = ([lo, hi]) => lo + (hi - lo) * Math.random();
+// A boss standing over this spot (not Broken): reviving here gets the reviver killed too.
+const SAFE = 4.5; // m past the boss's radius
+const bossOver = (b, x, z, pad = SAFE) => b.mobs.find(m => m.def?.boss && !m.staggered && d2(m.x, m.z, x, z) < m.def.radius + pad) || null;
 const LINES = ['Hang on, {who}!', 'Got you, {who}.', 'Picking {who} up!', 'Up you get, {who}.'];
 
 export function readDowned(b, list) {
   const down = new Map((list || []).map(r => [r[0], { left: r[1], prog: r[2], by: r[3] }]));
   for (const p of b.players) p.downed = down.get(p.id) || null;
   b.downed = down.get(b.id) || null;
-  const seen = (b.downSeen ||= new Map()); // body id -> when this bot noticed it (after its reaction delay)
-  for (const id of down.keys()) if (!seen.has(id)) seen.set(id, b.t + between(prof(b).delay));
+  const seen = (b.downSeen ||= new Map()); // body id -> { at: when this bot notices it (reaction delay), careless }
+  for (const id of down.keys()) if (!seen.has(id)) seen.set(id, { at: b.t + between(prof(b).delay), careless: Math.random() < prof(b).careless });
   for (const id of [...seen.keys()]) if (!down.has(id)) seen.delete(id);
   if (b.rev && !down.has(b.rev.id)) b.rev = null; // revived (or bled out)
 }
@@ -47,6 +51,12 @@ export function downedTurn(b, P) {
   if (b.rev) b.rev = null; // (the server already stopped any channel of ours)
   b.goal = b.downed.by ? 'Downed: being revived' : 'Downed: waiting for a revive';
   if (b.downed.by) return true; // hold still for the reviver
+  const boss = bossOver(b, b.x, b.z, SAFE + 2);
+  if (boss) { // crawl out from under the boss first, so a partymate can reach us safely
+    const a = Math.atan2(b.x - boss.x, b.z - boss.z);
+    stepTo(b, b.x + Math.sin(a) * 3, b.z + Math.cos(a) * 3, 0.2, DOWNED.crawl);
+    return true;
+  }
   const help = P.mates.filter(p => !p.dead && !p.downed).sort((x, y) => d2(x.x, x.z, b.x, b.z) - d2(y.x, y.z, b.x, b.z))[0];
   if (help && d2(help.x, help.z, b.x, b.z) > 1.6) stepTo(b, help.x, help.z, 1.4, DOWNED.crawl);
   return true;
@@ -74,15 +84,18 @@ function assignment(b, P) {
 export function reviveTurn(b, P) {
   if (b.dead || b.downed) return false;
   const d = assignment(b, P);
-  if (!d || (b.rev?.id !== d.id && b.t < (b.downSeen?.get(d.id) ?? 0))) { if (b.rev) release(b); return false; } // not ours, or not noticed yet
+  const seen = d && b.downSeen?.get(d.id);
+  if (!d || (b.rev?.id !== d.id && b.t < (seen?.at ?? 0))) { if (b.rev) release(b); return false; } // not ours, or not noticed yet
+  if (b.rev?.id !== d.id && !seen?.careless && bossOver(b, d.x, d.z)) return false; // wait until the body is clear of the boss
   if (b.rev?.id !== d.id) {
     release(b);
-    b.rev = { id: d.id, sent: false, at: 0, careless: Math.random() < prof(b).careless };
+    b.rev = { id: d.id, sent: false, at: 0, careless: !!seen?.careless };
     say(b, 'revive', {}, { p: 0.5, cd: 30, text: LINES[Math.floor(Math.random() * LINES.length)].replace('{who}', b.names?.get(d.id)?.name || 'friend') });
   }
   const R = b.rev;
   b.goal = `Reviving ${b.names?.get(d.id)?.name || 'a partymate'}`;
   const spot = dodgeSpot(b);
+  if (!R.careless && !spot && bossOver(b, d.x, d.z)) { release(b); return false; } // the boss came back over the body: back off
   if (spot && !R.careless) { // step out of the red first (lets go of E)
     if (R.sent) { b.send({ type: 'revive', on: 0 }); R.sent = false; }
     evade(b, ...spot);

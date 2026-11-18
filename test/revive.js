@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { Game } from '../server/game.js';
 import { WORLD } from '../shared/data.js';
 import { DOWNED, reviveTime } from '../shared/revive.js';
+import { readDowned, reviveTurn, downedTurn } from '../shared/bots/revive.js';
+import { MOBS } from '../shared/data.js';
 
 const g = new Game();
 let events = [];
@@ -262,6 +264,49 @@ g.time = 100; clear();
   kill(ana); assert.ok(ana.downed);
   assert.equal(g.scriptRevive(ana), true); assert.equal(ana.downed, null); assert.equal(ana.hp, ana.maxHp);
   ok('film safety: scriptDeath stays instant, no downed state while a show runs, scriptRevive works on downed');
+}
+
+// ---------- bots: who revives, and when ----------
+{
+  // Fake bot views (shared/bots/revive.js reads b.players / party view rows, b.mobs, b.tele).
+  const row = (id, cls, role, x, z, bot = true) => ({ id, cls, role, x, z, hp: 100, maxHp: 100, dead: false, bot, party: 1 });
+  const mkBot = (id, cls, role, x, z, rows) => {
+    const sent = [];
+    const b = { id, cls, role, skill: 5, t: 10, x, z, face: 0, mobs: [], tele: [], orbs: [], pools: [], players: rows, names: new Map(), gateOpen: true, me: { lvl: 10 }, cds: [0, 0, 0, 0], quiet: true, send: o => sent.push(o), sent };
+    return b;
+  };
+  const view = (b) => { const all = b.players.map(p => ({ ...p })); return { all, mates: all.filter(p => p.id !== b.id) }; };
+  const rows = () => [row(1, 'guardian', 'tank', 0, 60), row(2, 'swordsman', 'dps', 3, 60), row(3, 'cleric', 'healer', -6, 60), row(4, 'ranger', 'dps', 1, 64)];
+  const down = [[4, 14, 0, 0]];
+  const bots = [1, 2, 3].map(id => { const r = rows(); const me = r.find(p => p.id === id); return mkBot(id, me.cls, me.role, me.x, me.z, r); });
+  for (const b of bots) readDowned(b, down);
+  for (const b of bots) b.t += 1; // past the reaction delay
+  const go = bots.map(b => reviveTurn(b, view(b)));
+  assert.deepEqual(go, [false, false, true], 'the Cleric goes, not the tank or the DPS');
+  const cl = bots[2];
+  for (let i = 0; i < 200 && !cl.sent.some(o => o.type === 'revive' && o.on); i++) { cl.t += 0.05; reviveTurn(cl, view(cl)); }
+  const press = cl.sent.find(o => o.type === 'revive' && o.on);
+  assert.ok(press && press.id === 4, 'walks over and holds E on the body');
+  assert.ok(Math.hypot(cl.x - 1, cl.z - 64) < DOWNED.reach, 'in reach');
+  // no Cleric nearby: the closest non-tank goes
+  const r2 = rows().filter(p => p.id !== 3);
+  const b1 = mkBot(1, 'guardian', 'tank', 0, 60, r2), b2 = mkBot(2, 'swordsman', 'dps', 3, 60, r2);
+  for (const b of [b1, b2]) { readDowned(b, down); b.t += 1; }
+  assert.deepEqual([reviveTurn(b1, view(b1)), reviveTurn(b2, view(b2))], [false, true], 'the DPS before the tank');
+  // someone (a human) is already reviving: no bot goes
+  const b3 = mkBot(2, 'swordsman', 'dps', 3, 60, r2); readDowned(b3, [[4, 14, 0.3, 99]]); b3.t += 1;
+  assert.equal(reviveTurn(b3, view(b3)), false, 'leaves a body someone else is reviving');
+  // a boss standing over the body: a careful bot waits; the downed bot crawls out from under it
+  const r4 = rows().filter(p => p.id !== 3);
+  const b4 = mkBot(2, 'swordsman', 'dps', 3, 60, r4); readDowned(b4, down); b4.t += 1;
+  b4.mobs = [{ id: 50, x: 1, z: 66, def: MOBS.warden, staggered: false }];
+  assert.equal(reviveTurn(b4, view(b4)), false, 'waits while the Warden stands over the body');
+  b4.mobs[0].staggered = true;
+  assert.equal(reviveTurn(b4, view(b4)), true, '...and goes while it is Broken');
+  const dn = mkBot(4, 'ranger', 'dps', 1, 64, rows()); dn.mobs = [{ id: 50, x: 1, z: 66, def: MOBS.warden, staggered: false }];
+  readDowned(dn, down);
+  const z0 = dn.z; assert.equal(downedTurn(dn, view(dn)), true); assert.ok(dn.z < z0, 'downed bot crawls away from the boss');
+  ok('bots: the Cleric revives first, then the nearest non-tank; nobody doubles up; they wait while a boss is over the body');
 }
 
 console.log(`revive: ${n} checks passed`);
