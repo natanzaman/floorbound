@@ -123,7 +123,7 @@ F2 calls the others through these names, so keep them exactly. Every server meth
 
 - **Movement names:** `forceBossMove` takes `horn_sweep`, `slam`, `charge`, `quake`, `rockfall` (Warden) and `tidal_wave`, `geyser`, `trident`, `deluge` (Sovereign).
 - **Merging (several agents at once):** merge into `main` and push under a lock, so two merges never interleave:
-  `flock /home/claude/floorbound/.git/fb-merge.lock -c 'cd /home/claude/floorbound && git merge --no-ff feat/<name> && <run all tests> && git -c push.negotiate=true push origin main'`.
+  `flock /home/claude/floorbound/.git/fb-merge.lock -c 'cd /home/claude/floorbound && git merge --no-ff feat/<name> && <run all tests> && git -c push.negotiate=true push --force-with-lease origin main'`.
   Resolve conflicts keeping both sides. If the push gets HTTP 429 from the proxy, wait 5 s and retry once. Then remove your worktree and branch, and update the tracker row.
 - **Tests after merging:** your own new test, the existing tests for the files you touched, and `node test/combat.js` and `node test/feeltext.js` as a smoke check. DB tests need `DATABASE_URL` (see CLAUDE.md).
 
