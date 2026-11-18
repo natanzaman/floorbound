@@ -16,7 +16,10 @@ import { inGateZone2, floorOf } from '../shared/floor2.js';
 import { makeItem } from '../shared/items.js';
 import { MASTERY } from '../shared/mastery.js';
 import { loadoutFor, charmFor, defaultBranch } from '../shared/playerbots.js';
-import { parseSheet, validateSheet, Timeline, LANDMARKS, PLACES, PARK, BOSSES, VERBS, parseCond, sayHold, whoList, API_NAMES } from './director-sheet.js';
+import { existsSync } from 'node:fs';
+import { parseSheet, validateSheet, Timeline, LANDMARKS, PLACES, PARK, BOSSES, VERBS, parseCond, sayHold, whoList, API_NAMES, voiceDir, voiceKey } from './director-sheet.js';
+
+const VOICE_ROOT = new URL('../public/voice/', import.meta.url); // pre-made voice-over files (scripts/film/voices.mjs)
 
 const WALK = 3.4, RUN = PLAYER_SPEED; // m/s (the client plays the walk cycle up to 3.5 m/s)
 const PROTECT = 0.1; // actors never drop below 10% health unless a cue kills them
@@ -567,8 +570,17 @@ const VERBS_RUN = {
   },
   say(c, actors) {
     const g = this.game;
-    for (const a of actors) if (!a.p.dead || actors.length === 1) g.handle(a.p, { type: 'chat', text: String(c.text), ch: c.ch === 'party' ? 'p' : 's' });
     const t0 = g.time, hold = c.hold ?? sayHold(c.text);
+    for (const a of actors) {
+      if (a.p.dead && actors.length > 1) continue;
+      g.handle(a.p, { type: 'chat', text: String(c.text), ch: c.ch === 'party' ? 'p' : 's' });
+      // the line as a cue: its hold (bubbles, film subtitles) and its voice-over file when one has been made
+      const e = g.events.at(-1);
+      if (e?.t !== 'chat' || e.id !== a.p.id) continue;
+      e.hold = hold;
+      const voice = `${voiceDir(this.sheet)}/${voiceKey(a.id, e.text)}`;
+      if (existsSync(new URL(`${voice}.mp3`, VOICE_ROOT))) e.voice = voice;
+    }
     this.log(`${actors.map(a => a.name).join(', ')}: ${c.text}`);
     return () => g.time - t0 >= hold;
   },
