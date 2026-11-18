@@ -258,7 +258,7 @@ Same rules as F and G: set Status/Owner on `main` first, then mark it **done** w
 |---|---|---|---|---|
 | H1 Floor 2 polish + harder Sovereign | `feat/floor2polish` | in progress | agent floor2polish | |
 | H2 Loot and builds | `feat/loot` | in progress | agent loot | |
-| H3 AI companions: go live | `feat/ailive` | todo | | |
+| H3 AI companions: go live | `feat/ailive` | in progress | agent ailive | |
 | H4 Floor 3 | `feat/floor3` | todo | | |
 
 ### Shared contracts for H
