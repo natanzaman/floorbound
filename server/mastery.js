@@ -131,7 +131,7 @@ export const MasteryMethods = {
         fx({ x2: r2(tx), z2: r2(tz) });
         this.hitLine(p, x0, z0, tx, tz, 1.8, atk * 1.35, { sk: S });
         this.teleport(p, tx, tz);
-        this.schedule(paced(0.4), () => {
+        this.effectLater(paced(0.4), () => { // the player has already dashed through: not use time
           if (!alive()) return;
           this.events.push({ t: 'fx', k: 'evo', ev: 'phantom2', id: p.id, x: r2(x0), z: r2(z0), x2: r2(tx), z2: r2(tz) });
           this.hitLine(p, x0, z0, tx, tz, 1.8, atk * 0.8, { sk: S, knock: 1.2 });
@@ -172,7 +172,7 @@ export const MasteryMethods = {
           this.hitCircle(p, p.x, p.z, 3.2, atk * 0.45, { sk: S, knock: 0.25 });
         };
         tick(0);
-        for (let i = 1; i < 4; i++) this.schedule(i * paced(0.5), () => tick(i));
+        for (let i = 1; i < 4; i++) this.effectLater(i * paced(0.5), () => tick(i)); // the player keeps moving: not use time
         break;
       }
       case 'starburst': // 6 hits, more damage, no Break chunk
@@ -257,7 +257,7 @@ export const MasteryMethods = {
         const dx = Math.sin(p.face), dz = Math.cos(p.face), x0 = p.x, z0 = p.z, seg = 3, hit = new Set();
         let blocked = false;
         for (let i = 0; i < 4; i++) {
-          this.schedule(i * paced(0.1), () => {
+          this.effectLater(i * paced(0.1), () => { // the wave travels on its own: not use time
             if (blocked || !alive()) return;
             const ax = x0 + dx * seg * i, az = z0 + dz * seg * i, bx = ax + dx * seg, bz = az + dz * seg;
             if (!this.walk(bx, bz)) { blocked = true; return; }

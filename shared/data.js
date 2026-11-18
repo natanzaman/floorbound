@@ -21,8 +21,9 @@ export function paceMoves(tbl, keys) {
     if (!mv || mv._paced || typeof mv.wind !== 'number') continue;
     const wind = paced(mv.wind), extra = wind - mv.wind, grow = e => (e > 0 ? Math.round((e + extra) * 1000) / 1000 : e);
     mv.wind = wind;
+    const gap0 = mv.gap;
     if (typeof mv.gap === 'number') mv.gap = paced(mv.gap);
-    if (Array.isArray(mv.every)) mv.every = mv.every.map(grow);
+    if (Array.isArray(mv.every)) mv.every = mv.every.map((e, i) => grow(e) + (Array.isArray(mv.rings) && typeof mv.gap === 'number' && e > 0 ? Math.round((mv.rings[i] - 1) * (mv.gap - gap0) * 1000) / 1000 : 0));
     else if (typeof mv.every === 'number') mv.every = grow(mv.every);
     Object.defineProperty(mv, '_paced', { value: true }); // not enumerable: twists copy moves with { ...v }
   }

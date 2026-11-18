@@ -43,6 +43,10 @@ const near = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-6, `${msg}: ${a} vs $
   near(SWEEP.wind, paced(1.2), 'sweep wind'); near(SWEEP.every[2], 7.5 + paced(1.2) - 1.2, 'sweep every'); assert.equal(SWEEP.first, 9);
   near(SOVEREIGN.wave.wind, paced(2.3), 'wave wind'); assert.equal(SOVEREIGN.wave.every[0], 0, 'a move not in a phase stays off');
   near(SOVEREIGN.wave.every[1], 15 + paced(2.3) - 2.3, 'wave every'); near(SOVEREIGN.sweep.wind, paced(1.1), 'sovereign sweep');
+  // Quake: the rings are spaced wider too, so each phase's repeat also grows by (rings - 1) x the extra gap
+  const xw = paced(2.0) - 2.0, xg = paced(0.95) - 0.95;
+  [15, 12, 9.5].forEach((e, i) => near(WARDEN.quake.every[i], e + xw + i * xg, `quake every[${i}]`));
+  near(WARDEN.quake.every[2], 9.5 + xw + 2 * xg, 'quake: the rest after the last ring is unchanged');
   assert.equal(WARDEN.hounds.every, 24, 'moves without a wind-up are untouched');
   // pacing a table twice does nothing more
   const w = WARDEN.slam.wind; paceMoves(WARDEN); assert.equal(WARDEN.slam.wind, w);
@@ -109,6 +113,37 @@ function use(p, id) {
   near(lancer.cds[slot], t + paced(LANCE.sky.air) + cd, 'Sky Lance: cd after the landing');
   near(lancer.airUntil, t + paced(LANCE.sky.air), 'airborne for the paced leap');
   ok('Sky Lance (classes-b): air time x PACE, cooldown starts on landing');
+}
+
+{ // Blade Ring (evolved Whirl B): the ticks keep spinning but are not use time
+  reset(); sword.mastery.whirl = { pts: MASTERY.need[3], br: 'B' };
+  const [t, cd, slot] = use(sword, 'whirl');
+  near(sword.cds[slot], t + cd, 'Blade Ring: cooldown = press + cd');
+  assert.equal(g.scheduled.length, 3, 'three more ticks scheduled');
+  near(Math.max(...g.scheduled.map(s => s.at)) - t, 3 * paced(0.5), 'last tick keeps its paced delay');
+  ok('Blade Ring: ticks are lingering effects, no use time added to the cooldown');
+}
+{ // edge cases of the cooldown wrapper
+  reset();
+  sword.cds[slotOf(sword, 'burst')] = g.time + 5; const before = sword.cds.slice();
+  g.useSkill(sword, slotOf(sword, 'burst'), sword.face); // still on cooldown: refused
+  assert.deepEqual(sword.cds, before, 'a refused skill adds nothing');
+  assert.equal(g.scheduled.length, 0, 'and schedules nothing');
+  reset();
+  const slot = slotOf(sword, 'burst'), orig = g.skillCd; g.skillCd = () => 0; // a cooldown reset inside the call
+  const t = g.time; g.useSkill(sword, slot, sword.face); g.skillCd = orig;
+  assert.ok(g.scheduled.length > 0, 'the combo still scheduled hits');
+  near(sword.cds[slot], t, 'a cooldown reset to now stays at now');
+  ok('cooldown wrapper: refused skill adds nothing, a reset cooldown stays reset');
+}
+{ // Rain of Arrows ticks (effectLater) still carry the skill id for talents
+  reset(); ranger.mastery.pierce = { pts: MASTERY.need[3], br: 'A' };
+  const seen = [], orig = g.hitCircle;
+  g.hitCircle = function (p, ...a) { seen.push(p._tsk); return orig.call(this, p, ...a); };
+  use(ranger, 'pierce'); advance(paced(RT.rain.delay) + RT.rain.ticks * paced(RT.rain.every) + 0.1);
+  g.hitCircle = orig;
+  assert.ok(seen.length > 0 && seen.every(id => id === 'pierce'), `rain ticks see p._tsk = pierce: ${seen}`);
+  ok('Rain of Arrows ticks keep the skill id (talents) through effectLater');
 }
 
 // ---------- the Warden's basic swing keeps its rest ----------

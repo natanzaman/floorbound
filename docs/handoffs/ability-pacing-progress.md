@@ -25,3 +25,23 @@
 ## 2026-11-17 baseline done (code 6b2d62d = 1fc8892 code)
 - before.txt: 4/4 kills, avg kill 87 s (70/76/90/110), avg deaths 1.0, Quake Rings cleared 92% of 333.
 - Next: wait for server agent; then apply both agent diffs here, tests, after-runs PORT 3672.
+
+## 2026-11-17 step 3: merged agent work, tests, after-run + review started
+- Commit f68fde7: both agent diffs applied (git apply -3, clean) + fixes: shared/mastery.js descs (Phantom ~0.5 s, Blade Ring ~2 s), server/staging.js:89 Sovereign swing atkT + extra wind (imports PACE).
+- Tests at f68fde7: pacing 7, combat 19, staging 14, classes-a 19, classes-b 14, evolve 24, warden3 11, styles 24, talents 17: all pass. (Server agent ran every test/ file at its worktree: all pass; DB parts and bots.js skipped.)
+- Client cd ring clamps at 100% (main.js:1440), so cds longer than sk.cd display fine. floor2world imports data.js before floor2.js: SOVEREIGN paced.
+- Running: after-run PORT 3672 -> ability-pacing-data/after.txt; code-reviewer Opus high on git diff 6b2d62d f68fde7.
+- main has moved (b9c2e08 and later): rebase on origin/main before merging.
+- Next: review findings -> implementer fixes -> fix re-check if serious -> rebase, tests, merge --no-ff, push --force-with-lease --force-if-includes; report to Natan.
+
+## after-run done (f68fde7)
+- [skill 5 Perfect] run 1: kill in 79s, 1 deaths (twist eclipse) · Quake Rings: 57 jumped, 2 rolled, 7 hit · deaths to warden sweep
+- [skill 5 Perfect] run 2: kill in 84s, 0 deaths (twist echo) · Quake Rings: 64 jumped, 1 rolled, 5 hit
+- [skill 5 Perfect] run 3: kill in 89s, 0 deaths (twist ironhide) · Quake Rings: 68 jumped, 2 rolled, 6 hit
+- [skill 5 Perfect] run 4: kill in 89s, 0 deaths (twist packmaster) · Quake Rings: 66 jumped, 0 rolled, 2 hit
+- [skill 5 Perfect] 4/4 kills · avg kill time 85s · avg deaths 0.3 · Quake Rings cleared 93% of 280
+- EXIT 0
+
+## review (code-reviewer Opus high) on 6b2d62d..f68fde7: 0 serious, 1 bug, 4 minor
+- Bug: Sky Lance client hop 0.65 s vs server 0.91 s. Minor: F2 bossShot lead; Quake rest shorter (gap paced, every not); README Blade Ring; pacing test edge cases. Challenges taken: lingering Blade Ring/Phantom/Seismic -> effectLater; basic-attack clips unpaced (instant hits, rhythm kept).
+- Implementer (Sonnet medium) applying all of it in this worktree, uncommitted. Next: run tests, commit, rebase on origin/main, tests, merge --no-ff, push --force-with-lease --force-if-includes, report to Natan.

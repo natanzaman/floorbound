@@ -165,7 +165,7 @@ Each class skill on 1, 2 and 3 (not the basic attack) has its own **Mastery** le
 | Skill | A | B |
 | --- | --- | --- |
 | Rush | **Phantom Rush**: dash through, an afterimage strikes the path again about 0.5 s later | **Shoulder Charge**: stop on the first enemy, heavy posture damage and a stun (co-op) |
-| Whirl | **Vortex**: pull enemies within 7 m in, then spin (co-op) | **Blade Ring**: smaller ring that spins with you for 1.5 s while you move |
+| Whirl | **Vortex**: pull enemies within 7 m in, then spin (co-op) | **Blade Ring**: smaller ring that spins with you for about 2 s while you move |
 | Burst Combo | **Starburst**: 6 hits, more damage, no Break | **Finisher**: 2 hits; above 50% health the second fills posture, instant BREAK (co-op) |
 | Taunt | **Challenge**: one enemy deals 30% less to everyone but you for 5 s (co-op) | **War Cry**: 11 m taunt that drags enemies in, allies +10% damage for 6 s (co-op) |
 | Shield Wall | **Bulwark**: stand still: -80% from the front, allies behind you -60% (co-op) | **Iron Skin**: move freely, -35% for 6 s, reflects 30% of each hit |

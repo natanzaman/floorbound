@@ -82,6 +82,7 @@ function boltMesh(heavy) {
 }
 
 // ---------- animation per skill (clips from knight.glb, plus the Ranger's extra ranged clips) ----------
+const BASIC_KEYS = new Set(['shot', 'chop', 'crossbow', 'twinaxes', 'warhammer']); // basic attacks and styled basics
 const ANIM = {
   shot: [['2H_Ranged_Shoot', 2.4], ['2H_Ranged_Shoot', 2.6], ['1H_Ranged_Shoot', 2]],
   draw: [['2H_Ranged_Aiming', 1.2]], loose: [['2H_Ranged_Shoot', 2.2]],
@@ -146,7 +147,7 @@ export function initClassesA(ctx) {
     const ent = players.get(id), list = ANIM[key];
     if (!ent?.model.anim || !list) return;
     const [name, speed] = list[n % list.length];
-    ent.model.anim.shot(name, name.startsWith('Dodge_') ? speed : speed / PACE); // ability pacing: skill clips run PACE x slower (the Dodge_ hops of the instant skills stay)
+    ent.model.anim.shot(name, name.startsWith('Dodge_') || BASIC_KEYS.has(key) ? speed : speed / PACE); // ability pacing: skill clips run PACE x slower (the Dodge_ hops of the instant skills and basic attacks stay)
   }
 
   // ---------- visuals ----------

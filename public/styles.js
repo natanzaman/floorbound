@@ -240,7 +240,7 @@ export function initStyles(ctx) {
     if (ent && !e.tw) {
       ent.swing = 0.3;
       const list = ANIM[e.st];
-      if (list && ent.model.anim) { const [name, speed] = list[e.n % list.length]; ent.model.anim.shot(name, speed / PACE); } // ability pacing
+      if (list && ent.model.anim) { const [name, speed] = list[e.n % list.length]; ent.model.anim.shot(name, speed); } // basic-attack combo: not slowed by PACE
     }
     const ox = e.id === me ? state.x : e.x, oz = e.id === me ? state.z : e.z, at = { x: ox, z: oz };
     const [dx, dz] = fwd(e.f);
