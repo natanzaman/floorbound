@@ -12,7 +12,7 @@
 //  - Testing aids: START_STYLE=<id>|random equips that style's weapon on join (a comma list: each class takes the first
 //    style in it that's one of its own, e.g. START_STYLE=daggers,drum for a dagger Ranger and a drum Bard);
 //    BOT_STYLES=1 gives every anonymous (unsaved) player, bots included, a random style.
-import { CLASSES } from '../shared/data.js';
+import { CLASSES, paced } from '../shared/data.js';
 import { BAG_SIZE, makeItem } from '../shared/items.js';
 import { STYLES, STYLE_IDS, CLASS_STYLES, styleOf, validStyle } from '../shared/styles.js';
 import { RANGER_TUNE } from '../shared/classes/ranger.js';
@@ -50,7 +50,7 @@ export const StyleMethods = {
       if (hit.length) this.stylePassiveHit(p, hit, st);
     };
     strike(0);
-    if (st.twin) this.schedule(st.twin, () => strike(1));
+    if (st.twin) this.schedule(paced(st.twin), () => strike(1));
     return true;
   },
 

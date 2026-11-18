@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { WORLD, OBSTACLES, CLASSES, GATE, rng } from '/shared/data.js';
+import { WORLD, OBSTACLES, CLASSES, GATE, PACE, rng } from '/shared/data.js';
 import { MERCHANT } from '/shared/items.js';
 import { HALL } from '/shared/titles.js';
 import { MOBS } from '/shared/data.js';
@@ -550,16 +550,21 @@ export const POSES = {
 };
 export const STANCES = ['kneel', 'sit', 'bow']; // the held poses (server/poses.js POSE_KINDS)
 const POSE_T = 0.4; // ease in / out, seconds
+// Ability pacing: the strike clip plays PACE x slower and starts PACE x earlier (the numbers below stay as authored).
+function pacedWindups(t) {
+  for (const W of Object.values(t)) if (W.clip) W.clip = [W.clip[0], W.clip[1] / PACE, W.clip[2] * PACE];
+  return t;
+}
 // Wind-up per attack: up = the pose it builds into; then either clip [name, speed, s before impact] or hit (an impact
 // pose held `hold` s). hold without hit keeps `up` past the impact (the charge keeps its horns down down the lane).
-export const WINDUPS = {
+export const WINDUPS = pacedWindups({
   slam: { up: 'rear', clip: ['2H_Melee_Attack_Chop', 1.5, 0.4] },
   charge: { up: 'crouch', hold: 0.4 },
   sweep: { up: 'coil', clip: ['2H_Melee_Attack_Spin', 1.3, 0.45] },
   spin: { up: 'coil', clip: ['2H_Melee_Attack_Spinning', 1.2, 0.3] },
   quake: { up: 'stompUp', hit: 'stomp', hold: 0.3 },
   cleave: { up: 'cock', clip: ['2H_Melee_Attack_Chop', 1.6, 0.4] },
-};
+});
 const ORDER = ['hips', 'spine', 'chest', 'head', 'upperarm.l', 'lowerarm.l', 'upperarm.r', 'lowerarm.r', 'hand.r', 'upperleg.l', 'lowerleg.l', 'foot.l', 'upperleg.r', 'lowerleg.r', 'foot.r'];
 const D2R = Math.PI / 180, _e = new THREE.Euler(), _r = new THREE.Quaternion(), _g = new THREE.Quaternion(), _gi = new THREE.Quaternion(),
   _p = new THREE.Quaternion(), _x = new THREE.Quaternion(), _v = new THREE.Vector3(), _s = new THREE.Vector3();
@@ -722,13 +727,13 @@ export class Effects {
     const geo = new THREE.RingGeometry(r * 0.35, r, 24, 1, face - Math.PI / 2 - half, half * 2);
     const m = new THREE.Mesh(geo, this.fadeMat(color, 0.85));
     m.rotation.x = -Math.PI / 2; m.position.set(x, 1.0, z);
-    this.add(m, 0.22, (mesh, k) => { mesh.material.opacity = 0.85 * (1 - k); mesh.scale.setScalar(0.85 + k * 0.2); });
+    this.add(m, 0.22 * PACE, (mesh, k) => { mesh.material.opacity = 0.85 * (1 - k); mesh.scale.setScalar(0.85 + k * 0.2); });
   }
 
   ring(x, z, r, color = 0xe0f2ff, life = 0.4) {
     const m = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 48), this.fadeMat(color, 0.9));
     m.rotation.x = -Math.PI / 2; m.position.set(x, 0.3, z);
-    this.add(m, life, (mesh, k) => { mesh.scale.setScalar(Math.max(0.01, r * (0.3 + 0.7 * k))); mesh.material.opacity = 0.9 * (1 - k); });
+    this.add(m, life * PACE, (mesh, k) => { mesh.scale.setScalar(Math.max(0.01, r * (0.3 + 0.7 * k))); mesh.material.opacity = 0.9 * (1 - k); });
   }
 
   line(x0, z0, x1, z1, color, width = 0.5, life = 0.3, y = 1) {
@@ -736,7 +741,7 @@ export class Effects {
     const m = new THREE.Mesh(new THREE.BoxGeometry(width, 0.15, len), this.fadeMat(color, 0.9));
     m.position.set((x0 + x1) / 2, y, (z0 + z1) / 2);
     m.rotation.y = Math.atan2(x1 - x0, z1 - z0);
-    this.add(m, life, (mesh, k) => { mesh.material.opacity = 0.9 * (1 - k); mesh.scale.x = 1 - k * 0.7; });
+    this.add(m, life * PACE, (mesh, k) => { mesh.material.opacity = 0.9 * (1 - k); mesh.scale.x = 1 - k * 0.7; });
   }
 
   zone(x, z, r, life, color = 0x4ade80) {
@@ -830,7 +835,7 @@ export class Effects {
     for (let i = 0; i < 3; i++) {
       const m = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.62, 24), this.fadeMat(0x86efac, 0.9));
       m.rotation.x = -Math.PI / 2;
-      this.add(m, 0.8, (mesh, k) => {
+      this.add(m, 0.8 * PACE, (mesh, k) => {
         const kk = Math.max(0, k - i * 0.15);
         mesh.position.set(obj.position.x, 0.2 + kk * 2.4, obj.position.z);
         mesh.material.opacity = 0.9 * (1 - kk);

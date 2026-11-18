@@ -50,6 +50,8 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 
 Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 3-hit combos with a heavy, knockback finisher. You sprint automatically after 3 seconds out of combat. All sound effects and music are synthesized in the browser (`public/audio.js`), so there are no audio files.
 
+**Ability pacing:** skills with a wind-up, draw, leap or several hits (Piercing Shot's draw, Rain of Arrows, Leap Slam, Burst Combo, Sky Lance, Starburst and so on) and the Warden's and Sovereign's wind-ups run about 30% slower than before, so each move reads. A skill's cooldown now starts when it finishes, not when you press it (instant skills are unchanged, and basic attacks keep their rhythm). Tuning: `PACE` in `shared/data.js` (set it to 1 to turn pacing off).
+
 ## Floor 1 enemies
 
 | Enemy | Level | What it does |
@@ -84,6 +86,15 @@ Behind the Sunken Gate (same ready check as Floor 1's raid gate), the Sovereign'
 ## The raid gate and the Last Attack Bonus
 
 A portcullis blocks the corridor to the Warden's chamber. Everyone standing at the gate presses **F** (or taps Ready); when all of them are ready, it counts down 5 seconds and rises. It closes again once the chamber is empty. The Warden scales to the fighters inside when the fight starts: health by the party's size and make-up (each fighter weighted by role, damage dealers most, then raised to a power, so a full party of six with three damage dealers and a Bard faces about 3.3× the health of a Guardian/Swordsman/Cleric trio), damage by size (+12% per fighter above three), and both by level when the party's average is above 10 (+12% health and +6% damage per level). Slams target one fighter per three in the chamber. Tuning: `WARDEN` in `shared/data.js`. Whoever lands the killing blow gets the **Last Attack Bonus**: the unique *Horn of the Warden* charm.
+
+## Boss team mechanics
+
+With **two or more fighters alive** in the boss room, the Horned Warden and the Drowned Sovereign mix team mechanics into their rotation (one every ~26 s in phase 1, ~22 s in phase 2, ~18 s in phase 3; the first ~15 s in). Solo fights never see them. Rolling and jumping don't dodge them: it's about where you stand.
+- **STACK (shared meteor):** a gold circle follows one fighter for 4.5 s, then lands on them. Its damage is split between everyone inside: alone about 90% of your max health, two ~37%, three ~22%, four ~15%. Phases 1–3.
+- **SPREAD:** two fighters (three with 5+) get a violet ring; after 5.5 s each bursts in 6 m, hitting everyone *else* inside for ~42% of max health (carriers take a small 6%). Marked? Move away from everyone. Phases 1–3.
+- **Tether:** a beam links two fighters (one and their nearest partymate). After 1.5 s it hurts both a little every half second until they're 15 m apart (the beam turns green and snaps), for up to 11 s. Phases 2–3.
+
+Bots stack, spread and run tethers apart (a tank holding the boss stays put; capability levels see them late or miss some). Each one has a one-time guide tip and an on-screen prompt the first three times. The scene director can force them (`boss_move` `meteor` / `spread` / `tether`); otherwise they stay out of a show. Tuning: `shared/bossteam.js`; server `server/bossteam.js`, client `public/bossteam.js`, bots `shared/bots/bossteam.js`.
 
 ## Warden twists
 
@@ -150,7 +161,7 @@ With a database, the server records play events (session start/end, first kill, 
 - **Switch:** the first hit from a *teammate* on a broken enemy does 2.5x damage, and follow-up hits do 1.4x. You can't Switch your own Break. Charms of the Switch boost this further.
 - **Perfect dodge:** start a roll at most ~0.2 s before a hit lands and it's PERFECT: a brief slow-motion flash, heavy posture damage to the attacker, and for 1.5 s your next hit does +50% damage and double posture damage.
 - **Guard and parry (Guardian, R):** hold R to guard: hits from the front (±70°) take 70% less damage, but you can't attack and you move at half speed. Press R at most ~0.2 s before a frontal hit lands to **parry** it: no damage at all, and big posture damage to the attacker. Mashing R doesn't parry.
-- **Perilous attacks:** the Warden's **Horn Sweep** shows an orange/gold circle around it with a "!" glint and its own warning horn (about 1.2 s). Anyone inside takes about 80% of their max health: Shield Wall, Taunt, guarding, gear and jumping don't reduce it. Roll through it (i-frames) or parry it. Breaking the Warden during the wind-up cancels it. It comes every ~12 s in phase 1, more often later (never while a Quake Ring is still rolling out near the Warden).
+- **Perilous attacks:** the Warden's **Horn Sweep** shows an orange/gold circle around it with a "!" glint and its own warning horn (about 1.6 s). Anyone inside takes about 80% of their max health: Shield Wall, Taunt, guarding, gear and jumping don't reduce it. Roll through it (i-frames) or parry it. Breaking the Warden during the wind-up cancels it. It comes every ~12 s in phase 1, more often later (never while a Quake Ring is still rolling out near the Warden).
 - **Combat text and hit feel:** floating texts on the same character stagger into lanes and repeats merge ("Jumped! ×3"). Your own reactions (Jumped!, Dodged!, PERFECT, PARRY!, COUNTER, Switch, talent/style procs) show only to you; effects on a target (BROKEN, MARKED, PINNED, Discord) show to everyone; other players' damage numbers are small and dim, with only a few on screen at once. When a boss's big hit (Warden slam, charge, Horn Sweep, Quake Ring, rockfall; the Sovereign's trident, geysers, Tidal Wave) lands on you, your screen alone freezes for ~75 ms with a small shake; stomps and Quake Rings shake the camera more the closer they land. Player hits never hit-stop.
 - **Threat you can see:** a boss (and elites: Alphas, rares, the Mire Matron) shows who it's after: a red arrow over that player, a faint line from the enemy to them, and "→ Name" (or "→ YOU") under the boss bar. Under the boss bar a small meter shows your own threat as a % of the top ("You 62% of top"); it turns amber at 90% ("about to pull"). Whoever holds it sees the runner-up instead ("You have its attention · next 85%").
 - **Healer threat:** healing builds threat too: half of what a heal actually restores (overheal counts for nothing; damage a shield soaks counts like healing for its caster), split across every enemy fighting the party. A Cleric who spams heals and Smites can pull the boss off a Guardian who isn't taunting; a Guardian who Taunts on cooldown keeps it.
@@ -167,8 +178,8 @@ Each class skill on 1, 2 and 3 (not the basic attack) has its own **Mastery** le
 
 | Skill | A | B |
 | --- | --- | --- |
-| Rush | **Phantom Rush**: dash through, an afterimage strikes the path again 0.4 s later | **Shoulder Charge**: stop on the first enemy, heavy posture damage and a stun (co-op) |
-| Whirl | **Vortex**: pull enemies within 7 m in, then spin (co-op) | **Blade Ring**: smaller ring that spins with you for 1.5 s while you move |
+| Rush | **Phantom Rush**: dash through, an afterimage strikes the path again about 0.5 s later | **Shoulder Charge**: stop on the first enemy, heavy posture damage and a stun (co-op) |
+| Whirl | **Vortex**: pull enemies within 7 m in, then spin (co-op) | **Blade Ring**: smaller ring that spins with you for about 2 s while you move |
 | Burst Combo | **Starburst**: 6 hits, more damage, no Break | **Finisher**: 2 hits; above 50% health the second fills posture, instant BREAK (co-op) |
 | Taunt | **Challenge**: one enemy deals 30% less to everyone but you for 5 s (co-op) | **War Cry**: 11 m taunt that drags enemies in, allies +10% damage for 6 s (co-op) |
 | Shield Wall | **Bulwark**: stand still: -80% from the front, allies behind you -60% (co-op) | **Iron Skin**: move freely, -35% for 6 s, reflects 30% of each hit |
@@ -293,6 +304,7 @@ public/floor2world.js, public/floor2client.js  Floor 2 scene, models, effects, w
 server/game.js   authoritative simulation: combat, AI, boss, XP, parties
 server/combat.js posture/Break, perfect dodge, guard/parry, Horn Sweep, Quake Rings (mixed into Game)
 shared/threat.js, server/threat.js, public/threat.js  team threat: who bosses target (snapshot `th`), threat meter (`me.th`), healer threat, Guardian Cover, flank / Pincer; bots in shared/bots/threat.js; test/threat.js
+server/bossteam.js boss team mechanics: shared meteor (stack), spread markers, tether (mixed into Game; public/bossteam.js, shared/bots/bossteam.js)
 server/poses.js  kneel / sit / bow: setPose, /kneel /sit /bow /stand chat, cleared by moving or acting (public/poses.js on the client)
 server/index.js  static file server + WebSocket server (20 ticks/sec)
 server/shutdown.js  deploy drain on SIGTERM: "Update incoming", waits out a boss fight (4 min max), saves, exits
@@ -300,8 +312,10 @@ public/          Three.js client (no build step): main.js, world.js, style.css
 public/models/   rigged character models (glTF) with shared animations
 test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
-test/bubbles.js  speech bubble logic: duration, one per speaker, who sees which line (public/bubbles.js)
+test/bubbles.js  speech bubble logic: duration, one per speaker, who sees which line; film subtitle hold (public/bubbles.js)
+test/filmsubs.mjs  film dialogue in a browser: subtitles in the letterbox bar, voice-over files played (needs Playwright for Node)
 test/feeltext.js in-process checks for who sees combat text (`to` tags on reactions) and which boss hits hit-stop their victim
+test/bossteam.js boss team mechanics: meteor split, spread overlap, tether break distance, solo unchanged, director safety, bot positioning
 test/warden3.js  in-process checks for the Quake Ring (jump / roll / out of reach), Warden scaling and bot jump timing per capability
 test/aircontrol.js  jump air control: the shared air step, client prediction vs the server's movement check while airborne, bots steering mid-jump
 shared/bots/     one brain per bot: brain.js (decision loop, party teamwork, orders), motor.js (moving, dodging), registry.js (per-class plug-ins), classes.js (Guardian, Swordsman, Cleric), social.js (orders, /b chat parsing, chatter)
@@ -313,6 +327,7 @@ server/classes-b.js, public/classes-b.js  Lancer / Bard skills (mixed into Game)
 shared/styles.js, server/styles.js, public/styles.js  weapon styles; test/styles.js, test/newclass.js (newer classes)
 shared/talents.js, server/talents.js, public/talents.js  talent trees and the Skill Tree window; test/talents.js
 server/director.js, server/director-sheet.js  the scene director (filming): plays a YAML cue sheet with bot actors (format: docs/SCRIPT_BRIEF.md); routes in server/director-admin.js, the admin page's Director tab public/admin-director.js, the bots' script layer shared/bots/script.js; test/director.js
+scripts/film/voices.mjs, scripts/film/tts.py  voice-overs for a cue sheet's say lines (Kokoro-82M, local) -> public/voice/ep<N>/; voice map docs/story/ep<N>-voices.yaml
 server/staging.js  staging hooks for the scene director (filming): forceBossMove, reserveLastAttack, scriptDeath/scriptRevive, protect, setTwistOverride, spawnMob, giveKeepsake, clearStaging; test/staging.js
 server/admin.js  admin API (/api/admin/*) and /api/lobby; server/botmanager.js runs bots inside the server; public/admin.html the admin page
 ```
@@ -472,6 +487,7 @@ node test/team.js                           # Brann (tank), Kael (DPS), Lyra (he
 
 **Film view** (`/?spectate=1&film=1`, for the Season 1 episodes, `docs/story/`): a spectator whose camera obeys the scene director. The server keeps a picture state, `game.cine(op, data)` (`server/cine.js`, client `public/cine.js`), and sends it to anyone who joins mid-take:
 - `shot` `{ shot, target, from, secs }`: `close_up` (~3 m, head and shoulders), `medium` (~6 m), `wide` (~16 m, high), `over_shoulder` (behind `from`, looking at `target`), `follow` (behind and above), `orbit` (slow circle), `crane` (rises and pulls back over ~7 s), `free` (back to the auto framing), `pov` (that character's own game camera, behind and above, turning with them) and `eyes` (first person). Targets: `{ pid }` a player, `{ mid }` a mob, `{ x, z }` a point. `secs` is how long the camera takes to get there (0 = cut); the shot holds until the next one. Giants (the Warden) get a wider frame. The framing keeps a clear line of sight: it moves around walls and bodies, widens until the subject fits, frames a fighter together with the boss they face (side-on or behind the shoulder), and looks down at a fallen subject.
+- **Dialogue:** in the film and POV views each scripted `say` line is a subtitle, "Name: line", centred in the lower letterbox bar (above the bottom edge without bars), held for reading time (2.5 s + 0.06 s per character, or the cue's `hold` if longer), replaced by the next line and hidden under a fade to black; speech bubbles are off there (players and plain spectators keep them). Voice-overs: `node scripts/film/voices.mjs` turns every `say` line of a sheet into a small mp3 (`public/voice/ep<N>/<key>.mp3`, key = speaker + line) in a voice per cast member from `docs/story/ep<N>-voices.yaml`, with Kokoro-82M (free, local; setup in `docs/story/FILMING.md`); the director names a line's file in its chat event (`voice`) and the film view and plain spectators play it (`sfx.voice`, never for players). Tests: `node test/bubbles.js`, `node test/director.js`, `PORT=37xx node test/filmsubs.mjs` (browser; `npm i --no-save playwright`).
 - **POV views** (F8): `/?spectate=1&pov=<name>` rides one character's own game camera; add `&eyes=1` for first person. It ignores the director's shots but gets the rest of the picture (light, fades, titles, letterbox, clean feed); when the character goes down the camera rises above them. The admin Director lists a link per cast member, for a multi-camera take.
 - `slowmo` `{ secs, scale }`, `title` `{ text, sub, secs }`, `fade` `{ to: 'black' | 'in', secs }`, `letterbox` `{ on }` (2.39:1 bars), `clean` `{ on }` (hides the HUD, chat, skill bar, party frames and head markers; keeps nameplates, health bars, bubbles and banners), `light` `{ light: 'eclipse' | 'day' | null }` (the Eclipse darkness everywhere, forced daylight, or back to normal), `reset`.
 - Plain spectators ignore shots, letterbox and clean, but get light, titles, fades and slow motion. Players only get the light.

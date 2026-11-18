@@ -14,6 +14,8 @@ export const LANCER = {
 };
 
 // Numbers (damage multipliers are x attack power).
+// Use times here (sky.air, hitrun.back, cyclone.gap) are base values: the server applies x PACE (shared/data.js paced()) where it
+// uses them (server/classes-b.js), since this file can't import data.js.
 export const LANCE = {
   reach: 4.6, finReach: 5.4, width: 0.75, mult: 1.05, finMult: 1.6, // basic thrusts: a line in front of you
   sweetFrom: 2.4, sweetMult: 1.3,   // passive: an enemy whose near edge is 2.4 m+ away (near the spear tip) takes +30%

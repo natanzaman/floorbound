@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import WebSocket from 'ws';
 import { Game } from '../server/game.js';
-import { CLASSES, CLASS_IDS, SWITCH, angleTo, statsFor } from '../shared/data.js';
+import { CLASSES, CLASS_IDS, SWITCH, angleTo, statsFor, paced } from '../shared/data.js';
 import { MASTERY, BRANCHES, newMastery } from '../shared/mastery.js';
 import { makeItem } from '../shared/items.js';
 import { RECIPES, recipeName, SMITH } from '../shared/crafting.js';
@@ -228,11 +228,11 @@ const A = p => p.atk * g.dmgMult(p);
   const m = wolf(X, Z + 8);
   use(zerk, 'leap');
   const tele = ev('fx', e => e.k === 'ca' && e.v === 'leap')[0];
-  assert.ok(tele && tele.r === BT.leap.r && tele.d === BT.leap.delay, 'landing ring telegraphed');
+  assert.ok(tele && tele.r === BT.leap.r && tele.d === paced(BT.leap.delay), 'landing ring telegraphed');
   assert.ok(zerk.airUntil > g.time, 'airborne');
   advance(0.3);
   assert.equal(hits(m).length, 0, 'not landed yet');
-  advance(0.4);
+  advance(0.5); // the paced leap lands at 0.715 s
   assert.ok(Math.abs(zerk.z - (Z + 8 - m.def.radius - 0.8)) < 0.6 && Math.abs(zerk.x - X) < 0.3, 'landed next to the target');
   assert.equal(hits(m, zerk).length, 1);
   assert.ok(m.stunUntil > g.time && m.launchUntil > g.time, 'staggered and knocked up');
@@ -294,7 +294,7 @@ const A = p => p.atk * g.dmgMult(p);
   const a = wolf(X, Z + 8), b = wolf(X, Z + 14);
   use(ranger, 'pierce'); advance(0.9);
   assert.equal(hits(a).length, 0, 'Sniper: long draw');
-  advance(0.6);
+  advance(0.8); // the paced draw looses at 1.43 s
   assert.equal(dmgOn(a, ranger), Math.round(A(ranger) * RT.sniper.mult), 'Sniper: one huge hit');
   assert.equal(hits(b).length, 0, 'Sniper: no pierce');
   assert.ok(ranger.cds[1] - g.time > CLASSES.ranger.skills[1].cd * MASTERY.cd2, 'Sniper: longer cooldown');
@@ -351,7 +351,7 @@ const A = p => p.atk * g.dmgMult(p);
 { // Earthshatter breaks; Pounce is instant
   reset(); evolve(zerk, 'leap', 'A');
   const m = wolf(X, Z + 7, 110);
-  use(zerk, 'leap'); advance(1);
+  use(zerk, 'leap'); advance(1.1); // the paced Earthshatter lands at 1.04 s
   assert.ok(ev('stagger', e => e.id === m.id).length === 1, 'Earthshatter: BREAKS');
   reset(); evolve(zerk, 'leap', 'B');
   const t = wolf(X, Z + 11);

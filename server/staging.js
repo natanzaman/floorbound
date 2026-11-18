@@ -2,7 +2,7 @@
 // and revives, damage floors, twist overrides, labelled spawns and keepsake items. Mixed into Game (installStaging at the
 // end of game.js). Small hooks elsewhere: game.js calls lastAttackHeld (damageMob, killMob) and protectHit (damagePlayer),
 // and killMob keeps a staged mob down (no respawn) until clearStaging; newTwist (server/twists.js) reads this.twistOverride.
-import { WORLD, WARDEN, SWEEP, MOBS, BITE, inArena, angleTo } from '../shared/data.js';
+import { WORLD, WARDEN, SWEEP, MOBS, BITE, PACE, inArena, angleTo } from '../shared/data.js';
 import { SOVEREIGN, floorOf, inArena2 } from '../shared/floor2.js';
 import { SLOTS, keepsakeItem } from '../shared/items.js';
 import { TWISTS } from '../shared/twists.js';
@@ -86,7 +86,7 @@ const methods = {
         }
         case 'trident': { // its sweep: the red wedge wind-up, resolved by its own AI (f2Sovereign)
           const [r, h] = BITE.sovereign;
-          m.windupAt = t + S.sweep.wind; m.atkT = t + m.def.atkCd; m.busyUntil = Math.min(m.busyUntil || 0, t);
+          m.windupAt = t + S.sweep.wind; m.atkT = t + m.def.atkCd + S.sweep.wind - S.sweep.wind / PACE; m.busyUntil = Math.min(m.busyUntil || 0, t);
           this.events.push({ t: 'wind', id: m.id, d: S.sweep.wind, f: r2(m.face), r, h });
           return true;
         }

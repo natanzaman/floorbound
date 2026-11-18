@@ -1,0 +1,15 @@
+# Episode 1 voices: which voice says each cast member's lines (scripts/film/voices.mjs reads this next to the sheet).
+# Engine: Kokoro-82M (Apache-2.0 model and voices, free, runs on this Mac; see docs/story/FILMING.md "Voices").
+# voice: a Kokoro voice id (a = American, b = British; f = female, m = male), e.g. am_michael, bm_george, bf_emma,
+#   af_bella, am_puck, am_onyx. Change one, rerun the script, and only that character's lines are made again.
+# speed: 1 = normal. pitch: semitones (negative = deeper; the Warden's growl).
+# try: other voices the sample set renders (node scripts/film/voices.mjs --samples <dir>); sample: text for a sample
+#   when the character has no lines in this episode.
+engine: kokoro
+voices:
+  corvin: { voice: bm_george, speed: 0.95, try: [am_michael, bm_lewis] }
+  bram:   { voice: am_onyx, speed: 0.92, try: [bm_daniel, am_fenrir] }
+  tamsin: { voice: bf_emma, speed: 1.0, try: [af_heart, bf_isabella] }
+  juno:   { voice: af_bella, speed: 1.05, try: [af_nicole, af_sarah] }
+  pell:   { voice: am_puck, speed: 1.08, try: [am_echo, am_liam] }
+  warden: { voice: am_onyx, speed: 0.8, pitch: -5, try: [bm_george, am_fenrir], sample: "Five more little climbers. The stone will forget you too." }

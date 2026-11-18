@@ -26,6 +26,7 @@ import { basicProfile } from './style.js';
 import { STYLE_IDS } from '../styles.js';
 import { say } from './social.js';
 import { scriptTurn } from './script.js'; // the scene director's script layer (b.script; nothing without it)
+import { mechSpot } from './bossteam.js'; // boss team mechanics: stack, spread, tether (G4)
 import './classes.js'; // built-in class plug-ins (Guardian, Swordsman, Cleric, generic)
 import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
 
@@ -432,8 +433,9 @@ function act(b, P, M) {
     if (tgt?.def.boss && M.mode === 'lead' && b.party) say(b, 'pull', { mob: tgt.def.name.replace(/^The /, '') }, { cd: 120 });
     b.tgtId = tgt?.id ?? null; b.engAt = null;
   }
-  const dodge = dodgeSpot(b);
+  let dodge = dodgeSpot(b);
   if (dodge) evade(b, ...dodge);
+  else if ((dodge = mechSpot(b))) moveToward(b, dodge[0], dodge[1], 0.3); // stack / spread / tether: walk there, still fighting
   const brain = brainFor(b.cls);
   const ctx = makeCtx(b, P, M, tgt, dodge);
   b.goal = goalText(b, P, M, tgt);

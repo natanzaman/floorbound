@@ -1,6 +1,6 @@
 // Floor 2 — The Glimmering Mire: server-side AI, the Drowned Sovereign, the second raid gate, waystones and the Stairway.
 // Installed onto Game.prototype by server/game.js (Object.assign), so `this` is the Game.
-import { BITE, inTown, walkable, resolveCollision, rng, angleTo, wrapAngle } from '../shared/data.js';
+import { BITE, PACE, inTown, walkable, resolveCollision, rng, angleTo, wrapAngle } from '../shared/data.js';
 import {
   F2, F2_SPAWNS, F2_MATRONS, GATE2, SOVEREIGN, ORB, WISP, LURK, MATRON, STAIRWAY,
   inArena2, inCamp2, inGateZone2, nearWaystone, floorUnlocked, floorOf,
@@ -286,7 +286,7 @@ export const F2Methods = {
     if (d > def.range + 0.4) this.f2Move(m, target.x, target.z, def.speed * (m.phase === 2 ? 1.15 : 1), dt, def.range);
     else if (t >= m.atkT) {
       const [r, h] = BITE.sovereign;
-      m.windupAt = t + S.sweep.wind; m.atkT = t + def.atkCd * (m.phase === 2 ? 0.8 : 1);
+      m.windupAt = t + S.sweep.wind; m.atkT = t + def.atkCd * (m.phase === 2 ? 0.8 : 1) + S.sweep.wind * (1 - 1 / PACE); // + the paced extra wind-up
       this.events.push({ t: 'wind', id: m.id, d: S.sweep.wind, f: r2(m.face), r, h });
     }
   },
@@ -345,6 +345,7 @@ export const F2Methods = {
         }
       }
     }
+    this.bossTeam?.(m, fighters); // team mechanics: shared meteor, spread, tether (server/bossteam.js)
     if (m.phase >= 2 && t >= m.volleyT && free) {
       const V = S.volley;
       m.volleyT = t + V.every;

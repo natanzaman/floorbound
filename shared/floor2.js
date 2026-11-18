@@ -111,7 +111,7 @@ export const MATRON = { callEvery: 13, callR: 24, aura: 0.25, auraR: 14 };      
 
 // The Drowned Sovereign: each phase ADDS attacks. 100-66%: trident sweep + geysers. 66-33%: + Tidal Wave (must-dodge),
 // Drowned Thralls, mire pools. Below 33%: + the Deluge (outer ring floods) and homing orb volleys; waves come faster.
-export const SOVEREIGN = {
+export const SOVEREIGN = { // sweep / geyser / wave wind-ups and repeats are paced by shared/data.js (paceMoves)
   phases: [0.66, 0.33], hpBase: 4600, hpPer: 2000,
   sweep: { wind: 1.1, mult: 1.0 },
   geyser: { every: [7, 6, 5], r: 3.0, wind: 1.65, mult: 1.5, extra: [1, 2, 3] },
