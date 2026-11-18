@@ -35,7 +35,7 @@ const SHOTS = {
 const RISE = { dist: 4, camY: 6, lookY: 0.15, secs: 3 }; // a POV whose character is down
 
 export function initCine({ camera, state, players, mobs, slowMotion, twists, occluders = [] }) {
-  const S = { markers: true, shot: null, t: 0, u: 1, dur: 0, az: null, from: null, last: null, active: false, fov: BASE_FOV, hidden: null, down: 0, base: null, side: null, off: null, spin: 0, chk: 0, flip: 0, d: null };
+  const S = { markers: true, shot: null, t: 0, u: 1, dur: 0, az: null, from: null, last: null, active: false, fov: BASE_FOV, hidden: null, down: 0, base: null, side: null, off: null, spin: 0, chk: 0, flip: 0, d: 0, clr: 0, hb: null };
   const pos = new THREE.Vector3(), look = new THREE.Vector3(), want = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: BASE_FOV };
   const known = new Map(); // last seen place of each target (a mob that died and vanished keeps its spot)
 
@@ -79,7 +79,7 @@ body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-
     if (POV) return; // the POV view keeps its own camera
     if (e.shot === 'free' && !S.active) { S.shot = null; return; }
     S.shot = e; S.t = 0; S.u = 0; S.dur = cut ? 0 : Math.max(0, e.secs ?? 1.5);
-    Object.assign(S, { az: null, base: null, side: null, off: null, spin: 0, chk: 0, flip: 0, down: 0, d: null });
+    Object.assign(S, { az: null, base: null, side: null, off: null, spin: 0, chk: 0, flip: 0, down: 0, d: 0, clr: 0, hb: null });
     S.from = S.active ? { pos: pos.clone(), look: look.clone(), fov: S.fov } : null; // null: start from the auto camera
   }
 
@@ -144,6 +144,7 @@ body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-
     let d = dist; // never inside a big body (a boss in melee range): pull the camera in along the arm
     if (d > 0) for (let i = 0; i < 8 && insideBig(V5.set(T.x - fx * d + rx * side, cy, T.z - fz * d + rz * side)); i++) d *= 0.75;
     want.pos.set(T.x - fx * d + rx * side, cy, T.z - fz * d + rz * side);
+    if (D.dist > 0) arm(V4.set(T.x, T.h * 0.8 + (RISE.camY * 0.5 - T.h * 0.8) * c, T.z).clone(), want.pos, dt); // like the game camera: never behind a wall
     want.look.set(T.x + fx * ahead, T.h * (D.lookY + (RISE.lookY - D.lookY) * c), T.z + fz * ahead);
     want.fov = D.fov + (55 - D.fov) * c;
     hide(D.hide && c < 0.5 ? T.ent : null); // in their eyes: don't draw their own head
@@ -218,7 +219,13 @@ body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-
     if (!occluders.length || d < 1) return d;
     ray.set(l, V1.copy(p).sub(l).normalize()); ray.near = 0; ray.far = d;
     const hit = ray.intersectObjects(occluders, true)[0];
-    return hit ? Math.max(1.5, hit.distance - 0.6) : d;
+    return hit ? Math.max(0.6, hit.distance - 0.6) : d;
+  }
+  // Pull the camera at p in front of any wall between it and the pivot l, easing only the pulled-in amount.
+  function arm(l, p, dt) {
+    const full = p.distanceTo(l), pull = full - wallClamp(l, p, full);
+    S.d += (pull - S.d) * Math.min(1, dt * (pull > S.d ? 6 : 1.5));
+    if (full > 0.01) p.sub(l).multiplyScalar(Math.max(0.6, full - S.d) / full).add(l);
   }
   function pushOut(p) { // never leave the camera inside a big body
     for (const m of mobs.values()) {
@@ -289,21 +296,22 @@ body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-
       for (let i = 0; i < 12 && !fits(place(S.az, dist, cy, V5), want.look, want.fov, pts); i++) { dist *= 1.12; if (!D.eye) cy *= 1.04; else cy += 0.15; }
     }
     // a clear line of sight: keep the current angle if it's clear, else swing to the clearest one nearby
+    if (S.hb !== null && S.hb !== !!B) S.off = null; // a boss came into or left range: the base angle means something else now
+    S.hb = !!B;
     if (S.off === null || check) {
       const bodies = !(e.shot === 'wide' || e.shot === 'crane' || e.shot === 'orbit');
       // a boss two-shot prefers its own band (within ~1.1 rad), but a wall anywhere in it is worse than a wider angle
       const score = off => blockers(place(base + off, dist, cy, V3).clone(), want.look, skip, bodies) + Math.abs(off) * 0.01 + (B && Math.abs(off) > 1.1 ? 1.2 : 0);
       let best = S.off ?? 0, bs = score(best);
+      if (best !== 0) { S.clr = score(0) < 0.5 ? S.clr + 0.4 : 0; if (S.clr >= 1) { best = 0; bs = 0; S.clr = 0; } } // the own angle is clear again
       if (bs >= 0.5) for (const o of OFFS) { const sc = score(o); if (sc < bs - 0.5) { bs = sc; best = o; } }
       if (S.off === null) S.az = base + best;
       S.off = best;
     }
     S.az = lerpA(S.az, base + S.off, Math.min(1, dt * rate));
     // the camera's distance from the look point, pulled in front of any wall, eased (in fast, out slowly) so it never pops
-    place(S.az, dist, cy, V5);
-    const full = V5.distanceTo(want.look), dT = wallClamp(want.look, V5, full);
-    S.d = S.d === null ? dT : S.d + (dT - S.d) * Math.min(1, dt * (dT < S.d ? 6 : 1.5));
-    want.pos.copy(want.look).add(V5.sub(want.look).multiplyScalar(S.d / (full || 1)));
+    place(S.az, dist, cy, want.pos);
+    arm(want.look, want.pos, dt);
     pushOut(want.pos);
     return true;
   }

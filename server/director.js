@@ -415,8 +415,9 @@ export class Director {
     const tl = S?.tl;
     return {
       state: this.state, title: this.sheet?.title || '', error: this.error || null, force: !!this.force,
-      scenes: (this.sheet?.scenes || []).map((s, i) => s?.id || `#${i + 1}`),
-      cast: (this.sheet?.cast || []).map(c => c?.name).filter(Boolean), // for the admin page's POV view links (F8)
+      scenes: (Array.isArray(this.sheet?.scenes) ? this.sheet.scenes : []).map((s, i) => s?.id || `#${i + 1}`),
+      // for the admin page's POV view links (F8): the names the actors really play under once cast (a taken name gets " 2")
+      cast: this.actors.size ? [...this.actors.values()].map(a => a.name) : (Array.isArray(this.sheet?.cast) ? this.sheet.cast : []).map(c => c?.name).filter(Boolean),
       scene: S ? { i: S.i, id: S.sc.id, place: S.sc.place, secs: r2(g.time - S.t0), cues: S.sc.cues.length, done: tl.finishedAt.filter(t => t !== null).length } : null,
       elapsed: this.running || this.state === 'done' ? r2(g.time - this.t0) : 0,
       running: tl ? tl.running().map(i => { const c = S.sc.cues[i]; return { n: i + 1, do: c.do, who: c.who ?? null, id: c.id ?? null, secs: r2(g.time - tl.startedAt[i]), text: c.text || c.until || c.to || c.target || c.shot || '' }; }) : [],

@@ -164,6 +164,8 @@ scenes:
   const st = dir.status();
   if (st.state !== 'done') console.log(st.log.map(l => `    ${l.t} ${l.text}`).join('\n'));
   ok(st.state === 'done', `the show finishes (${st.elapsed} s)`);
+  ok(st.cast.join() === [...dir.actors.values()].map(a => a.name).join() && st.cast.includes('Wren'), 'status().cast lists the names the actors play under (POV links, F8)');
+  { const d2 = new Director(game, S.bots); d2.sheet = { cast: 'Pell', scenes: 'x' }; let c; try { c = d2.status().cast; } catch { c = null; } ok(Array.isArray(c) && !c.length, 'status() survives a sheet whose cast is not a list'); }
   const wren = dir.actors.get('wren').p, kade = dir.actors.get('kade').p;
   ok(wren.name === 'Wren' && wren.cls === 'cleric' && wren.lvl === 4 && kade.lvl === 4 && dir.actors.get('kade').b.skill === 3, 'actors join with their name, class, level and capability');
   ok(kade.inv.eq.weapon?.style === 'dual' && !wren.inv.eq.weapon?.style, 'an actor carries a weapon of its style (the default style: none)');

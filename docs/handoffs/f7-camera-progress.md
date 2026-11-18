@@ -22,3 +22,9 @@
 - Fix: two-shot angle close_up 1.6 (profile), medium 1.35; angle search over all OFFS with +1.2 penalty outside ±1.1 for a boss two-shot.
 - Take 4 (3714, take4/): 223 s, 0 `!` lines; s3 Pell close-ups side-on with the Warden, end medium shows Pell + Bram's body. Accepted.
 - Noted for Natan (not camera): a wild Dire Wolf attacks the cast at the raid gate during s2 dialogue (takes 2-4).
+- Review (Opus high, code-reviewer): 0 security/data-loss, 3 bugs + 4 minor. Fixed: status().cast uses the actors' real names once cast (renamed "Pell 2");
+  POV arm against walls (arm()); angle search returns to the shot's own angle after 1 s clear, restarts when a boss comes/goes; only the wall pull-in is eased
+  (crane/widen not lagged); wallClamp floor 0.6; status() survives a non-list cast/scenes. Skipped #7 (no client test harness for aim(); out of scope).
+- Context 220k: AE-1 said (b) clear, close call; continued instead (~12 calls left, all context loaded).
+- Take 5 (s3 only, 3715): 0 `!`, film framing holds, POV Pell stays in front of walls.
+- Checks: node test/director.js -> "all 40 passed"; PORT=3742 node test/cine.js -> "# 11 passed"; node test/combat.js -> "all 19 checks passed"; node test/feeltext.js -> "feeltext: 7 checks passed".
