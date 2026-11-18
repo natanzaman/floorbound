@@ -45,3 +45,8 @@
 ## review (code-reviewer Opus high) on 6b2d62d..f68fde7: 0 serious, 1 bug, 4 minor
 - Bug: Sky Lance client hop 0.65 s vs server 0.91 s. Minor: F2 bossShot lead; Quake rest shorter (gap paced, every not); README Blade Ring; pacing test edge cases. Challenges taken: lingering Blade Ring/Phantom/Seismic -> effectLater; basic-attack clips unpaced (instant hits, rhythm kept).
 - Implementer (Sonnet medium) applying all of it in this worktree, uncommitted. Next: run tests, commit, rebase on origin/main, tests, merge --no-ff, push --force-with-lease --force-if-includes, report to Natan.
+
+## 2026-11-17 step 4: fixes, rebase, merge
+- e179a43 review fixes (Twin Horns double-pace reverted: W.every is already paced). Rebased on origin/main (ef4d67f): branch 9a43685, b7431a0, 7006bff.
+- All test/*.js pass on the rebased branch (admin/adminbots, bots, wardenskill skipped: DB / live server / bot run).
+- Merge --no-ff into main and push --force-with-lease --force-if-includes follows this commit; then report to Natan.
