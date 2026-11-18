@@ -200,7 +200,7 @@ Same rules as F: set Status/Owner on `main` before starting, mark **done** with 
 | G2 Skill combos + Team Burst | `feat/teamburst` | done | agent teamburst | b767a11 |
 | G3 Threat you can see, healer threat, Cover, flanking | `feat/threat` | done | agent threat | 56ce6d9 |
 | G4 Boss team mechanics | `feat/bossteam` | done | agent bossteam | 2bdaf88 |
-| G5 Post-fight MVP card + balance pass | `feat/mvp` | in progress | agent mvp | |
+| G5 Post-fight MVP card + balance pass | `feat/mvp` | done | agent mvp | ceda318 |
 
 ### Shared contracts for G
 - **Team stat events.** Each G feature also calls `this.teamStat(p, key, n = 1)` (G2 defines it in `server/teamplay.js`; until merged, guard with `this.teamStat?.(…)`). Keys: `revive`, `save` (healing/cover/shield that stopped a hit that would have downed someone), `switch`, `break`, `combo`, `burst`, `cover`, `flank`, `heal`, `dmg`, `tanked` (damage taken while top threat), `lastAttack`, `mechanic` (did a G4 team mechanic right). G5 reads these.
