@@ -2,6 +2,7 @@
 // Usage: node test/teamplay.js
 import assert from 'node:assert/strict';
 import { Game } from '../server/game.js';
+import { angleTo } from '../shared/data.js';
 import { COMBO, COMBOS, BURST, hitInfo, payoffFor, setupsOf, canPay, nextChain, burstPower, burstFillScale } from '../shared/teamplay.js';
 
 let n = 0;
@@ -62,6 +63,7 @@ let mob = null;
 const freshMob = (type = 'wolf') => {
   if (mob) g.mobs.delete(mob.id);
   mob = g.addMob(type, X, Z + 1);
+  mob.face = angleTo(mob.x, mob.z, X, Z - 2); // facing the players: no flank bonus (server/threat.js)
   mob.maxHp = mob.hp = 1e6; mob.posture = 0; mob.staggerUntil = 0; mob.stunUntil = 0; mob.def = { ...mob.def, posture: 1e9 }; // no accidental Breaks
   return mob;
 };

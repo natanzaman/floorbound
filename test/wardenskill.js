@@ -5,7 +5,8 @@
 // Usage: BOT_SKILL=3 RUNS=2 PORT=3621 node test/wardenskill.js
 //        (env: START_LEVEL=10, SPAWN_AT=0,150, LIMIT=300 s per run, WARDEN_TWIST to force a twist,
 //         ROLES=guardian,ranger,bard,cleric, START_STYLE=daggers,drum to arm each class with the first of its styles listed,
-//         LOG_TALENTS=1, STATS=1 for each bot's damage, DPS and basic-attack presses; styled melee / ring combos also report how many landed)
+//         LOG_TALENTS=1, STATS=1 for each bot's damage, DPS and basic-attack presses; styled melee / ring combos also report how many landed,
+//         MVP=1 prints each run's post-fight MVP card (G5), MVP_JSON=file saves the last one)
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +14,8 @@ import WebSocket from 'ws';
 import { startTeam } from '../shared/teambots.js';
 import { skillName } from '../shared/botskill.js';
 import { STYLE_IDS } from '../shared/styles.js';
+import { writeFileSync } from 'node:fs';
+import { MVP_TITLE } from '../shared/mvp.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SKILL = Number(process.env.BOT_SKILL) || 5, RUNS = Number(process.env.RUNS) || 1, PORT = Number(process.env.PORT) || 3621;
@@ -54,6 +57,7 @@ async function run(i) {
       if (e.t === 'combo' && ids.has(e.by) && start) (res.combos ||= {})[e.k] = (res.combos[e.k] || 0) + 1; // team combos (G2)
       if (e.t === 'tburst' && ids.has(e.by) && start) (res.bursts ||= []).push(e.n); // Team Bursts: joiners each
       if (e.t === 'sys' && /Horned Warden has fallen/.test(e.text)) { res.result = 'kill'; done = true; }
+      if (e.t === 'mvp') res.card = e.card; // the post-fight MVP card (G5)
       if (start && (e.t === 'cover' || e.t === 'covered' || e.t === 'flank')) { // team threat (server/threat.js): Covers, covered hits, Pincer tags
         const T = (res.team ||= { cover: 0, covered: 0, pincer: 0 });
         if (e.t === 'cover' && !e.fail) T.cover++; else if (e.t === 'covered') T.covered++; else if (e.t === 'flank' && e.k === 'pincer') T.pincer++;
@@ -84,7 +88,9 @@ async function run(i) {
 }
 
 const out = [];
-for (let i = 0; i < RUNS; i++) { const r = await run(i); out.push(r); console.log(`[skill ${SKILL} ${skillName(SKILL)}] run ${r.run}: ${r.result} in ${r.secs}s, ${r.deaths} deaths, ${r.downs} downed, ${r.revives} revived (twist ${r.twist}) · Quake Rings: ${r.quake.jump} jumped, ${r.quake.roll} rolled, ${r.quake.hit} hit${r.causes ? ` · deaths to ${r.causes.join(', ')}` : ''}${r.mech ? ` · team mechanics: stacks ${r.mech.stack.join('/') || '-'} in, spread ${r.mech.spread[0]}/${r.mech.spread[1]} clean, tethers ${r.mech.tether[0]}/${r.mech.tether[1]} snapped` : ''}${r.team ? ` · Covers ${r.team.cover} (${r.team.covered} hits taken), Pincer tags ${r.team.pincer}` : ''} · combos ${Object.entries(r.combos || {}).map(([k, v]) => `${k} ${v}`).join(', ') || 0} · Team Bursts ${r.bursts ? `${r.bursts.length} (joiners ${r.bursts.join('/')})` : 0}`); for (const l of r.stats || []) console.log(`    ${l}`); }
+for (let i = 0; i < RUNS; i++) { const r = await run(i); out.push(r); console.log(`[skill ${SKILL} ${skillName(SKILL)}] run ${r.run}: ${r.result} in ${r.secs}s, ${r.deaths} deaths, ${r.downs} downed, ${r.revives} revived (twist ${r.twist}) · Quake Rings: ${r.quake.jump} jumped, ${r.quake.roll} rolled, ${r.quake.hit} hit${r.causes ? ` · deaths to ${r.causes.join(', ')}` : ''}${r.mech ? ` · team mechanics: stacks ${r.mech.stack.join('/') || '-'} in, spread ${r.mech.spread[0]}/${r.mech.spread[1]} clean, tethers ${r.mech.tether[0]}/${r.mech.tether[1]} snapped` : ''}${r.team ? ` · Covers ${r.team.cover} (${r.team.covered} hits taken), Pincer tags ${r.team.pincer}` : ''} · combos ${Object.entries(r.combos || {}).map(([k, v]) => `${k} ${v}`).join(', ') || 0} · Team Bursts ${r.bursts ? `${r.bursts.length} (joiners ${r.bursts.join('/')})` : 0}`); for (const l of r.stats || []) console.log(`    ${l}`);
+  if (process.env.MVP && r.card) for (const f of r.card.rows) console.log(`    ${f.id === r.card.mvp ? '★' : ' '} ${f.name} (${f.cls}${f.bot ? ' bot' : ''}): ${f.titles.map(k => MVP_TITLE[k].name).join(', ') || '-'} · dmg ${f.dmg} heal ${f.heal} tanked ${f.tanked} · Sw ${f.switch} Br ${f.break} combo ${f.combo} burst ${f.burst} rev ${f.revive} save ${f.save} cover ${f.cover} pincer ${f.flank} mech ${f.mechanic} LA ${f.lastAttack} · down ${f.down} death ${f.death}`);
+  if (process.env.MVP_JSON && r.card) writeFileSync(process.env.MVP_JSON, JSON.stringify(r.card, null, 1)); }
 const wins = out.filter(r => r.result === 'kill');
 const qt = k => out.reduce((s, r) => s + r.quake[k], 0), qn = qt('jump') + qt('roll') + qt('hit');
 console.log(`[skill ${SKILL} ${skillName(SKILL)}] ${wins.length}/${out.length} kills · avg kill time ${wins.length ? Math.round(wins.reduce((s, r) => s + r.secs, 0) / wins.length) : '-'}s · avg deaths ${(out.reduce((s, r) => s + r.deaths, 0) / out.length).toFixed(1)} · avg revives ${(out.reduce((s, r) => s + r.revives, 0) / out.length).toFixed(1)} (of ${(out.reduce((s, r) => s + r.downs, 0) / out.length).toFixed(1)} downs) · Quake Rings cleared ${qn ? Math.round((100 * (qn - qt('hit'))) / qn) : '-'}% of ${qn} · combos/fight ${(out.reduce((s, r) => s + Object.values(r.combos || {}).reduce((a, v) => a + v, 0), 0) / out.length).toFixed(1)} · bursts/fight ${(out.reduce((s, r) => s + (r.bursts?.length || 0), 0) / out.length).toFixed(1)}`);

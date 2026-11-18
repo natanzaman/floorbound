@@ -48,6 +48,7 @@ const TIPS = {
   revive: 'A partymate is down! Stand next to them and hold E to revive them (a Cleric\'s Heal speeds it up). Moving away or a heavy hit breaks it.',
   combo: 'COMBO! One player sets up (launch, stun, Mark, Discord, Sanctuary), a partner pays it off within 2.5 s. Combos chain on a target and fill the Team Burst bar.',
   tbfull: () => `Team Burst ready! ${touch() ? 'Tap the bar' : 'Press T'} to start a 3 s sync window: every partner who joins makes the finisher bigger (solo works too, weaker).`,
+  mvp: 'That was the post-fight card: everyone in the fight sees it after a boss kill or wipe. Titles go to whoever led: Lifeline for revives, Wall for tanking, Conductor for combos, Last Word for the Last Attack...',
   tbsync: () => `A partner started a TEAM BURST: ${touch() ? 'tap the prompt' : 'press T'} now to join it. More joiners, bigger burst.`,
   ...Object.fromEntries(Object.entries(COMBOS).map(([k, c]) => [`combo_${k}`, c.tip])),
 };

@@ -102,7 +102,7 @@ try {
   const AB = [`c${A}`, `c${B}`].sort();
   await fight(5, 'wipe', AB, { twist: 'echo', hpLeft: 60 }); await fight(4, 'wipe', AB, { hpLeft: 25 }); await fight(3, 'wipe', AB, { hpLeft: 30 });
   await fight(2, 'kill', AB, { twist: 'echo' }); await fight(1, 'kill', AB);
-  await fight(20, 'kill', [`c${C}`]); await fight(0.5, 'wipe', [`c${C}`]);
+  await fight(20, 'kill', [`c${C}`]); await fight(0.5, 'wipe', [`c${C}`], { mvp: { mvp: 'Tc', rows: [{ n: 'Tc', c: 'guardian', s: { dmg: 900, tanked: 1200 }, t: ['wall', 'heavy'] }, { n: 'Bo', c: 'cleric', b: 1, s: { heal: 400 }, t: ['mender'] }] } });
   await fight(1, 'wipe', [], { humans: 0, bots: 3, botCls: ['cleric', 'guardian', 'swordsman'], deaths: 0, botDeaths: 3 });
   await fight(1, 'wipe', [], { humans: 0, bots: 3, botCls: ['cleric', 'guardian', 'swordsman'], deaths: 0, botDeaths: 2 });
   await fight(1, 'wipe', ['sabc'], { humans: 1, bots: 2, botCls: ['ranger', 'ranger'] });
@@ -154,6 +154,11 @@ try {
   assert.deepEqual(d.pbots.map(r => [r.cls, r.adds, r.players]).sort(), [['cleric', 1, 1], ['ranger', 2, 1]]);
   assert.deepEqual(d.botSessions, { sessions: 4, with_bots: 1 });
   ok('bots players add and sessions with bots');
+  assert.equal(d.recent.length, 9, 'every fight in the window, newest first');
+  assert.ok(d.recent.every((r, i) => !i || r.at <= d.recent[i - 1].at));
+  assert.deepEqual([d.recent[0].result, d.recent[0].secs, d.recent[0].mvp.mvp, d.recent[0].mvp.rows[1].b], ['wipe', 90, 'Tc', 1]);
+  assert.equal(d.recent[1].mvp, null, 'older rows have no card');
+  ok('recent fights with their MVP card (G5)');
   const pub = await track.stats(7);
   assert.equal(pub.deaths.reduce((s, r) => s + r.n, 0), 5, 'public stats ignore bot deaths');
   ok('the public summary is unchanged by the new rows');

@@ -32,6 +32,7 @@ import { installThreat } from './threat.js'; // visible threat, healer threat, C
 import { installRevive } from './revive.js'; // downed + revive (G1)
 import { installBossTeam } from './bossteam.js'; // boss team mechanics: stack, spread, tether (G4)
 import { installTeamplay } from './teamplay.js'; // skill combos + Team Burst + team stats (G2)
+import { installMvp } from './mvp.js'; // post-fight MVP card (G5)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -1389,4 +1390,5 @@ installBossTeam(Game); // boss team mechanics (server/bossteam.js); after stagin
 installRevive(Game); // downed + revive (server/revive.js); after staging and boss team mechanics
 installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js)
 installTeamplay(Game); // skill combos between players, the Team Burst gauge, teamStat() for the post-fight card (server/teamplay.js); after the talents
+installMvp(Game); // the post-fight MVP card from the team stats, downs and deaths; in the fight's tracking row (server/mvp.js); after the team play
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last
