@@ -108,6 +108,10 @@ export const DETAIL_SQL = {
       min(hp) FILTER (WHERE result = 'wipe' AND (first_kill IS NULL OR at < first_kill)) AS best_hp_left, max(bots)::int AS bots,
       min(at) AS first_at, max(at) AS last_at
     FROM o GROUP BY 1, 2 HAVING max(at) > now() - make_interval(days => $1) ORDER BY last_at DESC LIMIT 40`,
+  // the latest boss fights with their post-fight MVP card (server/mvp.js; older rows have none)
+  recent: `SELECT at, (data->>'floor')::int AS floor, data->>'result' AS result, (data->>'secs')::int AS secs, (data->>'hpLeft')::int AS hp_left,
+      (data->>'humans')::int AS humans, (data->>'bots')::int AS bots, data->'mvp' AS mvp
+    FROM play_events WHERE kind = 'fight' AND at > now() - make_interval(days => $1) ORDER BY at DESC LIMIT 15`,
   // session length histogram
   lengths: `SELECT width_bucket((data->>'secs')::float, ARRAY[${LEN_BUCKETS.join(',')}]::float[]) AS b, count(*)::int AS n
     FROM play_events WHERE kind = 'session_end' AND at > now() - make_interval(days => $1) GROUP BY 1 ORDER BY 1`,

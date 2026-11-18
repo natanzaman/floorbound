@@ -51,6 +51,7 @@ g.time = 10; clear();
   // counter: next hit +50% damage and double posture
   const before = wolf.posture, hp0 = wolf.hp;
   sword.crit = 0; Math.random = () => 0.5; // no crit, no damage variance
+  wolf.face = angleTo(wolf.x, wolf.z, sword.x, sword.z); // facing him: no flank bonus (server/threat.js)
   g.damageMob(wolf, sword, 10, {});
   assert.equal(hp0 - wolf.hp, 15, '+50% damage');
   assert.ok(wolf.dead || wolf.staggerUntil > g.time || Math.abs(wolf.posture - before - 15 * PERFECT.posture) < 1e-6, 'double posture');

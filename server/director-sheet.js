@@ -104,6 +104,8 @@ export const VERBS = {
   light: { who: 'none', req: ['to'], args: { to: en('day', 'eclipse') }, api: 'cine' },
   // world (F6)
   bell: { who: 'none', args: { floor: NUM }, api: 'ringBell' },
+  // team (G5): show the last boss fight's MVP card to everyone (no card shows during a show otherwise)
+  mvp: { who: 'none', args: { secs: NUM }, api: 'showMvp' },
 };
 export const CUE_FIELDS = new Set(['who', 'do', 'id', 'after', 'delay', 'hold']);
 export const SCENE_FIELDS = new Set(['id', 'place', 'light', 'marks', 'absent', 'cues']);
@@ -289,7 +291,7 @@ export function validateSheet(sheet, { has = () => true } = {}) {
   return { errors, warnings };
 }
 
-const OWNERS = { forceBossMove: 'F3', reserveLastAttack: 'F3', scriptDeath: 'F3', scriptRevive: 'F3', protect: 'F3', setTwistOverride: 'F3', spawnMob: 'F3', giveKeepsake: 'F3', clearStaging: 'F3', cine: 'F4', setPose: 'F5', ringBell: 'F6' };
+const OWNERS = { forceBossMove: 'F3', reserveLastAttack: 'F3', scriptDeath: 'F3', scriptRevive: 'F3', protect: 'F3', setTwistOverride: 'F3', spawnMob: 'F3', giveKeepsake: 'F3', clearStaging: 'F3', cine: 'F4', setPose: 'F5', ringBell: 'F6', showMvp: 'G5' };
 export const apiOwner = name => OWNERS[name] || '?';
 export const API_NAMES = Object.keys(OWNERS);
 

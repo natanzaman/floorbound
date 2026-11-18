@@ -32,6 +32,7 @@ import { initThreat } from '/threat.js'; // who bosses target, threat meter, Cov
 import { initRevive } from '/revive.js'; // downed + revive (G1)
 import { initBossTeam } from '/bossteam.js'; // boss team mechanics: STACK, SPREAD, tether (G4)
 import { initTeamplay } from '/teamplay.js'; // combo counters, the Team Burst bar and sync window (G2)
+import { initMvp } from '/mvp.js'; // the post-fight MVP card (G5)
 
 const sfx = new Sound();
 
@@ -264,6 +265,8 @@ const revive = initRevive({ state, players, send: o => send(o), project: (x, y, 
 const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a) });
 // skill combos between players and the Team Burst: chain counters, setup hints, the party bar, T to sync (public/teamplay.js)
 const teamplay = initTeamplay({ state, players, mobs, fx, sfx, floatNum, project, send, guide, isTouch, callout: (a, b, c) => callout(a, b, c), shake: a => shake(a), $ });
+// the post-fight MVP card: every fighter's numbers and titles after a boss kill or wipe (public/mvp.js)
+const mvp = initMvp({ state, guide });
 
 // ---------------- networking ----------------
 function onMessage(msg) {
@@ -376,6 +379,7 @@ function handleEvent(e) {
   if (bell.event(e)) return; // the Tower Bell
   if (bossTeam.event(e)) return; // boss team mechanics (stack / spread / tether)
   if (teamplay.event(e)) return; // combos, Team Burst
+  if (mvp.event(e)) return; // the post-fight MVP card
   if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
   if (threat.event(e)) return; // Cover, flank / Pincer tags
   if (talents.event(e)) return; // talent points, learned talents, talent procs
@@ -1941,4 +1945,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { state, players, mobs, banner, sfx, project, floatLog, cine, camera, bubbles, threat };
+window.__fb = { state, players, mobs, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp };

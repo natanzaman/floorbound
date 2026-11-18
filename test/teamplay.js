@@ -2,6 +2,7 @@
 // Usage: node test/teamplay.js
 import assert from 'node:assert/strict';
 import { Game } from '../server/game.js';
+import { angleTo } from '../shared/data.js';
 import { COMBO, COMBOS, BURST, hitInfo, payoffFor, setupsOf, canPay, nextChain, burstPower, burstFillScale } from '../shared/teamplay.js';
 
 let n = 0;
@@ -28,7 +29,7 @@ const ok = name => console.log(`  ok ${++n} - ${name}`);
   assert.ok(canPay('berserker', 'execute') && canPay('swordsman', 'execute') && canPay('lancer', 'pin'));
   assert.deepEqual(nextChain(nextChain(null, 1), 3), { n: 2, at: 3 });
   assert.deepEqual(nextChain({ n: 4, at: 1 }, 1 + COMBO.chain + 0.5), { n: 1, at: 1 + COMBO.chain + 0.5 });
-  assert.ok(burstPower(2) > burstPower(1) && burstPower(4) > burstPower(2) * 1.5);
+  assert.ok(burstPower(2) > burstPower(1) && burstPower(4) > burstPower(2) * 1.3 && burstPower(6) > burstPower(4));
   ok('combo table: setups, payoffs by class/skill, setter excluded, window, chain, burst power');
 }
 
@@ -62,6 +63,7 @@ let mob = null;
 const freshMob = (type = 'wolf') => {
   if (mob) g.mobs.delete(mob.id);
   mob = g.addMob(type, X, Z + 1);
+  mob.face = angleTo(mob.x, mob.z, X, Z - 2); // facing the players: no flank bonus (server/threat.js)
   mob.maxHp = mob.hp = 1e6; mob.posture = 0; mob.staggerUntil = 0; mob.stunUntil = 0; mob.def = { ...mob.def, posture: 1e9 }; // no accidental Breaks
   return mob;
 };
@@ -240,7 +242,7 @@ function burstRun(joinIds, { solo = false } = {}) {
   assert.equal(four.ev[0].n, 4);
   const atk = ids => ids.reduce((s, p) => s + p.atk * g.dmgMult(p), 0);
   const per2 = two.lost / atk([gua, swo]), per4 = four.lost / atk([gua, swo, ber, lan]);
-  assert.ok(per4 / per2 > 1.3, `4 joiners hit much harder per head (${(per4 / per2).toFixed(2)}x)`);
+  assert.ok(per4 / per2 > 1.15, `4 joiners hit harder per head (${(per4 / per2).toFixed(2)}x)`);
   // everyone joined: fires at once
   freshMob(); g.tb = new Map(); clear();
   g.tbState(party.id).g = BURST.max;

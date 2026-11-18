@@ -3,7 +3,8 @@
 //    counts the death as a player or bot death for that fight.
 //  - quitCtx(p): extra fields for session_end (zone, floor, class, style, party size, bots in the party).
 //  - One 'fight' row per boss fight (both floors), whoever was in it (bots too): who fought (party key, classes,
-//    humans vs bots), result, time, phase, twist, deaths split by players / bots. Wrapped around start/endFight(2).
+//    humans vs bots), result, time, phase, twist, deaths split by players / bots, and the post-fight MVP card (`mvp`:
+//    server/mvp.js, shared/mvp.js compactCard). Wrapped around start/endFight(2).
 // Bots' own rows are kept out of play tracking by BotManager (except deaths, recorded as 'bot_death').
 import { inArena, areaName } from '../shared/data.js';
 import { inArena2, floorOf } from '../shared/floor2.js';
@@ -36,12 +37,15 @@ const TrackMethods = {
   trackFight(floor, f, result, m) {
     if (!f) return;
     const w = f.who || [], hum = w.filter(x => !x.bot), bots = w.filter(x => x.bot);
+    this.mvpCard?.(floor, f, result, m); // the MVP card (server/mvp.js), cached on the fight
+    const mvp = this.mvpCompact?.(f);
     this.track(null, 'fight', {
       floor, result, secs: Math.round(this.time - f.start), phase: m.phase | 0, hpLeft: result === 'wipe' ? Math.round((m.hp / m.maxHp) * 100) : 0,
       ...(floor === 1 && this.twist ? { twist: this.twist.id } : {}),
       humans: hum.length, bots: bots.length, deaths: f.hd || 0, botDeaths: f.bd || 0,
       party: hum.map(x => x.key).sort(), cls: hum.map(x => x.cls).sort(), botCls: bots.map(x => x.cls).sort(),
       lvl: hum.length ? Math.round(hum.reduce((s, x) => s + x.lvl, 0) / hum.length) : Math.round(bots.reduce((s, x) => s + x.lvl, 0) / (bots.length || 1)),
+      ...(mvp ? { mvp } : {}),
     });
   },
 };

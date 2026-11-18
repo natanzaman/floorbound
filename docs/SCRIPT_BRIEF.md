@@ -144,5 +144,6 @@ scenes:
 | | `letterbox`, `clean` | `on` (default true) | clean = no HUD (nameplates, bars and bubbles stay) |
 | | `light` | `to*` (`day`, `eclipse`) | (or per scene: `light:`) |
 | World | `bell` | `floor` (default 1) | the Tower Bell |
+| Team | `mvp` | `secs` (how long it stays up; default 25) | shows the last boss fight's post-fight MVP card to everyone, the film view included (a show gets no card otherwise) |
 
 Unknown fields are warnings; unknown verbs, actors, landmarks, conditions and labels are errors, and so is a verb whose game module isn't on the server.

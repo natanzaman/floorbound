@@ -32,6 +32,7 @@ import { installThreat } from './threat.js'; // visible threat, healer threat, C
 import { installRevive } from './revive.js'; // downed + revive (G1)
 import { installBossTeam } from './bossteam.js'; // boss team mechanics: stack, spread, tether (G4)
 import { installTeamplay } from './teamplay.js'; // skill combos + Team Burst + team stats (G2)
+import { installMvp } from './mvp.js'; // post-fight MVP card (G5)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -1269,11 +1270,11 @@ export class Game {
   // dealers and a Bard gets far more than twice the health a tank/damage/healer trio does, since talents, styles and
   // support buffs multiply), damage from the party size, and both from the party's average level above the Warden's.
   scaleWarden(m) {
-    const W = WARDEN, ps = [...this.players.values()].filter(p => !p.dead && inArena(p.x, p.z));
+    const W = this.director?.running ? { ...WARDEN, ...WARDEN.show } : WARDEN, ps = [...this.players.values()].filter(p => !p.dead && inArena(p.x, p.z)); // a show: its rehearsed scaling
     const weight = Math.max(0.5, ps.reduce((s, p) => s + (W.hpRole[CLASSES[p.cls]?.role] ?? 1), 0));
     const avg = ps.length ? ps.reduce((s, p) => s + p.lvl, 0) / ps.length : m.def.level, over = Math.max(0, avg - MOBS.warden.level);
     m.maxHp = m.hp = Math.round((W.hpBase + W.hpPer * Math.pow(weight, W.hpExp)) * (1 + W.hpLvl * over));
-    const atk = MOBS.warden.atk * (1 + W.atkLvl * over) * (1 + W.atkPer * Math.max(0, ps.length - 3));
+    const atk = (W.atk ?? MOBS.warden.atk) * (1 + W.atkLvl * over) * (1 + W.atkPer * Math.max(0, ps.length - 3));
     m.def = { ...MOBS.warden, atk: Math.round(atk * 10) / 10 };
   }
 
@@ -1389,4 +1390,5 @@ installBossTeam(Game); // boss team mechanics (server/bossteam.js); after stagin
 installRevive(Game); // downed + revive (server/revive.js); after staging and boss team mechanics
 installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js)
 installTeamplay(Game); // skill combos between players, the Team Burst gauge, teamStat() for the post-fight card (server/teamplay.js); after the talents
+installMvp(Game); // the post-fight MVP card from the team stats, downs and deaths; in the fight's tracking row (server/mvp.js); after the team play
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last

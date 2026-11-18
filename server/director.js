@@ -647,6 +647,7 @@ const VERBS_RUN = {
   clean(c) { this.game.cine('clean', { on: c.on !== false }); },
   light(c) { this.game.cine('light', { light: c.to }); },
   bell(c) { this.game.ringBell(c.floor ?? 1, { auto: false }); },
+  mvp(c) { if (!this.game.showMvp({ secs: c.secs })) this.log('! mvp: no boss fight has ended yet.'); },
 };
 Director.prototype.timedCine = function (op, data, secs) {
   const g = this.game, t0 = g.time;
