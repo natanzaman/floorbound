@@ -10,6 +10,7 @@ export class Sound {
     this.listener = { x: 0, z: 0 };
     this.mood = null; this.nextBar = 0; this.bar = 0;
     this.offset = 0; // seconds added to every scheduled sound (used for offline rendering)
+    this.lines = new Map(); this.line = null; this.heard = []; // voice-overs: decoded files, the one playing, a log (tests)
   }
 
   // Browsers only allow audio after a user gesture; call this from a click/tap.
@@ -32,11 +33,34 @@ export class Sound {
       this.master.connect(comp).connect(c.destination);
       this.sfx = c.createGain(); this.sfx.gain.value = 0.9; this.sfx.connect(this.master);
       this.music = c.createGain(); this.music.gain.value = 0.28; this.music.connect(this.master);
+      this.voices = c.createGain(); this.voices.gain.value = 1.1; this.voices.connect(this.master); // dialogue (voice-overs)
       const len = c.sampleRate;
       this.noiseBuf = c.createBuffer(1, len, c.sampleRate);
       const d = this.noiseBuf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     }
+  }
+
+  // A scripted line's voice-over (/voice/<name>.mp3, made by scripts/film/voices.mjs), played when the line is said in the
+  // film and spectator views. Not placed in the world: it's the film's dialogue track. A new line cuts the one playing.
+  async voice(name) {
+    const rec = { name, at: performance.now(), ok: false };
+    this.heard.push(rec); if (this.heard.length > 50) this.heard.shift();
+    if (!/^[\w-]+\/[\w-]+$/.test(name)) return false;
+    this.unlock();
+    if (!this.ctx) return false;
+    let buf = this.lines.get(name);
+    if (!buf) {
+      buf = fetch(`/voice/${name}.mp3`).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.status)))).then(b => this.ctx.decodeAudioData(b));
+      this.lines.set(name, buf);
+      if (this.lines.size > 80) this.lines.delete(this.lines.keys().next().value);
+    }
+    try { buf = await buf; } catch (err) { this.lines.delete(name); rec.why = `no file (${err.message})`; return false; }
+    if (this.ctx.state !== 'running') { rec.why = 'audio locked: click the page once'; return false; } // never play late
+    try { this.line?.stop(); } catch {}
+    const src = this.ctx.createBufferSource(); src.buffer = buf; src.connect(this.voices); src.start();
+    this.line = src; rec.ok = true; rec.secs = buf.duration;
+    return true;
   }
 
   toggle() {

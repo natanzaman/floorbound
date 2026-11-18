@@ -7,6 +7,7 @@
 // clean feed) but keeps its own camera, so one window per character records a multi-camera take. The director can also
 // cut the film view into a character with the shots `pov` and `eyes`.
 import * as THREE from 'three';
+import { subtitleHold, isCueLine } from '/bubbles.js';
 
 const Q = new URLSearchParams(location.search);
 const POV = (Q.get('pov') || '').trim().toLowerCase() || null;
@@ -50,15 +51,22 @@ export function initCine({ camera, state, players, mobs, slowMotion, twists, occ
   font: 800 clamp(30px, 7vw, 76px)/1.05 Georgia, 'Times New Roman', serif; letter-spacing: .16em; text-shadow: 0 3px 24px rgba(0,0,0,.85); opacity: 0; transition: opacity 1s ease; white-space: nowrap; }
 #cine-title small { display: block; margin-top: .55em; font: 600 clamp(13px, 2.2vw, 22px)/1.2 system-ui, sans-serif; letter-spacing: .28em; text-transform: uppercase; opacity: .85; }
 #cine-title.show { opacity: 1; }
+#cine-sub { position: fixed; left: 50%; bottom: 7vh; transform: translate(-50%, 0); z-index: 55; pointer-events: none; max-width: min(80vw, 1100px); width: max-content;
+  text-align: center; color: #fff; font: 600 clamp(18px, 2.3vw, 34px)/1.3 system-ui, -apple-system, 'Segoe UI', sans-serif; letter-spacing: .01em;
+  text-shadow: 0 0 3px #000, 0 2px 8px rgba(0,0,0,.95), 0 0 18px rgba(0,0,0,.6); opacity: 0; transition: opacity .25s ease; }
+#cine-sub b { color: #f2d28a; font-weight: 700; }
+#cine-sub.show { opacity: 1; }
+#cine-bars.on ~ #cine-sub { bottom: max(3vh, calc((100vh - 100vw / 2.39) / 4)); transform: translate(-50%, 50%); }
 body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-keep]), body.cine-clean #rare-hint, body.cine-clean #crosshair { display: none !important; }`;
   document.head.appendChild(css);
   const bars = document.createElement('div'); bars.id = 'cine-bars'; bars.innerHTML = '<i></i><i></i>';
   const fadeEl = document.createElement('div'); fadeEl.id = 'cine-fade';
   const titleEl = document.createElement('div'); titleEl.id = 'cine-title';
-  document.body.append(bars, fadeEl, titleEl);
-  let titleT = 0;
+  const subEl = document.createElement('div'); subEl.id = 'cine-sub'; // film subtitles: under the fade, centred in the lower bar
+  document.body.append(bars, subEl, fadeEl, titleEl);
+  let titleT = 0, subT = 0;
 
-  const view = { letterbox: false, clean: false, black: false, title: null, light: null }; // what's applied (tests read it)
+  const view = { letterbox: false, clean: false, black: false, title: null, light: null, sub: null }; // what's applied (tests read it)
   function fade(to, secs) {
     view.black = to === 'black';
     fadeEl.style.transition = `opacity ${Math.max(0, secs)}s ease`;
@@ -72,6 +80,16 @@ body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-
     titleEl.classList.add('show'); view.title = text;
     titleT = setTimeout(() => { titleEl.classList.remove('show'); view.title = null; }, Math.max(0.5, secs) * 1000);
   }
+  // A scripted line as a subtitle ("Name: line"), held for reading time; the next line replaces it. Film and POV views only.
+  function say(e) {
+    if (!FILM || !state.spectator || !isCueLine(e)) return false;
+    clearTimeout(subT);
+    subEl.replaceChildren(Object.assign(document.createElement('b'), { textContent: `${e.from}: ` }), String(e.text));
+    subEl.classList.add('show'); view.sub = `${e.from}: ${e.text}`;
+    subT = setTimeout(unsay, subtitleHold(e.text, e.hold) * 1000);
+    return true;
+  }
+  function unsay() { clearTimeout(subT); subEl.classList.remove('show'); view.sub = null; }
   function letterbox(on) { view.letterbox = !!on; bars.classList.toggle('on', view.letterbox); }
   function clean(on) { view.clean = !!on; document.body.classList.toggle('cine-clean', view.clean); }
   function light(v) { view.light = v || null; twists.light = view.light; }
@@ -94,7 +112,7 @@ body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-
       case 'letterbox': if (film) letterbox(e.on); break;
       case 'clean': if (film) clean(e.on); break;
       case 'shot': if (film) shot(e, late); break;
-      case 'reset': light(null); fade('in', late ? 0 : 1); title(''); letterbox(false); clean(false); if (film) shot({ shot: 'free', secs: 1.5 }); break;
+      case 'reset': light(null); fade('in', late ? 0 : 1); title(''); unsay(); letterbox(false); clean(false); if (film) shot({ shot: 'free', secs: 1.5 }); break;
     }
   }
   function event(e) { if (e.t !== 'cine') return false; apply(e.op, e, false); return true; }
@@ -344,6 +362,6 @@ body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-
   }
   function setFov(f) { if (Math.abs(camera.fov - f) > 0.01) { camera.fov = f; camera.updateProjectionMatrix(); } }
 
-  const api = { film: FILM, pov: POV, view, onMessage, event, frame, get shot() { return S.shot?.shot || 'free'; }, get active() { return S.active; }, want, pos, look };
+  const api = { film: FILM, pov: POV, view, onMessage, event, say, frame, get shot() { return S.shot?.shot || 'free'; }, get active() { return S.active; }, want, pos, look };
   return api;
 }

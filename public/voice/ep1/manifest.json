@@ -1,0 +1,226 @@
+{
+ "c9511c586cf1": {
+  "who": "corvin",
+  "text": "Forty-one days. Not one name on this stone.",
+  "voice": "bm_george",
+  "speed": 0.95,
+  "pitch": 0
+ },
+ "2eb0a6a836dd": {
+  "who": "bram",
+  "text": "Three raids tried.",
+  "voice": "am_onyx",
+  "speed": 0.92,
+  "pitch": 0
+ },
+ "b624dded5297": {
+  "who": "corvin",
+  "text": "I'm what's left of the second.",
+  "voice": "bm_george",
+  "speed": 0.95,
+  "pitch": 0
+ },
+ "0c1f816a1a9b": {
+  "who": "bram",
+  "text": "Then we go in smarter. All of us.",
+  "voice": "am_onyx",
+  "speed": 0.92,
+  "pitch": 0
+ },
+ "458391b5fb2d": {
+  "who": "juno",
+  "text": "Bolts are fresh. Tamsin's carrying forty potions.",
+  "voice": "af_bella",
+  "speed": 1.05,
+  "pitch": 0
+ },
+ "4800d3046715": {
+  "who": "tamsin",
+  "text": "Thirty-eight. Juno keeps \"testing\" them.",
+  "voice": "bf_emma",
+  "speed": 1,
+  "pitch": 0
+ },
+ "943aacd50f1f": {
+  "who": "pell",
+  "text": "Wait! I heard you need a fifth.",
+  "voice": "am_puck",
+  "speed": 1.08,
+  "pitch": 0
+ },
+ "cbc219b56018": {
+  "who": "juno",
+  "text": "You're level eight.",
+  "voice": "af_bella",
+  "speed": 1.05,
+  "pitch": 0
+ },
+ "1123eeca2ff7": {
+  "who": "pell",
+  "text": "I'm fast. I don't freeze. Please.",
+  "voice": "am_puck",
+  "speed": 1.08,
+  "pitch": 0
+ },
+ "f18ca517346a": {
+  "who": "bram",
+  "text": "Stay behind my shield. Every second. Understood?",
+  "voice": "am_onyx",
+  "speed": 0.92,
+  "pitch": 0
+ },
+ "a72a280cc476": {
+  "who": "pell",
+  "text": "Every second.",
+  "voice": "am_puck",
+  "speed": 1.08,
+  "pitch": 0
+ },
+ "d74b79f1a7f7": {
+  "who": "corvin",
+  "text": "Then we're five. Raid gate.",
+  "voice": "bm_george",
+  "speed": 0.95,
+  "pitch": 0
+ },
+ "2ec40405058c": {
+  "who": "bram",
+  "text": "When it spins its horns, you get behind me.",
+  "voice": "am_onyx",
+  "speed": 0.92,
+  "pitch": 0
+ },
+ "466ad6079877": {
+  "who": "pell",
+  "text": "And if I can't?",
+  "voice": "am_puck",
+  "speed": 1.08,
+  "pitch": 0
+ },
+ "f53865068d81": {
+  "who": "bram",
+  "text": "Then I come to you.",
+  "voice": "am_onyx",
+  "speed": 0.92,
+  "pitch": 0
+ },
+ "3c6108931b45": {
+  "who": "corvin",
+  "text": "Nobody dies today. That's the only order.",
+  "voice": "bm_george",
+  "speed": 0.95,
+  "pitch": 0
+ },
+ "47b50ee5e8eb": {
+  "who": "tamsin",
+  "text": "Five seconds. Last chance to turn back.",
+  "voice": "bf_emma",
+  "speed": 1,
+  "pitch": 0
+ },
+ "c42232f68404": {
+  "who": "bram",
+  "text": "Taunt's up! Hit it from the sides!",
+  "voice": "am_onyx",
+  "speed": 0.92,
+  "pitch": 0
+ },
+ "34206a9543f4": {
+  "who": "juno",
+  "text": "Hounds! I'll keep them off Tamsin!",
+  "voice": "af_bella",
+  "speed": 1.05,
+  "pitch": 0
+ },
+ "a44fcfa0bb84": {
+  "who": "tamsin",
+  "text": "Sanctuary down! Stay inside the light!",
+  "voice": "bf_emma",
+  "speed": 1,
+  "pitch": 0
+ },
+ "2d0bf9ea639b": {
+  "who": "corvin",
+  "text": "Pell! Horn Sweep!",
+  "voice": "bm_george",
+  "speed": 0.95,
+  "pitch": 0
+ },
+ "ba01644b6983": {
+  "who": "bram",
+  "text": "Told you. I come to you.",
+  "voice": "am_onyx",
+  "speed": 0.92,
+  "pitch": 0
+ },
+ "02be284f1786": {
+  "who": "pell",
+  "text": "Bram!",
+  "voice": "am_puck",
+  "speed": 1.08,
+  "pitch": 0
+ },
+ "79da7b5db515": {
+  "who": "tamsin",
+  "text": "His bar's empty. He's... he's gone.",
+  "voice": "bf_emma",
+  "speed": 1,
+  "pitch": 0
+ },
+ "4f30e945139f": {
+  "who": "corvin",
+  "text": "Pell. Up. We finish it. For him.",
+  "voice": "bm_george",
+  "speed": 0.95,
+  "pitch": 0
+ },
+ "7d24c780e657": {
+  "who": "corvin",
+  "text": "Switch!",
+  "voice": "bm_george",
+  "speed": 0.95,
+  "pitch": 0
+ },
+ "daa1af04c4b9": {
+  "who": "pell",
+  "text": "He told me to stay behind him.",
+  "voice": "am_puck",
+  "speed": 1.08,
+  "pitch": 0
+ },
+ "7a3c77e018f7": {
+  "who": "tamsin",
+  "text": "You did. Every second.",
+  "voice": "bf_emma",
+  "speed": 1,
+  "pitch": 0
+ },
+ "a91f4e4d4801": {
+  "who": "juno",
+  "text": "Five names. It kept his.",
+  "voice": "af_bella",
+  "speed": 1.05,
+  "pitch": 0
+ },
+ "75a1e1c83908": {
+  "who": "corvin",
+  "text": "First line on the stone. Where he always stood.",
+  "voice": "bm_george",
+  "speed": 0.95,
+  "pitch": 0
+ },
+ "5efac05793f2": {
+  "who": "tamsin",
+  "text": "The first bell.",
+  "voice": "bf_emma",
+  "speed": 1,
+  "pitch": 0
+ },
+ "ff309eec4927": {
+  "who": "pell",
+  "text": "Floor two. I'll take the front.",
+  "voice": "am_puck",
+  "speed": 1.08,
+  "pitch": 0
+ }
+}

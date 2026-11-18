@@ -229,7 +229,7 @@ function reconnect(joinMsg) {
 }
 const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
 const wheel = initBotWheel({ send, state, players, log }); // orders for the bots in your party: hold V (public/botwheel.js)
-const bubbles = initBubbles({ state, players, project, camera, layer: $('labels'), enabled: () => settings.bubbles !== false }); // speech bubbles over heads (public/bubbles.js)
+const bubbles = initBubbles({ state, players, project, camera, layer: $('labels'), enabled: () => settings.bubbles !== false && !cine.film }); // speech bubbles over heads (public/bubbles.js); the film view uses subtitles
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
@@ -624,6 +624,8 @@ function handleEvent(e) {
     case 'invite': if (e.to === me) showInvite(e.from, e.name); break;
     case 'chat': // ch 'p': party chat (only your party sees it), 's': say (heard within 40 m)
       if (bubbles.chat(e) && e.id !== me && !state.spectator) guide.tip('bubbles'); // a bubble over the speaker's head (same rules as the log)
+      cine.say(e); // film view: a scripted line as a subtitle
+      if (state.spectator && e.voice) sfx.voice(e.voice); // and its voice-over (spectators only, never players)
       if (e.ch === 'p') { if (state.party && e.party === state.party) log(`[Party] ${e.from}: ${e.text}`, e.id === me ? 'me party' : 'party'); break; }
       if (e.ch === 's') { if (state.spectator || Math.hypot(e.x - state.x, e.z - state.z) < 40) log(`${e.from} says: ${e.text}`, e.id === me ? 'me' : 'say'); break; }
       log(`${e.from}: ${e.text}`, e.id === me ? 'me' : ''); break;
