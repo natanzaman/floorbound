@@ -188,6 +188,66 @@ Run `docs/story/ep1-first-line.yaml` end to end in the film view, fix what break
 3. **Admin Director** lists a POV link (and first-person link) per cast member, to record several windows at once.
 4. **Accept when:** a recorded take shows each view; `node test/cine.js` and `node test/director.js` pass.
 
+## G. Team combat (owner request 2026-11-17)
+Friends are playing and like it. Keep the new-player helpers. Goal: solo still works, but a team gets **more**: more ways to save, set up and pay off each other. Owner picked G1–G5 and added: **healers also build threat by healing**. (Pings were offered and not picked.)
+
+### Tracker
+Same rules as F: set Status/Owner on `main` before starting, mark **done** with the merge commit. Merge with the `flock` lock from the F section's "Shared contracts" block.
+
+| Task | Branch | Status | Owner | Merge |
+|---|---|---|---|---|
+| G1 Downed + revive | `feat/revive` | todo | | |
+| G2 Skill combos + Team Burst | `feat/teamburst` | todo | | |
+| G3 Threat you can see, healer threat, Cover, flanking | `feat/threat` | todo | | |
+| G4 Boss team mechanics | `feat/bossteam` | todo | | |
+| G5 Post-fight MVP card | `feat/mvp` | todo (after G1–G3: it counts their events) | | |
+
+### Shared contracts for G
+- **Team stat events.** Each G feature also calls `this.teamStat(p, key, n = 1)` (G2 defines it in `server/teamplay.js`; until merged, guard with `this.teamStat?.(…)`). Keys: `revive`, `save` (healing/cover/shield that stopped a hit that would have downed someone), `switch`, `break`, `combo`, `burst`, `cover`, `flank`, `heal`, `dmg`, `tanked` (damage taken while top threat), `lastAttack`, `mechanic` (did a G4 team mechanic right). G5 reads these.
+- **Film safety.** The director (F2) and staging (F3) use `scriptDeath` / `scriptRevive`. Scripted deaths must stay instant deaths (no downed state). Downed state, Team Burst prompts and new boss mechanics stay out of the way while `game.director` is running a show unless a cue asks for them (`forceBossMove` may gain the G4 moves).
+- **Bots take part** in every G feature, scaled by capability (`shared/botskill.js`): they revive, cash in combos, join a Team Burst, stand in or spread for G4 mechanics, and Guardians Cover.
+- **Readable for new players.** Every new mechanic gets a one-line guide tip (`public/guide.js`) and a short on-screen prompt the first few times.
+
+### G1. Downed + revive (`feat/revive`)
+1. At 0 HP **in a party with someone alive nearby**, you go **downed** for ~15 s instead of dying: you can crawl slowly, can't attack, and a bleed-out ring shows. Solo (no living partymate within ~40 m) you die as today.
+2. A partymate holds **E** next to you (≈2.5 s channel, broken if they take a heavy hit or move away) to revive you at ~35% HP with a brief i-frame. Cleric **Heal** on a downed ally speeds the channel. Each revive in one fight takes longer (anti-cheese). Enemies keep attacking downed players but bosses prefer standing ones.
+3. Whole party downed = wipe as today. Bleed-out = normal death and respawn.
+4. Bots revive (priority by role: Cleric first, then whoever is closest and safe), at speed/accuracy scaled by capability.
+5. UI: downed overlay with bleed-out timer, "Hold E to revive <name>" prompt, a downed marker above the body visible to the party (through walls), party frame shows DOWNED.
+6. **Accept when:** tests cover downed → revive, bleed-out, solo death, wipe, scripted deaths unaffected; a bot party revives each other in a Warden run (report revives/run).
+
+### G2. Skill combos between players + Team Burst (`feat/teamburst`)
+1. **Combos (setup → payoff by a different player within ~2.5 s):** data-driven table in `shared/teamplay.js`. Starter set (adjust to the real skill ids):
+   - Lancer launch / Sky Lance → Ranger shot or any ranged hit = **Skewer** (bonus damage, posture).
+   - Guardian stun (Shield Bash / slam) → Berserker heavy or Swordsman Burst Combo = **Execute** (crit + posture).
+   - Bard Discord stacks ≥3 → any Break = **Shatter Chorus** (party heal + damage burst).
+   - Ranger Mark → Lancer charge/thrust = **Pin** (root 1.5 s).
+   - Cleric Sanctuary/Blessing → ally Switch inside it = **Sanctified Switch** (longer Break window).
+   - Show a **chain counter** above the target ("Combo ×2 · Skewer") visible to everyone (it's a target effect), payoff flash for the pair.
+2. **Team Burst gauge:** a shared party bar (party frame top) filled by combos, Switches, Breaks, parries, revives and saves; drains slowly out of combat. When full, any member presses **T** to start a ~3 s **sync window**; every member who presses T in the window joins. Effect scales with joiners (2 = strong, 4+ = huge): a combined finisher on the current target (big damage, full posture break, short party buff) with a team-coloured burst. Solo: gauge fills slower and gives a weaker solo burst.
+3. Define `teamStat` (see contracts) and record per-fight counters for G5.
+4. Bots: try to land payoffs on partners' setups and join a Team Burst window (skill-scaled chance/delay).
+5. **Accept when:** tests cover each combo trigger/timeout, gauge fill/drain, sync window joining and scaling; a bot run reports combos and bursts per fight.
+
+### G3. Threat you can see, healer threat, Cover, flanking (`feat/threat`)
+1. **Visible threat:** the boss (and elites) show who they're targeting (a line/marker on the target, and the name on the boss bar). Your own threat meter vs the top (small bar under the boss bar: "You 62% of top"), warning colour at ≥90% ("about to pull").
+2. **Healer threat:** healing (and shields) adds threat to every enemy currently fighting the party, split across them (~0.5× of the healed amount). Overheal adds none. Tune so a careless Cleric can pull the boss off a Guardian who isn't taunting.
+3. **Cover (Guardian):** a new action (e.g. **F** or a talent-free base skill slot if one is free; pick what fits the existing kit) — dash up to ~8 m to an ally and take the next hit meant for them within ~1.5 s (damage reduced by the Guardian's guard). Cooldown ~12 s. Bots: Guardians Cover a low-HP ally targeted by a big hit.
+4. **Flanking / pincer:** hitting an enemy from behind (back 120°) gives a small bonus (+10% damage, +posture); if another party member is on the opposite side (≥120° apart around the enemy) both get **Pincer** (+20% damage, +posture). Show a subtle "Pincer" tag to the two players (reaction = only to them). Bots: melee DPS bots try to take the side opposite the tank.
+5. **Accept when:** tests cover healer threat math, threat UI data in snapshots, Cover redirecting a hit, flank/pincer angles; a bot run still clears the Warden.
+
+### G4. Boss team mechanics (`feat/bossteam`)
+Warden first (Floor 2 boss if time allows). Each is telegraphed, has a guide tip, and only appears with 2+ party members alive (solo fights unchanged):
+1. **Shared meteor (stack):** a marked spot/target; damage splits between everyone inside the circle. 1 person = near-lethal, 3+ = light. Big "STACK" marker.
+2. **Spread markers:** 2–3 players get a marker; on expiry each explodes in a radius, hurting anyone else inside. "SPREAD" marker on the marked players.
+3. **Tether:** links two players; it deals ticking damage until they move ≥ ~15 m apart (or a Guardian Covers it? optional). Visible beam between them.
+4. Mix into the phase rotation (and twists if it fits); add to `forceBossMove` names (`meteor`, `spread`, `tether`).
+5. Bots stack, spread and break tethers (skill-scaled).
+6. **Accept when:** tests cover damage split, spread overlap, tether break distance, solo unchanged; Warden runs with bots (trio and 6) still clear at skill 5 with numbers reported.
+
+### G5. Post-fight MVP card (`feat/mvp`) — after G1–G3 merge
+After a boss kill (or a wipe), show every fighter a card: party damage, healing, tanked, Switches, Breaks, combos, bursts, revives, saves, covers, mechanics, Last Attack — with fun titles ("Lifeline": most revives/saves, "Wall": most tanked, "Conductor": most combos, "Last Word": Last Attack…). Shared to the whole party; stored in tracking (`server/trackgame.js`) so `/stats.html` can show it later. **Accept when:** a bot run shows a card with sensible numbers.
+
 ## Known issues and backlog
 - Floor 2 is untested by the owner: do a play pass before any Floor 3 work.
 - Bots ignore Floor 2 specifics? (check during C if cheap)
