@@ -107,7 +107,7 @@ One row per task. Whoever picks a task sets **Status** and **Owner** here first 
 | F5 Poses | `feat/poses` | done | agent poses | 901b9d4 |
 | F6 The Tower Bell and the engraved Hall | `feat/bell` | done | agent bell | f767ad7 |
 | F7 Episode 1 dress rehearsal, then Ep 2/3 cue sheets | (on `main`) | in progress: Ep 1 rehearsed headless (3.3 min, all 4 scenes, no errors); recorded as video and the gate (s2) and Warden (s3) framing reworked (`claude/episode-1-camera-framing-pov`); to do: tune scene 3 dialogue vs live Warden, Eclipse-vs-floor-switch check, Ep 2/3 cue sheets | agent main | |
-| F8 POV camera (per-character views) | `claude/episode-1-camera-framing-pov` | done | agent camera | |
+| F8 POV camera (per-character views) | `claude/episode-1-camera-framing-pov` | done | agent camera | a855ca2 |
 
 ### Shared contracts (read before starting any F task)
 F2 calls the others through these names, so keep them exactly. Every server method is mixed into `Game.prototype` from its own module (like `server/combat.js`), installed in `server/game.js`. Every new event goes into `this.events` (broadcast in snapshots) unless noted.

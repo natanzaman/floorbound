@@ -33,3 +33,5 @@
   (first parent = stale local main, unpushed). Redo blocked: `git reset --hard origin/main` denied by the auto-mode classifier. Waiting on Natan:
   option 1 (recommended) allow the reset, then `git merge --no-ff` the branch and push; option 2 push the branch tip as a fast-forward (`git push origin claude/episode-1-camera-framing-pov-2a66d4:main`) and leave local main for Natan.
 - Test servers stopped. Nothing running.
+- 2026-11-18: Natan OK'd the reset ("Yes, reset and push"). Local main reset to origin/main, merged --no-ff -> a855ca2 (tree identical to the tested branch 84770da), pushed (via gh credential helper; plain git HTTPS has no login).
+- Done. Open for Natan: wild Dire Wolf at the raid gate in s2; a retake from s3 shows the HUD (clean/letterbox are set in s1).
