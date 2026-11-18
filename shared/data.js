@@ -211,6 +211,9 @@ export const WARDEN = {
   // * (1 + hpLvl * levels above 10); damage = atk * (1 + atkLvl * levels above 10) * (1 + atkPer * fighters above 3).
   phases: [0.66, 0.33], hpBase: 2400, hpPer: 680, hpExp: 2.05, hpLvl: 0.12, atkLvl: 0.06, atkPer: 0.25,
   hpRole: { Tank: 0.6, Healer: 0.5, Support: 0.8, Damage: 1.2 },
+  // A filmed director show (server/director.js) keeps the scaling its episodes were rehearsed against (before the G5
+  // balance pass): the scripted fights' pacing and Break cues depend on it.
+  show: { hpBase: 2000, hpExp: 1.8, atkPer: 0.12, atk: 34 },
   slam: { every: [6.5, 5, 3.75], r: 5.5, wind: 1.6, mult: 3.0, per: 3 }, // one slam circle per `per` fighters (on different ones)
   charge: { every: 9.5, len: 15, width: 2.4, wind: 1.5, mult: 3.0 },
   cleave: { wind: 0.75 }, // its basic axe swing (a wedge in front of it)

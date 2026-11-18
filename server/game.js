@@ -1270,11 +1270,11 @@ export class Game {
   // dealers and a Bard gets far more than twice the health a tank/damage/healer trio does, since talents, styles and
   // support buffs multiply), damage from the party size, and both from the party's average level above the Warden's.
   scaleWarden(m) {
-    const W = WARDEN, ps = [...this.players.values()].filter(p => !p.dead && inArena(p.x, p.z));
+    const W = this.director?.running ? { ...WARDEN, ...WARDEN.show } : WARDEN, ps = [...this.players.values()].filter(p => !p.dead && inArena(p.x, p.z)); // a show: its rehearsed scaling
     const weight = Math.max(0.5, ps.reduce((s, p) => s + (W.hpRole[CLASSES[p.cls]?.role] ?? 1), 0));
     const avg = ps.length ? ps.reduce((s, p) => s + p.lvl, 0) / ps.length : m.def.level, over = Math.max(0, avg - MOBS.warden.level);
     m.maxHp = m.hp = Math.round((W.hpBase + W.hpPer * Math.pow(weight, W.hpExp)) * (1 + W.hpLvl * over));
-    const atk = MOBS.warden.atk * (1 + W.atkLvl * over) * (1 + W.atkPer * Math.max(0, ps.length - 3));
+    const atk = (W.atk ?? MOBS.warden.atk) * (1 + W.atkLvl * over) * (1 + W.atkPer * Math.max(0, ps.length - 3));
     m.def = { ...MOBS.warden, atk: Math.round(atk * 10) / 10 };
   }
 

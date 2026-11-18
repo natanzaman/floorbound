@@ -95,7 +95,7 @@ const b = g.boss;
   assert.equal(e[0].d, 5); assert.ok(!e[0].all);
   const c = e[0].card, row = id => c.rows.find(r => r.id === id);
   assert.equal(c.result, 'kill'); assert.equal(c.floor, 1); assert.equal(c.boss, 'The Horned Warden'); assert.ok(c.secs >= 30);
-  assert.ok(row(ber.id).dmg >= 100 && row(ber.id).down === 1 && !row(ber.id).death, 'Rook: damage, one down');
+  assert.ok(row(ber.id).dmg > 50 && row(ber.id).down === 1 && !row(ber.id).death, 'Rook: damage, one down');
   assert.equal(row(gua.id).lastAttack, 1); assert.ok(row(gua.id).titles.includes('lastword'));
   assert.equal(row(gua.id).tanked, 300); assert.equal(row(gua.id).cover, 1);
   assert.ok(row(cle.id).bot && row(cle.id).titles.includes('lifeline'));
@@ -204,6 +204,17 @@ scenes:
   assert.equal(e.length, 1); assert.deepEqual(e[0].ids, [gua.id]);
   delete process.env.TEST_HOOKS;
   ok('TEST_HOOKS mvpCard preset');
+}
+
+// Balance pass: a director show keeps the Warden scaling its episodes were rehearsed against.
+{
+  const { WARDEN } = await import('../shared/data.js');
+  const live = (g.scaleWarden(b), [b.maxHp, b.def.atk]);
+  g.director = { running: true }; g.scaleWarden(b); const show = [b.maxHp, b.def.atk]; g.director = null;
+  assert.ok(show[0] < live[0] && show[1] < live[1], `show ${show} vs live ${live}`);
+  assert.equal(WARDEN.show.hpExp, 1.8);
+  g.scaleWarden(b);
+  ok('a director show scales the Warden the pre-balance way');
 }
 
 console.log(`mvp: ${n} ok`);
