@@ -26,13 +26,14 @@ export const MVP_STATS = [
 export const MVP_KEYS = MVP_STATS.map(s => s.k);
 
 // Titles. Each goes to the one fighter with the highest score (ties: the higher MVP score), if that score is at least
-// `min`. 'each' titles go to every fighter that qualifies. A fighter can hold several; the first in this list is their
-// headline. why(r): the line under the title.
+// `min`; to spread them around, a fighter who already holds a title passes it to the best fighter without one who
+// scores at least SHARE of the top (not for `exact` titles). 'each' titles go to every fighter that qualifies. A
+// fighter can hold several; the first in this list is their headline. why(r): the line under the title.
 const n = v => Math.round(v || 0);
 const pl = (v, one, many = `${one}s`) => `${n(v)} ${n(v) === 1 ? one : many}`;
 const k = v => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : String(n(v)));
 export const MVP_TITLES = [
-  { k: 'lastword', name: 'Last Word', score: r => r.lastAttack, min: 1, why: () => 'landed the Last Attack' },
+  { k: 'lastword', name: 'Last Word', exact: true, score: r => r.lastAttack, min: 1, why: () => 'landed the Last Attack' },
   { k: 'lifeline', name: 'Lifeline', score: r => 2 * r.revive + r.save, min: 1, why: r => [r.revive && pl(r.revive, 'revive'), r.save && pl(r.save, 'save')].filter(Boolean).join(', ') },
   { k: 'wall', name: 'Wall', score: r => r.tanked, min: 1, why: r => `tanked ${k(r.tanked)}` },
   { k: 'conductor', name: 'Conductor', score: r => r.combo + 0.5 * r.setup, min: 1, why: r => [r.combo && pl(r.combo, 'combo'), r.setup && pl(r.setup, 'setup')].filter(Boolean).join(', ') },
@@ -44,6 +45,7 @@ export const MVP_TITLES = [
   { k: 'heavy', name: 'Heavy Hitter', score: r => r.dmg, min: 1, why: r => `${k(r.dmg)} damage` },
   { k: 'unshakable', name: 'Unshakable', each: true, ok: (r, c) => c.rows.length >= 2 && !r.down && !r.death && r.dmg + r.heal + r.tanked > 0, why: () => 'never went down' },
 ];
+export const SHARE = 0.85;
 export const MVP_TITLE = Object.fromEntries(MVP_TITLES.map(t => [t.k, t]));
 export const FALLBACK_TITLE = { k: 'steady', name: 'Steady Hand', why: () => 'there for the team' };
 
@@ -66,12 +68,17 @@ export function buildCard({ boss, floor, result, secs, rows }) {
     if (t.each) { for (const r of rows) if (t.ok(r, card)) r.titles.push(t.k); continue; }
     let best = null, bs = 0;
     for (const r of rows) { const s = t.score(r); if (s > bs + 1e-9) { best = r; bs = s; } } // rows are best-first: ties keep the higher MVP
-    if (best && bs >= t.min) best.titles.push(t.k);
+    if (!best || bs < t.min) continue;
+    if (best.titles.length && !t.exact) { // spread: the best fighter still without a title, if close enough
+      const alt = rows.filter(r => !r.titles.length && t.score(r) >= Math.max(t.min, bs * SHARE)).sort((x, y) => t.score(y) - t.score(x))[0];
+      if (alt) best = alt;
+    }
+    best.titles.push(t.k);
   }
-  for (const s of MVP_STATS) { // who led each stat (a highlight on the card)
+  for (const s of MVP_STATS) { // who led each stat (a highlight on the card; not when a third of the party ties for it)
     if (s.bad || rows.length < 2) continue;
-    const m = Math.max(0, ...rows.map(r => r[s.k]));
-    if (m > 0) for (const r of rows) if (r[s.k] === m) r.top.push(s.k);
+    const m = Math.max(0, ...rows.map(r => r[s.k])), lead = rows.filter(r => r[s.k] === m);
+    if (m > 0 && lead.length <= Math.max(1, Math.floor(rows.length / 3))) for (const r of lead) r.top.push(s.k);
   }
   return card;
 }

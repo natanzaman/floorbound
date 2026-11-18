@@ -45,6 +45,16 @@ const quiet = fn => { const l = console.log; console.log = () => {}; try { retur
   const solo = buildCard({ boss: 'B', floor: 1, result: 'wipe', secs: 30, rows: [{ id: 9, name: 'S', cls: 'swordsman', dmg: 50, flank: 1 }] });
   assert.deepEqual(solo.rows[0].titles, ['heavy']); assert.deepEqual(solo.rows[0].top, []);
   assert.equal(headline({ titles: [] }).name, 'Steady Hand');
+  // spreading: a close second without a title takes it from a fighter who already has one; Last Word never moves
+  const sp = buildCard({ boss: 'B', floor: 1, result: 'kill', secs: 60, rows: [
+    { id: 1, name: 'A', cls: 'lancer', dmg: 4400, break: 9, combo: 8, lastAttack: 1 },
+    { id: 2, name: 'B', cls: 'ranger', dmg: 4300, combo: 7 },
+    { id: 3, name: 'C', cls: 'bard', dmg: 1000, break: 2 },
+  ] });
+  const t = id => sp.rows.find(r => r.id === id).titles;
+  assert.ok(t(1).includes('lastword') && t(1).includes('breaker'), 'A: Last Word; Breaker stays (C is far behind)');
+  assert.ok(t(2).includes('conductor') && !t(1).includes('conductor'), 'Conductor goes to B (7 vs 8: close, B had none)');
+  assert.ok(!t(2).includes('heavy') && t(1).includes('heavy'), 'B has a title now: Heavy Hitter stays with A');
   assert.equal(fmtSecs(84), '1:24'); assert.equal(fmtSecs(59.6), '1:00');
   ok('titles (one holder each, Unshakable for all who stayed up), MVP order, stat leaders, compact copy');
 }
