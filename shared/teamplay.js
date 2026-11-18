@@ -5,7 +5,7 @@ import { CLASSES } from './data.js';
 
 // window: seconds a setup stays open for a payoff by a DIFFERENT player; chain: seconds between two combos on the same
 // target that keep its chain counter going ("Combo x2"); again: seconds before the same combo can land on the same target again.
-export const COMBO = { window: 2.5, chain: 6, again: 5 };
+export const COMBO = { window: 2.5, chain: 6, again: 6 };
 
 // Hits that count as ranged (any Ranger hit is ranged too).
 export const RANGED = new Set(['smite', 'sonic', 'dissonance']);
@@ -26,13 +26,13 @@ export const SETUPS = {
 //   root: seconds the target can't move (a boss: slowed); heal: party heal (fraction of max HP) around the target;
 //   burst: the Bard's damage burst (x its attack); extend: seconds added to the Broken (Switch) window.
 export const COMBOS = {
-  skewer: { name: 'Skewer', on: 'hit', setup: 'launch', pay: [{ ranged: true }], mult: 1.6, frac: [0.3, 0.08],
+  skewer: { name: 'Skewer', on: 'hit', setup: 'launch', pay: [{ ranged: true }], mult: 1.35, frac: [0.25, 0.05],
     tip: 'Skewer: a Lancer launched it (Sky Lance / Sweep). Hit it with a ranged attack within 2.5 s.' },
-  execute: { name: 'Execute', on: 'hit', setup: 'stun', pay: [{ cls: 'berserker', heavy: true }, { cls: 'swordsman', sk: ['burst'] }], mult: 1.3, crit: true, frac: [0.35, 0.1],
+  execute: { name: 'Execute', on: 'hit', setup: 'stun', pay: [{ cls: 'berserker', heavy: true }, { cls: 'swordsman', sk: ['burst'] }], mult: 1.1, crit: true, frac: [0.3, 0.05],
     tip: 'Execute: a Guardian stunned it (Ground Slam / Bash finisher). A Berserker heavy or Swordsman Burst Combo within 2.5 s always crits.' },
-  pin: { name: 'Pin', on: 'hit', setup: 'mark', pay: [{ cls: 'lancer', sk: ['lcharge', 'lthrust'] }], mult: 1.2, root: 1.5, frac: [0.15, 0.04],
+  pin: { name: 'Pin', on: 'hit', setup: 'mark', pay: [{ cls: 'lancer', sk: ['lcharge', 'lthrust'] }], mult: 1.1, root: 1.5, frac: [0.15, 0.03],
     tip: 'Pin: a Ranger marked it. Hit it with a Lancer Thrust or Lance Charge within 2.5 s to root it.' },
-  chorus: { name: 'Shatter Chorus', on: 'break', discord: 3, heal: 0.12, healR: 12, burst: 2.5,
+  chorus: { name: 'Shatter Chorus', on: 'break', discord: 3, heal: 0.12, healR: 12, burst: 1.8,
     tip: 'Shatter Chorus: Break an enemy carrying 3+ Discord stacks from a Bard: the party heals and the chord bursts.' },
   sanctified: { name: 'Sanctified Switch', on: 'switch', extend: 1.5,
     tip: 'Sanctified Switch: Switch while standing in a Cleric\'s Sanctuary or under their Blessing: the Broken window lasts longer.' },
@@ -50,7 +50,7 @@ export const BURST = {
   fill: { combo: 8, switch: 5, break: 4, parry: 4, revive: 15, save: 8, cover: 4, mechanic: 5, perfect: 2 },
   soloFill: 0.5, drain: 4, idle: 6, sync: 3, range: 40,
   power: [0, 0.6, 1, 1.3, 1.6, 1.8, 2],
-  per: 6, soloFrac: [0.5, 0.18], buff: [0, 0.08, 0.12, 0.15, 0.2, 0.22, 0.25], buffD: 6, buffR: 20, targetR: 14,
+  per: 4.5, soloFrac: [0.5, 0.18], buff: [0, 0.08, 0.12, 0.15, 0.2, 0.22, 0.25], buffD: 6, buffR: 20, targetR: 14,
 };
 export const burstPower = n => BURST.power[Math.max(0, Math.min(BURST.power.length - 1, n | 0))];
 export const burstBuff = n => BURST.buff[Math.max(0, Math.min(BURST.buff.length - 1, n | 0))];

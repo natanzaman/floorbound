@@ -78,12 +78,13 @@ const combos = () => ev('combo');
   const p0 = mob.posture, h = hitBy(rang, 100, { tsk: 'shot', threat: 1 });
   const c = combos();
   assert.equal(c.length, 1); assert.equal(c[0].k, 'skewer'); assert.equal(c[0].by, rang.id); assert.equal(c[0].from, lan.id); assert.equal(c[0].n, 1);
-  assert.ok(h.a >= 160 * 0.9 && h.a <= 160 * 1.1 + 1, `x1.6 damage (${h.a})`);
-  assert.ok(mob.posture - p0 > 100 * 0.9 + 1, 'extra posture');
+  const M = COMBOS.skewer.mult * 100;
+  assert.ok(h.a >= M * 0.9 && h.a <= M * 1.1 + 1, `x${COMBOS.skewer.mult} damage (${h.a})`);
+  assert.ok(mob.posture - p0 > M * 0.9 + 1, 'extra posture');
   assert.equal(mob.tbSet.launch, undefined, 'the setup is spent');
   clear(); hitBy(rang, 100, { tsk: 'shot' });
   assert.equal(combos().length, 0, 'one payoff per setup');
-  ok('Skewer: Lancer launch -> ranged hit by a partner (event, x1.6, posture, spent)');
+  ok('Skewer: Lancer launch -> ranged hit by a partner (event, bonus damage, posture, spent)');
 }
 {
   freshMob(); clear();
