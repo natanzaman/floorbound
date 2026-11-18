@@ -35,6 +35,8 @@ const TIPS = {
   bubbles: 'Chat lines pop up as speech bubbles over the speaker\'s head: /s is heard nearby, /p by your party. Settings turns bubbles off; the chat log keeps everything.',
   bots: 'Bots in your party take orders: hold V for the order wheel, or type /b stay, /b follow, /b Lyra: heal (one bot). /b help lists them all; ordinary chat never gives orders.',
   poses: 'Posed! Chat /kneel, /sit or /bow to strike a pose, /stand (or just move, attack, dodge or jump) to get up.',
+  downed: 'Downed! You have 15 s before you bleed out. Crawl toward your party: a partymate holds E next to you to revive you.',
+  revive: 'A partymate is down! Stand next to them and hold E to revive them (a Cleric\'s Heal speeds it up). Moving away or a heavy hit breaks it.',
 };
 
 export class Guide {

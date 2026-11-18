@@ -1,6 +1,6 @@
 // Warden runs with human-like bots: starts its own server (START_LEVEL, SPAWN_AT at the raid gate), sends a role party
 // (Guardian, Swordsman, Cleric) at a capability level, and reports kill / wipe, fight time, deaths (and what killed them)
-// and Quake Rings jumped / rolled / hit.
+// Quake Rings jumped / rolled / hit, and downs / revives (G1).
 // Usage: BOT_SKILL=3 RUNS=2 PORT=3621 node test/wardenskill.js
 //        (env: START_LEVEL=10, SPAWN_AT=0,150, LIMIT=300 s per run, WARDEN_TWIST to force a twist,
 //         ROLES=guardian,ranger,bard,cleric, START_STYLE=daggers,drum to arm each class with the first of its styles listed,
@@ -26,7 +26,7 @@ async function run(i) {
   for (let k = 0; k < 150 && !/running on/.test(log); k++) await sleep(100);
   const g = startTeam({ url: `ws://localhost:${PORT}/ws`, WebSocket, skill: SKILL, ...(process.env.ROLES ? { roles: process.env.ROLES.split(',') } : {}), log: m => { if (process.env.LOG_TALENTS && m.startsWith('[talent]')) console.log(m); } });
   const lead = g.team[0];
-  const res = { run: i + 1, result: 'timeout', secs: 0, deaths: 0, twist: (log.match(/Warden twist: (\w+)/) || [])[1] || '?' };
+  const res = { run: i + 1, result: 'timeout', secs: 0, deaths: 0, downs: 0, revives: 0, twist: (log.match(/Warden twist: (\w+)/) || [])[1] || '?' };
   let start = null, hit = false, done = false;
   const t0 = Date.now();
   const stats = new Map(g.team.map(b => [b, { dmg: 0, presses: 0, swings: 0, landed: 0, style: null }]));
@@ -48,6 +48,8 @@ async function run(i) {
     }
     for (const e of msg.w.events) {
       if (e.t === 'pdie' && ids.has(e.id) && start) { res.deaths++; (res.causes ||= []).push(e.src); }
+      if (e.t === 'down' && ids.has(e.id) && start) res.downs++;
+      if (e.t === 'revived' && ids.has(e.id) && start) res.revives++;
       if (e.t === 'sys' && /Horned Warden has fallen/.test(e.text)) { res.result = 'kill'; done = true; }
     }
     const w = msg.w.mobs.find(m => m[1] === 2); // warden
@@ -69,8 +71,8 @@ async function run(i) {
 }
 
 const out = [];
-for (let i = 0; i < RUNS; i++) { const r = await run(i); out.push(r); console.log(`[skill ${SKILL} ${skillName(SKILL)}] run ${r.run}: ${r.result} in ${r.secs}s, ${r.deaths} deaths (twist ${r.twist}) · Quake Rings: ${r.quake.jump} jumped, ${r.quake.roll} rolled, ${r.quake.hit} hit${r.causes ? ` · deaths to ${r.causes.join(', ')}` : ''}`); for (const l of r.stats || []) console.log(`    ${l}`); }
+for (let i = 0; i < RUNS; i++) { const r = await run(i); out.push(r); console.log(`[skill ${SKILL} ${skillName(SKILL)}] run ${r.run}: ${r.result} in ${r.secs}s, ${r.deaths} deaths, ${r.downs} downed, ${r.revives} revived (twist ${r.twist}) · Quake Rings: ${r.quake.jump} jumped, ${r.quake.roll} rolled, ${r.quake.hit} hit${r.causes ? ` · deaths to ${r.causes.join(', ')}` : ''}`); for (const l of r.stats || []) console.log(`    ${l}`); }
 const wins = out.filter(r => r.result === 'kill');
 const qt = k => out.reduce((s, r) => s + r.quake[k], 0), qn = qt('jump') + qt('roll') + qt('hit');
-console.log(`[skill ${SKILL} ${skillName(SKILL)}] ${wins.length}/${out.length} kills · avg kill time ${wins.length ? Math.round(wins.reduce((s, r) => s + r.secs, 0) / wins.length) : '-'}s · avg deaths ${(out.reduce((s, r) => s + r.deaths, 0) / out.length).toFixed(1)} · Quake Rings cleared ${qn ? Math.round((100 * (qn - qt('hit'))) / qn) : '-'}% of ${qn}`);
+console.log(`[skill ${SKILL} ${skillName(SKILL)}] ${wins.length}/${out.length} kills · avg kill time ${wins.length ? Math.round(wins.reduce((s, r) => s + r.secs, 0) / wins.length) : '-'}s · avg deaths ${(out.reduce((s, r) => s + r.deaths, 0) / out.length).toFixed(1)} · avg revives ${(out.reduce((s, r) => s + r.revives, 0) / out.length).toFixed(1)} (of ${(out.reduce((s, r) => s + r.downs, 0) / out.length).toFixed(1)} downs) · Quake Rings cleared ${qn ? Math.round((100 * (qn - qt('hit'))) / qn) : '-'}% of ${qn}`);
 process.exit(0);

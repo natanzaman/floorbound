@@ -27,6 +27,7 @@ import { installBell } from './bell.js';
 import { installStaging } from './staging.js';
 import { installCine } from './cine.js'; // cinematic camera state for filming (F4)
 import { installPoses } from './poses.js';
+import { installRevive } from './revive.js';
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -648,7 +649,7 @@ export class Game {
         const want = p.healTid && this.players.get(p.healTid); // a bot healer's pick (its party's most hurt / "heal me")
         if (want && !want.dead && dist(want, p) <= 15 && want.hp < want.maxHp) low = -1, target = want;
         for (const o of this.players.values()) {
-          if (o.dead || dist(o, p) > 15 * this.styleNum(p, 'healR', 1)) continue; // Wand: +50% range
+          if (o.dead || this.unhealable?.(o) || dist(o, p) > 15 * this.styleNum(p, 'healR', 1)) continue; // Wand: +50% range; downed: only while being revived
           const f = o.hp / o.maxHp;
           if (f < low) { low = f; target = o; }
         }
@@ -877,18 +878,21 @@ export class Game {
     p.lastHurt = this.time; p.lastCombat = this.time;
     this.onHurtA?.(p, amount); // Berserker Rage (server/classes-a.js)
     this.events.push({ t: 'hurt', id: p.id, a: amount, ...(this.bigHit(src) ? { big: 1 } : {}) }); // big: the victim's client hit-stops
-    if (p.hp <= 0) {
-      p.hp = 0; p.dead = true; p.respawnAt = this.time + 4;
-      p.xp = Math.max(0, p.xp - Math.round(xpToNext(p.lvl) * 0.1)); p.dirty = true;
-      p.deaths++;
-      if (this.fight?.ids.has(p.id)) this.fight.deaths++;
-      if (this.fight && (this.fight.ids.has(p.id) || inArena(p.x, p.z))) (this.fight.pd ||= new Map()).set(p.id, (this.fight.pd.get(p.id) || 0) + 1); // for "Undying"
-      this.bumpStat(p, 'deaths');
-      const floor = floorOf(p.x); // the respawn point (and the stats page) depend on the floor you died on
-      this.track(p, 'death', { cause: src, lvl: p.lvl, floor, area: (floor === 2 ? inArena2(p.x, p.z) : inArena(p.x, p.z)) ? 'arena' : p.z > 95 ? 'woods' : 'field', ...this.fightCtx?.(p) });
-      this.events.push({ t: 'pdie', id: p.id, src, f: floor });
-      this.sys(`${p.name} was defeated.`);
-    }
+    if (p.hp <= 0 && !this.goDown?.(p, src)) this.killPlayer(p, src); // downed instead, with a partymate nearby (server/revive.js)
+  }
+
+  // A player's death (0 HP, or a downed player bleeding out): XP loss, stats, tracking, `pdie`; respawns in 4 s.
+  killPlayer(p, src = '?') {
+    p.hp = 0; p.dead = true; p.respawnAt = this.time + 4;
+    p.xp = Math.max(0, p.xp - Math.round(xpToNext(p.lvl) * 0.1)); p.dirty = true;
+    p.deaths++;
+    if (this.fight?.ids.has(p.id)) this.fight.deaths++;
+    if (this.fight && (this.fight.ids.has(p.id) || inArena(p.x, p.z))) (this.fight.pd ||= new Map()).set(p.id, (this.fight.pd.get(p.id) || 0) + 1); // for "Undying"
+    this.bumpStat(p, 'deaths');
+    const floor = floorOf(p.x); // the respawn point (and the stats page) depend on the floor you died on
+    this.track(p, 'death', { cause: src, lvl: p.lvl, floor, area: (floor === 2 ? inArena2(p.x, p.z) : inArena(p.x, p.z)) ? 'arena' : p.z > 95 ? 'woods' : 'field', ...this.fightCtx?.(p) });
+    this.events.push({ t: 'pdie', id: p.id, src, f: floor });
+    this.sys(`${p.name} was defeated.`);
   }
 
   // ---------- simulation ----------
@@ -1338,7 +1342,7 @@ export class Game {
     const g = this.gate;
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
     const gate = [g.open ? 1 : 0, waiting, g.ready.size, g.countAt ? r1(Math.max(0, g.countAt - this.time)) : 0];
-    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), gi: this.groundSnap(), poses: this.posesSnap() }); // poses: [[id, k]], only while any is held (server/poses.js)
+    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), gi: this.groundSnap(), poses: this.posesSnap(), down: this.downSnap?.() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
     this.events = [];
     return out;
   }
@@ -1374,4 +1378,5 @@ installCine(Game); // cine(op, data), cineState(): filming camera, titles, fades
 installPoses(Game); // kneel / sit / bow: setPose, /kneel chat, cleared by moving or acting (server/poses.js)
 installTracking(Game); // play-tracking hooks: boss fight rows, death / quit context (server/trackgame.js)
 installStaging(Game); // staging hooks for the scene director: boss moves, reserved Last Attack, scripted deaths (server/staging.js)
+installRevive(Game); // downed + revive (server/revive.js)
 installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js); keep it last
