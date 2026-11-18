@@ -66,7 +66,7 @@ base 1fc8892. node_modules installed by `npm ci` (gitignored). Do NOT touch publ
 - Bot runs before/after: `ROLES=guardian,ranger,cleric,swordsman,lancer BOT_SKILL=5 RUNS=4 PORT=36xx node test/wardenskill.js`
   (before: docs/handoffs/ability-pacing-data/before.txt).
 - Then code-reviewer (Opus high, fresh: brief + diff), fixes, rebase on main, merge --no-ff into main, run tests, push once:
-  `git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push origin main`.
+  `git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push --force-with-lease --force-if-includes origin main` (Natan's rule, 2026-11-18: never a plain push).
 
 ## Not verified
 - Clip lengths read from public/models/knight.glb: slash clips ~1.0 s at 2.0x = 0.5 s; paced 0.65 s vs 0.55 cd: the next swing

@@ -9,7 +9,7 @@
 //  - moveMob / f2Move: slows (Dissonance, Hamstring, Lullaby, Feedback)
 //  - bookBuffs / absorbHit: mastery credit for Anthem / War March and Crescendo's shields
 //  - updateProjectiles: the per-tick upkeep (sonic bolts, songs, buff expiry, Crescendo build-up)
-import { POSTURE, angleTo, resolveCollision } from '../shared/data.js';
+import { POSTURE, angleTo, resolveCollision, paced } from '../shared/data.js';
 import { BRANCHES } from '../shared/mastery.js';
 import { LANCE } from '../shared/classes/lancer.js';
 import { SONG } from '../shared/classes/bard.js';
@@ -80,7 +80,7 @@ const methods = {
   },
   // Leap: airborne (ground attacks miss, like a jump) until it lands `air` s later.
   skyLeap(p, c, spot, land) {
-    const t = this.time, air = LANCE.sky.air;
+    const t = this.time, air = paced(LANCE.sky.air);
     p.face = spot.face; p.airFrom = t; p.airUntil = t + air;
     this.cbFx(p, 'skymark', { s: c.S, ev2: c.ev || 'skylance', x2: r2(spot.x), z2: r2(spot.z), d: air, r: c.ev === 'meteor' ? LANCE.meteor.r : c.ev === 'pinning' ? LANCE.pin.r : LANCE.sky.r });
     this.schedule(air, () => {
@@ -258,7 +258,7 @@ const SKILLS = {
     this.cbFx(p, 'hitrun', { s: c.S, x2: r2(tx), z2: r2(tz) });
     this.hitLine(p, x0, z0, tx, tz, LANCE.charge.width, c.atk * H.mult, { knock: 0.8, heavy: true, sk: c.S });
     this.teleport(p, tx, tz);
-    this.schedule(H.back, () => {
+    this.schedule(paced(H.back), () => {
       if (!this.cbAlive(p)) return;
       this.cbFx(p, 'hitrunBack', { x2: r2(x0), z2: r2(z0) });
       this.teleport(p, x0, z0);
@@ -267,7 +267,7 @@ const SKILLS = {
   cyclone(p, c) { // two wide spins, no stagger
     const C = LANCE.cyclone;
     for (let i = 0; i < C.spins; i++) {
-      this.schedule(i * C.gap, () => {
+      this.schedule(i * paced(C.gap), () => {
         if (!this.cbAlive(p)) return;
         this.cbFx(p, 'cyclone', { s: i ? undefined : c.S, n: i, r: C.r });
         this.hitCircle(p, p.x, p.z, C.r, p.atk * this.dmgMult(p) * c.pow * C.mult, { knock: 0.4, sk: c.S });

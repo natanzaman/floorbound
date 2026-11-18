@@ -1,7 +1,7 @@
 // Floorbound browser client: networking, input, camera, entities and HUD.
 import * as THREE from 'three';
 import {
-  CLASSES, CLASS_IDS, MOBS, MOB_IDS, PLAYER_SPEED, SPRINT_SPEED, SPRINT_AFTER, TICK_RATE, MAX_LEVEL, DODGE, JUMP,
+  CLASSES, CLASS_IDS, MOBS, MOB_IDS, PACE, PLAYER_SPEED, SPRINT_SPEED, SPRINT_AFTER, TICK_RATE, MAX_LEVEL, DODGE, JUMP,
   walkable, resolveCollision, inTown, inArena, areaName, angleTo, inGateZone,
 } from '/shared/data.js';
 import { airStep } from '/shared/data.js'; // jump air control
@@ -471,7 +471,7 @@ function handleEvent(e) {
       const m = mobs.get(e.id);
       if (m) {
         m.wind = e.d;
-        if (m.def?.boss && m.model.anim?.windup) m.model.anim.windup('cleave', e.d); else m.model.anim?.shot('2H_Melee_Attack_Chop', 1.4); // bosses: a readable wind-up pose (world.js WINDUPS)
+        if (m.def?.boss && m.model.anim?.windup) m.model.anim.windup('cleave', e.d); else m.model.anim?.shot('2H_Melee_Attack_Chop', m.def?.boss ? 1.4 / PACE : 1.4); // bosses: a readable wind-up pose (world.js WINDUPS)
         if ((m.type === 'wolf' || m.type === 'alpha') && Math.random() < 0.4) sfx.play('growl', m.model.group.position, 0.7);
         if (e.r) fx.wedge(m.x, m.z, e.f, e.r, e.h, e.d);                 // bite wedge: step out of it
         if (e.ax !== undefined) fx.aimLine(m.x, m.z, e.ax, e.az, e.d);   // thorn shot: sidestep the line
@@ -496,7 +496,7 @@ function handleEvent(e) {
       sfx.play('warn', { x: e.x, z: e.z });
       if (mine) guide.tip('slam');
       if (boss && e.k !== 'lurk' && e.k !== 'pool') {
-        if (boss.def.f2) bossShot(boss.id, e.follow ? '2H_Melee_Attack_Spin' : '2H_Melee_Attack_Slice', 1.2, Math.max(0, e.d - 0.55));
+        if (boss.def.f2) bossShot(boss.id, e.follow ? '2H_Melee_Attack_Spin' : '2H_Melee_Attack_Slice', 1.2 / PACE, Math.max(0, e.d - 0.55));
         else boss.model.anim?.windup?.(e.follow ? 'spin' : 'slam', e.d); // the Warden rears up (slam) or winds round (spin)
       }
       break;
@@ -656,7 +656,7 @@ function playSkillAnim(ent, skill, n) {
   if (!ent?.model.anim || !list) return;
   const i = n ?? (ent.combo = (ent.combo || 0) + 1);
   const [name, speed] = list[i % list.length];
-  ent.model.anim.shot(name, speed);
+  ent.model.anim.shot(name, speed / PACE); // ability pacing: skill clips run PACE x slower
 }
 const bossShot = (id, name, speed, delay = 0) => setTimeout(() => mobs.get(id)?.model.anim?.shot(name, speed), delay * 1000);
 

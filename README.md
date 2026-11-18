@@ -49,6 +49,8 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 
 Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 3-hit combos with a heavy, knockback finisher. You sprint automatically after 3 seconds out of combat. All sound effects and music are synthesized in the browser (`public/audio.js`), so there are no audio files.
 
+**Ability pacing:** skills with a wind-up, draw, leap or several hits (Piercing Shot's draw, Rain of Arrows, Leap Slam, Burst Combo, Sky Lance, Starburst and so on) and the Warden's and Sovereign's wind-ups run about 30% slower than before, so each move reads. A skill's cooldown now starts when it finishes, not when you press it (instant skills are unchanged, and basic attacks keep their rhythm). Tuning: `PACE` in `shared/data.js` (set it to 1 to turn pacing off).
+
 ## Floor 1 enemies
 
 | Enemy | Level | What it does |
@@ -149,7 +151,7 @@ With a database, the server records play events (session start/end, first kill, 
 - **Switch:** the first hit from a *teammate* on a broken enemy does 2.5x damage, and follow-up hits do 1.4x. You can't Switch your own Break. Charms of the Switch boost this further.
 - **Perfect dodge:** start a roll at most ~0.2 s before a hit lands and it's PERFECT: a brief slow-motion flash, heavy posture damage to the attacker, and for 1.5 s your next hit does +50% damage and double posture damage.
 - **Guard and parry (Guardian, R):** hold R to guard: hits from the front (±70°) take 70% less damage, but you can't attack and you move at half speed. Press R at most ~0.2 s before a frontal hit lands to **parry** it: no damage at all, and big posture damage to the attacker. Mashing R doesn't parry.
-- **Perilous attacks:** the Warden's **Horn Sweep** shows an orange/gold circle around it with a "!" glint and its own warning horn (about 1.2 s). Anyone inside takes about 80% of their max health: Shield Wall, Taunt, guarding, gear and jumping don't reduce it. Roll through it (i-frames) or parry it. Breaking the Warden during the wind-up cancels it. It comes every ~12 s in phase 1, more often later (never while a Quake Ring is still rolling out near the Warden).
+- **Perilous attacks:** the Warden's **Horn Sweep** shows an orange/gold circle around it with a "!" glint and its own warning horn (about 1.6 s). Anyone inside takes about 80% of their max health: Shield Wall, Taunt, guarding, gear and jumping don't reduce it. Roll through it (i-frames) or parry it. Breaking the Warden during the wind-up cancels it. It comes every ~12 s in phase 1, more often later (never while a Quake Ring is still rolling out near the Warden).
 - **Combat text and hit feel:** floating texts on the same character stagger into lanes and repeats merge ("Jumped! ×3"). Your own reactions (Jumped!, Dodged!, PERFECT, PARRY!, COUNTER, Switch, talent/style procs) show only to you; effects on a target (BROKEN, MARKED, PINNED, Discord) show to everyone; other players' damage numbers are small and dim, with only a few on screen at once. When a boss's big hit (Warden slam, charge, Horn Sweep, Quake Ring, rockfall; the Sovereign's trident, geysers, Tidal Wave) lands on you, your screen alone freezes for ~75 ms with a small shake; stomps and Quake Rings shake the camera more the closer they land. Player hits never hit-stop.
 
 ## Skill mastery and evolutions
@@ -162,7 +164,7 @@ Each class skill on 1, 2 and 3 (not the basic attack) has its own **Mastery** le
 
 | Skill | A | B |
 | --- | --- | --- |
-| Rush | **Phantom Rush**: dash through, an afterimage strikes the path again 0.4 s later | **Shoulder Charge**: stop on the first enemy, heavy posture damage and a stun (co-op) |
+| Rush | **Phantom Rush**: dash through, an afterimage strikes the path again about 0.5 s later | **Shoulder Charge**: stop on the first enemy, heavy posture damage and a stun (co-op) |
 | Whirl | **Vortex**: pull enemies within 7 m in, then spin (co-op) | **Blade Ring**: smaller ring that spins with you for 1.5 s while you move |
 | Burst Combo | **Starburst**: 6 hits, more damage, no Break | **Finisher**: 2 hits; above 50% health the second fills posture, instant BREAK (co-op) |
 | Taunt | **Challenge**: one enemy deals 30% less to everyone but you for 5 s (co-op) | **War Cry**: 11 m taunt that drags enemies in, allies +10% damage for 6 s (co-op) |

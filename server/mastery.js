@@ -3,7 +3,7 @@
 //  - useEvolved() runs the 18 evolved skills; useSkill() hands a skill over when its branch is active (Mastery 3+).
 //  - Lasting effects: Renew (heal over time), Bulwark (stand still), Aegis shields, Iron Skin reflect, Challenge,
 //    War Cry, Zeal, Purify (Miracle), Haven / Consecrate zones.
-import { CLASSES, angleTo, wrapAngle, resolveCollision, inTown } from '../shared/data.js';
+import { CLASSES, angleTo, wrapAngle, resolveCollision, inTown, paced } from '../shared/data.js';
 import { MASTERY, BRANCHES, newMastery, masteryLevel, activeBranch, masteryCd, masteryPow, nearShrine } from '../shared/mastery.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -131,7 +131,7 @@ export const MasteryMethods = {
         fx({ x2: r2(tx), z2: r2(tz) });
         this.hitLine(p, x0, z0, tx, tz, 1.8, atk * 1.35, { sk: S });
         this.teleport(p, tx, tz);
-        this.schedule(0.4, () => {
+        this.schedule(paced(0.4), () => {
           if (!alive()) return;
           this.events.push({ t: 'fx', k: 'evo', ev: 'phantom2', id: p.id, x: r2(x0), z: r2(z0), x2: r2(tx), z2: r2(tz) });
           this.hitLine(p, x0, z0, tx, tz, 1.8, atk * 0.8, { sk: S, knock: 1.2 });
@@ -158,7 +158,7 @@ export const MasteryMethods = {
         const R = 7.5;
         for (const m of this.mobs.values()) if (this.targetable(m) && dist(m, p) <= R + m.def.radius) this.dragToward(m, p, R);
         fx({ r: R });
-        this.schedule(0.25, () => {
+        this.schedule(paced(0.25), () => {
           if (!alive()) return;
           this.events.push({ t: 'fx', k: 'evo', ev: 'vortex2', id: p.id, x: r2(p.x), z: r2(p.z), r: 4.2 });
           this.hitCircle(p, p.x, p.z, 4.2, atk * 1.4, { sk: S, knock: 0.4 });
@@ -172,12 +172,12 @@ export const MasteryMethods = {
           this.hitCircle(p, p.x, p.z, 3.2, atk * 0.45, { sk: S, knock: 0.25 });
         };
         tick(0);
-        for (let i = 1; i < 4; i++) this.schedule(i * 0.5, () => tick(i));
+        for (let i = 1; i < 4; i++) this.schedule(i * paced(0.5), () => tick(i));
         break;
       }
       case 'starburst': // 6 hits, more damage, no Break chunk
         for (let i = 0; i < 6; i++) {
-          this.schedule(i * 0.15, () => {
+          this.schedule(i * paced(0.15), () => {
             if (!alive()) return;
             const fin = i === 5;
             this.events.push({ t: 'fx', k: 'evo', ev: 'starburst', s: S, n: i, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), r: 3.2 });
@@ -187,7 +187,7 @@ export const MasteryMethods = {
         break;
       case 'finisher': // 2 hits; the second fills posture on an enemy above 50% health
         for (let i = 0; i < 2; i++) {
-          this.schedule(i * 0.3, () => {
+          this.schedule(i * paced(0.3), () => {
             if (!alive()) return;
             this.events.push({ t: 'fx', k: 'evo', ev: 'finisher', s: S, n: i, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), r: 3.4 });
             const A = p.atk * this.dmgMult(p) * pow;
@@ -257,7 +257,7 @@ export const MasteryMethods = {
         const dx = Math.sin(p.face), dz = Math.cos(p.face), x0 = p.x, z0 = p.z, seg = 3, hit = new Set();
         let blocked = false;
         for (let i = 0; i < 4; i++) {
-          this.schedule(i * 0.1, () => {
+          this.schedule(i * paced(0.1), () => {
             if (blocked || !alive()) return;
             const ax = x0 + dx * seg * i, az = z0 + dz * seg * i, bx = ax + dx * seg, bz = az + dz * seg;
             if (!this.walk(bx, bz)) { blocked = true; return; }

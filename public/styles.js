@@ -5,6 +5,7 @@
 // main.js calls initStyles() once and routes snapshot rows (snap) and events (event) here.
 import * as THREE from 'three';
 import { STYLES, STYLE_IDS, altStyle, styleOf } from '/shared/styles.js';
+import { PACE } from '/shared/data.js';
 
 const CSS = `
 .sty { color: #fcd34d; font-weight: 700; }
@@ -239,7 +240,7 @@ export function initStyles(ctx) {
     if (ent && !e.tw) {
       ent.swing = 0.3;
       const list = ANIM[e.st];
-      if (list && ent.model.anim) { const [name, speed] = list[e.n % list.length]; ent.model.anim.shot(name, speed); }
+      if (list && ent.model.anim) { const [name, speed] = list[e.n % list.length]; ent.model.anim.shot(name, speed / PACE); } // ability pacing
     }
     const ox = e.id === me ? state.x : e.x, oz = e.id === me ? state.z : e.z, at = { x: ox, z: oz };
     const [dx, dz] = fwd(e.f);

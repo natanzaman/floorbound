@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { RIGS } from '/world.js';
 import { LANCE } from '/shared/classes/lancer.js';
+import { PACE } from '/shared/data.js';
 import { SONG } from '/shared/classes/bard.js';
 
 const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);
@@ -191,7 +192,7 @@ export function initClassesB(ctx) {
   function playAnim(id, key, n, sty) {
     const p = players.get(id), a = ANIM[key]?.(n, sty);
     if (!p?.model.anim || !a) return;
-    p.model.anim.shot(a[0], a[1]);
+    p.model.anim.shot(a[0], a[1] / PACE); // ability pacing: skill clips run PACE x slower
     p.swing = 0.3;
   }
   function onFx(e) {

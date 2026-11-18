@@ -14,6 +14,8 @@ export const RANGER = {
   ],
 };
 
+// Use times here (draws, rain delay / spacing) are base values: the server applies x PACE (shared/data.js paced()) where it
+// uses them (server/classes-a.js), since this file can't import data.js.
 export const RANGER_TUNE = {
   // Arrows are real projectiles: they fly at `speed` m/s, steer gently toward the target picked when fired
   // (`homing` rad/s), and hit the first enemy in their path. Point-blank: x`close[2]` within close[0] m, full damage from close[1] m.
@@ -32,8 +34,8 @@ export const RANGER_TUNE = {
 
 export const RANGER_BRANCHES = {
   pierce: {
-    A: { id: 'rainofarrows', name: 'Rain of Arrows', desc: 'Loose a volley into the air: arrows rain on an area 4.5 m wide for 1.5 s, chipping posture on everything inside.', coop: 1 },
-    B: { id: 'snipershot', name: 'Sniper Shot', desc: 'A long 1.1 s draw, then one huge arrow (no pierce) with massive posture damage. Longer cooldown.', cd: 1.3 },
+    A: { id: 'rainofarrows', name: 'Rain of Arrows', desc: 'Loose a volley into the air: arrows rain on an area 4.5 m wide for about 2 s, chipping posture on everything inside.', coop: 1 },
+    B: { id: 'snipershot', name: 'Sniper Shot', desc: 'A long 1.4 s draw, then one huge arrow (no pierce) with massive posture damage. Longer cooldown.', cd: 1.3 },
   },
   disengage: {
     A: { id: 'snaretrap', name: 'Snare Trap', desc: 'Hop back 4 m and leave a snare: the first enemies to step in are rooted for 2.5 s and lose posture. Sets up a Switch.', coop: 1 },

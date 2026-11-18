@@ -3,6 +3,7 @@
 // world.js calls attachClassA() to put the Ranger's bow in its hand.
 import * as THREE from 'three';
 import { RANGER_TUNE as RT } from '/shared/classes/ranger.js';
+import { PACE } from '/shared/data.js';
 
 const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
@@ -145,7 +146,7 @@ export function initClassesA(ctx) {
     const ent = players.get(id), list = ANIM[key];
     if (!ent?.model.anim || !list) return;
     const [name, speed] = list[n % list.length];
-    ent.model.anim.shot(name, speed);
+    ent.model.anim.shot(name, name.startsWith('Dodge_') ? speed : speed / PACE); // ability pacing: skill clips run PACE x slower (the Dodge_ hops of the instant skills stay)
   }
 
   // ---------- visuals ----------
