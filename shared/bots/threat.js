@@ -18,15 +18,24 @@ function underTele(b, o, soon) {
   return false;
 }
 
-// Guardian: Cover a partymate under half health that a big hit is about to land on (a winding boss / elite after them,
-// or a telegraph on them). Noticed with the bot's Switch awareness (capability). Returns true if it covered.
+// A winding boss / elite is about to hit o: o is its target, or stands in its frontal swing (it faces its target).
+function inSwing(b, m, o) {
+  if (!m.winding || !(m.def.boss || m.def.elite) || !near(m, o.x, o.z, m.def.range + m.def.radius + 1.5)) return false;
+  if (m.tgt === o.id) return true;
+  const t = m.tgt && (b.players || []).find(p => p.id === m.tgt);
+  if (!t) return false;
+  const a = Math.atan2(o.x - m.x, o.z - m.z) - Math.atan2(t.x - m.x, t.z - m.z);
+  return Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < 1.3; // the Warden's cleave arc
+}
+
+// Guardian: Cover a partymate under half health that a big hit is about to land on (a winding boss / elite after them
+// or swinging through where they stand, or a telegraph under them). Noticed with the bot's Switch awareness (capability). Returns true if it covered.
 export function botCover(b, ctx) {
   if (b.dead || b.cls !== 'guardian' || (b.me?.cov ?? 99) > 0.05 || b.t - (b.coverT ?? -99) < 0.8) return false;
   const aware = (BOT_SKILLS[b.skill] || BOT_SKILLS[5]).switchAware;
   for (const o of ctx.party.all) {
     if (o.id === b.id || o.dead || o.hp / o.maxHp >= 0.5 || !near(o, b.x, b.z, COVER.range - 0.5)) continue;
-    const winding = b.mobs.some(m => m.tgt === o.id && m.winding && (m.def.boss || m.def.elite) && near(m, o.x, o.z, m.def.range + m.def.radius + 3));
-    if (!winding && !underTele(b, o, 1.3)) continue;
+    if (!b.mobs.some(m => inSwing(b, m, o)) && !underTele(b, o, 1.3)) continue;
     b.coverT = b.t;
     if (Math.random() >= aware) return false; // didn't see it in time (lower capability)
     b.send({ type: 'cover', tid: o.id });

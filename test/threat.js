@@ -254,7 +254,11 @@ function race(taunt) {
   assert.deepEqual(sent[0], { type: 'cover', tid: 2 }, 'Covers the hurt ally the winding boss is after');
   b.t += 5; sent.length = 0; mate.hp = 80;
   assert.equal(botCover(b, ctx), false, 'not when they are healthy');
-  mate.hp = 40; warden.winding = false;
+  mate.hp = 40; warden.tgt = 1; b.players = [{ id: 1, x: 0, z: 3 }, mate];
+  assert.equal(botCover(b, ctx), true, 'in the swing aimed at the tank');
+  b.t += 5; sent.length = 0; mate.x = 0; mate.z = 16; // behind the boss
+  assert.equal(botCover(b, ctx), false, 'not behind it');
+  mate.x = 2; mate.z = 6; warden.tgt = 2; warden.winding = false;
   assert.equal(botCover(b, ctx), false, 'not without a big hit coming');
   b.tele = [{ x: 2, z: 6, r: 3, until: b.t + 0.8 }];
   assert.equal(botCover(b, ctx), true, 'a telegraph under them counts');
