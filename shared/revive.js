@@ -19,9 +19,9 @@ export const DOWNED = {
   iframe: 1.2,     // s of invulnerability after getting up
   heal: 0.4,       // a Cleric Heal on the downed ally during the channel: this fraction of the channel done at once
   heavy: 0.12,     // the reviver loses the channel to a hit of at least this fraction of their max HP (or a boss big hit)
-  hitBleed: 8,     // a hit on a downed player takes (hit / max HP) × this many seconds off the bleed-out,
-  hitBleedMin: 0.25, hitBleedMax: 3, // ...within these bounds (s)
-  bossThreat: 0.2, // going down cuts your threat on bosses to this fraction: bosses prefer standing players
+  hitBleed: 4,     // a hit on a downed player takes (hit / max HP) × this many seconds off the bleed-out,
+  hitBleedMin: 0.25, hitBleedMax: 1.5, // ...within these bounds (s)
+  bossThreat: 0.2, // going down cuts your threat on bosses (and their hounds) to this fraction: they prefer standing players
 };
 
 // Revive time for a player already revived n times this fight.

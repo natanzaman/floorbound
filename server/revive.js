@@ -2,7 +2,8 @@
 //  - game.js damagePlayer calls goDown(p, src) at 0 HP: with a standing partymate within DOWNED.near (same floor) the
 //    player goes downed (p.downed, still "alive": p.dead stays false, hp 0) instead of dying. Solo: killPlayer as before.
 //  - A downed player crawls (onInput clamps to DOWNED.crawl), can't attack, dodge, jump, guard or drink, and bleeds out
-//    (killPlayer) after DOWNED.secs. Hits on them take bleed time off. Bosses cut their threat (they prefer standing players).
+//    (killPlayer) after DOWNED.secs. Hits on them take bleed time off. Bosses and their summons cut their threat (they
+//    prefer standing players); other enemies keep attacking them.
 //  - A partymate sends { type: 'revive', on: 1, id } (hold E) within DOWNED.reach to channel a revive (reviveTime, longer
 //    for each earlier revive of that player this fight). Moving away, a heavy hit, or acting (skill, dodge, jump, guard,
 //    potion) breaks it (the progress then fades unless someone resumes); a Cleric's Heal on the body speeds it (and doesn't break the Cleric's own channel). Done: up at
@@ -47,8 +48,8 @@ const methods = {
     p.hp = 0; p.regenAcc = 0;
     p.downed = { at: t, until: t + DOWNED.secs, src, by: 0, prog: 0, need: reviveTime(p.reviveN | 0) };
     p.downs = (p.downs || 0) + 1;
-    for (const m of this.mobs.values()) { // bosses turn to the players still standing
-      if (m.def.boss && m.threat.has(p.id)) m.threat.set(p.id, m.threat.get(p.id) * DOWNED.bossThreat);
+    for (const m of this.mobs.values()) { // bosses (and their summons: hounds, totems) turn to the players still standing
+      if ((m.def.boss || m.temp) && m.threat.has(p.id)) m.threat.set(p.id, m.threat.get(p.id) * DOWNED.bossThreat);
     }
     this.events.push({ t: 'down', id: p.id, src, d: DOWNED.secs, x: r2(p.x), z: r2(p.z) });
     this.sys(`${p.name} is down! Hold E next to them to revive.`);

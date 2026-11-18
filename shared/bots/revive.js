@@ -4,7 +4,7 @@
 //   reviveTurn(b, P)       a partymate is down and this bot is the one to go: walk over, hold the revive (true = turn taken)
 // Who goes (every bot works it out the same way, one reviver per body): the party's Cleric (healer) within 20 m first,
 // then the closest bot that isn't the tank, then the tank. A careful bot waits while a boss stands over the body (the
-// downed bot crawls out from under it). Capability (BOT_REVIVE) sets the reaction delay and how often the bot keeps
+// downed bot crawls out from under it; the tank, who has the boss on it anyway, doesn't wait). Capability (BOT_REVIVE) sets the reaction delay and how often the bot keeps
 // channelling inside a telegraph or next to the boss instead of stepping out.
 import { DOWNED, BOT_REVIVE } from '../revive.js';
 import { clampSkill } from '../botskill.js';
@@ -86,7 +86,8 @@ export function reviveTurn(b, P) {
   const d = assignment(b, P);
   const seen = d && b.downSeen?.get(d.id);
   if (!d || (b.rev?.id !== d.id && b.t < (seen?.at ?? 0))) { if (b.rev) release(b); return false; } // not ours, or not noticed yet
-  if (b.rev?.id !== d.id && !seen?.careless && bossOver(b, d.x, d.z)) return false; // wait until the body is clear of the boss
+  const wary = !seen?.careless && b.role !== 'tank'; // (the tank has the boss on it anyway)
+  if (b.rev?.id !== d.id && wary && bossOver(b, d.x, d.z)) return false; // wait until the body is clear of the boss
   if (b.rev?.id !== d.id) {
     release(b);
     b.rev = { id: d.id, sent: false, at: 0, careless: !!seen?.careless };
@@ -95,7 +96,7 @@ export function reviveTurn(b, P) {
   const R = b.rev;
   b.goal = `Reviving ${b.names?.get(d.id)?.name || 'a partymate'}`;
   const spot = dodgeSpot(b);
-  if (!R.careless && !spot && bossOver(b, d.x, d.z)) { release(b); return false; } // the boss came back over the body: back off
+  if (wary && !spot && bossOver(b, d.x, d.z)) { release(b); return false; } // the boss came back over the body: back off
   if (spot && !R.careless) { // step out of the red first (lets go of E)
     if (R.sent) { b.send({ type: 'revive', on: 0 }); R.sent = false; }
     evade(b, ...spot);
