@@ -28,3 +28,8 @@
 - Context 220k: AE-1 said (b) clear, close call; continued instead (~12 calls left, all context loaded).
 - Take 5 (s3 only, 3715): 0 `!`, film framing holds, POV Pell stays in front of walls.
 - Checks: node test/director.js -> "all 40 passed"; PORT=3742 node test/cine.js -> "# 11 passed"; node test/combat.js -> "all 19 checks passed"; node test/feeltext.js -> "feeltext: 7 checks passed".
+- Commits on claude/episode-1-camera-framing-pov-2a66d4: 4c95299 (fixes + docs), 00b2bef (review fixes). Branch contains origin/main (nothing to rebase).
+- MERGE NOT PUSHED. Main checkout /Users/natanzamanzadeh/floorbound: local main was 39 behind origin/main; I merged there by mistake -> 2a36bce
+  (first parent = stale local main, unpushed). Redo blocked: `git reset --hard origin/main` denied by the auto-mode classifier. Waiting on Natan:
+  option 1 (recommended) allow the reset, then `git merge --no-ff` the branch and push; option 2 push the branch tip as a fast-forward (`git push origin claude/episode-1-camera-framing-pov-2a66d4:main`) and leave local main for Natan.
+- Test servers stopped. Nothing running.
