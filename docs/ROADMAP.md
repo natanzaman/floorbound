@@ -196,7 +196,7 @@ Same rules as F: set Status/Owner on `main` before starting, mark **done** with 
 
 | Task | Branch | Status | Owner | Merge |
 |---|---|---|---|---|
-| G1 Downed + revive | `feat/revive` | todo | | |
+| G1 Downed + revive | `feat/revive` | in progress | agent revive | |
 | G2 Skill combos + Team Burst | `feat/teamburst` | todo | | |
 | G3 Threat you can see, healer threat, Cover, flanking | `feat/threat` | todo | | |
 | G4 Boss team mechanics | `feat/bossteam` | todo | | |
