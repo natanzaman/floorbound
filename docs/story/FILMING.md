@@ -13,12 +13,15 @@ With no database there are no admins either: the Director answers **only from th
 
 ## 2. Open the film view and the Director
 - **Film view:** `http://localhost:3000/?spectate=1&film=1` in its own browser window, sized to your recording (16:9; the letterbox makes it 2.39:1). It follows the director's camera, titles, fades, letterbox, light and clean feed.
+- **POV views (optional, for a multi-camera take):** `http://localhost:3000/?spectate=1&pov=<name>` rides one actor's own camera; add `&eyes=1` for first person. The Director lists a link per cast member under "POV views". Open them before Run and record each window alongside the film view.
 - **Director:** `http://localhost:3000/admin.html#director` in another window (or another screen). On a local server without a database it shows just the Director tab.
 
 ## 3. Load the sheet
 Pick `ep1-first-line.yaml` from the list (or paste a sheet) and **Validate**. Errors list their scene and cue; fix them in the YAML file. Purple lines are cues whose game module isn't on this server: tick "skip missing modules" to run without them (for rehearsals only).
 
 ## 4. Record, then Run
+For a full take, restart the server first: once the Warden has fallen on a server, the Hall shows the engraved names, but Episode 1 opens on a blank Hall.
+
 1. Start your screen recorder on the film-view window (OBS: Window Capture, 60 fps).
 2. Press **Run** (or pick a scene under "From scene" to retake just that one).
 3. Watch the status: current scene, running cues, the log. Lines starting with `!` are problems (an actor stuck, an unscripted death).

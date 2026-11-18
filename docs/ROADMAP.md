@@ -106,7 +106,8 @@ One row per task. Whoever picks a task sets **Status** and **Owner** here first 
 | F4 Cinematic camera | `feat/cinecam` | done | agent cinecam | b343ff6 |
 | F5 Poses | `feat/poses` | done | agent poses | 901b9d4 |
 | F6 The Tower Bell and the engraved Hall | `feat/bell` | done | agent bell | f767ad7 |
-| F7 Episode 1 dress rehearsal, then Ep 2/3 cue sheets | (on `main`) | in progress: Ep 1 rehearsed headless (3.3 min, all 4 scenes, no errors); to do: tune scene 3 dialogue vs live Warden, Eclipse-vs-floor-switch check, Ep 2/3 cue sheets | agent main | |
+| F7 Episode 1 dress rehearsal, then Ep 2/3 cue sheets | (on `main`) | in progress: Ep 1 rehearsed headless (3.3 min, all 4 scenes, no errors); recorded as video and the gate (s2) and Warden (s3) framing reworked (`claude/episode-1-camera-framing-pov`); to do: tune scene 3 dialogue vs live Warden, Eclipse-vs-floor-switch check, Ep 2/3 cue sheets | agent main | |
+| F8 POV camera (per-character views) | `claude/episode-1-camera-framing-pov` | done | agent camera | |
 
 ### Shared contracts (read before starting any F task)
 F2 calls the others through these names, so keep them exactly. Every server method is mixed into `Game.prototype` from its own module (like `server/combat.js`), installed in `server/game.js`. Every new event goes into `this.events` (broadcast in snapshots) unless noted.
@@ -179,6 +180,13 @@ A real game feature, not just for the film.
 
 ### F7. Episode 1 dress rehearsal (after F1–F6)
 Run `docs/story/ep1-first-line.yaml` end to end in the film view, fix what breaks, record timings (aim 3–4 min), and list anything the owner should decide. Then write the cue sheets for Episodes 2 and 3 from `STORY.md` (they need Floor 2: Mirelight Camp at night, the Mire Matron's Call, the Sovereign's Tidal Wave and Deluge).
+- **Framing pass (2026-11-17):** Ep 1 recorded as 60 fps video (`scripts/film/record.mjs`, contact sheets `scripts/film/sheets.sh`). Fixed in `public/cine.js` `aim()`, for every shot: line of sight (walls, bodies, camera inside a body), widen until the subject fits, a fighter facing a boss gets a two-shot (side-on or behind the shoulder), a fallen subject is framed on the ground.
+
+### F8. POV camera (per-character views)
+1. **POV view:** `/?spectate=1&pov=<name>` follows one character with their own game camera (behind, a little above, over the right shoulder, turning with them); `&eyes=1` is first person (their model hidden). It ignores director shots and obeys light, fades, titles, letterbox and clean. When the character is down the camera rises above them.
+2. **Director shots** `pov` and `eyes` (`target`: an actor) cut the film view into a character's view.
+3. **Admin Director** lists a POV link (and first-person link) per cast member, to record several windows at once.
+4. **Accept when:** a recorded take shows each view; `node test/cine.js` and `node test/director.js` pass.
 
 ## Known issues and backlog
 - Floor 2 is untested by the owner: do a play pass before any Floor 3 work.
