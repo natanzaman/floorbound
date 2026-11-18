@@ -22,8 +22,8 @@ export const FLANK = {
   back: Math.PI / 3,     // half-angle of the back cone (120° in all)
   apart: (2 * Math.PI) / 3, // 120°: how far apart around the enemy two attackers must be for a Pincer
   reach: 6,              // m beyond the enemy's radius: attacker and partner must both be this close (melee-ish range)
-  dmg: { back: 1.1, pincer: 1.2 },     // damage multipliers (a Pincer replaces the back bonus)
-  posture: { back: 1.15, pincer: 1.3 }, // extra posture from the hit's damage
+  dmg: { back: 1.08, pincer: 1.15 },     // damage multipliers (a Pincer replaces the back bonus)
+  posture: { back: 1.12, pincer: 1.2 }, // extra posture from the hit's damage
   tagEvery: 2,           // s: at most one Pincer tag per player this often
   backTagEvery: 6,       // s: the subtler Flank tag
 };

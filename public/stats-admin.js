@@ -4,7 +4,7 @@ import { CLASSES } from '/shared/data.js';
 import { STYLES } from '/shared/styles.js';
 import { TWISTS } from '/shared/twists.js';
 import { nodeDef } from '/shared/talents.js';
-import { MVP_TITLE, fmtSecs } from '/shared/mvp.js';
+import { MVP_TITLE, FALLBACK_TITLE, fmtSecs } from '/shared/mvp.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -186,14 +186,14 @@ function recentSection(d) {
   if (!rows.length) return panel('Recent fights', 'The latest boss fights.', '<div class="sub">No boss fights yet.</div>');
   const when = iso => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   const fighter = (f, mvp) => {
-    const t = f.t?.[0] && MVP_TITLE[f.t[0]], s = f.s || {};
+    const t = MVP_TITLE[f.t?.[0]] || FALLBACK_TITLE, s = f.s || {};
     const tip = Object.keys(STAT_SHORT).filter(k => s[k]).map(k => `${kNum(s[k])} ${STAT_SHORT[k]}`).join(', ') + (s.lastAttack ? ', Last Attack' : '');
     return `<span class="who mf" data-tip="${esc(`${f.n} (${clsName(f.c)}${f.b ? ' bot' : ''}): ${tip || 'no numbers'}${f.t?.length ? ` · ${f.t.map(k => MVP_TITLE[k]?.name || k).join(', ')}` : ''}`)}"><i style="background:${clsColor(f.c)}"></i>${f.n === mvp ? '★ ' : ''}${esc(f.n)}${f.b ? '<small class="bt">bot</small>' : ''}${t ? ` <em>${esc(t.name)}</em>` : ''}</span>`;
   };
   const table = `<table class="tbl recent"><thead><tr><th>When</th><th>Boss</th><th>Result</th><th>Time</th><th>Fighters (★ MVP, headline title; hover for numbers)</th></tr></thead><tbody>${rows.map(r =>
     `<tr><td class="nw">${when(r.at)}</td><td><span class="fl ${r.floor === 2 ? 'f2' : ''}">${BOSS[r.floor] || `F${r.floor}`}</span></td>
      <td class="nw">${r.result === 'kill' ? '<b class="win">Kill</b>' : `Wipe${r.hp_left != null ? ` · ${r.hp_left}%` : ''}`}</td><td>${fmtSecs(r.secs)}</td>
-     <td>${r.mvp ? r.mvp.rows.map(f => fighter(f, r.mvp.mvp)).join('') : `<span class="sub">${r.humans} player${r.humans === 1 ? '' : 's'}, ${r.bots} bot${r.bots === 1 ? '' : 's'} (no card)</span>`}</td></tr>`).join('')}</tbody></table>`;
+     <td>${r.mvp ? r.mvp.rows.map(f => fighter(f, r.mvp.mvp)).join('') : `<span class="nc">${r.humans} player${r.humans === 1 ? '' : 's'}, ${r.bots} bot${r.bots === 1 ? '' : 's'} (no card)</span>`}</td></tr>`).join('')}</tbody></table>`;
   return panel('Recent fights', 'The latest boss fights and their post-fight MVP card: who fought, the MVP and each fighter’s headline title.', table);
 }
 

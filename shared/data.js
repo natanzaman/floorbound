@@ -186,7 +186,7 @@ export const MOBS = {
   alpha: { name: 'Alpha Wolf', hp: 480, atk: 15, speed: 6.6, aggro: 14, range: 2.4, atkCd: 1.4, xp: 150, radius: 1.2, level: 7, elite: true },
   spitter: { name: 'Bramble Spitter', hp: 80, atk: 10, speed: 0, aggro: 17, range: 15, atkCd: 2.2, xp: 30, radius: 0.9, level: 4, ranged: true },
   hound: { name: "Warden's Hound", hp: 90, atk: 12, speed: 6.6, aggro: 30, range: 2.0, atkCd: 1.2, xp: 15, radius: 0.8, level: 8 },
-  warden: { name: 'The Horned Warden', hp: 2400, atk: 34, posture: 1200, speed: 4.2, aggro: 18, range: 4.2, atkCd: 2.0, xp: 600, radius: 2.2, level: 10, boss: true },
+  warden: { name: 'The Horned Warden', hp: 2400, atk: 38, posture: 1200, speed: 4.2, aggro: 18, range: 4.2, atkCd: 2.0, xp: 600, radius: 2.2, level: 10, boss: true },
   // Rare named elites: one at a time, announced server-wide, temporary (see RARE).
   oldtusk: { name: 'Old Tusk', hp: 600, atk: 14, speed: 5.0, aggro: 10, range: 2.2, atkCd: 1.5, xp: 160, radius: 1.4, level: 6, elite: true, rare: true },
   ghostfang: { name: 'Ghostfang', hp: 750, atk: 16, speed: 7.2, aggro: 14, range: 2.4, atkCd: 1.2, xp: 200, radius: 1.3, level: 8, elite: true, rare: true, howl: true },
@@ -209,7 +209,7 @@ export const WARDEN = {
   // Scaled to the fighters in the chamber when it engages (server/game.js scaleWarden). Party weight = the sum of each
   // fighter's role weight (hpRole: a damage dealer counts more than a healer); health = (hpBase + hpPer * weight^hpExp)
   // * (1 + hpLvl * levels above 10); damage = atk * (1 + atkLvl * levels above 10) * (1 + atkPer * fighters above 3).
-  phases: [0.66, 0.33], hpBase: 2000, hpPer: 680, hpExp: 1.8, hpLvl: 0.12, atkLvl: 0.06, atkPer: 0.12,
+  phases: [0.66, 0.33], hpBase: 2400, hpPer: 680, hpExp: 2.05, hpLvl: 0.12, atkLvl: 0.06, atkPer: 0.25,
   hpRole: { Tank: 0.6, Healer: 0.5, Support: 0.8, Damage: 1.2 },
   slam: { every: [6.5, 5, 3.75], r: 5.5, wind: 1.6, mult: 3.0, per: 3 }, // one slam circle per `per` fighters (on different ones)
   charge: { every: 9.5, len: 15, width: 2.4, wind: 1.5, mult: 3.0 },
