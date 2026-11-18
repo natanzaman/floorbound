@@ -28,6 +28,7 @@ import { say } from './social.js';
 import { scriptTurn } from './script.js'; // the scene director's script layer (b.script; nothing without it)
 import './classes.js'; // built-in class plug-ins (Guardian, Swordsman, Cleric, generic)
 import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
+import { comboTurn, burstTurn } from './teamplay.js'; // combo payoffs + Team Burst (G2)
 
 const F2_BOSS_LVL = 15;
 const LEASH = 24; // a follower drops its target and regroups beyond this distance from its anchor (not in boss fights)
@@ -114,6 +115,7 @@ function onSnap(b, msg) {
   b.gateOpen = onF2 ? !!f2?.gate?.[0] : !!msg.w.gate?.[0];
   b.gateReady = (onF2 ? f2?.gate?.[2] : msg.w.gate?.[2]) || 0;
   b.orbs = f2?.orbs || []; b.pools = f2?.pools || []; b.deluge = !!f2?.del;
+  b.tb = msg.w.tb || null; // Team Burst gauges (server/teamplay.js teamSnap)
   b.players = msg.w.players.map(p => ({ id: p[0], x: p[1], z: p[2], face: p[3], hp: p[4], maxHp: p[5], lvl: p[6], cls: CLASS_IDS[p[7]], party: p[8], dead: !!p[9], style: STYLE_IDS[p[11]] || null }));
   const mine = b.players.find(p => p.id === b.id);
   if (mine) {
@@ -368,6 +370,7 @@ function think(b) {
   b.mode = M.mode;
   b.anchor = M.anchor ? { id: M.anchor.id, name: M.anchor.name, bot: !!M.anchor.bot } : null;
   upkeep(b, P, M);
+  burstTurn(b, P); // join / start a Team Burst
   if (stepRoll(b) || perilous(b) || waveDodge(b) || travel(b, M)) return;
   act(b, P, M);
 }
@@ -447,6 +450,7 @@ function act(b, P, M) {
     moveToward(b, b.x + Math.sin(a) * 3, b.z + Math.cos(a) * 3, 0.2, SPRINT_SPEED);
     return;
   }
+  if (comboTurn(b, tgt, ctx)) return; // a partner's combo setup on the target: cash it in
   if (!brain.combat || brain.combat(b, tgt, ctx) === false) brainFor('*').combat(b, tgt, ctx);
 }
 

@@ -41,6 +41,7 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Chat | Enter (`/p` party, `/s` nearby, `/b` bot orders); lines also show as speech bubbles over the speaker's head (Settings → Speech bubbles turns them off) | Chat button |
 | Pose | Chat `/kneel`, `/sit`, `/bow`; `/stand`, moving, attacking, a skill, dodging, jumping or guarding stands you up | Chat button |
 | Party | Players button (P) → Find party, or Invite | Players button → Find party / Invite |
+| Team Burst | T: when the party bar at the top of the party frames is full, start a 3 s sync window; partners press T to join | Tap the full bar (or the prompt) |
 | Order your party's bots | Hold V (command wheel), or chat `/b stay`, `/b Lyra: heal` (`/b help` lists them) | ⌘ Bot orders under the party frames |
 | Items | 4 potion, 5 tonic, 6 draught; B bag | Potion button; Bag button |
 | Skill Tree (progression, talents, mastery, evolutions) | K, or the Skills button (Esc closes) | Skills button |
@@ -151,6 +152,23 @@ With a database, the server records play events (session start/end, first kill, 
 - **Guard and parry (Guardian, R):** hold R to guard: hits from the front (±70°) take 70% less damage, but you can't attack and you move at half speed. Press R at most ~0.2 s before a frontal hit lands to **parry** it: no damage at all, and big posture damage to the attacker. Mashing R doesn't parry.
 - **Perilous attacks:** the Warden's **Horn Sweep** shows an orange/gold circle around it with a "!" glint and its own warning horn (about 1.2 s). Anyone inside takes about 80% of their max health: Shield Wall, Taunt, guarding, gear and jumping don't reduce it. Roll through it (i-frames) or parry it. Breaking the Warden during the wind-up cancels it. It comes every ~12 s in phase 1, more often later (never while a Quake Ring is still rolling out near the Warden).
 - **Combat text and hit feel:** floating texts on the same character stagger into lanes and repeats merge ("Jumped! ×3"). Your own reactions (Jumped!, Dodged!, PERFECT, PARRY!, COUNTER, Switch, talent/style procs) show only to you; effects on a target (BROKEN, MARKED, PINNED, Discord) show to everyone; other players' damage numbers are small and dim, with only a few on screen at once. When a boss's big hit (Warden slam, charge, Horn Sweep, Quake Ring, rockfall; the Sovereign's trident, geysers, Tidal Wave) lands on you, your screen alone freezes for ~75 ms with a small shake; stomps and Quake Rings shake the camera more the closer they land. Player hits never hit-stop.
+
+## Team combat: combos and the Team Burst
+
+- **Skill combos:** one player sets an enemy up, a *different* player pays it off within 2.5 s (data: `shared/teamplay.js`; server: `server/teamplay.js`). The same combo lands on the same enemy at most once per 5 s.
+
+  | Combo | Setup | Payoff | Effect |
+  | --- | --- | --- | --- |
+  | **Skewer** | Lancer Sky Lance or Sweep (launch) | any ranged hit (Ranger, Cleric Smite, Bard Sonic Bolt / Dissonance) | ×1.6 damage, extra posture |
+  | **Execute** | Guardian Ground Slam or Bash finisher (stun) | Berserker heavy hit, or Swordsman Burst Combo | always a crit, ×1.3, extra posture |
+  | **Pin** | Ranger Hunter's Mark (or a heavy arrow on their own mark) | Lancer Thrust or Lance Charge | rooted 1.5 s (a boss is slowed), ×1.2 |
+  | **Shatter Chorus** | Bard Discord, 3+ stacks | anyone else's Break | the breaker's party near it heals 12%, the chord bursts for 2.5× the Bard's attack |
+  | **Sanctified Switch** | Cleric Sanctuary (standing in it) or Blessing | a Switch | the Broken window lasts 1.5 s longer |
+
+  A partner's setup you can cash in shows "→ Skewer" over the target (only to you). Every combo shows a chain counter over the target for everyone ("Combo ×2 · Skewer", combos within 6 s of each other chain); the two players who made it get a bright flash, a white ring and the combo's name.
+- **Team Burst:** a shared bar at the top of the party frames (solo players get their own, filling at half speed). Combos (+8), Switches (+5), Breaks (+4), parries (+4), perfect dodges (+2), revives (+15) and saves (+8) fill it; parties over 3 fill a little slower; it drains when nobody has fought for 6 s. When it's full anyone presses **T** (or taps the bar): a 3 s **sync window** opens and every member who presses T joins (it fires early once everyone's in). The finisher hits your locked target, the boss you're fighting or the nearest enemy you're fighting: each joiner deals 6× their attack × power (2 joiners ×1, 3 ×1.3, 4 ×1.6, 5 ×1.8, 6 ×2), a full posture **BREAK** (a Switch window for everyone), and the team near the starter gets +8–25% damage for 6 s. Solo: no window, ×0.6 power and a posture chunk instead of a Break. Off during a filmed director show.
+- **Bots** cash in partners' setups (Lancer charges a marked target, Swordsman bursts and Berserker leaps on a stunned one; capability 1–5: 15–100% notice), join a sync window (35–100%, 0.15–2.8 s late) and start one with a full bar on a boss or elite (a human in the party gets 5 s to start it first).
+- **Team stats (for the post-fight card):** `teamStat(p, key, n)` records per-fight counters on the boss fight record (`fight.team` / `fight2.team`: player id → { dmg, heal, tanked, switch, break, combo, setup, burst, parry, perfect, lastAttack, revive, save, cover, flank, mechanic }); `game.teamStats(fight)` reads them.
 
 ## Skill mastery and evolutions
 
@@ -288,6 +306,7 @@ public/floor2world.js, public/floor2client.js  Floor 2 scene, models, effects, w
 server/game.js   authoritative simulation: combat, AI, boss, XP, parties
 server/combat.js posture/Break, perfect dodge, guard/parry, Horn Sweep, Quake Rings (mixed into Game)
 server/poses.js  kneel / sit / bow: setPose, /kneel /sit /bow /stand chat, cleared by moving or acting (public/poses.js on the client)
+server/teamplay.js  skill combos between players, the Team Burst gauge and sync window, teamStat() per-fight counters (tables: shared/teamplay.js; client: public/teamplay.js; bots: shared/bots/teamplay.js)
 server/index.js  static file server + WebSocket server (20 ticks/sec)
 server/shutdown.js  deploy drain on SIGTERM: "Update incoming", waits out a boss fight (4 min max), saves, exits
 public/          Three.js client (no build step): main.js, world.js, style.css
@@ -295,6 +314,7 @@ public/models/   rigged character models (glTF) with shared animations
 test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
 test/bubbles.js  speech bubble logic: duration, one per speaker, who sees which line (public/bubbles.js)
+test/teamplay.js  combos (each trigger, timeout, chain), Team Burst gauge fill/drain, sync window joining and scaling, team stats
 test/feeltext.js in-process checks for who sees combat text (`to` tags on reactions) and which boss hits hit-stop their victim
 test/warden3.js  in-process checks for the Quake Ring (jump / roll / out of reach), Warden scaling and bot jump timing per capability
 test/aircontrol.js  jump air control: the shared air step, client prediction vs the server's movement check while airborne, bots steering mid-jump
