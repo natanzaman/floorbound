@@ -28,6 +28,7 @@ import { initBotWheel } from '/botwheel.js';
 import { initBell } from '/bell.js'; // the Tower Bell and the engraved Hall stones
 import { initCine } from '/cine.js'; // film view camera, titles, fades, letterbox, light (F4)
 import { initBubbles } from '/bubbles.js';
+import { initRevive } from '/revive.js'; // downed + revive (G1)
 import { initBossTeam } from '/bossteam.js'; // boss team mechanics: STACK, SPREAD, tether (G4)
 
 const sfx = new Sound();
@@ -253,6 +254,8 @@ const pbots = initPlayerBots({ $, send, state, players, log: (a, b) => log(a, b)
 const talents = initTalents({ state, players, fx, sfx, send, floatNum, mastery, guide, isTouch, $ });
 // the Tower Bell (toll, sway, banner) and the engraved Hall stones (public/bell.js)
 const bell = initBell({ scene, sfx, guide, banner: (a, b, c) => banner(a, b, c) });
+// downed + revive: your downed overlay, "Hold E to revive", markers over downed partymates (public/revive.js)
+const revive = initRevive({ state, players, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), isTouch });
 // boss team mechanics: the gold STACK circle, SPREAD rings, tether beams, first-time prompts (public/bossteam.js)
 const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a) });
 
@@ -342,6 +345,7 @@ function onSnapshot({ me, w }) {
     }
   }
   for (const [id, e] of players) if (!seen.has(id)) { removeEntity(e); players.delete(id); }
+  revive.snap(w.down); // downed players (public/revive.js)
   if (snapPoses(w.poses, players).has(state.myId)) guide.tip('poses'); // held poses (public/poses.js)
 
   const seenM = new Set();
@@ -368,6 +372,7 @@ function handleEvent(e) {
   if (mastery.event(e)) return; // evolved skills, mastery level-ups, evolutions
   if (classesA.event(e)) return; // Ranger / Berserker
   if (styles.event(e)) return; // weapon styles: styled basic attacks
+  if (revive.event(e)) return; // downed / revive
   switch (e.t) {
     case 'tp':
       if (e.id === me) { state.x = e.x; state.z = e.z; state.seq = e.s; }
@@ -1011,7 +1016,7 @@ function lockedMob() {
 
 function jump() {
   const now = performance.now();
-  if (state.dead || !state.joined || state.spectator || state.roll || now < state.jumpReady) return;
+  if (state.dead || revive.isDown() || !state.joined || state.spectator || state.roll || now < state.jumpReady) return;
   state.jumpReady = now + JUMP.cd * 1000; state.jumpPress = now;
   state.air = { x: state.vel?.[0] || 0, z: state.vel?.[1] || 0 }; // take off with your running speed
   const me = players.get(state.myId);
@@ -1022,7 +1027,7 @@ function jump() {
 
 function dodge() {
   const now = performance.now();
-  if (state.dead || !state.joined || state.spectator || state.roll || now < state.dodgeReady) return;
+  if (state.dead || revive.isDown() || !state.joined || state.spectator || state.roll || now < state.dodgeReady) return;
   const dir = state.moveDir ?? state.face;
   state.roll = { left: DODGE.time, dir };
   state.face = dir;
@@ -1063,7 +1068,7 @@ function nearestMob(range) {
 }
 
 function useSkill(slot) {
-  if (state.dead || !state.joined) return;
+  if (state.dead || revive.isDown() || !state.joined) return;
   const sk = CLASSES[state.cls].skills[slot];
   const now = performance.now();
   if (!sk || state.lvl < sk.lvl || now < state.ready[slot] || combat.guarding) return;
@@ -1157,7 +1162,7 @@ function updateHallLabel() {
   if (hd > HALL.r + 7 && !$('hall').classList.contains('hidden')) toggleHall(false);
 }
 function useItem(id) {
-  if (state.dead || !state.joined || !CONSUMABLES[id]) return;
+  if (state.dead || revive.isDown() || !state.joined || !CONSUMABLES[id]) return;
   const now = performance.now();
   if (!(state.inv?.cons?.[id] > 0)) { log(`No ${CONSUMABLES[id].name}s left. The merchant in town sells them.`, 'sys'); return; }
   if (now < (state.ccdReady[id] || 0)) return;
@@ -1405,7 +1410,7 @@ function updateHud(now) {
   const partyHtml = mates.map(p => {
     const pc = (p.hp / p.maxHp) * 100, bot = state.roster.get(p.id)?.bot;
     const nm = state.roster.get(p.id)?.name || p.name;
-    return `<div class="frame ${p.dead ? 'dead' : ''} ${bot && !state.spectator ? 'botf' : ''}" ${bot && !state.spectator ? `data-bot="${esc(nm)}" title="Click for ${esc(nm)}'s orders"` : ''}><div class="row" style="font-size:12px;margin:0"><span>${bot && !state.spectator ? '<span class="bcmd">⌘</span> ' : ''}${esc(p.name)}${bot ? ' <small class="bottag">BOT</small>' : ''}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div>${classesA.frameBar(p)}</div>`;
+    return `<div class="frame ${p.dead ? 'dead' : ''} ${p.downed ? 'downed' : ''} ${bot && !state.spectator ? 'botf' : ''}" ${bot && !state.spectator ? `data-bot="${esc(nm)}" title="Click for ${esc(nm)}'s orders"` : ''}><div class="row" style="font-size:12px;margin:0"><span>${bot && !state.spectator ? '<span class="bcmd">⌘</span> ' : ''}${esc(p.name)}${bot ? ' <small class="bottag">BOT</small>' : ''}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}${p.downed ? ` <b class="dtag">${p.downed.by ? 'REVIVING' : 'DOWNED'}</b>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div>${classesA.frameBar(p)}</div>`;
   }).join('') + (!state.spectator && mates.some(p => state.roster.get(p.id)?.bot) ? `<button id="bots-btn" class="pbtn" title="Orders for all your bots (or hold V for the wheel)">⌘ All bots <small>V</small></button>` : '');
   if (partyHtml !== hudParty) { hudParty = partyHtml; $('party').innerHTML = partyHtml; }
 
@@ -1623,10 +1628,12 @@ function animateEntity(e, dt) {
       e.back = (e.back || 0) + ((Math.cos(rel) < -0.35 ? 1 : 0) - (e.back || 0)) * Math.min(1, dt * 12);
     } else if (isP && e.spd < 0.5) e.back = 0;
     const dirSign = isP && e.back > 0.5 ? -1 : 1;
-    if (e.spd > (isP ? 3.5 : 4.6)) a.base(dirSign < 0 ? 'Walking_A' : 'Running_A', 0.2, dirSign * Math.max(0.7, e.spd / (isP ? (dirSign < 0 ? 4.5 : 6.5) : 5.5)));
+    if (isP && e.downed && !e.dead) a.base('Idle', 0.25); // downed: the slumped pose below, crawling
+    else if (e.spd > (isP ? 3.5 : 4.6)) a.base(dirSign < 0 ? 'Walking_A' : 'Running_A', 0.2, dirSign * Math.max(0.7, e.spd / (isP ? (dirSign < 0 ? 4.5 : 6.5) : 5.5)));
     else if (e.spd > 0.5) a.base('Walking_A', 0.2, dirSign * (isP ? 1.2 : Math.max(0.6, e.spd / 3.5)));
     else a.base(a.posed ? 'Idle' : a.idle, 0.25); // a held pose is tuned over the plain Idle
-    if (isP) poseFrame(e, a);
+    if (isP && e.downed && !e.dead) a.setPose('downed'); // downed: slumped on the knees (public/revive.js)
+    else if (isP) poseFrame(e, a);
     a.update(hitStop > 0 ? dt * 0.08 : dt);
     if (isP) m.cursor.material.color.setHex(state.party && e.party === state.party && !self ? 0xa78bfa : 0x4ade80);
     else m.cursor.rotation.y += dt * 2;
@@ -1799,7 +1806,7 @@ function frame(now) {
       if (keys.has('a') || keys.has('arrowleft')) ix -= 1;
       if (keys.has('d') || keys.has('arrowright')) ix += 1;
       if (keys.has('q')) state.yaw += dt * 2;
-      if (keys.has('e')) state.yaw -= dt * 2;
+      if (keys.has('e') && !revive.usesE()) state.yaw -= dt * 2; // (E revives a downed partymate in reach)
     }
     if (stick.active) { ix += stick.dx; iz -= stick.dy; }
     const mag = Math.min(1, Math.hypot(ix, iz));
@@ -1833,7 +1840,7 @@ function frame(now) {
       let mx = fwd[0] * iz + right[0] * ix, mz = fwd[1] * iz + right[1] * ix;
       const ml = Math.hypot(mx, mz); mx /= ml; mz /= ml;
       const sprint = performance.now() - state.lastCombat > SPRINT_AFTER * 1000 && !combat.guarding;
-      const want = (sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult(); // half speed while guarding; talents can add move speed
+      const want = revive.crawlCap((sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult(), mag); // half speed while guarding; talents can add move speed; downed: crawl
       state.speed += (want - state.speed) * Math.min(1, dt * (want > state.speed ? 3 : 10));
       const step = state.speed * dt;
       let nx = state.x + mx * step, nz = state.z + mz * step;
@@ -1905,6 +1912,7 @@ function frame(now) {
 
   drawFloats(dt, vdt);
   bubbles.frame();
+  revive.frame(keys); // downed overlay, revive prompt, downed markers
 
   if (state.joined) updateHud(now);
   updateRareHint(now);
