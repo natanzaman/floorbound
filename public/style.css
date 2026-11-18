@@ -472,6 +472,21 @@ body.mlock #crosshair { display: block; }
 #reconnect button { margin-top: 6px; padding: 6px 14px; border-radius: 8px; border: 1px solid #475569; background: #1e293b; color: #e5e7eb; cursor: pointer; }
 @keyframes rc-spin { to { transform: rotate(360deg); } }
 
+/* team threat (public/threat.js): who the boss is after, my threat meter, Cover, Pincer tags */
+#boss .boss-tgt { font-size: 12px; font-weight: 700; letter-spacing: .08em; color: #fca5a5; text-shadow: 0 2px 4px #000; margin: -2px 0 4px; min-height: 14px; }
+#boss .boss-tgt.me { color: #f87171; }
+#boss .threat-meter { display: flex; align-items: center; gap: 8px; width: 62%; margin: 5px auto 0; font-size: 11px; font-weight: 700; text-shadow: 0 1px 3px #000; }
+#boss .threat-meter.hidden { display: none; }
+#boss .threat-meter .bar { flex: 0 0 38%; height: 6px; border: 1px solid rgba(255,255,255,.25); }
+#boss .threat-meter .bar > div { background: #94a3b8; transition: width .2s; }
+#boss .threat-meter span { white-space: nowrap; opacity: .9; }
+#boss .threat-meter.warn .bar > div { background: #f59e0b; }
+#boss .threat-meter.warn span { color: #fbbf24; opacity: 1; }
+#boss .threat-meter.top .bar > div { background: #ef4444; }
+.sk.sc { border-color: rgba(251,191,36,.6); }
+.touch .sk.sc { position: absolute; left: -70px; top: 56px; }
+.num.pincer { color: #fcd34d; font-size: 13px; font-weight: 700; letter-spacing: .06em; opacity: .9; }
+.num.cover { color: #fbbf24; font-size: 17px; }
 /* ---------- downed + revive (G1, public/revive.js) ---------- */
 #downed { position: fixed; inset: 0; z-index: 6; pointer-events: none; display: grid; place-content: center; text-align: center;
   background: radial-gradient(ellipse at center, rgba(0,0,0,0) 35%, rgba(110,0,0,.55) 100%); }

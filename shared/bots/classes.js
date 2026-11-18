@@ -2,19 +2,23 @@
 // ('*') for any class without its own plug-in. See shared/bots/registry.js for the interface.
 import { registerClassBrain } from './registry.js';
 import { standOff } from './style.js';
+import { botCover, lostAggro } from './threat.js'; // Cover, re-Taunt (shared/bots/threat.js)
 
 const faceTo = (b, m) => Math.atan2(m.x - b.x, m.z - b.z);
 
 // Reaches below come from ctx.basic (the weapon style's basic attack, shared/bots/style.js): Spear & Shield and Rapier
 // poke from further out, Dual Blades stay tight, Mace & Tome takes the Cleric into melee, the Wand bolts from further back.
 
-// Guardian: opens with Taunt, peels mobs off the party, Ground Slam to Break, Bash to Switch, Shield Wall when low.
+// Guardian: opens with Taunt, peels mobs off the party, Ground Slam to Break, Bash to Switch, Shield Wall when low,
+// Covers a hurt ally a big hit is coming for, and Taunts a boss back when it turns on a partymate.
 registerClassBrain('guardian', {
   role: 'tank', name: 'Brann', parry: true,
   combat(b, tgt, ctx) {
     const { useSkill, moveToward, switchOpen, d2, dodge } = ctx;
     const reach = tgt.def.radius + ctx.basic.reach - 1.4, d = d2(b.x, b.z, tgt.x, tgt.z), face = faceTo(b, tgt);
+    if (botCover(b, ctx)) return true;                                          // Cover: take a big hit for a hurt ally
     if (!dodge) { moveToward(b, tgt.x, tgt.z, reach - 0.3); b.face = face; }
+    if (d < 7.5 && lostAggro(b, tgt, ctx) && b.t - (b.tauntT ?? -99) > 1 && useSkill(b, 1, face)) { b.tauntT = b.t; return true; } // it turned on a mate
     if (d < 8.5 && b.engAt === null) { if (useSkill(b, 1, face)) b.tauntT = b.t; b.engAt = b.t; } // open with Taunt
     if (ctx.peel && b.t - (b.tauntT ?? -99) > 2 && useSkill(b, 1, face)) { b.tauntT = b.t; return true; } // pull it off a teammate
     if (d < reach + 1.2) {

@@ -64,7 +64,7 @@ const take = (g, t, k) => { const out = g.events.filter(e => e.t === t && (!k ||
   assert.ok(soloLoss > 0.75, `alone: near-lethal (${(soloLoss * 100).toFixed(0)}%)`);
   assert.ok(ps.slice(1).every(p => p.hp === p.maxHp), 'nobody else hit');
   assert.equal(take(g, 'btend', 'stack')[0].n, 1);
-  assert.equal(stats.length, 0, 'no mechanic credit for a solo soak');
+  assert.equal(stats.filter(s => s[1] === 'mechanic').length, 0, 'no mechanic credit for a solo soak'); // (G3 may book 'tanked')
 
   // three in the circle: light; the fourth outside takes nothing
   full(ps); g.events = [];
@@ -107,7 +107,7 @@ const take = (g, t, k) => { const out = g.events.filter(e => e.t === t && (!k ||
   assert.ok(Math.abs(lost(ps[1]) - (S.hit + S.self)) < 0.06);
   assert.ok(Math.abs(lost(ps[2]) - S.hit) < 0.05, 'bystander inside one burst');
   assert.equal(ps[3].hp, ps[3].maxHp, 'far away: untouched');
-  assert.equal(stats.length, 0);
+  assert.equal(stats.filter(s => s[1] === 'mechanic').length, 0);
 
   // spread out properly: carriers only take their own small hit, both credited
   full(ps); g.events = [];
@@ -158,7 +158,7 @@ const take = (g, t, k) => { const out = g.events.filter(e => e.t === t && (!k ||
   const fail = take(g, 'btend', 'tether')[0];
   assert.ok(fail && fail.ok === 0, 'never broken: ends after its max');
   assert.ok(ps.every(p => lost(p) > 0.5), 'and hurt a lot');
-  assert.equal(stats.length, 0);
+  assert.equal(stats.filter(s => s[1] === 'mechanic').length, 0);
   ok(`tether: ticks after ${T.grace} s, breaks at ${T.need} m (both credited), ends unbroken after ${T.max} s`);
 }
 
