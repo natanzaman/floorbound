@@ -345,6 +345,7 @@ export const F2Methods = {
         }
       }
     }
+    this.bossTeam?.(m, fighters); // team mechanics: shared meteor, spread, tether (server/bossteam.js)
     if (m.phase >= 2 && t >= m.volleyT && free) {
       const V = S.volley;
       m.volleyT = t + V.every;

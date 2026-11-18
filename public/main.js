@@ -28,6 +28,7 @@ import { initBotWheel } from '/botwheel.js';
 import { initBell } from '/bell.js'; // the Tower Bell and the engraved Hall stones
 import { initCine } from '/cine.js'; // film view camera, titles, fades, letterbox, light (F4)
 import { initBubbles } from '/bubbles.js';
+import { initBossTeam } from '/bossteam.js'; // boss team mechanics: STACK, SPREAD, tether (G4)
 
 const sfx = new Sound();
 
@@ -252,6 +253,8 @@ const pbots = initPlayerBots({ $, send, state, players, log: (a, b) => log(a, b)
 const talents = initTalents({ state, players, fx, sfx, send, floatNum, mastery, guide, isTouch, $ });
 // the Tower Bell (toll, sway, banner) and the engraved Hall stones (public/bell.js)
 const bell = initBell({ scene, sfx, guide, banner: (a, b, c) => banner(a, b, c) });
+// boss team mechanics: the gold STACK circle, SPREAD rings, tether beams, first-time prompts (public/bossteam.js)
+const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a) });
 
 // ---------------- networking ----------------
 function onMessage(msg) {
@@ -359,6 +362,7 @@ function handleEvent(e) {
   if (cine.event(e)) return; // shots, titles, fades, letterbox, clean feed, light
   f2.onEvent(e);
   if (bell.event(e)) return; // the Tower Bell
+  if (bossTeam.event(e)) return; // boss team mechanics (stack / spread / tether)
   if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
   if (talents.event(e)) return; // talent points, learned talents, talent procs
   if (mastery.event(e)) return; // evolved skills, mastery level-ups, evolutions

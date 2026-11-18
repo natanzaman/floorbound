@@ -131,7 +131,7 @@ scenes:
 | Lifecycle | `die` | `respawn` (default false) | scripted death: stays down |
 | | `revive` | | |
 | | `wait` | `secs` or `until` | a director cue |
-| Staging | `boss_move` | `move*`, `target` | `who: warden`: `horn_sweep`, `slam`, `charge`, `quake`, `rockfall`; `who: sovereign`: `tidal_wave`, `geyser`, `trident`, `deluge` |
+| Staging | `boss_move` | `move*`, `target` | `who: warden`: `horn_sweep`, `slam`, `charge`, `quake`, `rockfall`; `who: sovereign`: `tidal_wave`, `geyser`, `trident`, `deluge`; either boss: the team mechanics `meteor` (STACK on `target`), `spread` (`target` gets the first marker), `tether` (`target` + their nearest partymate; needs two fighters) |
 | | `reserve_last_attack` | `target*`, `for` (actor; none clears it) | nobody else's damage takes it below 1 HP |
 | | `twists` | `set*` (`off`, `random`, or a twist id) | the Warden's twist |
 | | `spawn` | `type*`, `at*`, `label*` | a labelled mob; `who:`/`target:` can then name it |
