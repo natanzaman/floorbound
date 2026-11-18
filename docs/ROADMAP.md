@@ -248,6 +248,77 @@ Warden first (Floor 2 boss if time allows). Each is telegraphed, has a guide tip
 ### G5. Post-fight MVP card (`feat/mvp`) — after G1–G3 merge
 After a boss kill (or a wipe), show every fighter a card: party damage, healing, tanked, Switches, Breaks, combos, bursts, revives, saves, covers, mechanics, Last Attack — with fun titles ("Lifeline": most revives/saves, "Wall": most tanked, "Conductor": most combos, "Last Word": Last Attack…). Shared to the whole party; stored in tracking (`server/trackgame.js`) so `/stats.html` can show it later. **Accept when:** a bot run shows a card with sensible numbers.
 
+## H. Floor 2 polish, loot and builds, AI companions live, Floor 3 (owner request 2026-11-18)
+Owner decisions: do H1–H4 in parallel. **Skip for now:** achievements, weekly board and cosmetics, and more film work (F7 stays where it is). Owner played Floor 2: "the boss is much easier than floor 1, but it plays nicely".
+
+### Tracker
+Same rules as F and G: set Status/Owner on `main` first, then mark it **done** with the merge commit. Merge under the `flock` lock and **push with `--force-with-lease`**.
+
+| Task | Branch | Status | Owner | Merge |
+|---|---|---|---|---|
+| H1 Floor 2 polish + harder Sovereign | `feat/floor2polish` | todo | | |
+| H2 Loot and builds | `feat/loot` | todo | | |
+| H3 AI companions: go live | `feat/ailive` | todo | | |
+| H4 Floor 3 | `feat/floor3` | todo | | |
+
+### Shared contracts for H
+- **Loot tables are data** (H2 owns them in `shared/items.js` / new `shared/loot.js`): affixes, sets and drop tables keyed by source (`mob:<type>`, `boss:<id>`, `rare:<id>`). H1 and H4 add *entries* for their floor's bosses and mobs through those tables, never with custom drop code. If H2 hasn't merged yet, keep the floor's drops as today and leave a `TODO(H2)` note naming the set you'd add.
+- **Floors are data where possible.** H4 follows the Floor 2 pattern (`shared/floor2.js`, `server/floor2.js`, `public/floor2world.js`, `public/floor2client.js`) as `floor3`. Where Floor 2 code hardcodes "floor 2", generalise it carefully (H1 touches the same files, so keep those diffs small and merge often).
+- **G systems apply on every floor:** downed/revive, combos and Team Burst, threat/Cover/flanking, boss team mechanics (`server/bossteam.js`) and the MVP card all work in Floor 3 fights.
+- **Film safety** as in G: director shows keep their rehearsed numbers.
+- **Bots** play every new thing, scaled by capability.
+
+### H1. Floor 2 polish + a harder Sovereign (`feat/floor2polish`)
+1. **Bot play pass:** run bot parties through Floor 2 (fields, rare elites, the Sovereign) and fix what breaks: pathing in the Mire, Floor 2 mob mechanics, the Sovereign's moves, warp and camp. Report what you found.
+2. **Sovereign wind-up poses and readable channels**, like the Warden's (task B): bone poses for the trident, geysers, Tidal Wave and Deluge, and telegraphs that fill up toward impact.
+3. **Harder Sovereign:** the owner says it's much easier than the Warden. Tune its health and damage scaling like the G5 Warden pass, and add a twist pool if it has none. Target at skill 5:
+   - trio: about 90–130 s, winning most runs;
+   - 6 bots: about 90–140 s with a few downs;
+   - skill 4: wipes sometimes.
+
+   It should feel like a step up from the Warden.
+4. **Accept when:** a bot play-pass report exists, Sovereign numbers are in range, pose screenshots are taken, and all tests pass.
+
+### H2. Loot and builds (`feat/loot`)
+1. **Affixes:** armor, charms and weapons roll 1–3 bonus stats by rarity, e.g. crit, haste, max HP, damage reduction, posture damage, healing done, threat, skill-specific bonuses ("+15% Whirl damage", "Taunt cooldown −2 s") and team bonuses ("+10% combo damage", "revive 20% faster"). Tooltips show them, and the Smith can reroll one affix for gold and materials.
+2. **Sets:** 2–3 piece sets per boss (Warden and Sovereign now, Floor 3 via H4), with 2-piece and 3-piece bonuses. Sets drop from their boss (better odds for the Last Attack), and the bag and character sheet show set progress.
+3. **Loadouts:** save up to 3 loadouts (gear, weapon style, talents) and swap at the Skill Shrine or in town, never mid-fight.
+4. **Drop tables as data**, per the contract above. Rare elites get small chances at set pieces.
+5. **Saving:** existing characters keep their items. Old items simply have no affixes. Make the database changes in `server/db.js` safe to run twice.
+6. Update the admin page: the item editor shows and edits affixes and sets, and the "Maxed" preset gives a full set plus good affixes.
+7. Bots use the premade setups (give their gear sensible affixes) and pick loot sensibly.
+8. **Accept when:** tests cover affix rolls, set bonuses, reroll, loadout swap and save/load; old characters load fine; screenshots of the tooltip, the set progress and the loadout UI.
+
+### H3. AI companions: go live (`feat/ailive`)
+The owner is adding `ANTHROPIC_API_KEY` in Render (provider `anthropic`, model default).
+1. **Bot memories survive restarts:** a small table (in `server/db.js`, safe to run twice) holding per bot and per player notes, capped and pruned.
+2. **Admin "Test call" button:** one tiny real call that shows OK/error, latency and cost, so the owner can confirm the key works. Never show the key; show only the last 4 characters at most.
+3. **In-game:**
+   - a guide tip ("Talk to bots by name in chat: 'Lyra, hang back and heal me'");
+   - a small indicator over a bot when its AI "mind" is thinking;
+   - the bot's reply comes as a speech bubble (F1).
+4. **Safety and budget:**
+   - check the `AI_DAILY_USD` cap and the per-bot rate limits;
+   - make sure it never turns on without a key;
+   - with `AI_ENABLED=1` set, it turns on automatically after each deploy.
+5. Update `docs/research/ai-companions.md` section 8 with the exact Render steps.
+6. **Accept when:** mock tests cover memory persistence and the test-call path; with no key, behaviour is identical to today.
+
+### H4. Floor 3 (`feat/floor3`)
+1. **Design first:** write `docs/floor3.md` (theme, zone layout, a safe camp, 3–4 field mobs with one new mechanic each, 1–2 rare elites, the boss with 3 phases, how players unlock and warp there, level cap to 30), and commit it before building. Pick a theme that contrasts with the forest (Floor 1) and swamp (Floor 2), e.g. a wind-swept cliff or ruin, crystal caverns, or a burning forge. Write a short "story beat" line for the film team too.
+2. **Build:**
+   - the zone (world mesh, lighting and fog palette, camp, warp from the Floor 2 boss clear);
+   - mobs, rare elites and the boss, with wind-up poses and readable telegraphs from day one;
+   - a boss twist pool;
+   - at least one new boss mechanic that uses the G team systems (e.g. a mechanic that needs a Switch or a Team Burst to survive, or a two-platform split).
+3. **Progression:** level cap 30 with XP curve, mastery and talent points, and premade bot setups extending to 30. Floor 3 loot comes via H2's tables (a set for the boss).
+4. **Tuning target at skill 5:**
+   - trio: about 100–150 s;
+   - 6 bots: about 100–160 s;
+   - harder than the Sovereign after H1.
+5. Update the guide, README and admin (warp, spawn Floor 3 bots), and the stats page knows Floor 3.
+6. **Accept when:** a bot party at level 30 can warp there, clear the field and kill the boss; there's a screenshot tour of the zone and every boss telegraph; tests pass.
+
 ## Known issues and backlog
 - Floor 2 is untested by the owner: do a play pass before any Floor 3 work.
 - Bots ignore Floor 2 specifics? (check during C if cheap)
