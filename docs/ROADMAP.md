@@ -256,7 +256,7 @@ Same rules as F and G: set Status/Owner on `main` first, then mark it **done** w
 
 | Task | Branch | Status | Owner | Merge |
 |---|---|---|---|---|
-| H1 Floor 2 polish + harder Sovereign | `feat/floor2polish` | todo | | |
+| H1 Floor 2 polish + harder Sovereign | `feat/floor2polish` | in progress | agent floor2polish | |
 | H2 Loot and builds | `feat/loot` | todo | | |
 | H3 AI companions: go live | `feat/ailive` | todo | | |
 | H4 Floor 3 | `feat/floor3` | todo | | |
