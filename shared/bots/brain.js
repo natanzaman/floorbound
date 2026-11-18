@@ -26,6 +26,8 @@ import { basicProfile } from './style.js';
 import { STYLE_IDS } from '../styles.js';
 import { say } from './social.js';
 import { scriptTurn } from './script.js'; // the scene director's script layer (b.script; nothing without it)
+import { readDowned, downedTurn, reviveTurn } from './revive.js'; // downed + revive (G1)
+import { mechSpot } from './bossteam.js'; // boss team mechanics: stack, spread, tether (G4)
 import './classes.js'; // built-in class plug-ins (Guardian, Swordsman, Cleric, generic)
 import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
 import { comboTurn, burstTurn } from './teamplay.js'; // combo payoffs + Team Burst (G2)
@@ -111,6 +113,7 @@ function onSnap(b, msg) {
   b.cds = msg.me.cds.map((c, k) => (b.t - (b.pressed?.[k] || -9) < 0.3 ? Math.max(c, 0.2) : c));
   if (b.t - (b.dodgePressed || -9) > 0.3) b.dodgeCd = msg.me.dodge || 0;
   b.mobs = msg.w.mobs.map(m => ({ id: m[0], type: MOB_IDS[m[1]], x: m[2], z: m[3], hp: m[5], maxHp: m[6], engaged: !!(m[7] & 2), enraged: !!(m[7] & 4), winding: !!(m[7] & 16), staggered: !!(m[7] & 32), marked: !!(m[7] & 256), def: MOBS[MOB_IDS[m[1]]] })).filter(m => m.def);
+  const th = new Map(msg.w.th || []); for (const m of b.mobs) m.tgt = th.get(m.id) || 0; // who a boss / elite is after (server/threat.js)
   const f2 = msg.w.f2, onF2 = onFloor2(b.x);
   b.gateOpen = onF2 ? !!f2?.gate?.[0] : !!msg.w.gate?.[0];
   b.gateReady = (onF2 ? f2?.gate?.[2] : msg.w.gate?.[2]) || 0;
@@ -123,6 +126,7 @@ function onSnap(b, msg) {
     if (b.dead && !mine.dead) { b.tele = []; b.sweep = null; b.roll = null; } // respawned: regroup from town
     Object.assign(b, { hp: mine.hp, maxHp: mine.maxHp, dead: mine.dead, party: mine.party, style: mine.style }); // style: the equipped weapon's (shared/styles.js)
   }
+  readDowned(b, msg.w.down); // downed players (p.downed, b.downed)
   for (const e of perceive(b, msg.w.events)) onEvent(b, e); // (reaction delays / misses below capability 5)
   if (b.t - (b.pruneT || 0) > 5) prune(b);
   think(b);
@@ -365,6 +369,7 @@ function think(b) {
   const P = partyView(b);
   social(b, P);
   if (b.dead) { b.goal = 'down'; return; }
+  if (downedTurn(b, P)) return; // downed: crawl to help
   if (b.healFocus && (b.healFocus.until < b.t || !P.all.some(p => p.id === b.healFocus.id))) b.healFocus = null;
   const M = decideMode(b, P);
   b.mode = M.mode;
@@ -372,6 +377,7 @@ function think(b) {
   upkeep(b, P, M);
   burstTurn(b, P); // join / start a Team Burst
   if (stepRoll(b) || perilous(b) || waveDodge(b) || travel(b, M)) return;
+  if (reviveTurn(b, P)) return; // a partymate is down and it's our job to pick them up
   act(b, P, M);
 }
 
@@ -394,7 +400,7 @@ function upkeep(b, P, M) {
     if (there && (!P.humans.length || ordered || b.gateReady > 0)) { b.readyT = b.t; b.send({ type: 'ready' }); }
     else if (!there) say(b, 'gateWait', {}, { p: 0.5, cd: 90 });
   }
-  if (b.hp / b.maxHp < potionAt(b) && b.t - b.potT > 10) { if (!drink(b)) b.potT = b.t; }
+  if (!b.rev && b.hp / b.maxHp < potionAt(b) && b.t - b.potT > 10) { if (!drink(b)) b.potT = b.t; }
   if (b.hp / b.maxHp < 0.3 && b.tgtId && b.t - (b.lowT || -99) > 20) {
     b.lowT = b.t;
     say(b, 'lowHp', {}, { p: 0.7, cd: 25 });
@@ -434,8 +440,9 @@ function act(b, P, M) {
     if (tgt?.def.boss && M.mode === 'lead' && b.party) say(b, 'pull', { mob: tgt.def.name.replace(/^The /, '') }, { cd: 120 });
     b.tgtId = tgt?.id ?? null; b.engAt = null;
   }
-  const dodge = dodgeSpot(b);
+  let dodge = dodgeSpot(b);
   if (dodge) evade(b, ...dodge);
+  else if ((dodge = mechSpot(b))) moveToward(b, dodge[0], dodge[1], 0.3); // stack / spread / tether: walk there, still fighting
   const brain = brainFor(b.cls);
   const ctx = makeCtx(b, P, M, tgt, dodge);
   b.goal = goalText(b, P, M, tgt);
@@ -456,7 +463,7 @@ function act(b, P, M) {
 
 function makeCtx(b, P, M, tgt, dodge) {
   const ctx = ctxBase(b);
-  const alive = P.all.filter(p => !p.dead);
+  const alive = P.all.filter(p => !p.dead && !p.downed);
   const tank = alive.find(p => p.role === 'tank' && p.id !== b.id) || null;
   const tankOn = tgt && tank && d2(tank.x, tank.z, tgt.x, tgt.z) < 12 ? tank : null;
   const hTank = tgt && tankOn ? b.hits.get(tgt.id)?.get(tankOn.id) : null;
@@ -466,7 +473,8 @@ function makeCtx(b, P, M, tgt, dodge) {
   ctx.anchor = tankOn || (M.anchor && !M.anchor.dead && M.anchor.id !== b.id ? M.anchor : null);
   ctx.ready = b.role === 'tank' || !tankOn || (!!hTank && b.t - hTank.first > 1.2);
   ctx.party = { mates: P.mates, humans: P.humans, all: P.all };
-  ctx.hurt = alive.filter(p => pct(p) < 0.78 && d2(p.x, p.z, b.x, b.z) < 15).sort((x, y) => pct(x) - pct(y));
+  ctx.hurt = [...P.all.filter(p => p.downed?.by && d2(p.x, p.z, b.x, b.z) < 15), // a body being revived: a Heal speeds it up
+    ...alive.filter(p => pct(p) < 0.78 && d2(p.x, p.z, b.x, b.z) < 15).sort((x, y) => pct(x) - pct(y))];
   ctx.healFocus = b.healFocus ? alive.find(p => p.id === b.healFocus.id) || null : null;
   ctx.engaged = b.engAt === null ? null : b.t - b.engAt;
   if (tank && tgt) { // the tank's Ground Slam: Break it ourselves only while that's on cooldown (or the tank isn't Breaking)

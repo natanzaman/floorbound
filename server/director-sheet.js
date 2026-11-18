@@ -1,6 +1,7 @@
 // Cue sheets for the scene director (server/director.js): parsing, the format's vocabulary (verbs, landmarks, places,
 // conditions), validation and the cue timeline. Pure: no game state here, so tests can use it on its own.
 // The format (v1) is documented in docs/SCRIPT_BRIEF.md; Episode 1's sheet is docs/story/ep1-first-line.yaml.
+import { createHash } from 'node:crypto';
 import YAML from 'yaml';
 import { CLASSES, MAX_LEVEL, MOBS, WORLD, GATE } from '../shared/data.js';
 import { F2, GATE2, WAYSTONES } from '../shared/floor2.js';
@@ -58,7 +59,7 @@ export const BOSSES = { warden: 'warden', sovereign: 'sovereign' }; // name in a
 // args: name -> kind (validated below). req: required args. api: the Game method it needs (F1/F3-F6, docs/ROADMAP.md).
 const LOC = 'loc', TGT = 'tgt', MOB = 'mob', COND = 'cond', NUM = 'num', STR = 'str', BOOL = 'bool';
 const en = (...v) => ({ enum: v });
-export const MOVES = ['horn_sweep', 'slam', 'charge', 'quake', 'rockfall', 'tidal_wave', 'geyser', 'trident', 'deluge'];
+export const MOVES = ['horn_sweep', 'slam', 'charge', 'quake', 'rockfall', 'tidal_wave', 'geyser', 'trident', 'deluge', 'meteor', 'spread', 'tether']; // (the last three: team mechanics, server/bossteam.js)
 export const SHOTS = ['close_up', 'medium', 'wide', 'over_shoulder', 'follow', 'orbit', 'crane', 'pov', 'eyes', 'free']; // pov / eyes: a character's own view (F8)
 export const EMOTES = ['cheer', 'block', 'cast', 'hit', 'die'];
 export const VERBS = {
@@ -111,6 +112,11 @@ export const CAST_FIELDS = new Set(['id', 'name', 'class', 'style', 'level', 'sk
 
 // A say line's default hold: like a speech bubble, 1.6 s + 0.07 s per character, 2-5 s.
 export const sayHold = text => Math.min(5, Math.max(2, 1.6 + 0.07 * String(text || '').length));
+
+// Voice-over files for say lines (scripts/film/voices.mjs makes them): public/voice/<episode dir>/<key>.mp3, one per
+// cast member and line. The key only depends on who says what, so the server can name the file without the voice map.
+export const voiceDir = sheet => `ep${String(sheet?.episode ?? 'x').replace(/[^\w-]/g, '')}`;
+export const voiceKey = (castId, text) => createHash('sha1').update(`${castId}\n${String(text)}`).digest('hex').slice(0, 12);
 
 // ---------- conditions (`until`) ----------
 // <target>_hp < N% (also <=, >, >=), <target>_dead, <target>_broken, gate_open, t > N (seconds into the scene).

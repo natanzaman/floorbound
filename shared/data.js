@@ -1,11 +1,34 @@
 // Shared game data and helpers, imported by both the server and the browser client.
-import { F2, F2_MOB_IDS, F2_MOBS, F2_BITE, inCamp2, walkable2, areaName2, floor2Obstacles } from './floor2.js';
+import { F2, F2_MOB_IDS, F2_MOBS, F2_BITE, SOVEREIGN, inCamp2, walkable2, areaName2, floor2Obstacles } from './floor2.js';
 import { LANCER } from './classes/lancer.js';
 import { BARD } from './classes/bard.js';
 import { RANGER } from './classes/ranger.js';
 import { BERSERKER } from './classes/berserker.js';
 
 export const TICK_RATE = 20;
+// Ability pacing: every player skill's use time (draws, leaps, gaps between hits) and every boss wind-up is x PACE, so
+// abilities read clearly; damage and cooldowns are unchanged (a skill's cooldown starts when its last hit lands:
+// server/pacing.js). Instant skills stay instant. The client plays skill clips at speed / PACE. PACE = 1 undoes it all.
+export const PACE = 1.3;
+export const paced = s => Math.round(s * PACE * 1000) / 1000;
+// Pace boss move tables in place (once): each move's `wind` (and Quake Ring `gap`) x PACE, and its repeat `every`
+// (a number, or one per phase; 0 = not in that phase) grows by the extra wind-up, because repeats are timed from the
+// start of the wind-up: the rest after the hit stays the same. `first` timers are unchanged.
+// keys: the moves of `tbl` to pace (default: every entry with a numeric `wind`); keys = null paces `tbl` itself as one move.
+export function paceMoves(tbl, keys) {
+  const moves = keys === null ? [tbl] : (keys || Object.keys(tbl).filter(k => typeof tbl[k]?.wind === 'number')).map(k => tbl[k]);
+  for (const mv of moves) {
+    if (!mv || mv._paced || typeof mv.wind !== 'number') continue;
+    const wind = paced(mv.wind), extra = wind - mv.wind, grow = e => (e > 0 ? Math.round((e + extra) * 1000) / 1000 : e);
+    mv.wind = wind;
+    const gap0 = mv.gap;
+    if (typeof mv.gap === 'number') mv.gap = paced(mv.gap);
+    if (Array.isArray(mv.every)) mv.every = mv.every.map((e, i) => grow(e) + (Array.isArray(mv.rings) && typeof mv.gap === 'number' && e > 0 ? Math.round((mv.rings[i] - 1) * (mv.gap - gap0) * 1000) / 1000 : 0));
+    else if (typeof mv.every === 'number') mv.every = grow(mv.every);
+    Object.defineProperty(mv, '_paced', { value: true }); // not enumerable: twists copy moves with { ...v }
+  }
+  return tbl;
+}
 export const PLAYER_SPEED = 7;
 export const SPRINT_SPEED = 10; // automatic when out of combat for a few seconds
 export const SPRINT_AFTER = 3;   // seconds without dealing or taking damage
@@ -200,6 +223,8 @@ export const WARDEN = {
   // rings per phase, `gap` s apart; `w`: half-thickness of the wavefront (m); speed in m/s.
   quake: { every: [15, 12, 9.5], first: [9, 5, 4], wind: 2.0, speed: 9, w: 0.55, max: 15, mult: 2.7, rings: [1, 2, 3], gap: 0.95 },
 };
+paceMoves(WARDEN, ['slam', 'charge', 'cleave', 'spin', 'rock', 'quake']); // slower, readable wind-ups (PACE above)
+paceMoves(SOVEREIGN, ['sweep', 'geyser', 'wave']); // shared/floor2.js can't import this file, so it is paced here
 export const THORN = { speed: 16, radius: 0.6, wind: 0.75 };
 // Rare named spawns: at most one alive; first after `first` s, then `every` s after the last one is gone.
 export const RARE = {
@@ -240,4 +265,4 @@ export const PERFECT = { window: 0.2, counter: 1.5, dmg: 1.5, posture: 2 };
 // Guardian guard (hold R): frontal hits (within `arc` rad of facing) take `dr` less damage; a press <= `parry` s before a hit negates it.
 export const GUARD = { arc: (70 * Math.PI) / 180, dr: 0.7, parry: 0.2, speed: 0.5, repress: 0.6 };
 // The Warden's perilous Horn Sweep: dodge (i-frames) or parry it; shields, guard, gear and jumping don't help.
-export const SWEEP = { r: 9, wind: 1.2, frac: 0.8, every: [12.5, 9.5, 7.5], first: 9 };
+export const SWEEP = paceMoves({ r: 9, wind: 1.2, frac: 0.8, every: [12.5, 9.5, 7.5], first: 9 }, null);

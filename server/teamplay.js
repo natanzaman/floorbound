@@ -10,8 +10,10 @@
 // Tables: shared/teamplay.js. Events (all in this.events): 'tsetup' { id, k, by, d } a setup opened on a target;
 // 'combo' { id, k, n, by, from, x, z } (n: the target's chain); 'tbsync' { key, by, d, ids } a sync window opened;
 // 'tbjoin' { key, id, n }; 'tburst' { key, by, ids, n, m, x, z } the finisher fired. Snapshot: w.tb (teamSnap).
-// Hooks wrapped here (the original always runs): damageMob, breakMob, markA, healPlayer, guardHit, evadeHit,
-// damagePlayer, killMob, update, handle ('burst' messages), meFor is untouched.
+// Stats recorded here: dmg, switch, break, combo, setup, burst, parry, perfect, lastAttack. The others come from their
+// features: heal, tanked, save, cover, flank (server/threat.js), revive (server/revive.js), mechanic (server/bossteam.js).
+// Hooks wrapped here (the original always runs): damageMob, breakMob, markA, guardHit, evadeHit, killMob, update,
+// handle ('burst' messages; TEST_HOOKS { type: 'test', tb } presets the gauge).
 import { inArena } from '../shared/data.js';
 import { inArena2 } from '../shared/floor2.js';
 import { COMBO, COMBOS, BURST, hitInfo, setupsOf, payoffFor, comboReady, nextChain, burstPower, burstBuff, burstFillScale } from '../shared/teamplay.js';
@@ -100,7 +102,7 @@ const methods = {
   },
   // T pressed (a 'burst' message { m }: the presser's target, a hint): open a sync window (full gauge), or join the open one.
   teamBurst(p, mid = 0) {
-    if (!p || p.dead || this.showRunning()) return false;
+    if (!p || p.dead || p.downed || this.showRunning()) return false; // (downed: server/revive.js)
     const key = this.teamKey(p), s = this.tbState(key), t = this.time;
     const hint = this.mobs.get(mid | 0);
     if (hint && this.targetable(hint) && dist(hint, p) <= BURST.range && !s.tgt) s.tgt = hint.id;
@@ -127,7 +129,7 @@ const methods = {
   // Every living team member near the starter has joined.
   allJoined(key, s) {
     const st = this.players.get(s.by);
-    return this.teamOf(key).every(o => o.dead || s.ids.includes(o.id) || (st && dist(o, st) > BURST.range));
+    return this.teamOf(key).every(o => o.dead || o.downed || s.ids.includes(o.id) || (st && dist(o, st) > BURST.range));
   },
   // What the finisher hits: the target the starter (else a joiner) pressed T on, the starter's locked target, the boss
   // the team is fighting, else the nearest enemy the team is fighting near the starter.
@@ -148,7 +150,7 @@ const methods = {
     return best;
   },
   fireBurst(key, s) {
-    const t = this.time, ids = s.ids.filter(id => this.players.get(id) && !this.players.get(id).dead);
+    const t = this.time, ids = s.ids.filter(id => this.players.get(id) && !this.players.get(id).dead && !this.players.get(id).downed);
     const starter = this.players.get(s.by) || this.players.get(ids[0]), hint = s.tgt;
     s.sync = 0; s.g = 0; s.ids = []; s.tgt = 0;
     if (!starter || !ids.length) return;
@@ -173,7 +175,7 @@ const methods = {
     }
     const v = burstBuff(n);
     for (const o of this.teamOf(key)) { // the team (near the starter): a short damage buff
-      if (o.dead || dist(o, starter) > BURST.buffR) continue;
+      if (o.dead || o.downed || dist(o, starter) > BURST.buffR) continue;
       this.teamBuff?.(o, v, BURST.buffD);
       this.events.push({ t: 'buff', id: o.id, k: 'tburst', d: BURST.buffD });
     }
@@ -270,13 +272,6 @@ export function installTeamplay(Game) {
     return out;
   });
 
-  // Healing done (overheal doesn't count).
-  wrap('healPlayer', function (orig, tg, amount, by, sk) {
-    const got = orig.call(this, tg, amount, by, sk);
-    if (by?.cls && got > 0) this.teamStat(by, 'heal', got);
-    return got;
-  });
-
   // Parries and perfect dodges fill the gauge a little.
   wrap('guardHit', function (orig, p, ...rest) {
     const r = orig.call(this, p, ...rest);
@@ -287,22 +282,6 @@ export function installTeamplay(Game) {
     const n = p.perfects || 0;
     const out = orig.call(this, p, ...rest);
     if ((p.perfects || 0) > n) this.teamStat(p, 'perfect');
-    return out;
-  });
-
-  // Damage taken while the attacker's top threat ("tanked").
-  wrap('damagePlayer', function (orig, p, base, opts = {}) {
-    const hp = p.hp;
-    const out = orig.call(this, p, base, opts);
-    const lost = hp - Math.max(0, p.hp);
-    if (lost > 0) {
-      const a = this.attackerOf(p, opts.src, opts.mob);
-      if (a?.threat?.size) {
-        let top = null, tv = -1;
-        for (const [id, v] of a.threat) if (v > tv) { tv = v; top = id; }
-        if (top === p.id) this.teamStat(p, 'tanked', lost);
-      }
-    }
     return out;
   });
 

@@ -471,3 +471,48 @@ body.mlock #crosshair { display: block; }
 #reconnect span::after { content: ''; display: inline-block; width: 12px; height: 12px; margin-left: 8px; border: 2px solid #60a5fa; border-right-color: transparent; border-radius: 50%; vertical-align: -2px; animation: rc-spin .8s linear infinite; }
 #reconnect button { margin-top: 6px; padding: 6px 14px; border-radius: 8px; border: 1px solid #475569; background: #1e293b; color: #e5e7eb; cursor: pointer; }
 @keyframes rc-spin { to { transform: rotate(360deg); } }
+
+/* team threat (public/threat.js): who the boss is after, my threat meter, Cover, Pincer tags */
+#boss .boss-tgt { font-size: 12px; font-weight: 700; letter-spacing: .08em; color: #fca5a5; text-shadow: 0 2px 4px #000; margin: -2px 0 4px; min-height: 14px; }
+#boss .boss-tgt.me { color: #f87171; }
+#boss .threat-meter { display: flex; align-items: center; gap: 8px; width: 62%; margin: 5px auto 0; font-size: 11px; font-weight: 700; text-shadow: 0 1px 3px #000; }
+#boss .threat-meter.hidden { display: none; }
+#boss .threat-meter .bar { flex: 0 0 38%; height: 6px; border: 1px solid rgba(255,255,255,.25); }
+#boss .threat-meter .bar > div { background: #94a3b8; transition: width .2s; }
+#boss .threat-meter span { white-space: nowrap; opacity: .9; }
+#boss .threat-meter.warn .bar > div { background: #f59e0b; }
+#boss .threat-meter.warn span { color: #fbbf24; opacity: 1; }
+#boss .threat-meter.top .bar > div { background: #ef4444; }
+.sk.sc { border-color: rgba(251,191,36,.6); }
+.touch .sk.sc { position: absolute; left: -70px; top: 56px; }
+.num.pincer { color: #fcd34d; font-size: 13px; font-weight: 700; letter-spacing: .06em; opacity: .9; }
+.num.cover { color: #fbbf24; font-size: 17px; }
+/* ---------- downed + revive (G1, public/revive.js) ---------- */
+#downed { position: fixed; inset: 0; z-index: 6; pointer-events: none; display: grid; place-content: center; text-align: center;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0) 35%, rgba(110,0,0,.55) 100%); }
+#downed .dn-box { position: relative; display: grid; justify-items: center; gap: 4px; margin-top: -30vh; }
+#downed svg { width: 120px; height: 120px; transform: rotate(-90deg); }
+#downed circle, .dn-mark circle { fill: rgba(15,5,5,.55); stroke-width: 3.5; }
+#downed circle.bg, .dn-mark circle.bg { stroke: rgba(255,255,255,.15); }
+#downed circle.fg, .dn-mark circle.fg { fill: none; stroke: #ef4444; stroke-linecap: round; stroke-dasharray: 100.53; transition: stroke-dashoffset .12s linear; }
+#downed .dn-secs { position: absolute; top: 0; height: 120px; display: grid; place-content: center; font-size: 40px; font-weight: 800; }
+#downed .dn-title { font-size: 30px; font-weight: 800; letter-spacing: .14em; color: #fecaca; text-shadow: 0 2px 8px #000; }
+#downed .dn-sub { font-size: 15px; max-width: min(440px, 86vw); opacity: .92; text-shadow: 0 1px 4px #000; }
+#downed .dn-bar, #revive-prompt .rp-bar { width: 220px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.18); overflow: hidden; margin-top: 4px; }
+#downed .dn-bar > div, #revive-prompt .rp-bar > div { height: 100%; background: #4ade80; transition: width .1s linear; }
+#downed.urgent .dn-secs { color: #f87171; animation: dnpulse .5s ease-in-out infinite alternate; }
+@keyframes dnpulse { to { transform: scale(1.12); } }
+#revive-prompt { position: fixed; left: 50%; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 150px); transform: translateX(-50%); z-index: 6;
+  padding: 10px 18px; border-radius: 12px; background: rgba(10,20,14,.82); border: 1px solid rgba(74,222,128,.55); font-size: 16px; font-weight: 700;
+  display: grid; justify-items: center; text-shadow: 0 1px 3px #000; pointer-events: auto; user-select: none; touch-action: none; }
+#revive-prompt b { color: #4ade80; padding: 0 5px; border: 1px solid rgba(74,222,128,.7); border-radius: 4px; }
+.dn-mark { position: absolute; left: 0; top: 0; display: grid; justify-items: center; font-size: 12px; font-weight: 700; color: #fecaca; text-shadow: 0 1px 3px #000; }
+.dn-mark svg { width: 34px; height: 34px; }
+.dn-mark svg circle { transform: rotate(-90deg); transform-origin: 20px 20px; }
+.dn-mark path { fill: #ef4444; }
+.dn-mark.busy path { fill: #4ade80; }
+.dn-mark .pg { width: 46px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.2); overflow: hidden; visibility: hidden; }
+.dn-mark.busy .pg { visibility: visible; }
+.dn-mark .pg > div { height: 100%; background: #4ade80; }
+#party .frame.downed { border-color: rgba(239,68,68,.7); background: rgba(127,29,29,.35); }
+#party .dtag { font-size: 9px; padding: 0 4px; border-radius: 4px; background: #b91c1c; color: #fff; letter-spacing: .05em; }

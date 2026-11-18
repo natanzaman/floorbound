@@ -38,7 +38,7 @@ export function comboTurn(b, tgt, ctx) {
 // The Team Burst: join an open window (chance + delay by capability), or start one with a full gauge while fighting
 // (a human in the party gets BOT_TEAM.startWait s to start it first).
 export function burstTurn(b, P) {
-  if (b.dead || !b.me) return;
+  if (b.dead || b.downed || !b.me) return;
   const key = b.party || b.id, row = b.tb?.find(r => r[0] === key), s = lvl(b);
   const sync = row?.[2] || 0, ids = row?.[3] || [];
   const press = () => { if (b.t - (b.tbPress || -9) > 0.5) { b.tbPress = b.t; b.send({ type: 'burst', m: b.tgtId || 0 }); } };

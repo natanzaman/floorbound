@@ -28,7 +28,7 @@ const MOUNTS = [
   ['/shared/', path.join(root, 'shared')],
   ['/', path.join(root, 'public')],
 ];
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json; charset=utf-8', '.glb': 'model/gltf-binary' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json; charset=utf-8', '.glb': 'model/gltf-binary', '.mp3': 'audio/mpeg' };
 
 // A bug in one bot or one event shouldn't take the whole world down (and wipe everyone's bots). Log it and keep going.
 let crashes = 0;

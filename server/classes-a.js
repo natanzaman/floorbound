@@ -7,7 +7,7 @@
 //    Rage (built by dealing and taking damage, decays out of combat; broadcast as 'rageA' events) and Bloodrage.
 // Hooks in game.js: useSkill (dispatch), damageMob (hitMultA / afterHitA), damagePlayer (hurtModA / onHurtA),
 // update (updateClassesA), moveMob + server/floor2.js f2Move (mobSlowA).
-import { angleTo, wrapAngle, resolveCollision } from '../shared/data.js';
+import { angleTo, wrapAngle, resolveCollision, paced } from '../shared/data.js';
 import { MASTERY, BRANCHES } from '../shared/mastery.js';
 import { RANGER_TUNE as RT } from '../shared/classes/ranger.js';
 import { RAGE, BERSERKER_TUNE as BT } from '../shared/classes/berserker.js';
@@ -37,7 +37,7 @@ const SKILLS = {
     g.fireArrowA(p, { tg, sp: A.speed, pierceN: A.pierceN, dmg: c.atk * A.mult[p.combo], k: fin ? A.kFin || 'heavy' : A.k || 'shot', opts: { heavy: fin, threat: 1 } });
   },
   pierce(g, p, c) {
-    const P = RT.pierce, draw = P.draw * g.styleNum(p, 'drawMul', 1); // Crossbow: a faster draw
+    const P = RT.pierce, draw = paced(P.draw) * g.styleNum(p, 'drawMul', 1); // Crossbow: a faster draw
     g.fxA(p, 'draw', { s: 'pierce', d: r2(draw), r: P.range });
     g.schedule(draw, () => {
       if (!c.alive()) return;
@@ -48,19 +48,19 @@ const SKILLS = {
     });
   },
   rainofarrows(g, p, c) {
-    const R = RT.rain, tg = g.aimA(p, R.range, 0.5);
+    const R = RT.rain, delay = paced(R.delay), every = paced(R.every), tg = g.aimA(p, R.range, 0.5);
     const cx = tg ? tg.x : p.x + Math.sin(p.face) * R.ahead, cz = tg ? tg.z : p.z + Math.cos(p.face) * R.ahead;
     if (tg) p.face = angleTo(p.x, p.z, tg.x, tg.z);
-    g.fxA(p, 'rain', { s: 'pierce', x2: r2(cx), z2: r2(cz), r: R.r, d: r2(R.delay + R.ticks * R.every) });
+    g.fxA(p, 'rain', { s: 'pierce', x2: r2(cx), z2: r2(cz), r: R.r, d: r2(delay + R.ticks * every) });
     for (let i = 0; i < R.ticks; i++) {
-      g.schedule(R.delay + i * R.every, () => {
+      g.effectLater(delay + i * every, () => { // the rain lingers after the volley: not use time (server/pacing.js)
         if (!c.alive()) return;
         g.hitCircle(p, cx, cz, R.r, c.atkNow() * R.mult, { sk: c.S, frac: R.frac, threat: 0.6 });
       });
     }
   },
   snipershot(g, p, c) {
-    const N = RT.sniper, draw = N.draw * g.styleNum(p, 'drawMul', 1);
+    const N = RT.sniper, draw = paced(N.draw) * g.styleNum(p, 'drawMul', 1);
     g.fxA(p, 'draw', { s: 'pierce', d: r2(draw), r: N.range, big: 1 });
     g.schedule(draw, () => {
       if (!c.alive()) return;
@@ -135,7 +135,7 @@ const SKILLS = {
     const C = BT.cleave, rage = p.rage || 0, twin = g.styleNum(p, 'cleaveTwin', 0); // Twin Axes: a second sweep
     g.fxA(p, 'cleave', { s: 'cleave', r: C.r, h: C.half, rage: Math.round(rage) });
     g.hitArc(p, C.r, C.half, c.atk * (C.mult + (C.rage * rage) / 100), { sk: c.S, heavy: true, knock: 1.2 });
-    if (twin) g.schedule(0.22, () => {
+    if (twin) g.schedule(paced(0.22), () => {
       if (!c.alive()) return;
       g.fxA(p, 'cleave', { r: C.r, h: C.half, rage: Math.round(p.rage || 0), tw: 1 });
       g.hitArc(p, C.r, C.half, c.atkNow() * twin * (C.mult + (C.rage * (p.rage || 0)) / 100), { sk: c.S, heavy: true, knock: 0.6 });
@@ -144,7 +144,7 @@ const SKILLS = {
   whirlingaxe(g, p, c) {
     const W = BT.whirlaxe;
     for (let i = 0; i < W.hits; i++) {
-      g.schedule(i * W.gap, () => {
+      g.schedule(i * paced(W.gap), () => {
         if (!c.alive()) return;
         g.fxA(p, 'whirl', { s: i ? undefined : 'cleave', n: i, r: W.r });
         g.hitCircle(p, p.x, p.z, W.r, c.atkNow() * (W.mult + (W.rage * (p.rage || 0)) / 100), { sk: c.S, heavy: i === W.hits - 1, knock: 0.6 });
@@ -397,9 +397,10 @@ export const ClassesAMethods = {
     let lx, lz;
     if (tg) { const a = angleTo(p.x, p.z, tg.x, tg.z); p.face = a; [lx, lz] = this.lineEndA(p, a, Math.max(0, dist(p, tg) - tg.def.radius - 0.8)); }
     else [lx, lz] = this.lineEndA(p, p.face, L.ahead);
-    p.airFrom = c.t; p.airUntil = c.t + L.delay + 0.05; // airborne: ground slams pass under
-    this.fxA(p, 'leap', { s: 'leap', x0: r2(p.x), z0: r2(p.z), x2: r2(lx), z2: r2(lz), r: r2(R), d: L.delay, big: brk ? 1 : 0 });
-    this.schedule(L.delay, () => {
+    const delay = paced(L.delay);
+    p.airFrom = c.t; p.airUntil = c.t + delay + 0.05; // airborne: ground slams pass under
+    this.fxA(p, 'leap', { s: 'leap', x0: r2(p.x), z0: r2(p.z), x2: r2(lx), z2: r2(lz), r: r2(R), d: delay, big: brk ? 1 : 0 });
+    this.schedule(delay, () => {
       if (!c.alive()) return;
       this.teleport(p, lx, lz);
       this.events.push({ t: 'fx', k: 'ca', v: 'slam', id: p.id, x: r2(lx), z: r2(lz), r: r2(hitR), big: brk ? 1 : 0 });

@@ -4,6 +4,7 @@
 import { LANCE } from './lancer.js';
 import { SONG } from './bard.js';
 import { basicProfile, standOff } from '../bots/style.js';
+import { oppositeSpot } from '../bots/threat.js';
 
 export const TEAM_NAMES_B = { lancer: 'Rook', bard: 'Wren' };
 
@@ -20,12 +21,16 @@ function holdRange(ctx, b, tgt, keep, side = null) {
 const basicOf = (ctx, b) => ctx.basic || basicProfile(b.cls, b.style);
 
 export const CLASS_BRAINS_B = {
-  // Lancer: fights at the tip of its spear (the +30% sweet spot), charges to close gaps, Sky Lance to Break.
+  // Lancer: fights at the tip of its spear (the +30% sweet spot), charges to close gaps, Sky Lance to Break; once the
+  // tank holds the target it works round to the far side from the tank (flank / Pincer, shared/bots/threat.js).
   lancer(ctx, b, tgt, dodge) {
     const { useSkill, switchOpen, d2 } = ctx;
     const P = basicOf(ctx, b), edge = d2(b.x, b.z, tgt.x, tgt.z) - tgt.def.radius, want = standOff(P);
+    const a = ctx.anchor(b), far = a && ctx.ready && a.id !== b.id ? oppositeSpot(tgt, a, tgt.def.radius + want) : null;
+    const offSide = far && d2(b.x, b.z, far[0], far[1]) > Math.max(2, (tgt.def.radius + want) * 0.9); // not yet round the back
     if (!dodge) {
-      if (edge > want + 0.4 || edge < P.sweet) holdRange(ctx, b, tgt, tgt.def.radius + want);
+      if (offSide) ctx.moveToward(b, far[0], far[1], 0.35);
+      else if (edge > want + 0.4 || edge < P.sweet) holdRange(ctx, b, tgt, tgt.def.radius + want);
       b.face = Math.atan2(tgt.x - b.x, tgt.z - b.z);
     }
     const face = Math.atan2(tgt.x - b.x, tgt.z - b.z);

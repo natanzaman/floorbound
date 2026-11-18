@@ -1,7 +1,7 @@
 // Authoritative world simulation: players, mobs, the floor boss, combat, XP and parties.
 import {
   WORLD, CLASSES, CLASS_IDS, MOBS, MOB_IDS, MAX_LEVEL, PARTY_MAX, PLAYER_SPEED, SPRINT_SPEED, DODGE, JUMP, SWITCH, BITE, PACK, THORN,
-  GATE, WARDEN, inGateZone, crossesGate, RARE, PERFECT, GUARD,
+  GATE, WARDEN, inGateZone, crossesGate, RARE, PERFECT, GUARD, PACE, paced,
   inTown, inArena, walkable, resolveCollision, rng, angleTo, wrapAngle, xpToNext, statsFor,
 } from '../shared/data.js';
 import {
@@ -22,11 +22,15 @@ import { ClassesAMethods } from './classes-a.js';
 import { installStyles } from './styles.js';
 import { altStyle } from '../shared/styles.js';
 import { installTalents } from './talents.js';
+import { installPacing } from './pacing.js';
 import { installTracking } from './trackgame.js';
 import { installBell } from './bell.js';
 import { installStaging } from './staging.js';
 import { installCine } from './cine.js'; // cinematic camera state for filming (F4)
 import { installPoses } from './poses.js';
+import { installThreat } from './threat.js'; // visible threat, healer threat, Cover, flanking (G3)
+import { installRevive } from './revive.js'; // downed + revive (G1)
+import { installBossTeam } from './bossteam.js'; // boss team mechanics: stack, spread, tether (G4)
 import { installTeamplay } from './teamplay.js'; // skill combos + Team Burst + team stats (G2)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
@@ -177,6 +181,7 @@ export class Game {
         return;
       }
       case 'botcmd': return this.botCommand(p, msg);
+      case 'cover': return this.cover(p, msg.tid); // Guardian Cover (server/threat.js)
       case 'test': // testing aid (TEST_HOOKS=1 only): { hurt: fraction } sets your health, { xp } gives XP, for the bot tests
         if (process.env.TEST_HOOKS && msg.hurt > 0 && msg.hurt <= 1 && !p.dead) p.hp = Math.max(1, Math.round(p.maxHp * msg.hurt));
         if (process.env.TEST_HOOKS && msg.xp > 0) this.giveXp(p, Math.min(1e6, msg.xp | 0)); // { xp }: level up (bot level sync tests)
@@ -608,7 +613,7 @@ export class Game {
       case 'whirl': fx('ring', { r: 4 }); this.hitCircle(p, p.x, p.z, 4, atk * 1.4, { knock: 1.2, sk: S }); break;
       case 'burst':
         for (let i = 0, nb = this.styleNum(p, 'burstHits', 4); i < nb; i++) { // Dual Blades: +2 hits
-          this.schedule(i * 0.2, () => {
+          this.schedule(i * paced(0.2), () => {
             if (p.dead || !this.players.has(p.id)) return;
             this.events.push({ t: 'fx', k: 'arc', s: 'burst', n: i, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), r: 3.2, c: i === nb - 1 ? 'gold' : undefined });
             this.hitArc(p, 3.2, 0.9, p.atk * this.dmgMult(p) * pow * (i === nb - 1 ? 1.6 : 0.9), i === nb - 1 ? { brk: true, knock: 2.5, heavy: true, sk: S } : { knock: 0.3, sk: S });
@@ -649,7 +654,7 @@ export class Game {
         const want = p.healTid && this.players.get(p.healTid); // a bot healer's pick (its party's most hurt / "heal me")
         if (want && !want.dead && dist(want, p) <= 15 && want.hp < want.maxHp) low = -1, target = want;
         for (const o of this.players.values()) {
-          if (o.dead || dist(o, p) > 15 * this.styleNum(p, 'healR', 1)) continue; // Wand: +50% range
+          if (o.dead || this.unhealable?.(o) || dist(o, p) > 15 * this.styleNum(p, 'healR', 1)) continue; // Wand: +50% range; downed: only while being revived
           const f = o.hp / o.maxHp;
           if (f < low) { low = f; target = o; }
         }
@@ -878,18 +883,21 @@ export class Game {
     p.lastHurt = this.time; p.lastCombat = this.time;
     this.onHurtA?.(p, amount); // Berserker Rage (server/classes-a.js)
     this.events.push({ t: 'hurt', id: p.id, a: amount, ...(this.bigHit(src) ? { big: 1 } : {}) }); // big: the victim's client hit-stops
-    if (p.hp <= 0) {
-      p.hp = 0; p.dead = true; p.respawnAt = this.time + 4;
-      p.xp = Math.max(0, p.xp - Math.round(xpToNext(p.lvl) * 0.1)); p.dirty = true;
-      p.deaths++;
-      if (this.fight?.ids.has(p.id)) this.fight.deaths++;
-      if (this.fight && (this.fight.ids.has(p.id) || inArena(p.x, p.z))) (this.fight.pd ||= new Map()).set(p.id, (this.fight.pd.get(p.id) || 0) + 1); // for "Undying"
-      this.bumpStat(p, 'deaths');
-      const floor = floorOf(p.x); // the respawn point (and the stats page) depend on the floor you died on
-      this.track(p, 'death', { cause: src, lvl: p.lvl, floor, area: (floor === 2 ? inArena2(p.x, p.z) : inArena(p.x, p.z)) ? 'arena' : p.z > 95 ? 'woods' : 'field', ...this.fightCtx?.(p) });
-      this.events.push({ t: 'pdie', id: p.id, src, f: floor });
-      this.sys(`${p.name} was defeated.`);
-    }
+    if (p.hp <= 0 && !this.goDown?.(p, src)) this.killPlayer(p, src); // downed instead, with a partymate nearby (server/revive.js)
+  }
+
+  // A player's death (0 HP, or a downed player bleeding out): XP loss, stats, tracking, `pdie`; respawns in 4 s.
+  killPlayer(p, src = '?') {
+    p.hp = 0; p.dead = true; p.respawnAt = this.time + 4;
+    p.xp = Math.max(0, p.xp - Math.round(xpToNext(p.lvl) * 0.1)); p.dirty = true;
+    p.deaths++;
+    if (this.fight?.ids.has(p.id)) this.fight.deaths++;
+    if (this.fight && (this.fight.ids.has(p.id) || inArena(p.x, p.z))) (this.fight.pd ||= new Map()).set(p.id, (this.fight.pd.get(p.id) || 0) + 1); // for "Undying"
+    this.bumpStat(p, 'deaths');
+    const floor = floorOf(p.x); // the respawn point (and the stats page) depend on the floor you died on
+    this.track(p, 'death', { cause: src, lvl: p.lvl, floor, area: (floor === 2 ? inArena2(p.x, p.z) : inArena(p.x, p.z)) ? 'arena' : p.z > 95 ? 'woods' : 'field', ...this.fightCtx?.(p) });
+    this.events.push({ t: 'pdie', id: p.id, src, f: floor });
+    this.sys(`${p.name} was defeated.`);
   }
 
   // ---------- simulation ----------
@@ -1037,7 +1045,7 @@ export class Game {
     } else if (t >= m.atkT) {
       const wind = def.boss ? (this.twistW || WARDEN).cleave.wind : def.ranged ? THORN.wind : 0.45;
       m.windupAt = t + wind;
-      m.atkT = t + def.atkCd * (enraged ? 0.7 : 1) * (frenzy ? 0.7 : 1);
+      m.atkT = t + def.atkCd * (enraged ? 0.7 : 1) * (frenzy ? 0.7 : 1) + (def.boss ? wind - wind / PACE : 0); // the paced wind-up doesn't eat the rest
       const ev = { t: 'wind', id: m.id, d: wind, f: r2(m.face) };
       if (def.ranged) { m.aimX = target.x; m.aimZ = target.z; ev.ax = r2(target.x); ev.az = r2(target.z); }
       else if (BITE[m.type]) { ev.r = BITE[m.type][0]; ev.h = BITE[m.type][1]; }
@@ -1253,6 +1261,7 @@ export class Game {
         for (const [x, z] of spots) this.circleAttack(m, x, z, W.rock.r, W.rock.wind, m.def.atk * W.rock.mult, 'rockfall', false, 'rock');
       }
     }
+    this.bossTeam?.(m, fighters); // team mechanics: shared meteor, spread, tether (server/bossteam.js)
     this.twistSpecials(m, pick); // Warden twist behaviour
   }
 
@@ -1288,7 +1297,7 @@ export class Game {
     this.events.push({ t: 'tele', k: 'line', x: r2(x0), z: r2(z0), x2: r2(x2), z2: r2(z2), w: W.width, d: W.wind, id: m.id });
     const steps = 3;
     for (let i = 1; i <= steps; i++) {
-      this.schedule(W.wind + i * 0.1, () => {
+      this.schedule(W.wind + i * paced(0.1), () => {
         if (m.dead) return;
         m.x = x0 + (x2 - x0) * (i / steps); m.z = z0 + (z2 - z0) * (i / steps); m.moving = true;
         if (i < steps) return;
@@ -1339,7 +1348,7 @@ export class Game {
     const g = this.gate;
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
     const gate = [g.open ? 1 : 0, waiting, g.ready.size, g.countAt ? r1(Math.max(0, g.countAt - this.time)) : 0];
-    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), gi: this.groundSnap(), poses: this.posesSnap(), tb: this.teamSnap() }); // poses: [[id, k]], only while any is held (server/poses.js)
+    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), gi: this.groundSnap(), poses: this.posesSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
     this.events = [];
     return out;
   }
@@ -1374,6 +1383,10 @@ installBell(Game); // the Tower Bell: ringBell, bellAuto (server/bell.js)
 installCine(Game); // cine(op, data), cineState(): filming camera, titles, fades, light (server/cine.js)
 installPoses(Game); // kneel / sit / bow: setPose, /kneel chat, cleared by moving or acting (server/poses.js)
 installTracking(Game); // play-tracking hooks: boss fight rows, death / quit context (server/trackgame.js)
+installThreat(Game); // threat you can see, healer threat, Cover, flanking (server/threat.js)
 installStaging(Game); // staging hooks for the scene director: boss moves, reserved Last Attack, scripted deaths (server/staging.js)
-installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js); keep it last
+installBossTeam(Game); // boss team mechanics (server/bossteam.js); after staging: adds meteor / spread / tether to forceBossMove
+installRevive(Game); // downed + revive (server/revive.js); after staging and boss team mechanics
+installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js)
 installTeamplay(Game); // skill combos between players, the Team Burst gauge, teamStat() for the post-fight card (server/teamplay.js); after the talents
+installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last
