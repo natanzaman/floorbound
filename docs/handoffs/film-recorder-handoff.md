@@ -4,7 +4,8 @@
 ## Purpose
 scripts/film/record.mjs records Episode 1 takes headless so the camera framing can be reviewed as real video (F7/F8,
 docs/ROADMAP.md). Natan watched take 4 and found it "very laggy". Goal: test recordings that play smoothly at 60 fps
-(or at least a steady frame rate with no stutter). Dev tool only; the real episode is recorded with OBS (docs/story/FILMING.md).
+(or at least a steady frame rate with no stutter) and carry the game's audio (Natan 2026-11-18: "also theres no audio?"; a
+parallel session adds character voices, so audio matters). Playwright video has no audio: option 4 (screen capture) or a WebAudio tap. Dev tool only; the real episode is recorded with OBS (docs/story/FILMING.md).
 Rule: small focused diffs; don't touch game code unless the measurement shows the game itself stutters.
 
 ## Git state (2026-11-18 ~01:40Z)
