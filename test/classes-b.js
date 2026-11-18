@@ -160,14 +160,14 @@ const evolve = (p, sk, br) => { p.mastery[sk] = { pts: MASTERY.need[3], br }; };
   advance(0.5);
   assert.equal(hits(m).length, 0, 'still in the air');
   assert.equal(lancer.z, Z, 'not landed yet');
-  advance(0.3);
+  advance(0.45); // the paced leap lands at 0.91 s
   assert.ok(Math.abs(lancer.z - mark.z2) < 0.01, 'landed on the mark');
   assert.ok(ev('stagger', e => e.id === m.id && e.by === lancer.id).length, 'BROKEN');
   assert.ok(hits(other, lancer).length, 'area hit');
   assert.ok(lancer.mastery.skylance.pts > MASTERY.brk[0], 'mastery: damage, posture and the Break');
   g.damageMob(m, ally, 10);
   assert.ok(ev('switch', e => e.id === m.id && e.by === ally.id && e.from === lancer.id).length, 'a teammate Switches in');
-  ok('Sky Lance: marked leap, airborne for 0.7 s, crashes down to BREAK, a teammate Switches');
+  ok('Sky Lance: marked leap, airborne for 0.91 s (0.7 x PACE), crashes down to BREAK, a teammate Switches');
 }
 { // the airborne flight dodges a ground slam
   reset();
@@ -344,13 +344,13 @@ const evolve = (p, sk, br) => { p.mastery[sk] = { pts: MASTERY.need[3], br }; };
 
   reset(); evolve(lancer, 'skylance', 'A');
   const ma = wolf(X, Z + 8, 400), mb = wolf(X + 4, Z + 7, 400);
-  face(lancer, ma); use(lancer, 'skylance'); advance(0.8);
+  face(lancer, ma); use(lancer, 'skylance'); advance(1); // lands at 0.91 s (paced)
   assert.ok(hits(ma).length && hits(mb).length, 'Meteor: wide crash');
   assert.equal(ev('stagger').length, 0, 'no Break');
 
   reset(); evolve(lancer, 'skylance', 'B');
   const pin = wolf(X, Z + 8);
-  face(lancer, pin); use(lancer, 'skylance'); advance(0.8);
+  face(lancer, pin); use(lancer, 'skylance'); advance(1);
   assert.equal(ev('stagger', e => e.id === pin.id && e.by === lancer.id).length, 1, 'Pinning: instant Break');
   assert.ok(pin.stunUntil >= g.time + LANCE.pin.root - 0.1, 'pinned (rooted)');
 

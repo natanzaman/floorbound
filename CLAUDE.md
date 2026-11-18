@@ -24,6 +24,7 @@ Start every session by reading `docs/ROADMAP.md`: it holds the current plan, the
   - Create one with `git worktree add -b feat/<name> /home/claude/wt/<name> main`, then `ln -s <repo>/node_modules <wt>/node_modules`.
   - Merge straight into `main` (no PRs), resolving conflicts by keeping both sides.
   - After merging, run all tests, push, then remove the worktree and branch.
+  - **Always push with lease:** `git push --force-with-lease origin main` (never a bare `--force`). If the lease is rejected, someone else pushed: pull, re-merge, re-test, push again.
 - **Commits:** the owner has granted standing commit and push access. Commit messages end with the session's attribution lines.
 - **Safety:**
   - Never type passwords, keys or tokens.

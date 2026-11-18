@@ -41,12 +41,12 @@ export const nearShrine = (x, z, pad = 0) => SHRINES.find(s => Math.hypot(x - s.
 export const BRANCHES = {
   // Swordsman
   rush: {
-    A: { id: 'phantom', name: 'Phantom Rush', desc: 'Dash through enemies; an afterimage strikes the same path again 0.4 s later.' },
+    A: { id: 'phantom', name: 'Phantom Rush', desc: 'Dash through enemies; an afterimage strikes the same path again about half a second later.' },
     B: { id: 'shoulder', name: 'Shoulder Charge', desc: 'Stop on the first enemy and slam it: heavy posture damage and a short stun. Sets up a Switch.', coop: 1 },
   },
   whirl: {
     A: { id: 'vortex', name: 'Vortex', desc: 'Pull enemies within 7 m in, then spin. Gathers a pack for your party.', coop: 1 },
-    B: { id: 'bladering', name: 'Blade Ring', desc: 'A smaller ring of blades that spins with you for 1.5 s while you keep moving.' },
+    B: { id: 'bladering', name: 'Blade Ring', desc: 'A smaller ring of blades that spins with you for about 2 s while you keep moving.' },
   },
   burst: {
     A: { id: 'starburst', name: 'Starburst', desc: '6 hits and more total damage, but no Break posture.' },

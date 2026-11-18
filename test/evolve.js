@@ -216,10 +216,10 @@ const evoFx = name => ev('fx', e => e.k === 'evo' && e.ev === name);
   use(sword, 'rush');
   assert.equal(hits(m, sword).length, 1);
   assert.ok(sword.z > m.z, 'dashes through');
-  advance(0.3); assert.equal(hits(m, sword).length, 1);
-  advance(0.2); assert.equal(hits(m, sword).length, 2, 'afterimage hit');
+  advance(0.4); assert.equal(hits(m, sword).length, 1);
+  advance(0.2); assert.equal(hits(m, sword).length, 2, 'afterimage hit'); // 0.4 x PACE = 0.52 s
   assert.equal(evoFx('phantom2').length, 1);
-  ok('Phantom Rush: passes through, afterimage strikes again ~0.4 s later');
+  ok('Phantom Rush: passes through, afterimage strikes again ~0.5 s later');
 }
 { // Shoulder Charge: stops on the first enemy, big posture
   reset(); evolve(sword, 'rush', 'B');
@@ -240,7 +240,7 @@ const evoFx = name => ev('fx', e => e.k === 'evo' && e.ev === name);
   const d1 = Math.hypot(m.x - sword.x, m.z - sword.z);
   assert.ok(d1 < d0 - 2 && d1 < 3, `pulled in (${d0.toFixed(1)} -> ${d1.toFixed(1)})`);
   assert.equal(far.x, X + 20, 'out of reach: not pulled');
-  advance(0.3); assert.equal(hits(m, sword).length, 1, 'then the spin hits');
+  advance(0.4); assert.equal(hits(m, sword).length, 1, 'then the spin hits'); // 0.25 x PACE
   ok('Vortex: moves enemies toward you, then spins');
 }
 { // Blade Ring: keeps hitting where you are as you move
@@ -249,11 +249,11 @@ const evoFx = name => ev('fx', e => e.k === 'evo' && e.ev === name);
   use(sword, 'whirl');
   assert.equal(hits(a, sword).length, 1); assert.equal(hits(b, sword).length, 0);
   sword.x = X + 29; // keep moving
-  advance(0.55);
+  advance(0.7); // ticks every 0.5 x PACE = 0.65 s
   assert.equal(hits(b, sword).length, 1, 'the ring moved with you');
-  advance(1.1);
+  advance(1.3);
   assert.equal(evoFx('bladering').length, 4);
-  ok('Blade Ring: 4 ticks over 1.5 s that follow you as you move');
+  ok('Blade Ring: 4 ticks over ~2 s that follow you as you move');
 }
 { // Starburst: 6 hits
   reset(); evolve(sword, 'burst', 'A');

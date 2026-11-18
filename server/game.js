@@ -1,7 +1,7 @@
 // Authoritative world simulation: players, mobs, the floor boss, combat, XP and parties.
 import {
   WORLD, CLASSES, CLASS_IDS, MOBS, MOB_IDS, MAX_LEVEL, PARTY_MAX, PLAYER_SPEED, SPRINT_SPEED, DODGE, JUMP, SWITCH, BITE, PACK, THORN,
-  GATE, WARDEN, inGateZone, crossesGate, RARE, PERFECT, GUARD,
+  GATE, WARDEN, inGateZone, crossesGate, RARE, PERFECT, GUARD, PACE, paced,
   inTown, inArena, walkable, resolveCollision, rng, angleTo, wrapAngle, xpToNext, statsFor,
 } from '../shared/data.js';
 import {
@@ -22,6 +22,7 @@ import { ClassesAMethods } from './classes-a.js';
 import { installStyles } from './styles.js';
 import { altStyle } from '../shared/styles.js';
 import { installTalents } from './talents.js';
+import { installPacing } from './pacing.js';
 import { installTracking } from './trackgame.js';
 import { installBell } from './bell.js';
 import { installStaging } from './staging.js';
@@ -608,7 +609,7 @@ export class Game {
       case 'whirl': fx('ring', { r: 4 }); this.hitCircle(p, p.x, p.z, 4, atk * 1.4, { knock: 1.2, sk: S }); break;
       case 'burst':
         for (let i = 0, nb = this.styleNum(p, 'burstHits', 4); i < nb; i++) { // Dual Blades: +2 hits
-          this.schedule(i * 0.2, () => {
+          this.schedule(i * paced(0.2), () => {
             if (p.dead || !this.players.has(p.id)) return;
             this.events.push({ t: 'fx', k: 'arc', s: 'burst', n: i, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), r: 3.2, c: i === nb - 1 ? 'gold' : undefined });
             this.hitArc(p, 3.2, 0.9, p.atk * this.dmgMult(p) * pow * (i === nb - 1 ? 1.6 : 0.9), i === nb - 1 ? { brk: true, knock: 2.5, heavy: true, sk: S } : { knock: 0.3, sk: S });
@@ -1037,7 +1038,7 @@ export class Game {
     } else if (t >= m.atkT) {
       const wind = def.boss ? (this.twistW || WARDEN).cleave.wind : def.ranged ? THORN.wind : 0.45;
       m.windupAt = t + wind;
-      m.atkT = t + def.atkCd * (enraged ? 0.7 : 1) * (frenzy ? 0.7 : 1);
+      m.atkT = t + def.atkCd * (enraged ? 0.7 : 1) * (frenzy ? 0.7 : 1) + (def.boss ? wind - wind / PACE : 0); // the paced wind-up doesn't eat the rest
       const ev = { t: 'wind', id: m.id, d: wind, f: r2(m.face) };
       if (def.ranged) { m.aimX = target.x; m.aimZ = target.z; ev.ax = r2(target.x); ev.az = r2(target.z); }
       else if (BITE[m.type]) { ev.r = BITE[m.type][0]; ev.h = BITE[m.type][1]; }
@@ -1289,7 +1290,7 @@ export class Game {
     this.events.push({ t: 'tele', k: 'line', x: r2(x0), z: r2(z0), x2: r2(x2), z2: r2(z2), w: W.width, d: W.wind, id: m.id });
     const steps = 3;
     for (let i = 1; i <= steps; i++) {
-      this.schedule(W.wind + i * 0.1, () => {
+      this.schedule(W.wind + i * paced(0.1), () => {
         if (m.dead) return;
         m.x = x0 + (x2 - x0) * (i / steps); m.z = z0 + (z2 - z0) * (i / steps); m.moving = true;
         if (i < steps) return;
@@ -1377,4 +1378,5 @@ installPoses(Game); // kneel / sit / bow: setPose, /kneel chat, cleared by movin
 installTracking(Game); // play-tracking hooks: boss fight rows, death / quit context (server/trackgame.js)
 installStaging(Game); // staging hooks for the scene director: boss moves, reserved Last Attack, scripted deaths (server/staging.js)
 installBossTeam(Game); // boss team mechanics (server/bossteam.js); after staging: adds meteor / spread / tether to forceBossMove
-installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js); keep it last
+installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js)
+installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last

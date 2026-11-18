@@ -97,7 +97,7 @@ scenes:
 - `id`: a label other cues can wait for;
 - `after`: `prev` or a label;
 - `delay`: seconds to wait after the trigger;
-- `hold`: seconds the cue lasts at least (for `say`: how long the bubble holds; default by length).
+- `hold`: seconds the cue lasts at least (for `say`: how long the bubble holds; default by length; the film view's subtitle stays at least this long, longer if the line needs more reading time).
 
 **Timing:**
 - A cue **starts together with the previous cue**.
@@ -125,7 +125,7 @@ scenes:
 | | `parry` | | Guardian: a quick guard tap |
 | | `use_item` | `item` (`potion` default, `tonic`, `draught`) | |
 | | `ready` | | at a raid gate |
-| Body | `say` | `text*`, `ch` (`say` default, heard nearby; `party`) | a speech bubble |
+| Body | `say` | `text*`, `ch` (`say` default, heard nearby; `party`) | a speech bubble; in the film view a subtitle, plus the line's voice-over when made (`scripts/film/voices.mjs`; voices in `docs/story/ep<N>-voices.yaml`) |
 | | `emote` | `anim*` (`cheer`, `block`, `cast`, `hit`, `die`) | |
 | | `pose` | `k*` (`kneel`, `sit`, `bow`, `none`) | clears when the actor moves |
 | Lifecycle | `die` | `respawn` (default false) | scripted death: stays down |

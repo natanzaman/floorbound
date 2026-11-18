@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import WebSocket from 'ws';
 import { Game } from '../server/game.js';
-import { CLASSES, SWITCH, MAX_LEVEL, angleTo } from '../shared/data.js';
+import { CLASSES, SWITCH, MAX_LEVEL, angleTo, paced } from '../shared/data.js';
 import { makeItem, SHOP, MERCHANT } from '../shared/items.js';
 import { SMITH, RECIPES } from '../shared/crafting.js';
 import { STYLES, STYLE_IDS, CLASS_STYLES, styleOf, rollStyle, styleItemName } from '../shared/styles.js';
@@ -413,7 +413,7 @@ g.time = 100;
   assert.ok(ev('aproj', e => e.by === xb.id).every(e => e.k === 'xbolt' || e.k === 'xheavy'));
   clear(); use(lb, 'pierce'); use(xb, 'pierce');
   const draws = ev('fx', e => e.k === 'ca' && e.v === 'draw');
-  near(draws.find(e => e.id === xb.id).d, RT.pierce.draw * 0.6, 0.01); near(draws.find(e => e.id === lb.id).d, RT.pierce.draw, 0.01);
+  near(draws.find(e => e.id === xb.id).d, paced(RT.pierce.draw) * 0.6, 0.01); near(draws.find(e => e.id === lb.id).d, paced(RT.pierce.draw), 0.01);
   done();
   ok('Crossbow: slower (0.99 s), x1.75 bolts that pierce one extra, first bolt on a new target crits, Piercing Shot draws 40% faster');
 

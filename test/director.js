@@ -13,7 +13,7 @@ import { WebSocketServer } from 'ws';
 import { Game } from '../server/game.js';
 import { BotManager } from '../server/botmanager.js';
 import { Director } from '../server/director.js';
-import { parseSheet, validateSheet, Timeline, parseCond, API_NAMES, sayHold } from '../server/director-sheet.js';
+import { parseSheet, validateSheet, Timeline, parseCond, API_NAMES, sayHold, voiceKey, voiceDir } from '../server/director-sheet.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -141,8 +141,13 @@ function inProcessServer(game) {
   await S.listen();
   const chats = [], snap = game.snapshot.bind(game);
   game.snapshot = () => { for (const e of game.events) if (e.t === 'chat') chats.push(e); return snap(); };
+  // a voice-over file for Wren's line (scripts/film/voices.mjs makes these); Kade's has none
+  const vdir = new URL('../public/voice/eptest/', import.meta.url);
+  fs.mkdirSync(vdir, { recursive: true });
+  fs.writeFileSync(new URL(`${voiceKey('wren', 'Not one name on this stone.')}.mp3`, vdir), '');
   const r = dir.load(`
 title: Test
+episode: test
 cast:
   - { id: wren, name: "Wren", class: cleric, style: staff, level: 4 }
   - { id: kade, name: "Kade", class: swordsman, style: dual, level: 4, skill: 3 }
@@ -155,12 +160,14 @@ scenes:
       - { who: kade, do: face, to: wren }
       - { who: wren, do: say, text: "Not one name on this stone.", hold: 1, after: walk }
       - { who: kade, do: run_to, to: wren, after: prev }
+      - { who: kade, do: say, text: "Then we go.", after: prev }
       - { do: wait, secs: 0.5, after: prev }
 `);
   ok(r.ok && r.scenes.join() === 'one', 'a short sheet loads');
   dir.run({ force: true });
   const t0 = Date.now();
   while (Date.now() - t0 < 30000 && dir.state !== 'done' && dir.state !== 'error') await sleep(100);
+  fs.rmSync(vdir, { recursive: true, force: true }); // the test voice file never stays in public/
   const st = dir.status();
   if (st.state !== 'done') console.log(st.log.map(l => `    ${l.t} ${l.text}`).join('\n'));
   ok(st.state === 'done', `the show finishes (${st.elapsed} s)`);
@@ -173,7 +180,11 @@ scenes:
   ok(Math.hypot(wren.x - -5.6, wren.z - 1.9) < 1.5, `Wren walked to the Hall of Clearers (${wren.x.toFixed(1)}, ${wren.z.toFixed(1)})`);
   ok(Math.hypot(kade.x - wren.x, kade.z - wren.z) < 2.6, 'Kade ran to Wren');
   ok(chats.some(e => e.id === wren.id && e.text === 'Not one name on this stone.' && e.ch === 's'), 'Wren said her line (say chat)');
-  ok(!chats.some(e => e.id === kade.id || (e.id === wren.id && e.text !== 'Not one name on this stone.')), 'actors never chatter on their own');
+  const wl = chats.find(e => e.id === wren.id), kl = chats.find(e => e.id === kade.id);
+  ok(wl?.hold === 1 && kl?.hold === sayHold('Then we go.'), 'a scripted line carries its hold (bubbles, film subtitles)');
+  ok(wl?.voice === `eptest/${voiceKey('wren', 'Not one name on this stone.')}` && kl && !('voice' in kl), 'a line names its voice-over file only when one was made');
+  ok(voiceDir({ episode: 1 }) === 'ep1' && voiceKey('wren', 'a') !== voiceKey('kade', 'a') && /^[0-9a-f]{12}$/.test(voiceKey('x', 'y')), 'voice files: ep<N>/<key per speaker and line>');
+  ok(!chats.some(e => (e.id === kade.id && e.text !== 'Then we go.') || (e.id === wren.id && e.text !== 'Not one name on this stone.')), 'actors never chatter on their own');
   ok(st.checks.scenes.join() === 'one' && st.checks.unscripted.length === 0, 'status: scene finished, no unscripted deaths');
   const said = st.log.findIndex(l => /Wren: Not one name/.test(l.text)), walked = st.log.findIndex(l => /Scene one finished/.test(l.text));
   ok(said > 0 && walked > said, 'the log has the line, then the scene end');

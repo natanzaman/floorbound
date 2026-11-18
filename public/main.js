@@ -1,7 +1,7 @@
 // Floorbound browser client: networking, input, camera, entities and HUD.
 import * as THREE from 'three';
 import {
-  CLASSES, CLASS_IDS, MOBS, MOB_IDS, PLAYER_SPEED, SPRINT_SPEED, SPRINT_AFTER, TICK_RATE, MAX_LEVEL, DODGE, JUMP,
+  CLASSES, CLASS_IDS, MOBS, MOB_IDS, PACE, PLAYER_SPEED, SPRINT_SPEED, SPRINT_AFTER, TICK_RATE, MAX_LEVEL, DODGE, JUMP,
   walkable, resolveCollision, inTown, inArena, areaName, angleTo, inGateZone,
 } from '/shared/data.js';
 import { airStep } from '/shared/data.js'; // jump air control
@@ -230,7 +230,7 @@ function reconnect(joinMsg) {
 }
 const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
 const wheel = initBotWheel({ send, state, players, log }); // orders for the bots in your party: hold V (public/botwheel.js)
-const bubbles = initBubbles({ state, players, project, camera, layer: $('labels'), enabled: () => settings.bubbles !== false }); // speech bubbles over heads (public/bubbles.js)
+const bubbles = initBubbles({ state, players, project, camera, layer: $('labels'), enabled: () => settings.bubbles !== false && !cine.film }); // speech bubbles over heads (public/bubbles.js); the film view uses subtitles
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
@@ -358,6 +358,7 @@ function onSnapshot({ me, w }) {
 
 function handleEvent(e) {
   const me = state.myId;
+  if (e.t === 'cine' && (e.op === 'reset' || (e.op === 'fade' && e.to === 'black'))) sfx.hush(); // no voice-over under black or after a stop
   if (cine.event(e)) return; // shots, titles, fades, letterbox, clean feed, light
   f2.onEvent(e);
   if (bell.event(e)) return; // the Tower Bell
@@ -474,7 +475,7 @@ function handleEvent(e) {
       const m = mobs.get(e.id);
       if (m) {
         m.wind = e.d;
-        if (m.def?.boss && m.model.anim?.windup) m.model.anim.windup('cleave', e.d); else m.model.anim?.shot('2H_Melee_Attack_Chop', 1.4); // bosses: a readable wind-up pose (world.js WINDUPS)
+        if (m.def?.boss && m.model.anim?.windup) m.model.anim.windup('cleave', e.d); else m.model.anim?.shot('2H_Melee_Attack_Chop', m.def?.boss ? 1.4 / PACE : 1.4); // bosses: a readable wind-up pose (world.js WINDUPS)
         if ((m.type === 'wolf' || m.type === 'alpha') && Math.random() < 0.4) sfx.play('growl', m.model.group.position, 0.7);
         if (e.r) fx.wedge(m.x, m.z, e.f, e.r, e.h, e.d);                 // bite wedge: step out of it
         if (e.ax !== undefined) fx.aimLine(m.x, m.z, e.ax, e.az, e.d);   // thorn shot: sidestep the line
@@ -499,7 +500,7 @@ function handleEvent(e) {
       sfx.play('warn', { x: e.x, z: e.z });
       if (mine) guide.tip('slam');
       if (boss && e.k !== 'lurk' && e.k !== 'pool') {
-        if (boss.def.f2) bossShot(boss.id, e.follow ? '2H_Melee_Attack_Spin' : '2H_Melee_Attack_Slice', 1.2, Math.max(0, e.d - 0.55));
+        if (boss.def.f2) bossShot(boss.id, e.follow ? '2H_Melee_Attack_Spin' : '2H_Melee_Attack_Slice', 1.2 / PACE, Math.max(0, e.d - 0.55 * PACE));
         else boss.model.anim?.windup?.(e.follow ? 'spin' : 'slam', e.d); // the Warden rears up (slam) or winds round (spin)
       }
       break;
@@ -628,6 +629,8 @@ function handleEvent(e) {
     case 'invite': if (e.to === me) showInvite(e.from, e.name); break;
     case 'chat': // ch 'p': party chat (only your party sees it), 's': say (heard within 40 m)
       if (bubbles.chat(e) && e.id !== me && !state.spectator) guide.tip('bubbles'); // a bubble over the speaker's head (same rules as the log)
+      cine.say(e); // film view: a scripted line as a subtitle
+      if (state.spectator && e.voice) sfx.voice(e.voice); // and its voice-over (spectators only, never players)
       if (e.ch === 'p') { if (state.party && e.party === state.party) log(`[Party] ${e.from}: ${e.text}`, e.id === me ? 'me party' : 'party'); break; }
       if (e.ch === 's') { if (state.spectator || Math.hypot(e.x - state.x, e.z - state.z) < 40) log(`${e.from} says: ${e.text}`, e.id === me ? 'me' : 'say'); break; }
       log(`${e.from}: ${e.text}`, e.id === me ? 'me' : ''); break;
@@ -657,7 +660,8 @@ function playSkillAnim(ent, skill, n) {
   if (!ent?.model.anim || !list) return;
   const i = n ?? (ent.combo = (ent.combo || 0) + 1);
   const [name, speed] = list[i % list.length];
-  ent.model.anim.shot(name, speed);
+  const basic = skill === CLASSES[ent.cls]?.skills[0].id; // basic attacks keep their rhythm: only skills run PACE x slower
+  ent.model.anim.shot(name, basic ? speed : speed / PACE);
 }
 const bossShot = (id, name, speed, delay = 0) => setTimeout(() => mobs.get(id)?.model.anim?.shot(name, speed), delay * 1000);
 
@@ -1591,11 +1595,12 @@ function animateEntity(e, dt) {
   const k = Math.min(1, dt * (self ? 25 : 12));
   const px = g.position.x, pz = g.position.z;
   const tx = self ? e.x : e.tx, tz = self ? e.z : e.tz;
-  if (e.jumpT !== undefined && e.jumpT < JUMP.time) {
+  const jumpTime = e.jumpDur ?? JUMP.time; // Sky Lance's hop lasts its whole flight
+  if (e.jumpT !== undefined && e.jumpT < jumpTime) {
     e.jumpT += dt;
-    const jk = Math.min(1, e.jumpT / JUMP.time);
+    const jk = Math.min(1, e.jumpT / jumpTime);
     g.position.y = 4 * JUMP.height * jk * (1 - jk);
-  } else g.position.y = 0;
+  } else { g.position.y = 0; e.jumpDur = undefined; }
   if (e.kind === 'mob') mastery.lift(e, dt); // Quake launches enemies
   if (e.punch > 0) e.punch -= dt;
   const kk = e.punch > 0 ? Math.min(1, dt * 22) : k;

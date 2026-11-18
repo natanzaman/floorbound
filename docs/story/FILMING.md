@@ -27,6 +27,24 @@ For a full take, restart the server first: once the Warden has fallen on a serve
 3. Watch the status: current scene, running cues, the log. Lines starting with `!` are problems (an actor stuck, an unscripted death).
 4. When the log says "The end", stop recording, then press **Stop**: the actors leave and the picture, the twists and the bell go back to normal. Stop also works mid-take.
 
+## Voices and subtitles
+The film view shows each `say` line as a subtitle in the lower letterbox bar and plays its voice-over; plain spectators hear the voice too (with bubbles, no subtitles); players get neither.
+
+**Audio needs one click:** browsers keep sound off until you click the page, so click once in the film-view window before Run (the Sound button shows whether it's on). A line said while the sound is still locked is skipped, never played late. To record the voices, capture the window's audio too (OBS: Window Capture plus Application Audio Capture). Playwright's video (`scripts/film/record.mjs`) has no sound: its takes get subtitles only.
+
+**Making the voice files** (free, offline; Kokoro-82M, Apache-2.0: fine for a public video). One-time setup, about 350 MB, in `tools/tts/` (gitignored):
+```sh
+python3 -m venv tools/tts/venv && tools/tts/venv/bin/pip install kokoro-onnx soundfile
+mkdir -p tools/tts/models && cd tools/tts/models
+curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+```
+Then (needs `ffmpeg`):
+```sh
+node scripts/film/voices.mjs docs/story/ep1-first-line.yaml
+```
+It writes `public/voice/ep1/<key>.mp3` (one per line and speaker, ~20 KB each; what each holds: `docs/story/ep1-voices.manifest.json`) and skips lines that haven't changed; commit both with the sheet. Lines said by several actors at once (`who: [a, b]` or `all`) play one voice (the last speaker listed). Who sounds like what is in `docs/story/ep1-voices.yaml` (a Kokoro voice, speed, pitch per cast member): change a voice and rerun, and only that character's lines are made again. To hear options before choosing, `node scripts/film/voices.mjs --samples ~/Movies/floorbound-ep1/voice-samples` renders each character in their voice and in the `try` voices. After editing a line in the sheet, rerun the script, or that line plays silent (the subtitle still shows).
+
 ## Notes
 - Episode 1 runs about 4–6 minutes: the Warden fight is live, so its length varies (the director waits for each `until`). Trim in editing.
 - The actors are protected (never below 10% health) unless a cue kills them, and the automatic first-clear bell is held: the sheet rings it.
