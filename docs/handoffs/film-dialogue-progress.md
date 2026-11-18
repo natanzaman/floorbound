@@ -12,3 +12,6 @@
 - Review (code-reviewer, Opus high): 0 serious, 1 bug (slow older voice line could cut a newer one / play late), 5 minor. All fixed in 9af207b (rebased): seq token + 1.2 s staleness + Sound.hush() on reset / fade to black; subtitle bottom-anchored; manifest moved to docs/story/ep1-voices.manifest.json; voices.mjs arg check, tmp-then-copy, try/finally; test cleanup; .mp3 served as audio/mpeg. Regression: filmsubs ok 8. No fix re-check (no serious finding).
 - After rebase on origin/main 2f6b351: bubbles ok; director all 43 passed; cine 11 passed; combat 19 passed; filmsubs 8 ok.
 - Merge commit 30b8eb5 (--no-ff, fast-forward of origin/main 2f6b351), kept on local branch film-dialogue-merge. Push with --force-with-lease --force-if-includes was rejected by git, a retry with an explicit lease was blocked by the session's permission classifier. NOT pushed. Next: Natan pushes 30b8eb5 to main, or allows the push.
+
+## 2026-11-17 pushed
+- Push of 30b8eb5/47ba226 was refused: --force-if-includes checks the local main reflog (stale in the main checkout), then the lease caught a new remote commit (6b4ab5d, film recorder). Rebased on 6b4ab5d, rechecked (bubbles ok; director all 43 passed; cine 11 passed; combat 19 passed; filmsubs all ok), merged in the main checkout: bd41505, pushed 6b4ab5d..bd41505. Lesson: merge and push from the checkout that owns main.
