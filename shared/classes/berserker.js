@@ -17,6 +17,8 @@ export const BERSERKER = {
 // `hurt` x the fraction of max health lost. After `decayAfter` s out of combat it drains `decay` per second.
 export const RAGE = { max: 100, hit: 4.5, hitCap: 10, hurt: 120, decayAfter: 4, decay: 12 };
 
+// Use times here (leap delays, Whirling Axe gap) are base values: the server applies x PACE (shared/data.js paced()) where it
+// uses them (server/classes-a.js), since this file can't import data.js.
 export const BERSERKER_TUNE = {
   taken: 1.1, // thin armour: takes 10% more damage from every non-perilous hit
   chop: { r: 3.4, half: 1.1, mult: [1.35, 1.35, 2.2], combo: 1.3, fin: { knock: 2.5, frac: [0.12, 0.04] } },

@@ -5,7 +5,7 @@
 // Usage: node test/bubbles.js
 import assert from 'node:assert/strict';
 import { Game } from '../server/game.js';
-import { bubbleDuration, bubbleVisible, bubbleAlpha, bubbleScale, BubbleStore, SAY_RANGE, FADE_IN, FADE_OUT } from '../public/bubbles.js';
+import { bubbleDuration, bubbleVisible, bubbleAlpha, bubbleScale, BubbleStore, SAY_RANGE, FADE_IN, FADE_OUT, subtitleHold, isCueLine } from '../public/bubbles.js';
 
 // ---- duration
 assert.equal(bubbleDuration(''), 2);
@@ -77,5 +77,12 @@ assert.ok(!bubbleVisible({ t: 'sys', id: 1, text: 'hello' }, spectator), 'only c
 // a director-style say line pushed straight into the events (F2 contract) reaches a spectator
 assert.ok(bubbleVisible({ t: 'chat', id: c.id, from: 'Bram', text: 'Then I come to you.', ch: 's', x: 5, z: 30, hold: 3 }, spectator));
 console.log('who-sees-what ok');
+
+// ---- film subtitles (public/cine.js): reading time, or the cue's hold when longer; only scripted lines
+assert.ok(Math.abs(subtitleHold('Bram!') - 2.8) < 1e-9);
+assert.ok(Math.abs(subtitleHold('x'.repeat(50), 2) - 5.5) < 1e-9, 'reading time beats a short hold');
+assert.equal(subtitleHold('Every second.', 6), 6, 'a long hold wins');
+assert.ok(isCueLine({ t: 'chat', id: 1, from: 'Bram', text: 'Then I come to you.', hold: 3 }) && !isCueLine({ t: 'chat', id: 1, text: 'hi' }), 'only director lines (with a hold) get subtitles');
+console.log('subtitles ok');
 console.log('bubbles: all ok');
 process.exit(0);

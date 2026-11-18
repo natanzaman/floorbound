@@ -1,0 +1,6 @@
+[skill 5 Perfect] run 1: kill in 79s, 1 deaths (twist eclipse) · Quake Rings: 57 jumped, 2 rolled, 7 hit · deaths to warden sweep
+[skill 5 Perfect] run 2: kill in 84s, 0 deaths (twist echo) · Quake Rings: 64 jumped, 1 rolled, 5 hit
+[skill 5 Perfect] run 3: kill in 89s, 0 deaths (twist ironhide) · Quake Rings: 68 jumped, 2 rolled, 6 hit
+[skill 5 Perfect] run 4: kill in 89s, 0 deaths (twist packmaster) · Quake Rings: 66 jumped, 0 rolled, 2 hit
+[skill 5 Perfect] 4/4 kills · avg kill time 85s · avg deaths 0.3 · Quake Rings cleared 93% of 280
+EXIT 0

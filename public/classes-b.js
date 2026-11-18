@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { RIGS } from '/world.js';
 import { LANCE } from '/shared/classes/lancer.js';
+import { PACE } from '/shared/data.js';
 import { SONG } from '/shared/classes/bard.js';
 
 const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);
@@ -85,6 +86,7 @@ const ANIM = {
   sonic: () => ['Spellcast_Shoot', 2.2], dissonance: () => ['Spellcast_Shoot', 1.6], shatter: () => ['Spellcast_Shoot', 1.5], feedback: () => ['Spellcast_Raise', 1.8],
   song: () => ['Spellcast_Long', 1.2], cresc: () => ['Spellcast_Long', 1.0], crescBurst: () => ['Cheer', 1.4],
 };
+const BASIC_KEYS = new Set(['thrust', 'sonic']); // basic attacks: instant hits, clips not slowed by PACE
 const SONG_COLOR = { anthem: 0xfbbf24, warmarch: 0xf97316, lullaby: 0x93c5fd };
 const BUFF_NAME = { anthem: 'Anthem', march: 'War March', cresc: 'Crescendo' };
 
@@ -191,7 +193,7 @@ export function initClassesB(ctx) {
   function playAnim(id, key, n, sty) {
     const p = players.get(id), a = ANIM[key]?.(n, sty);
     if (!p?.model.anim || !a) return;
-    p.model.anim.shot(a[0], a[1]);
+    p.model.anim.shot(a[0], BASIC_KEYS.has(key) ? a[1] : a[1] / PACE); // ability pacing: skill clips run PACE x slower, basic attacks keep their rhythm
     p.swing = 0.3;
   }
   function onFx(e) {
@@ -227,7 +229,7 @@ export function initClassesB(ctx) {
       case 'skymark': {
         const color = e.ev2 === 'pinning' ? 0xf472b6 : e.ev2 === 'meteor' ? 0xfb923c : 0x38bdf8;
         marker(e.x2, e.z2, e.r, e.d, color);
-        if (p) { p.jumpT = 0; p.model.anim?.shot('Jump_Full_Short', 1.6); }
+        if (p) { p.jumpT = 0; p.jumpDur = e.d; p.model.anim?.shot('Jump_Full_Short', 1.6 / PACE); } // the hop lasts as long as the flight (main.js)
         for (let i = 1; i < 10; i++) { // the flight path: a dotted arc
           const k = i / 10, dot = new THREE.Mesh(new THREE.SphereGeometry(0.11, 6, 4), glass(color, 0.9));
           dot.position.set(e.x + (e.x2 - e.x) * k, 1 + 4 * 2.6 * k * (1 - k), e.z + (e.z2 - e.z) * k);

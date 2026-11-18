@@ -121,9 +121,9 @@ F2 calls the others through these names, so keep them exactly. Every server meth
 | F6 | `ringBell(floor, { auto })`; `game.bellAuto` (true by default; F2 sets false during a show) | `{ t: 'bell', floor, n }` |
 | F2 | `game.director` (server/director.js): `load(yamlText)`, `validate()`, `run({ from, force })`, `stop()`, `status()` | `emote` `{ t, id, a }` (cheer, block, cast, hit, die); otherwise uses F1/F3–F6 |
 
-- **Movement names:** `forceBossMove` takes `horn_sweep`, `slam`, `charge`, `quake`, `rockfall` (Warden) and `tidal_wave`, `geyser`, `trident`, `deluge` (Sovereign).
+- **Movement names:** `forceBossMove` takes `horn_sweep`, `slam`, `charge`, `quake`, `rockfall` (Warden) and `tidal_wave`, `geyser`, `trident`, `deluge` (Sovereign); `meteor`, `spread`, `tether` (team mechanics, either boss: G4).
 - **Merging (several agents at once):** merge into `main` and push under a lock, so two merges never interleave:
-  `flock /home/claude/floorbound/.git/fb-merge.lock -c 'cd /home/claude/floorbound && git merge --no-ff feat/<name> && <run all tests> && git -c push.negotiate=true push origin main'`.
+  `flock /home/claude/floorbound/.git/fb-merge.lock -c 'cd /home/claude/floorbound && git merge --no-ff feat/<name> && <run all tests> && git -c push.negotiate=true push --force-with-lease origin main'`.
   Resolve conflicts keeping both sides. If the push gets HTTP 429 from the proxy, wait 5 s and retry once. Then remove your worktree and branch, and update the tracker row.
 - **Tests after merging:** your own new test, the existing tests for the files you touched, and `node test/combat.js` and `node test/feeltext.js` as a smoke check. DB tests need `DATABASE_URL` (see CLAUDE.md).
 
@@ -196,10 +196,10 @@ Same rules as F: set Status/Owner on `main` before starting, mark **done** with 
 
 | Task | Branch | Status | Owner | Merge |
 |---|---|---|---|---|
-| G1 Downed + revive | `feat/revive` | todo | | |
-| G2 Skill combos + Team Burst | `feat/teamburst` | todo | | |
-| G3 Threat you can see, healer threat, Cover, flanking | `feat/threat` | todo | | |
-| G4 Boss team mechanics | `feat/bossteam` | todo | | |
+| G1 Downed + revive | `feat/revive` | in progress | agent revive | |
+| G2 Skill combos + Team Burst | `feat/teamburst` | in progress | agent teamburst | |
+| G3 Threat you can see, healer threat, Cover, flanking | `feat/threat` | in progress | agent threat | |
+| G4 Boss team mechanics | `feat/bossteam` | done | agent bossteam | 2bdaf88 |
 | G5 Post-fight MVP card | `feat/mvp` | todo (after G1–G3: it counts their events) | | |
 
 ### Shared contracts for G

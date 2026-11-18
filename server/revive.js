@@ -1,4 +1,4 @@
-// Downed + revive (docs/ROADMAP.md G1). Mixed into Game by installRevive (after staging, before talents).
+// Downed + revive (docs/ROADMAP.md G1). Mixed into Game by installRevive (after staging and bossteam, before talents).
 //  - game.js damagePlayer calls goDown(p, src) at 0 HP: with a standing partymate within DOWNED.near (same floor) the
 //    player goes downed (p.downed, still "alive": p.dead stays false, hp 0) instead of dying. Solo: killPlayer as before.
 //  - A downed player crawls (onInput clamps to DOWNED.crawl), can't attack, dodge, jump, guard or drink, and bleeds out
@@ -229,6 +229,9 @@ export function installRevive(Game) {
     for (const q of this.allyList(p, r)) { const f = q.hp / q.maxHp; if (f < low) { low = f; target = q; } }
     return target;
   });
+
+  // Boss team mechanics (G4, server/bossteam.js): markers, tethers and the 2+ alive check pick standing players only.
+  if (P.btFighters) wrap('btFighters', function (orig, ...a) { return orig.apply(this, a).filter(p => !p.downed); });
 
   // Film safety: a scripted death is instant (never downed), and a scripted revive also stands a downed player up.
   if (P.scriptDeath) wrap('scriptDeath', function (orig, pp, ...a) {

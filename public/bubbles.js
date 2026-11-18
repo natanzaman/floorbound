@@ -12,6 +12,11 @@ export function bubbleDuration(text, hold) {
   return Math.min(5, Math.max(2, 1.6 + 0.07 * String(text || '').length));
 }
 
+// Film subtitles (public/cine.js): how long a scripted line stays on screen: reading time, 2.5 s + 0.06 s per character,
+// or the cue's hold if that's longer. A scripted line is a chat event the scene director made (it carries `hold`).
+export const subtitleHold = (text, hold) => Math.max(Number.isFinite(+hold) && +hold > 0 ? +hold : 0, 2.5 + 0.06 * String(text || '').length);
+export const isCueLine = e => !!e && e.t === 'chat' && e.hold !== undefined && !!String(e.text || '').trim();
+
 // Does this viewer get a bubble for this chat event? Mirrors the chat log: say within 40 m, party chat to the party,
 // global chat to everyone; spectators see all of them. `/b` bot orders never show (the server never sends them as chat).
 // viewer: { spectator, party, x, z }

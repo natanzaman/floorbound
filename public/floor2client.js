@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { F2, GATE2, WAYSTONES, STAIRWAY, PHASE_TEXT2, inArena2, inGateZone2, nearWaystone, floorUnlocked, onFloor2 } from '/shared/floor2.js';
 import { createFloor2 } from '/floor2world.js';
+import { PACE } from '/shared/data.js';
 
 // ctx: { scene, sun, occluders, fx, sfx, state, mobs, players, send, banner, callout, floatNum, log, shake, project, isTouch, hallOpen }
 export function initFloor2Client(ctx) {
@@ -130,7 +131,7 @@ export function initFloor2Client(ctx) {
       case 'f2wave': wave(e); break;
       case 'f2phase': {
         const b = mobs.get(e.id);
-        b?.model.anim?.shot(e.n === 1 ? 'Spellcast_Long' : 'Cheer', 1.2);
+        b?.model.anim?.shot(e.n === 1 ? 'Spellcast_Long' : 'Cheer', 1.2 / PACE);
         sfx.play('roar', b?.model.group.position || null, 1.3);
         if (e.n === 1) ctx.banner('THE TIDE RISES', 'Phase 2: Tidal Waves (roll THROUGH them), Drowned Thralls, mire pools');
         else ctx.banner('THE DELUGE', 'Phase 3: the outer court floods. Stay near the centre and dodge the orbs');
@@ -176,7 +177,7 @@ export function initFloor2Client(ctx) {
     g.add(wall, foam, warn); g.position.set(e.x, 0, e.z); wall.visible = foam.visible = false;
     scene.add(g);
     waves.push({ g, wall, foam, warn, start, e });
-    mobs.get(e.by)?.model.anim?.shot('Spellcast_Raise', 0.9);
+    mobs.get(e.by)?.model.anim?.shot('Spellcast_Raise', 0.9 / PACE);
     sfx.play('warn', { x: e.x, z: e.z }, 1.5);
     if (inArena2(state.x, state.z) && !state.spectator) ctx.callout('TIDAL WAVE', `Roll (${ctx.isTouch ? 'Dodge' : 'Shift'}) THROUGH it as it reaches you`, e.d + 0.6);
     else if (state.spectator && near(e.x, e.z, 60)) ctx.callout('TIDAL WAVE', 'Roll through it as it reaches you', e.d + 0.6);
