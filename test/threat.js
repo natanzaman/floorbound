@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { Game } from '../server/game.js';
 import { WORLD, MOBS, GUARD } from '../shared/data.js';
 import { THREAT, COVER, FLANK, fromBehind, apartAround } from '../shared/threat.js';
+import { botCover, lostAggro, oppositeSpot } from '../shared/bots/threat.js';
 
 let n = 0;
 const ok = name => console.log(`  ok ${++n} - ${name}`);
@@ -240,6 +241,29 @@ function race(taunt) {
     assert.ok(!sw.dead && stats.some(s => s[0] === cl.id && s[1] === 'save'), 'a heal that kept them up through the next hit is a save');
   } finally { Math.random = random; }
   ok('teamStat: tanked (damage taken as top threat), save (heal that kept someone up)');
+}
+
+// ---------- bots ----------
+{
+  const sent = [];
+  const warden = { id: 9, x: 0, z: 10, winding: true, tgt: 2, def: MOBS.warden };
+  const b = { id: 1, cls: 'guardian', skill: 5, t: 50, x: 0, z: 3, dead: false, me: { cov: 0 }, mobs: [warden], tele: [], send: o => sent.push(o) };
+  const mate = { id: 2, x: 2, z: 6, hp: 40, maxHp: 100, dead: false };
+  const ctx = { party: { all: [{ id: 1, x: 0, z: 3, hp: 100, maxHp: 100 }, mate] } };
+  assert.equal(botCover(b, ctx), true);
+  assert.deepEqual(sent[0], { type: 'cover', tid: 2 }, 'Covers the hurt ally the winding boss is after');
+  b.t += 5; sent.length = 0; mate.hp = 80;
+  assert.equal(botCover(b, ctx), false, 'not when they are healthy');
+  mate.hp = 40; warden.winding = false;
+  assert.equal(botCover(b, ctx), false, 'not without a big hit coming');
+  b.tele = [{ x: 2, z: 6, r: 3, until: b.t + 0.8 }];
+  assert.equal(botCover(b, ctx), true, 'a telegraph under them counts');
+  b.t += 5; b.me.cov = 4; assert.equal(botCover(b, ctx), false, 'on cooldown');
+  assert.equal(lostAggro(b, warden, ctx), true, 'the boss turned on a mate: Taunt it back');
+  warden.tgt = 1; assert.equal(lostAggro(b, warden, ctx), false);
+  const [x, z] = oppositeSpot({ x: 0, z: 0 }, { x: 0, z: -3 }, 4);
+  assert.ok(Math.abs(x) < 1e-9 && Math.abs(z - 4) < 1e-9, 'the far side from the tank');
+  ok('bots: Guardian Covers a hurt ally under a big hit, re-Taunts, melee takes the far side');
 }
 
 console.log(`threat: ${n} passed`);
