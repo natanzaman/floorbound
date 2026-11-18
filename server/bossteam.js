@@ -86,7 +86,7 @@ const methods = {
       const p = this.players.get(a.id);
       if (!p || !this.btLive(m, key)) { this.events.push({ t: 'btend', k: 'stack', id: a.id, n: 0, off: 1 }); return; }
       const x = p.x, z = p.z, ring = this.btRoom(m);
-      const inside = [...this.players.values()].filter(q => !q.dead && ring(q.x, q.z) && Math.hypot(q.x - x, q.z - z) <= M.r);
+      const inside = [...this.players.values()].filter(q => !q.dead && !q.downed && ring(q.x, q.z) && Math.hypot(q.x - x, q.z - z) <= M.r);
       const n = inside.length;
       this.events.push({ t: 'fx', k: 'boom', x: r2(x), z: r2(z), r: M.r });
       this.events.push({ t: 'btend', k: 'stack', id: a.id, x: r2(x), z: r2(z), r: M.r, n });
@@ -108,8 +108,8 @@ const methods = {
       this.btDone(a);
       if (!this.btLive(m, key)) { this.events.push({ t: 'btend', k: 'spread', ids, clean: [], off: 1 }); return; }
       const ring = this.btRoom(m);
-      const cs = ids.map(id => this.players.get(id)).filter(p => p && !p.dead);
-      const live = [...this.players.values()].filter(q => !q.dead && ring(q.x, q.z));
+      const cs = ids.map(id => this.players.get(id)).filter(p => p && !p.dead && !p.downed); // a downed carrier's marker fizzles
+      const live = [...this.players.values()].filter(q => !q.dead && !q.downed && ring(q.x, q.z));
       const hits = new Map(live.map(q => [q, cs.filter(c => c !== q && dist(c, q) <= S.r).length])); // decide first, then hurt
       const clean = cs.filter(c => !live.some(q => q !== c && dist(c, q) <= S.r));
       for (const c of cs) this.events.push({ t: 'fx', k: 'boom', x: r2(c.x), z: r2(c.z), r: S.r });
@@ -129,7 +129,7 @@ const methods = {
     const step = () => {
       const A = this.players.get(pa.id), B = this.players.get(pb.id);
       if (!this.btLive(m, key)) return end(false, { off: 1 });
-      if (!A || !B || A.dead || B.dead) return end(false, { off: 1 });
+      if (!A || !B || A.dead || B.dead || A.downed || B.downed) return end(false, { off: 1 }); // either end down: the tether breaks
       if (dist(A, B) >= T.need) { this.teamStat?.(A, 'mechanic'); this.teamStat?.(B, 'mechanic'); return end(true); }
       if (this.time - t0 >= T.max - 1e-6) return end(false);
       if (this.time - t0 >= T.grace - 1e-6) { this.btHit(A, T.dmg, 'tether'); this.btHit(B, T.dmg, 'tether'); }
