@@ -64,7 +64,7 @@ export const TwistMethods = {
       }
     } else if (id === 'twinhorns') {
       const W = (this.twistW || WARDEN).charge;
-      if (m.phase === 0 && t >= m.twinT && t >= m.busyUntil && !m.windupAt) { m.twinT = t + W.every; this.hornCharge(m, pick()); }
+      if (m.phase === 0 && t >= m.twinT && t >= m.busyUntil && !m.windupAt) { m.twinT = t + W.every; /* W.every is paced already (paceMoves): the rest after the charge stays as before */ this.hornCharge(m, pick()); }
     } else if (id === 'thornbound') {
       const S = T.totems;
       if (t >= m.totemT) { m.totemT = t + S.every; this.twistTotems(m, S, pick); }
