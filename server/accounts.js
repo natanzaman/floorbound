@@ -11,7 +11,7 @@ import * as db from './db.js';
 const q = (...a) => db.q(...a);
 import { CLASSES, MAX_LEVEL } from '../shared/data.js';
 
-export const MAX_CHARACTERS = 4;
+export const MAX_CHARACTERS = 8;
 const DISCORD_ID = process.env.DISCORD_CLIENT_ID;
 export const discordOn = () => db.enabled && !!DISCORD_ID;
 

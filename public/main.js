@@ -155,7 +155,7 @@ function renderChars() {
     const k = CLASSES[c.cls], hex = '#' + k.color.toString(16).padStart(6, '0');
     return `<div class="char"><span class="dot" style="background:${hex}"></span><div class="info"><b>${esc(c.name)}</b><small>Lv ${c.lvl} ${k.name} · ${k.role}</small></div><button class="play" data-id="${c.id}">Play</button><button class="del" data-id="${c.id}" title="Delete">✕</button></div>`;
   }).join('');
-  $('new-char').classList.toggle('hidden', characters.length >= (acct.cfg.maxCharacters || 4));
+  $('new-char').classList.toggle('hidden', characters.length >= (acct.cfg.maxCharacters || 8));
   for (const b of $('char-list').querySelectorAll('.play')) b.onclick = () => {
     const c = characters.find(x => x.id === +b.dataset.id);
     state.cls = c.cls;
