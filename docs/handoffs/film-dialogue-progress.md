@@ -15,3 +15,7 @@
 
 ## 2026-11-17 pushed
 - Push of 30b8eb5/47ba226 was refused: --force-if-includes checks the local main reflog (stale in the main checkout), then the lease caught a new remote commit (6b4ab5d, film recorder). Rebased on 6b4ab5d, rechecked (bubbles ok; director all 43 passed; cine 11 passed; combat 19 passed; filmsubs all ok), merged in the main checkout: bd41505, pushed 6b4ab5d..bd41505. Lesson: merge and push from the checkout that owns main.
+
+## 2026-11-17 recorded take (done criterion)
+- node scripts/film/record.mjs 3811 ~/Movies/floorbound-ep1/take-dialogue-s1 docs/story/ep1-first-line.yaml s1 110: film.mp4 116.6 s, audio track present; 18 subtitles in track.jsonl (s1-s3); audio during first line mean -19.6 dB vs -37.6 dB before it (voice audible). Natan kept the default voices.
+- Sheet timing issue (not changed, sheet owner): s1 Pell "Wait! I heard you need a fifth." (31.7 s) is replaced 0.3 s later by Juno "You are level eight." because the face cue between them has no after, so Juno after: prev fires at once. Fix: id on Pell line, Juno after: <id>.
