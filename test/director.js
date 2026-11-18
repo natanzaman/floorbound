@@ -167,6 +167,7 @@ scenes:
   dir.run({ force: true });
   const t0 = Date.now();
   while (Date.now() - t0 < 30000 && dir.state !== 'done' && dir.state !== 'error') await sleep(100);
+  fs.rmSync(vdir, { recursive: true, force: true }); // the test voice file never stays in public/
   const st = dir.status();
   if (st.state !== 'done') console.log(st.log.map(l => `    ${l.t} ${l.text}`).join('\n'));
   ok(st.state === 'done', `the show finishes (${st.elapsed} s)`);
@@ -179,7 +180,6 @@ scenes:
   ok(Math.hypot(wren.x - -5.6, wren.z - 1.9) < 1.5, `Wren walked to the Hall of Clearers (${wren.x.toFixed(1)}, ${wren.z.toFixed(1)})`);
   ok(Math.hypot(kade.x - wren.x, kade.z - wren.z) < 2.6, 'Kade ran to Wren');
   ok(chats.some(e => e.id === wren.id && e.text === 'Not one name on this stone.' && e.ch === 's'), 'Wren said her line (say chat)');
-  fs.rmSync(vdir, { recursive: true, force: true });
   const wl = chats.find(e => e.id === wren.id), kl = chats.find(e => e.id === kade.id);
   ok(wl?.hold === 1 && kl?.hold === sayHold('Then we go.'), 'a scripted line carries its hold (bubbles, film subtitles)');
   ok(wl?.voice === `eptest/${voiceKey('wren', 'Not one name on this stone.')}` && kl && !('voice' in kl), 'a line names its voice-over file only when one was made');

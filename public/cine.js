@@ -56,7 +56,7 @@ export function initCine({ camera, state, players, mobs, slowMotion, twists, occ
   text-shadow: 0 0 3px #000, 0 2px 8px rgba(0,0,0,.95), 0 0 18px rgba(0,0,0,.6); opacity: 0; transition: opacity .25s ease; }
 #cine-sub b { color: #f2d28a; font-weight: 700; }
 #cine-sub.show { opacity: 1; }
-#cine-bars.on ~ #cine-sub { bottom: max(3vh, calc((100vh - 100vw / 2.39) / 4)); transform: translate(-50%, 50%); }
+#cine-bars.on ~ #cine-sub { bottom: max(1.5vh, calc((100vh - 100vw / 2.39) / 4 - .65em)); } /* one line centred in the bar; longer ones grow upward */
 body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-keep]), body.cine-clean #rare-hint, body.cine-clean #crosshair { display: none !important; }`;
   document.head.appendChild(css);
   const bars = document.createElement('div'); bars.id = 'cine-bars'; bars.innerHTML = '<i></i><i></i>';

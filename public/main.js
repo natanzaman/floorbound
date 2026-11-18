@@ -355,6 +355,7 @@ function onSnapshot({ me, w }) {
 
 function handleEvent(e) {
   const me = state.myId;
+  if (e.t === 'cine' && (e.op === 'reset' || (e.op === 'fade' && e.to === 'black'))) sfx.hush(); // no voice-over under black or after a stop
   if (cine.event(e)) return; // shots, titles, fades, letterbox, clean feed, light
   f2.onEvent(e);
   if (bell.event(e)) return; // the Tower Bell

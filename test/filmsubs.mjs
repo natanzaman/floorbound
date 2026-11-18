@@ -15,8 +15,9 @@ const ok = name => console.log(`  ok ${++n} - ${name}`);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const srv = spawn(process.execPath, ['server/index.js'], { env: { ...process.env, PORT: String(PORT), DATABASE_URL: '' }, stdio: ['ignore', 'pipe', 'inherit'] });
-const browser = await chromium.launch({ headless: true, args: ['--autoplay-policy=no-user-gesture-required', '--enable-unsafe-swiftshader'] });
+let browser;
 try {
+  browser = await chromium.launch({ headless: true, args: ['--autoplay-policy=no-user-gesture-required', '--enable-unsafe-swiftshader'] });
   await new Promise((res, rej) => { srv.stdout.on('data', d => /listening|localhost:\d+/i.test(d) && res()); srv.on('exit', rej); setTimeout(res, 4000); });
   const open = async q => { const p = await browser.newPage({ viewport: { width: 1280, height: 720 } }); await p.goto(`${base}/${q}`); await p.waitForFunction(() => window.__fb?.state?.spectator, null, { timeout: 30000 }); return p; };
   const film = await open('?spectate=1&film=1'), spec = await open('?spectate=1');
@@ -72,9 +73,15 @@ scenes:
   const held = (Date.now() - t0) / 1000;
   assert.ok(held > 2, `held ${held.toFixed(1)} s`); // 2.5 s + 0.06 s x 18 chars = 3.6 s
   ok(`the last line clears after its reading time (${held.toFixed(1)} s after the check started)`);
+  // an older line still loading never cuts the newer one or plays late (review finding)
+  const k2 = `ep1/${voiceKey('bram', L2)}`, mp3 = await (await fetch(`${base}/voice/${k2}.mp3`)).arrayBuffer();
+  await film.route('**/voice/ep1/slowline.mp3', async r => { await sleep(1500); await r.fulfill({ body: Buffer.from(mp3), contentType: 'audio/mpeg' }); });
+  const race = await film.evaluate(async k => { const sfx = window.__fb.sfx, a = sfx.voice('ep1/slowline'); await new Promise(r => setTimeout(r, 100)); const b = await sfx.voice(k); return [await a, b, sfx.heard.at(-2).why]; }, k2);
+  assert.deepEqual(race, [false, true, 'stale']);
+  ok('a slow older line is dropped, the newer one plays');
   await post('stop', {});
 } finally {
-  await browser.close(); srv.kill();
+  await browser?.close(); srv.kill();
 }
 console.log('filmsubs: all ok');
 process.exit(0);

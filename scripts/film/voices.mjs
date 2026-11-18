@@ -3,7 +3,8 @@
 // it's said (server/director.js names it in the chat event; public/audio.js plays it).
 // Usage: node scripts/film/voices.mjs [sheet.yaml] [--voices <map.yaml>] [--force] [--samples <dir>]
 //   sheet: default docs/story/ep1-first-line.yaml; the voice map defaults to ep<N>-voices.yaml next to it.
-//   Writes public/voice/ep<N>/<key>.mp3 (+ manifest.json); unchanged lines are skipped, lines no longer in the sheet removed.
+//   Writes public/voice/ep<N>/<key>.mp3; unchanged lines are skipped, lines no longer in the sheet removed. What each file
+//   holds is in <map>.manifest.json next to the voice map (not under public/: the lines would be readable before release).
 //   --samples <dir>: instead, a short sample per character in their voice and in each `try` voice, for picking voices.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -15,7 +16,7 @@ import { parseSheet, whoList, voiceDir, voiceKey } from '../../server/director-s
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const args = process.argv.slice(2);
-const opt = k => { const i = args.indexOf(k); if (i < 0) return null; const v = args[i + 1]; args.splice(i, 2); return v; };
+const opt = k => { const i = args.indexOf(k); if (i < 0) return null; const v = args[i + 1]; if (!v || v.startsWith('--')) { console.error(`${k} needs a value`); process.exit(1); } args.splice(i, 2); return v; };
 const flag = k => { const i = args.indexOf(k); if (i < 0) return false; args.splice(i, 1); return true; };
 const samples = opt('--samples'), voicesArg = opt('--voices'), force = flag('--force');
 const sheetPath = path.resolve(args[0] || path.join(ROOT, 'docs/story/ep1-first-line.yaml'));
@@ -54,10 +55,13 @@ function render(jobs) {
     const af = j.pitch ? [`asetrate=24000*${f.toFixed(4)}`, 'aresample=24000', `atempo=${(1 / f).toFixed(4)}`] : [];
     af.push('silenceremove=start_periods=1:start_threshold=-50dB', 'loudnorm=I=-16:TP=-1.5');
     fs.mkdirSync(path.dirname(j.mp3), { recursive: true });
-    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', j.out, '-af', af.join(','), '-ac', '1', '-ar', '24000', '-c:a', 'libmp3lame', '-b:a', '64k', j.mp3]);
+    const part = `${j.out}.mp3`; // made in tmp, then moved: a crash never leaves a half file that later runs would skip
+    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', j.out, '-af', af.join(','), '-ac', '1', '-ar', '24000', '-c:a', 'libmp3lame', '-b:a', '64k', part]);
+    fs.copyFileSync(part, j.mp3);
   }
 }
 
+try {
 if (samples) { // a sample per character, in their voice and each `try` voice
   const out = path.resolve(samples.replace(/^~/, os.homedir()));
   const jobs = [];
@@ -72,7 +76,7 @@ if (samples) { // a sample per character, in their voice and each `try` voice
   render(jobs);
   console.log(`${jobs.length} samples in ${out}`);
 } else {
-  const outDir = path.join(ROOT, 'public/voice', dir), manPath = path.join(outDir, 'manifest.json');
+  const outDir = path.join(ROOT, 'public/voice', dir), manPath = mapPath.replace(/\.ya?ml$/, '') + '.manifest.json';
   const man = fs.existsSync(manPath) ? JSON.parse(fs.readFileSync(manPath, 'utf8')) : {};
   const next = {}, jobs = [];
   for (const l of lines) {
@@ -89,4 +93,4 @@ if (samples) { // a sample per character, in their voice and each `try` voice
   fs.writeFileSync(manPath, JSON.stringify(next, null, 1) + '\n');
   console.log(`${Object.keys(next).length} lines: ${jobs.length} made, ${Object.keys(next).length - jobs.length} unchanged, ${gone} removed -> ${path.relative(ROOT, outDir)}`);
 }
-fs.rmSync(tmp, { recursive: true, force: true });
+} finally { fs.rmSync(tmp, { recursive: true, force: true }); }

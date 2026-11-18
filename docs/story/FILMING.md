@@ -43,7 +43,7 @@ Then (needs `ffmpeg`):
 ```sh
 node scripts/film/voices.mjs docs/story/ep1-first-line.yaml
 ```
-It writes `public/voice/ep1/<key>.mp3` (one per line and speaker, ~20 KB each) and skips lines that haven't changed; commit them with the sheet. Who sounds like what is in `docs/story/ep1-voices.yaml` (a Kokoro voice, speed, pitch per cast member): change a voice and rerun, and only that character's lines are made again. To hear options before choosing, `node scripts/film/voices.mjs --samples ~/Movies/floorbound-ep1/voice-samples` renders each character in their voice and in the `try` voices. After editing a line in the sheet, rerun the script, or that line plays silent (the subtitle still shows).
+It writes `public/voice/ep1/<key>.mp3` (one per line and speaker, ~20 KB each; what each holds: `docs/story/ep1-voices.manifest.json`) and skips lines that haven't changed; commit both with the sheet. Lines said by several actors at once (`who: [a, b]` or `all`) play one voice (the last speaker listed). Who sounds like what is in `docs/story/ep1-voices.yaml` (a Kokoro voice, speed, pitch per cast member): change a voice and rerun, and only that character's lines are made again. To hear options before choosing, `node scripts/film/voices.mjs --samples ~/Movies/floorbound-ep1/voice-samples` renders each character in their voice and in the `try` voices. After editing a line in the sheet, rerun the script, or that line plays silent (the subtitle still shows).
 
 ## Notes
 - Episode 1 runs about 4–6 minutes: the Warden fight is live, so its length varies (the director waits for each `until`). Trim in editing.
