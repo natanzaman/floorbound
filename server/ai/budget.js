@@ -11,7 +11,7 @@ export class Budget {
     this.cfg = cfg; this.now = now;
     this.bots = new WeakMap(); // bot -> { last, used: [{ t, n }] }
     this.recent = [];          // global call start times (last minute)
-    this.inFlight = 0;
+    this.inFlight = 0; this.calls = 0;
     this.day = day(now()); this.daySpend = 0; this.totalSpend = 0;
     this.fails = 0; this.pausedUntil = 0; this.pauseWhy = '';
   }
@@ -39,16 +39,17 @@ export class Budget {
 
   start(b) {
     const t = this.now();
-    this.inFlight++; this.recent.push(t);
+    this.inFlight++; this.calls++; this.recent.push(t);
     if (b) this.bot(b).last = t;
   }
 
-  // r: { ok, usage, cost, kind ('timeout' | 'rate' | 'nokey' | 'error'), retryAfter }
+  // r: { ok, usage, cost, kind ('timeout' | 'rate' | 'nokey' | 'error'), retryAfter, test (admin test call) }
   end(b, r) {
     this.inFlight = Math.max(0, this.inFlight - 1);
     this.rollDay();
     if (r.usage && b) this.bot(b).used.push({ t: this.now(), n: (r.usage.in || 0) + (r.usage.cacheRead || 0) + (r.usage.cacheWrite || 0) + (r.usage.out || 0) });
     if (r.cost) { this.daySpend += r.cost; this.totalSpend += r.cost; }
+    if (r.test) return; // an admin test call never trips the breaker
     if (r.ok) { this.fails = 0; return; }
     this.fails++;
     if (r.kind === 'rate' && r.retryAfter) this.pause(r.retryAfter * 1000, 'provider rate limit');

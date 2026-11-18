@@ -486,8 +486,11 @@ An LLM "mind" can sit on top of a bot's rule-based brain.
 - **Off by default:** it's off unless `AI_PROVIDER` (`anthropic`, `openai`, `gemini` or `mock`) and that provider's key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `GEMINI_API_KEY`) are set in the environment. Then an admin turns it on from **/admin.html → Bots → AI companions**, or it starts on with `AI_ENABLED=1`.
 - **Off means unchanged:** when it's off, bots behave exactly as before.
 - **Caps:** per-bot and global caps (calls, tokens, a daily `$` cap `AI_DAILY_USD`), timeouts and an error breaker keep cost and failures contained. If the model is unavailable, the bot just plays on.
+- **Remembers:** each bot's notes about each player and the day's spend are saved in Postgres (`ai_memories`, `ai_spend`), so memories and the daily cap survive deploys.
+- **In game:** dots over a bot while it thinks about a line said to it; its answer is party chat, so it shows as a speech bubble. A guide tip tells players to talk to bots by name.
+- **Admin Test call:** one tiny real call (OK/error, latency, cost, at most the key's last 4 characters) to check the key.
 - **More:** models, prices, costs per hour and the Render setup are in `docs/research/ai-companions.md`.
-- **Code and test:** code in `server/ai/` (adapters in `server/ai/providers/`), the admin card is `public/admin-ai.js`, and the test is `node test/ai-mind.js` (mock provider and fake HTTP, no keys).
+- **Code and test:** code in `server/ai/` (adapters in `server/ai/providers/`, persistence in `server/ai/store.js`), the admin card is `public/admin-ai.js`, and the test is `node test/ai-mind.js` (mock provider and fake HTTP, no keys; with `DATABASE_URL` it also checks the tables).
 
 ## Testing
 
