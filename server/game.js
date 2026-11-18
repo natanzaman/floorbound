@@ -27,6 +27,7 @@ import { installBell } from './bell.js';
 import { installStaging } from './staging.js';
 import { installCine } from './cine.js'; // cinematic camera state for filming (F4)
 import { installPoses } from './poses.js';
+import { installThreat } from './threat.js'; // visible threat, healer threat, Cover, flanking (G3)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -176,6 +177,7 @@ export class Game {
         return;
       }
       case 'botcmd': return this.botCommand(p, msg);
+      case 'cover': return this.cover(p, msg.tid); // Guardian Cover (server/threat.js)
       case 'test': // testing aid (TEST_HOOKS=1 only): { hurt: fraction } sets your health, { xp } gives XP, for the bot tests
         if (process.env.TEST_HOOKS && msg.hurt > 0 && msg.hurt <= 1 && !p.dead) p.hp = Math.max(1, Math.round(p.maxHp * msg.hurt));
         if (process.env.TEST_HOOKS && msg.xp > 0) this.giveXp(p, Math.min(1e6, msg.xp | 0)); // { xp }: level up (bot level sync tests)
@@ -1338,7 +1340,7 @@ export class Game {
     const g = this.gate;
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
     const gate = [g.open ? 1 : 0, waiting, g.ready.size, g.countAt ? r1(Math.max(0, g.countAt - this.time)) : 0];
-    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), gi: this.groundSnap(), poses: this.posesSnap() }); // poses: [[id, k]], only while any is held (server/poses.js)
+    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), gi: this.groundSnap(), poses: this.posesSnap(), th: this.threatSnap() }); // poses: [[id, k]], only while any is held (server/poses.js)
     this.events = [];
     return out;
   }
@@ -1373,5 +1375,6 @@ installBell(Game); // the Tower Bell: ringBell, bellAuto (server/bell.js)
 installCine(Game); // cine(op, data), cineState(): filming camera, titles, fades, light (server/cine.js)
 installPoses(Game); // kneel / sit / bow: setPose, /kneel chat, cleared by moving or acting (server/poses.js)
 installTracking(Game); // play-tracking hooks: boss fight rows, death / quit context (server/trackgame.js)
+installThreat(Game); // threat you can see, healer threat, Cover, flanking (server/threat.js)
 installStaging(Game); // staging hooks for the scene director: boss moves, reserved Last Attack, scripted deaths (server/staging.js)
 installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js); keep it last

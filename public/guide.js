@@ -35,6 +35,11 @@ const TIPS = {
   bubbles: 'Chat lines pop up as speech bubbles over the speaker\'s head: /s is heard nearby, /p by your party. Settings turns bubbles off; the chat log keeps everything.',
   bots: 'Bots in your party take orders: hold V for the order wheel, or type /b stay, /b follow, /b Lyra: heal (one bot). /b help lists them all; ordinary chat never gives orders.',
   poses: 'Posed! Chat /kneel, /sit or /bow to strike a pose, /stand (or just move, attack, dodge or jump) to get up.',
+  threat: 'Threat: the red arrow (and "→ name" on the boss bar) shows who the boss is after. Your bar under it is your threat vs the top; amber means you are about to pull it off your tank. Ease off for a moment.',
+  healthreat: 'Healing builds threat too (half the healing, shared across the enemies in the fight). Heal hard and the boss comes for you: let your Guardian Taunt it back.',
+  cover: 'Cover (C): dash to an ally (the one you selected, else whoever needs it) and take their next hit, braced like a guard. Perilous hits still need a dodge or parry.',
+  pincer: 'Pincer! You and a partymate are on opposite sides of the enemy: both of you deal +20% damage and more posture.',
+  flank: 'Flank: hitting an enemy from behind deals +10% damage and posture. Get a partymate on its other side for a Pincer.',
 };
 
 export class Guide {

@@ -36,6 +36,7 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Dodge roll | Shift | Dodge button |
 | Jump | Space (hop over the boss's slams and Quake Rings; you keep your momentum and can steer in the air, a little less sharply than on the ground) | Jump button |
 | Guard / parry (Guardian) | Hold R to guard; tap R just before a hit to parry | — |
+| Cover (Guardian) | C: dash to the ally you selected (else whoever needs it most) and take their next hit | Cover button |
 | Select a character (enemy or ally) | Hold Ctrl (Cmd on Mac) to preview, Ctrl+click to select; Ctrl+right-click to deselect | Lock on button (enemies) |
 | Lock on / cycle enemies | Tab (Esc to clear) | Lock on button |
 | Chat | Enter (`/p` party, `/s` nearby, `/b` bot orders); lines also show as speech bubbles over the speaker's head (Settings → Speech bubbles turns them off) | Chat button |
@@ -151,6 +152,10 @@ With a database, the server records play events (session start/end, first kill, 
 - **Guard and parry (Guardian, R):** hold R to guard: hits from the front (±70°) take 70% less damage, but you can't attack and you move at half speed. Press R at most ~0.2 s before a frontal hit lands to **parry** it: no damage at all, and big posture damage to the attacker. Mashing R doesn't parry.
 - **Perilous attacks:** the Warden's **Horn Sweep** shows an orange/gold circle around it with a "!" glint and its own warning horn (about 1.2 s). Anyone inside takes about 80% of their max health: Shield Wall, Taunt, guarding, gear and jumping don't reduce it. Roll through it (i-frames) or parry it. Breaking the Warden during the wind-up cancels it. It comes every ~12 s in phase 1, more often later (never while a Quake Ring is still rolling out near the Warden).
 - **Combat text and hit feel:** floating texts on the same character stagger into lanes and repeats merge ("Jumped! ×3"). Your own reactions (Jumped!, Dodged!, PERFECT, PARRY!, COUNTER, Switch, talent/style procs) show only to you; effects on a target (BROKEN, MARKED, PINNED, Discord) show to everyone; other players' damage numbers are small and dim, with only a few on screen at once. When a boss's big hit (Warden slam, charge, Horn Sweep, Quake Ring, rockfall; the Sovereign's trident, geysers, Tidal Wave) lands on you, your screen alone freezes for ~75 ms with a small shake; stomps and Quake Rings shake the camera more the closer they land. Player hits never hit-stop.
+- **Threat you can see:** a boss (and elites: Alphas, rares, the Mire Matron) shows who it's after: a red arrow over that player, a faint line from the enemy to them, and "→ Name" (or "→ YOU") under the boss bar. Under the boss bar a small meter shows your own threat as a % of the top ("You 62% of top"); it turns amber at 90% ("about to pull"). Whoever holds it sees the runner-up instead ("You have its attention · next 85%").
+- **Healer threat:** healing builds threat too: half of what a heal actually restores (overheal counts for nothing; damage a shield soaks counts like healing for its caster), split across every enemy fighting the party. A Cleric who spams heals and Smites can pull the boss off a Guardian who isn't taunting; a Guardian who Taunts on cooldown keeps it.
+- **Cover (Guardian, C):** dash up to 8 m to an ally (the one you selected, else whoever an enemy is after, most hurt first) and take the next hit meant for them within 1.5 s, braced like a guard (70% less; a guarding Guardian takes it on the guard). 12 s cooldown. Perilous hits (Horn Sweep) can't be covered: dodge or parry those. Guardian bots Cover a partymate under half health that a big hit is coming for (a winding boss after them, or a telegraph under them).
+- **Flanking and Pincers:** a hit from an enemy's back 120° does +10% damage and posture. If a party member is on the opposite side (at least 120° apart around it, both within ~6 m of its edge), both of you get a **Pincer**: +20% damage and more posture, with a small "Pincer" tag only the two of you see. Melee bots (Swordsman, Berserker, Lancer) take the side opposite the tank. Tuning: `shared/threat.js`; rules: `server/threat.js`; HUD: `public/threat.js`; bots: `shared/bots/threat.js`; tests: `node test/threat.js`.
 
 ## Skill mastery and evolutions
 
@@ -287,6 +292,7 @@ server/floor2.js Floor 2 AI (Shieldback, Wisp, Lurker, Matron, Sovereign), Sunke
 public/floor2world.js, public/floor2client.js  Floor 2 scene, models, effects, waystone UI
 server/game.js   authoritative simulation: combat, AI, boss, XP, parties
 server/combat.js posture/Break, perfect dodge, guard/parry, Horn Sweep, Quake Rings (mixed into Game)
+shared/threat.js, server/threat.js, public/threat.js  team threat: who bosses target (snapshot `th`), threat meter (`me.th`), healer threat, Guardian Cover, flank / Pincer; bots in shared/bots/threat.js; test/threat.js
 server/poses.js  kneel / sit / bow: setPose, /kneel /sit /bow /stand chat, cleared by moving or acting (public/poses.js on the client)
 server/index.js  static file server + WebSocket server (20 ticks/sec)
 server/shutdown.js  deploy drain on SIGTERM: "Update incoming", waits out a boss fight (4 min max), saves, exits

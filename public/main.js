@@ -28,6 +28,7 @@ import { initBotWheel } from '/botwheel.js';
 import { initBell } from '/bell.js'; // the Tower Bell and the engraved Hall stones
 import { initCine } from '/cine.js'; // film view camera, titles, fades, letterbox, light (F4)
 import { initBubbles } from '/bubbles.js';
+import { initThreat } from '/threat.js'; // who bosses target, threat meter, Cover, Pincer tags (G3)
 
 const sfx = new Sound();
 
@@ -234,6 +235,8 @@ const ground = initGround({ scene, state, project, $ }); // items lying on the g
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
 const combat = initCombat({ state, players, mobs, fx, sfx, guide, send, floatNum, slowMotion, shake: a => shake(a), shakeNear: (...a) => shakeNear(...a), bossShot: (...a) => bossShot(...a), lockedMob: () => lockedMob(), nearestMob: r => nearestMob(r), callout: (a, b, c) => callout(a, b, c) });
+// threat you can see (target marker, boss-bar name, meter), Guardian Cover (C), flank / Pincer tags (public/threat.js)
+const threat = initThreat({ scene, state, players, mobs, fx, sfx, guide, send, floatNum, log: (a, b) => log(a, b), isTouch, $ });
 // skill mastery + evolutions: Skills panel (K), Skill Shrines, evolved skill visuals (public/mastery.js)
 const mastery = initMastery({
   state, players, mobs, fx, sfx, send, log, floatNum, project, isTouch, scene, floor1, $,
@@ -279,7 +282,7 @@ function onMessage(msg) {
     buildSkillBar();
     guide.start(msg.charId ? `c${msg.charId}` : `anon_${state.cls}`, msg.lvl);
     log('Welcome to Floorbound! Head north through the field and defeat the Horned Warden.', 'sys');
-    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion.' : `WASD move (S back, A/D strafe) · mouse to look (click to capture, Esc frees it; Settings for classic) · Left click (or J) attack · 1 2 3 skills · K skill tree · Shift dodge · Space jump${state.cls === 'guardian' ? ' · R guard / parry' : ''} · 4 5 6 items · B bag · F interact · P party · Ctrl+click select`, 'sys');
+    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion.' : `WASD move (S back, A/D strafe) · mouse to look (click to capture, Esc frees it; Settings for classic) · Left click (or J) attack · 1 2 3 skills · K skill tree · Shift dodge · Space jump${state.cls === 'guardian' ? ' · R guard / parry · C cover an ally' : ''} · 4 5 6 items · B bag · F interact · P party · Ctrl+click select`, 'sys');
     log('Fill an enemy\'s yellow posture bar (heavy hits, Break skills, perfect dodges, parries) to BREAK it, then a teammate hits it for a SWITCH: big bonus damage.', 'sys');
     return;
   }
@@ -320,6 +323,7 @@ function onSnapshot({ me, w }) {
   if (w.f2) f2.snap(w.f2); // on Floor 2, state.gate/gateOpen become Floor 2's gate
   state.phase = w.phase || 0;
   twists.snap(w);
+  threat.snap(w, me); // boss / elite targets, my threat meter, Cover cooldown
 
   // events first (they may reference mobs that are about to vanish)
   for (const e of w.events) handleEvent(e);
@@ -359,6 +363,7 @@ function handleEvent(e) {
   f2.onEvent(e);
   if (bell.event(e)) return; // the Tower Bell
   if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
+  if (threat.event(e)) return; // Cover, flank / Pincer tags
   if (talents.event(e)) return; // talent points, learned talents, talent procs
   if (mastery.event(e)) return; // evolved skills, mastery level-ups, evolutions
   if (classesA.event(e)) return; // Ranger / Berserker
@@ -732,6 +737,7 @@ addEventListener('keydown', e => {
   if (k === 'p') $('players-btn').click();
   if (k === 'b' || k === 'i') toggleBag();
   if (k === 'f') interact();
+  if (k === 'c' && !e.repeat) threat.cover(); // Guardian Cover
   const ci = ['4', '5', '6'].indexOf(k);
   if (ci >= 0) useItem(CONSUMABLE_IDS[ci]);
 });
@@ -868,6 +874,7 @@ function buildSkillBar(lvl = state.lvl) {
   }).join('') + `<button class="sk sd" data-slot="dodge" title="Dodge roll: dash and avoid damage"><span class="key">${isTouch ? '' : 'SHIFT'}</span>Dodge<span class="cd"></span><span class="cdt"></span></button>`
     + `<button class="sk sj" data-slot="jump" title="Jump: hop over the boss's ground slams"><span class="key">${isTouch ? '' : 'SPACE'}</span>Jump<span class="cd"></span><span class="cdt"></span></button>`
     + combat.guardButton(state.cls, isTouch)
+    + threat.coverButton(state.cls, isTouch)
     + CONSUMABLE_IDS.map(id => `<button class="sk it2 ${id}" data-item="${id}" title="${CONSUMABLES[id].name}: ${CONSUMABLES[id].desc}"><span class="key">${isTouch ? '' : CONSUMABLES[id].key}</span>${CONSUMABLES[id].name.split(' ').pop()}<span class="cnt"></span><span class="cd"></span></button>`).join('')
     + `<button class="sk act" data-slot="act">Ready</button>`;
   for (const b of $('skills').children) {
@@ -878,6 +885,7 @@ function buildSkillBar(lvl = state.lvl) {
       continue;
     }
     if (b.dataset.slot === 'guard') { combat.bindGuardButton(b); continue; }
+    if (b.dataset.slot === 'cover') { threat.bindCover(b); continue; }
     if (b.dataset.slot === 'dodge' || b.dataset.slot === 'jump') {
       const act = b.dataset.slot === 'dodge' ? dodge : jump;
       b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('pressed'); act(); });
@@ -1410,6 +1418,7 @@ function updateHud(now) {
     setBar($('boss-hp'), (boss.hp / boss.maxHp) * 100); $('boss').classList.toggle('enraged', !!boss.enraged);
     const bn = $('boss').querySelector('.boss-name'); if (bn.textContent !== boss.def.name) bn.textContent = boss.def.name;
     combat.bossBar(boss);
+    threat.bossBar(boss); // who it's after, my threat meter
     $('boss-phase').textContent = onF2 ? f2.phaseText() : ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '';
     if (!onF2) twists.bossLine($('boss-phase'));
   }
@@ -1433,6 +1442,7 @@ function updateHud(now) {
       continue;
     }
     if (btn.dataset.slot === 'guard') { btn.classList.toggle('on', combat.guarding); continue; }
+    if (btn.dataset.slot === 'cover') { threat.coverCd(btn); continue; }
     if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); btn.textContent = a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : state.meReady ? 'Unready' : 'Ready'; continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : { cd: mastery.cd(slot) }; // mastery/branch cooldowns
@@ -1848,6 +1858,7 @@ function frame(now) {
   }
 
   for (const e of players.values()) animateEntity(e, e.id === state.myId ? dt : vdt); // your own character stays responsive
+  threat.frame(now); // threat markers follow the animated models
   for (const e of mobs.values()) animateEntity(e, vdt);
   fx.update(vdt);
   crystal.rotation.y += vdt;
@@ -1906,4 +1917,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { state, players, mobs, banner, sfx, project, floatLog, cine, camera, bubbles };
+window.__fb = { state, players, mobs, banner, sfx, project, floatLog, cine, camera, bubbles, threat };

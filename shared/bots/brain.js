@@ -110,6 +110,7 @@ function onSnap(b, msg) {
   b.cds = msg.me.cds.map((c, k) => (b.t - (b.pressed?.[k] || -9) < 0.3 ? Math.max(c, 0.2) : c));
   if (b.t - (b.dodgePressed || -9) > 0.3) b.dodgeCd = msg.me.dodge || 0;
   b.mobs = msg.w.mobs.map(m => ({ id: m[0], type: MOB_IDS[m[1]], x: m[2], z: m[3], hp: m[5], maxHp: m[6], engaged: !!(m[7] & 2), enraged: !!(m[7] & 4), winding: !!(m[7] & 16), staggered: !!(m[7] & 32), marked: !!(m[7] & 256), def: MOBS[MOB_IDS[m[1]]] })).filter(m => m.def);
+  const th = new Map(msg.w.th || []); for (const m of b.mobs) m.tgt = th.get(m.id) || 0; // who a boss / elite is after (server/threat.js)
   const f2 = msg.w.f2, onF2 = onFloor2(b.x);
   b.gateOpen = onF2 ? !!f2?.gate?.[0] : !!msg.w.gate?.[0];
   b.gateReady = (onF2 ? f2?.gate?.[2] : msg.w.gate?.[2]) || 0;
