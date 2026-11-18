@@ -35,9 +35,9 @@ scenes:
       - { who: tamsin, do: say, text: "Thirty-eight. Juno keeps \"testing\" them.", after: prev }
       - { who: pell, do: run_to, to: corvin, after: prev }
       - { do: camera, shot: medium, target: pell }
-      - { who: pell, do: say, text: "Wait! I heard you need a fifth.", after: prev }
+      - { id: pell_fifth, who: pell, do: say, text: "Wait! I heard you need a fifth.", after: prev }
       - { who: [corvin, bram, tamsin, juno], do: face, to: pell }
-      - { who: juno, do: say, text: "You're level eight.", after: prev }
+      - { who: juno, do: say, text: "You're level eight.", after: pell_fifth }
       - { who: pell, do: say, text: "I'm fast. I don't freeze. Please.", after: prev }
       - { who: corvin, do: face, to: bram, after: prev }
       - { who: bram, do: walk_to, to: pell, after: prev }
