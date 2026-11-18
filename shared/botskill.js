@@ -39,7 +39,7 @@ const st = b => (b.sk ||= { q: [], seen: [], next: 0, off: [0, 0], offT: -9, pot
 
 // ---------- perception ----------
 // Events a capability level delays / may miss. 'tele' covers red circles, wedges, charge lanes and the Horn Sweep.
-const PERCEIVED = new Set(['tele', 'pcancel', 'f2wave', 'quake', 'stagger']);
+const PERCEIVED = new Set(['tele', 'pcancel', 'f2wave', 'quake', 'stagger', 'bt']); // bt: boss team mechanics (stack / spread / tether)
 
 // One reaction outcome for a telegraph: { drop } (missed), or { delay } in seconds. Exported for the unit test.
 export function reaction(level, rng = Math.random) {

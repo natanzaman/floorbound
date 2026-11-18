@@ -84,6 +84,15 @@ Behind the Sunken Gate (same ready check as Floor 1's raid gate), the Sovereign'
 
 A portcullis blocks the corridor to the Warden's chamber. Everyone standing at the gate presses **F** (or taps Ready); when all of them are ready, it counts down 5 seconds and rises. It closes again once the chamber is empty. The Warden scales to the fighters inside when the fight starts: health by the party's size and make-up (each fighter weighted by role, damage dealers most, then raised to a power, so a full party of six with three damage dealers and a Bard faces about 3.3× the health of a Guardian/Swordsman/Cleric trio), damage by size (+12% per fighter above three), and both by level when the party's average is above 10 (+12% health and +6% damage per level). Slams target one fighter per three in the chamber. Tuning: `WARDEN` in `shared/data.js`. Whoever lands the killing blow gets the **Last Attack Bonus**: the unique *Horn of the Warden* charm.
 
+## Boss team mechanics
+
+With **two or more fighters alive** in the boss room, the Horned Warden and the Drowned Sovereign mix team mechanics into their rotation (one every ~26 s in phase 1, ~22 s in phase 2, ~18 s in phase 3; the first ~15 s in). Solo fights never see them. Rolling and jumping don't dodge them: it's about where you stand.
+- **STACK (shared meteor):** a gold circle follows one fighter for 4.5 s, then lands on them. Its damage is split between everyone inside: alone about 90% of your max health, two ~37%, three ~22%, four ~15%. Phases 1–3.
+- **SPREAD:** two fighters (three with 5+) get a violet ring; after 5.5 s each bursts in 6 m, hitting everyone *else* inside for ~42% of max health (carriers take a small 6%). Marked? Move away from everyone. Phases 1–3.
+- **Tether:** a beam links two fighters (one and their nearest partymate). After 1.5 s it hurts both a little every half second until they're 15 m apart (the beam turns green and snaps), for up to 11 s. Phases 2–3.
+
+Bots stack, spread and run tethers apart (a tank holding the boss stays put; capability levels see them late or miss some). Each one has a one-time guide tip and an on-screen prompt the first three times. The scene director can force them (`boss_move` `meteor` / `spread` / `tether`); otherwise they stay out of a show. Tuning: `shared/bossteam.js`; server `server/bossteam.js`, client `public/bossteam.js`, bots `shared/bots/bossteam.js`.
+
 ## Warden twists
 
 Every time the Horned Warden spawns (server start, and each respawn after a kill) it rolls one **twist**, never the same one twice in a row. The twist is announced to the whole server, shown on the raid gate panel and under the boss bar, and pays a bonus to everyone who fought when the Warden dies under it.
@@ -287,6 +296,7 @@ server/floor2.js Floor 2 AI (Shieldback, Wisp, Lurker, Matron, Sovereign), Sunke
 public/floor2world.js, public/floor2client.js  Floor 2 scene, models, effects, waystone UI
 server/game.js   authoritative simulation: combat, AI, boss, XP, parties
 server/combat.js posture/Break, perfect dodge, guard/parry, Horn Sweep, Quake Rings (mixed into Game)
+server/bossteam.js boss team mechanics: shared meteor (stack), spread markers, tether (mixed into Game; public/bossteam.js, shared/bots/bossteam.js)
 server/poses.js  kneel / sit / bow: setPose, /kneel /sit /bow /stand chat, cleared by moving or acting (public/poses.js on the client)
 server/index.js  static file server + WebSocket server (20 ticks/sec)
 server/shutdown.js  deploy drain on SIGTERM: "Update incoming", waits out a boss fight (4 min max), saves, exits
@@ -296,6 +306,7 @@ test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
 test/bubbles.js  speech bubble logic: duration, one per speaker, who sees which line (public/bubbles.js)
 test/feeltext.js in-process checks for who sees combat text (`to` tags on reactions) and which boss hits hit-stop their victim
+test/bossteam.js boss team mechanics: meteor split, spread overlap, tether break distance, solo unchanged, director safety, bot positioning
 test/warden3.js  in-process checks for the Quake Ring (jump / roll / out of reach), Warden scaling and bot jump timing per capability
 test/aircontrol.js  jump air control: the shared air step, client prediction vs the server's movement check while airborne, bots steering mid-jump
 shared/bots/     one brain per bot: brain.js (decision loop, party teamwork, orders), motor.js (moving, dodging), registry.js (per-class plug-ins), classes.js (Guardian, Swordsman, Cleric), social.js (orders, /b chat parsing, chatter)
