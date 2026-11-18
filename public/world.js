@@ -466,7 +466,7 @@ class Animator {
   // A held pose (F5: kneel / sit / bow, POSES): eased in and out over POSE_T s, layered over the plain Idle clip while
   // held (main.js plays 'Idle' when `posed`). A new pose eases in while the old one eases out.
   setPose(k) {
-    k = POSES[k] && STANCES.includes(k) ? k : null;
+    k = POSES[k] && (STANCES.includes(k) || k === 'downed') ? k : null; // (downed: G1, public/revive.js)
     const P = this.ps ||= { k: null, w: 0, out: null, ow: 0 };
     if (P.k === k) return;
     if (P.k && P.w > P.ow) { P.out = P.k; P.ow = P.w; }
@@ -547,6 +547,10 @@ export const POSES = {
     'upperarm.l': [-55, 0, 10], 'lowerarm.l': [-30, 0, 0], 'upperarm.r': [-55, 0, -10], 'lowerarm.r': [-30, 0, 0], 'hand.r': [105, 0, 0] },
   bow: { spine: [14, 0, 0], chest: [14, 0, 0], head: [26, 0, 0], // standing, head and shoulders bowed
     'upperarm.l': [-12, 0, 8], 'upperarm.r': [-12, 0, -8], 'lowerarm.l': [-20, 0, 0], 'lowerarm.r': [-20, 0, 0], 'hand.r': [0, 0, 70] },
+  // Downed (G1): on both knees, slumped forward, one hand on the ground.
+  downed: { drop: 0.11, hips: [16, 0, 0], spine: [16, 0, 0], chest: [12, 0, 0], head: [14, 0, 0],
+    'upperleg.l': [8, 0, 0], 'lowerleg.l': [88, 0, 0], 'upperleg.r': [8, 0, 0], 'lowerleg.r': [88, 0, 0], 'foot.l': [-20, 0, 0], 'foot.r': [-20, 0, 0],
+    'upperarm.l': [-35, 0, 12], 'lowerarm.l': [-10, 0, 0], 'upperarm.r': [-8, 0, -6], 'lowerarm.r': [-25, 0, 0], 'hand.r': [60, 0, 0] },
 };
 export const STANCES = ['kneel', 'sit', 'bow']; // the held poses (server/poses.js POSE_KINDS)
 const POSE_T = 0.4; // ease in / out, seconds

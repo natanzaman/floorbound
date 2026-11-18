@@ -43,6 +43,8 @@ const TIPS = {
   cover: 'Cover (C): dash to an ally (the one you selected, else whoever needs it) and take their next hit, braced like a guard. Perilous hits still need a dodge or parry.',
   pincer: 'Pincer! You and a partymate are on opposite sides of the enemy: both of you deal +20% damage and more posture.',
   flank: 'Flank: hitting an enemy from behind deals +10% damage and posture. Get a partymate on its other side for a Pincer.',
+  downed: 'Downed! You have 15 s before you bleed out. Crawl toward your party: a partymate holds E next to you to revive you.',
+  revive: 'A partymate is down! Stand next to them and hold E to revive them (a Cleric\'s Heal speeds it up). Moving away or a heavy hit breaks it.',
 };
 
 export class Guide {
