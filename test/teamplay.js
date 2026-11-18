@@ -246,6 +246,22 @@ function burstRun(joinIds, { solo = false } = {}) {
   for (const p of all) { p.x = X; p.z = Z - 2; }
   for (const p of all.slice(0, 6)) g.handle(p, { type: 'burst' });
   assert.equal(ev('tburst').length, 1, 'fires early once every living member is in'); assert.equal(ev('tburst')[0].n, 6);
+  // no enemy in reach: refused, the gauge is kept
+  g.mobs.delete(mob.id); mob = null; g.tb = new Map(); clear();
+  for (const p of all) p.target = 0;
+  g.tbState(party.id).g = BURST.max;
+  assert.equal(g.handle(gua, { type: 'burst' }), false, 'nothing to hit: refused');
+  assert.equal(tb(gua), BURST.max, 'the gauge is kept');
+  assert.ok(ev('sys').some(e => e.to === gua.id && /no enemy/.test(e.text)));
+  // the presser's target (a hint with the press) wins over the fallbacks
+  const other = g.addMob('boar', X + 3, Z + 2); other.maxHp = other.hp = 1e6;
+  freshMob(); g.tb = new Map(); clear();
+  g.tbState(party.id).g = BURST.max;
+  g.handle(gua, { type: 'burst', m: other.id });
+  advance(BURST.sync + 0.2);
+  assert.equal(ev('tburst')[0].m, other.id, 'the target pressed on');
+  assert.ok(other.hp < other.maxHp);
+  g.mobs.delete(other.id);
   // solo: no window, weaker, no full break
   const solo = burstRun([bar.id], { solo: true });
   assert.equal(solo.sync.length, 0); assert.equal(solo.ev[0].n, 1);

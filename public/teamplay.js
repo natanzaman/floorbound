@@ -54,7 +54,7 @@ export function initTeamplay({ state, players, mobs, fx, sfx, floatNum, project,
 
   function press() {
     if (!state.joined || state.spectator || state.dead) return;
-    send({ type: 'burst' });
+    send({ type: 'burst', m: state.lock || 0 }); // the target I'm on (a hint; the server picks otherwise)
   }
 
   function partyBar() {
@@ -142,8 +142,10 @@ export function initTeamplay({ state, players, mobs, fx, sfx, floatNum, project,
     for (const [id, L] of labels) {
       const m = mobs.get(id);
       if (!m || now > L.until) { L.el.remove(); labels.delete(id); continue; }
-      const g = m.model.group.position, p = project(g.x, g.y + m.model.height + 1.5, g.z);
+      const big = m.def?.boss || m.model.height > 3, g = m.model.group.position;
+      const p = project(g.x, g.y + (big ? m.model.height * 0.62 : m.model.height + 1.2), g.z); // a boss: across its chest
       if (!p) { L.el.style.display = 'none'; continue; }
+      p[1] = Math.max(p[1], 150); // never under the boss bar / top HUD
       const age = (now - L.at) / 1000, pop = age < 0.15 ? 1.35 - age * 2.3 : 1, fade = Math.min(1, (L.until - now) / 400);
       L.el.style.display = ''; L.el.style.left = `${p[0]}px`; L.el.style.top = `${p[1]}px`;
       L.el.style.opacity = fade; L.el.style.transform = `translate(-50%, -50%) scale(${pop})`;

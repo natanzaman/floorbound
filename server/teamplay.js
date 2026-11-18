@@ -98,10 +98,12 @@ const methods = {
     if (s.sync) return; // a window is open: it doesn't fill until the finisher fires
     s.g = Math.min(BURST.max, s.g + v * (p.party ? burstFillScale(this.teamOf(key).length) : BURST.soloFill));
   },
-  // T pressed (a 'burst' message): open a sync window (full gauge), or join the open one.
-  teamBurst(p) {
+  // T pressed (a 'burst' message { m }: the presser's target, a hint): open a sync window (full gauge), or join the open one.
+  teamBurst(p, mid = 0) {
     if (!p || p.dead || this.showRunning()) return false;
     const key = this.teamKey(p), s = this.tbState(key), t = this.time;
+    const hint = this.mobs.get(mid | 0);
+    if (hint && this.targetable(hint) && dist(hint, p) <= BURST.range && !s.tgt) s.tgt = hint.id;
     if (s.sync && t < s.sync) {
       if (s.ids.includes(p.id)) return false;
       s.ids.push(p.id);
@@ -111,7 +113,11 @@ const methods = {
     }
     if (s.g < BURST.max - 1e-6) return false;
     const team = this.teamOf(key);
-    s.by = p.id; s.ids = [p.id];
+    if (!this.burstTarget(p, team.map(o => o.id), hint && this.targetable(hint) && dist(hint, p) <= BURST.range ? hint.id : 0)) {
+      if (t - (p.tbNoTgt || -9) > 3) { p.tbNoTgt = t; this.sys('Team Burst: no enemy in reach.', p.id); }
+      return false; // kept for a fight
+    }
+    s.by = p.id; s.ids = [p.id]; s.tgt = hint && this.targetable(hint) && dist(hint, p) <= BURST.range ? hint.id : 0;
     if (team.length <= 1) { this.fireBurst(key, s); return true; } // solo: no window
     s.sync = t + BURST.sync;
     this.events.push({ t: 'tbsync', key, by: p.id, d: BURST.sync, ids: team.map(o => o.id) });
@@ -123,9 +129,11 @@ const methods = {
     const st = this.players.get(s.by);
     return this.teamOf(key).every(o => o.dead || s.ids.includes(o.id) || (st && dist(o, st) > BURST.range));
   },
-  // What the finisher hits: the starter's locked target, else the boss they're fighting, else the nearest enemy
-  // the team is fighting near them.
-  burstTarget(p, ids) {
+  // What the finisher hits: the target the starter (else a joiner) pressed T on, the starter's locked target, the boss
+  // the team is fighting, else the nearest enemy the team is fighting near the starter.
+  burstTarget(p, ids, hint = 0) {
+    const h = hint && this.mobs.get(hint);
+    if (h && this.targetable(h)) return h;
     const lock = p.target && this.mobs.get(p.target);
     if (lock && this.targetable(lock) && dist(lock, p) <= BURST.range) return lock;
     for (const b of [this.boss, this.sovereign]) { // a boss any joiner is fighting (or close to the starter)
@@ -141,10 +149,10 @@ const methods = {
   },
   fireBurst(key, s) {
     const t = this.time, ids = s.ids.filter(id => this.players.get(id) && !this.players.get(id).dead);
-    const starter = this.players.get(s.by) || this.players.get(ids[0]);
-    s.sync = 0; s.g = 0; s.ids = [];
+    const starter = this.players.get(s.by) || this.players.get(ids[0]), hint = s.tgt;
+    s.sync = 0; s.g = 0; s.ids = []; s.tgt = 0;
     if (!starter || !ids.length) return;
-    const n = ids.length, joiners = ids.map(id => this.players.get(id)), m = this.burstTarget(starter, ids), pow = burstPower(n);
+    const n = ids.length, joiners = ids.map(id => this.players.get(id)), m = this.burstTarget(starter, ids, hint), pow = burstPower(n);
     this.events.push({ t: 'tburst', key, by: starter.id, ids, n, m: m?.id || 0, x: r2(m?.x ?? starter.x), z: r2(m?.z ?? starter.z) });
     for (const o of joiners) this.teamStat(o, 'burst');
     if (m) {
@@ -305,6 +313,10 @@ export function installTeamplay(Game) {
   });
 
   wrap('update', function (orig, dt) { const out = orig.call(this, dt); this.updateTeamplay(dt); return out; });
-  wrap('handle', function (orig, p, msg) { if (msg?.type === 'burst') return this.teamBurst(p); return orig.call(this, p, msg); });
+  wrap('handle', function (orig, p, msg) {
+    if (msg?.type === 'burst') return this.teamBurst(p, msg.m);
+    if (msg?.type === 'test' && process.env.TEST_HOOKS && msg.tb > 0 && p) this.tbState(this.teamKey(p)).g = Math.min(BURST.max, +msg.tb); // testing aid: { tb } sets your team's gauge
+    return orig.call(this, p, msg);
+  });
 }
 
