@@ -31,6 +31,7 @@ import { installPoses } from './poses.js';
 import { installThreat } from './threat.js'; // visible threat, healer threat, Cover, flanking (G3)
 import { installRevive } from './revive.js'; // downed + revive (G1)
 import { installBossTeam } from './bossteam.js'; // boss team mechanics: stack, spread, tether (G4)
+import { installTeamplay } from './teamplay.js'; // skill combos + Team Burst + team stats (G2)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -1347,7 +1348,7 @@ export class Game {
     const g = this.gate;
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
     const gate = [g.open ? 1 : 0, waiting, g.ready.size, g.countAt ? r1(Math.max(0, g.countAt - this.time)) : 0];
-    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), gi: this.groundSnap(), poses: this.posesSnap(), down: this.downSnap?.(), th: this.threatSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
+    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), gi: this.groundSnap(), poses: this.posesSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
     this.events = [];
     return out;
   }
@@ -1387,4 +1388,5 @@ installStaging(Game); // staging hooks for the scene director: boss moves, reser
 installBossTeam(Game); // boss team mechanics (server/bossteam.js); after staging: adds meteor / spread / tether to forceBossMove
 installRevive(Game); // downed + revive (server/revive.js); after staging and boss team mechanics
 installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js)
+installTeamplay(Game); // skill combos between players, the Team Burst gauge, teamStat() for the post-fight card (server/teamplay.js); after the talents
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last

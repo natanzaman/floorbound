@@ -1,7 +1,7 @@
 // Warden runs with human-like bots: starts its own server (START_LEVEL, SPAWN_AT at the raid gate), sends a role party
 // (Guardian, Swordsman, Cleric) at a capability level, and reports kill / wipe, fight time, deaths (and what killed them)
 // and Quake Rings jumped / rolled / hit, how the boss team mechanics went (people in each stack, clean spreads, snapped
-// tethers), downs / revives (G1), and Covers / Pincers (G3).
+// tethers), downs / revives (G1), Covers / Pincers (G3), and team combos / Team Bursts (G2).
 // Usage: BOT_SKILL=3 RUNS=2 PORT=3621 node test/wardenskill.js
 //        (env: START_LEVEL=10, SPAWN_AT=0,150, LIMIT=300 s per run, WARDEN_TWIST to force a twist,
 //         ROLES=guardian,ranger,bard,cleric, START_STYLE=daggers,drum to arm each class with the first of its styles listed,
@@ -51,6 +51,8 @@ async function run(i) {
       if (e.t === 'pdie' && ids.has(e.id) && start) { res.deaths++; (res.causes ||= []).push(e.src); }
       if (e.t === 'down' && ids.has(e.id) && start) res.downs++;
       if (e.t === 'revived' && ids.has(e.id) && start) res.revives++;
+      if (e.t === 'combo' && ids.has(e.by) && start) (res.combos ||= {})[e.k] = (res.combos[e.k] || 0) + 1; // team combos (G2)
+      if (e.t === 'tburst' && ids.has(e.by) && start) (res.bursts ||= []).push(e.n); // Team Bursts: joiners each
       if (e.t === 'sys' && /Horned Warden has fallen/.test(e.text)) { res.result = 'kill'; done = true; }
       if (start && (e.t === 'cover' || e.t === 'covered' || e.t === 'flank')) { // team threat (server/threat.js): Covers, covered hits, Pincer tags
         const T = (res.team ||= { cover: 0, covered: 0, pincer: 0 });
@@ -82,8 +84,8 @@ async function run(i) {
 }
 
 const out = [];
-for (let i = 0; i < RUNS; i++) { const r = await run(i); out.push(r); console.log(`[skill ${SKILL} ${skillName(SKILL)}] run ${r.run}: ${r.result} in ${r.secs}s, ${r.deaths} deaths, ${r.downs} downed, ${r.revives} revived (twist ${r.twist}) · Quake Rings: ${r.quake.jump} jumped, ${r.quake.roll} rolled, ${r.quake.hit} hit${r.causes ? ` · deaths to ${r.causes.join(', ')}` : ''}${r.mech ? ` · team mechanics: stacks ${r.mech.stack.join('/') || '-'} in, spread ${r.mech.spread[0]}/${r.mech.spread[1]} clean, tethers ${r.mech.tether[0]}/${r.mech.tether[1]} snapped` : ''}${r.team ? ` · Covers ${r.team.cover} (${r.team.covered} hits taken), Pincer tags ${r.team.pincer}` : ''}`); for (const l of r.stats || []) console.log(`    ${l}`); }
+for (let i = 0; i < RUNS; i++) { const r = await run(i); out.push(r); console.log(`[skill ${SKILL} ${skillName(SKILL)}] run ${r.run}: ${r.result} in ${r.secs}s, ${r.deaths} deaths, ${r.downs} downed, ${r.revives} revived (twist ${r.twist}) · Quake Rings: ${r.quake.jump} jumped, ${r.quake.roll} rolled, ${r.quake.hit} hit${r.causes ? ` · deaths to ${r.causes.join(', ')}` : ''}${r.mech ? ` · team mechanics: stacks ${r.mech.stack.join('/') || '-'} in, spread ${r.mech.spread[0]}/${r.mech.spread[1]} clean, tethers ${r.mech.tether[0]}/${r.mech.tether[1]} snapped` : ''}${r.team ? ` · Covers ${r.team.cover} (${r.team.covered} hits taken), Pincer tags ${r.team.pincer}` : ''} · combos ${Object.entries(r.combos || {}).map(([k, v]) => `${k} ${v}`).join(', ') || 0} · Team Bursts ${r.bursts ? `${r.bursts.length} (joiners ${r.bursts.join('/')})` : 0}`); for (const l of r.stats || []) console.log(`    ${l}`); }
 const wins = out.filter(r => r.result === 'kill');
 const qt = k => out.reduce((s, r) => s + r.quake[k], 0), qn = qt('jump') + qt('roll') + qt('hit');
-console.log(`[skill ${SKILL} ${skillName(SKILL)}] ${wins.length}/${out.length} kills · avg kill time ${wins.length ? Math.round(wins.reduce((s, r) => s + r.secs, 0) / wins.length) : '-'}s · avg deaths ${(out.reduce((s, r) => s + r.deaths, 0) / out.length).toFixed(1)} · avg revives ${(out.reduce((s, r) => s + r.revives, 0) / out.length).toFixed(1)} (of ${(out.reduce((s, r) => s + r.downs, 0) / out.length).toFixed(1)} downs) · Quake Rings cleared ${qn ? Math.round((100 * (qn - qt('hit'))) / qn) : '-'}% of ${qn}`);
+console.log(`[skill ${SKILL} ${skillName(SKILL)}] ${wins.length}/${out.length} kills · avg kill time ${wins.length ? Math.round(wins.reduce((s, r) => s + r.secs, 0) / wins.length) : '-'}s · avg deaths ${(out.reduce((s, r) => s + r.deaths, 0) / out.length).toFixed(1)} · avg revives ${(out.reduce((s, r) => s + r.revives, 0) / out.length).toFixed(1)} (of ${(out.reduce((s, r) => s + r.downs, 0) / out.length).toFixed(1)} downs) · Quake Rings cleared ${qn ? Math.round((100 * (qn - qt('hit'))) / qn) : '-'}% of ${qn} · combos/fight ${(out.reduce((s, r) => s + Object.values(r.combos || {}).reduce((a, v) => a + v, 0), 0) / out.length).toFixed(1)} · bursts/fight ${(out.reduce((s, r) => s + (r.bursts?.length || 0), 0) / out.length).toFixed(1)}`);
 process.exit(0);

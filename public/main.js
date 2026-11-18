@@ -31,6 +31,7 @@ import { initBubbles } from '/bubbles.js';
 import { initThreat } from '/threat.js'; // who bosses target, threat meter, Cover, Pincer tags (G3)
 import { initRevive } from '/revive.js'; // downed + revive (G1)
 import { initBossTeam } from '/bossteam.js'; // boss team mechanics: STACK, SPREAD, tether (G4)
+import { initTeamplay } from '/teamplay.js'; // combo counters, the Team Burst bar and sync window (G2)
 
 const sfx = new Sound();
 
@@ -261,6 +262,8 @@ const bell = initBell({ scene, sfx, guide, banner: (a, b, c) => banner(a, b, c) 
 const revive = initRevive({ state, players, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), isTouch });
 // boss team mechanics: the gold STACK circle, SPREAD rings, tether beams, first-time prompts (public/bossteam.js)
 const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a) });
+// skill combos between players and the Team Burst: chain counters, setup hints, the party bar, T to sync (public/teamplay.js)
+const teamplay = initTeamplay({ state, players, mobs, fx, sfx, floatNum, project, send, guide, isTouch, callout: (a, b, c) => callout(a, b, c), shake: a => shake(a), $ });
 
 // ---------------- networking ----------------
 function onMessage(msg) {
@@ -288,7 +291,7 @@ function onMessage(msg) {
     buildSkillBar();
     guide.start(msg.charId ? `c${msg.charId}` : `anon_${state.cls}`, msg.lvl);
     log('Welcome to Floorbound! Head north through the field and defeat the Horned Warden.', 'sys');
-    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion.' : `WASD move (S back, A/D strafe) · mouse to look (click to capture, Esc frees it; Settings for classic) · Left click (or J) attack · 1 2 3 skills · K skill tree · Shift dodge · Space jump${state.cls === 'guardian' ? ' · R guard / parry · C cover an ally' : ''} · 4 5 6 items · B bag · F interact · P party · Ctrl+click select`, 'sys');
+    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion.' : `WASD move (S back, A/D strafe) · mouse to look (click to capture, Esc frees it; Settings for classic) · Left click (or J) attack · 1 2 3 skills · K skill tree · Shift dodge · Space jump${state.cls === 'guardian' ? ' · R guard / parry · C cover an ally' : ''} · 4 5 6 items · B bag · F interact · P party · T Team Burst · Ctrl+click select`, 'sys');
     log('Fill an enemy\'s yellow posture bar (heavy hits, Break skills, perfect dodges, parries) to BREAK it, then a teammate hits it for a SWITCH: big bonus damage.', 'sys');
     return;
   }
@@ -316,6 +319,7 @@ function onMessage(msg) {
 
 function onSnapshot({ me, w }) {
   const now = performance.now();
+  teamplay.snap(w); // Team Burst gauges and sync windows
   if (me) {
     state.xp = me.xp; state.next = me.next;
     if (me.lvl !== state.lvl) { state.lvl = me.lvl; buildSkillBar(me.lvl); mastery.render(); }
@@ -371,6 +375,7 @@ function handleEvent(e) {
   f2.onEvent(e);
   if (bell.event(e)) return; // the Tower Bell
   if (bossTeam.event(e)) return; // boss team mechanics (stack / spread / tether)
+  if (teamplay.event(e)) return; // combos, Team Burst
   if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
   if (threat.event(e)) return; // Cover, flank / Pincer tags
   if (talents.event(e)) return; // talent points, learned talents, talent procs
@@ -747,6 +752,7 @@ addEventListener('keydown', e => {
   if (k === 'tab') { e.preventDefault(); cycleLock(); }
   if (k === 'escape') { if (wheel.isOpen()) wheel.close(); else { state.lock = 0; state.focus = 0; } }
   if (k === 'v' && !e.repeat) wheel.keydown(e); // bot command wheel
+  if (k === 't' && !e.repeat) teamplay.press(); // Team Burst: start it (full bar) or join the sync window
   if (k === 'p') $('players-btn').click();
   if (k === 'b' || k === 'i') toggleBag();
   if (k === 'f') interact();
@@ -1415,7 +1421,7 @@ function updateHud(now) {
 
   // party frames
   const mates = state.spectator ? [...players.values()] : state.party ? [...players.values()].filter(p => p.party === state.party && p.id !== state.myId) : [];
-  const partyHtml = mates.map(p => {
+  const partyHtml = teamplay.partyBar() + mates.map(p => {
     const pc = (p.hp / p.maxHp) * 100, bot = state.roster.get(p.id)?.bot;
     const nm = state.roster.get(p.id)?.name || p.name;
     return `<div class="frame ${p.dead ? 'dead' : ''} ${p.downed ? 'downed' : ''} ${bot && !state.spectator ? 'botf' : ''}" ${bot && !state.spectator ? `data-bot="${esc(nm)}" title="Click for ${esc(nm)}'s orders"` : ''}><div class="row" style="font-size:12px;margin:0"><span>${bot && !state.spectator ? '<span class="bcmd">⌘</span> ' : ''}${esc(p.name)}${bot ? ' <small class="bottag">BOT</small>' : ''}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}${p.downed ? ` <b class="dtag">${p.downed.by ? 'REVIVING' : 'DOWNED'}</b>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div>${classesA.frameBar(p)}</div>`;
@@ -1924,6 +1930,7 @@ function frame(now) {
   drawFloats(dt, vdt);
   bubbles.frame();
   revive.frame(keys); // downed overlay, revive prompt, downed markers
+  teamplay.frame(); // combo chain counters over targets
 
   if (state.joined) updateHud(now);
   updateRareHint(now);

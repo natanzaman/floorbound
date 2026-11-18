@@ -1,5 +1,6 @@
 // First-time player guide: a short step-by-step card plus one-time contextual tips.
 // Progress is kept in this browser, per character, and reported to the server for play tracking.
+import { COMBOS } from '/shared/teamplay.js'; // combo tips (G2)
 
 const touch = () => document.body.classList.contains('touch');
 
@@ -45,6 +46,10 @@ const TIPS = {
   flank: 'Flank: hitting an enemy from behind deals +10% damage and posture. Get a partymate on its other side for a Pincer.',
   downed: 'Downed! You have 15 s before you bleed out. Crawl toward your party: a partymate holds E next to you to revive you.',
   revive: 'A partymate is down! Stand next to them and hold E to revive them (a Cleric\'s Heal speeds it up). Moving away or a heavy hit breaks it.',
+  combo: 'COMBO! One player sets up (launch, stun, Mark, Discord, Sanctuary), a partner pays it off within 2.5 s. Combos chain on a target and fill the Team Burst bar.',
+  tbfull: () => `Team Burst ready! ${touch() ? 'Tap the bar' : 'Press T'} to start a 3 s sync window: every partner who joins makes the finisher bigger (solo works too, weaker).`,
+  tbsync: () => `A partner started a TEAM BURST: ${touch() ? 'tap the prompt' : 'press T'} now to join it. More joiners, bigger burst.`,
+  ...Object.fromEntries(Object.entries(COMBOS).map(([k, c]) => [`combo_${k}`, c.tip])),
 };
 
 export class Guide {
@@ -99,7 +104,7 @@ export class Guide {
     if (this.off || this.seen.has(id) || !TIPS[id]) return;
     this.seen.add(id);
     try { localStorage.setItem('fb_tips', JSON.stringify([...this.seen])); } catch {}
-    this.tipEl.textContent = TIPS[id];
+    this.tipEl.textContent = typeof TIPS[id] === 'function' ? TIPS[id]() : TIPS[id];
     this.tipEl.classList.remove('show'); void this.tipEl.offsetWidth; this.tipEl.classList.add('show');
     clearTimeout(this.tipT); this.tipT = setTimeout(() => this.tipEl.classList.remove('show'), 6500);
   }

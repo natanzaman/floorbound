@@ -43,6 +43,7 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Pose | Chat `/kneel`, `/sit`, `/bow`; `/stand`, moving, attacking, a skill, dodging, jumping or guarding stands you up | Chat button |
 | Party | Players button (P) → Find party, or Invite | Players button → Find party / Invite |
 | Revive a downed partymate | Stand next to them and hold E (about 2.5 s) | Press and hold the "Hold here to revive" prompt |
+| Team Burst | T: when the party bar at the top of the party frames is full, start a 3 s sync window; partners press T to join | Tap the full bar (or the prompt) |
 | Order your party's bots | Hold V (command wheel), or chat `/b stay`, `/b Lyra: heal` (`/b help` lists them) | ⌘ Bot orders under the party frames |
 | Items | 4 potion, 5 tonic, 6 draught; B bag | Potion button; Bag button |
 | Skill Tree (progression, talents, mastery, evolutions) | K, or the Skills button (Esc closes) | Skills button |
@@ -169,6 +170,23 @@ With a database, the server records play events (session start/end, first kill, 
 - **Healer threat:** healing builds threat too: half of what a heal actually restores (overheal counts for nothing; damage a shield soaks counts like healing for its caster), split across every enemy fighting the party. A Cleric who spams heals and Smites can pull the boss off a Guardian who isn't taunting; a Guardian who Taunts on cooldown keeps it.
 - **Cover (Guardian, C):** dash up to 8 m to an ally (the one you selected, else whoever an enemy is after, most hurt first) and take the next hit meant for them within 1.5 s, braced like a guard (70% less; a guarding Guardian takes it on the guard). 12 s cooldown. Perilous hits (Horn Sweep) can't be covered: dodge or parry those. Guardian bots Cover a partymate under half health that a big hit is coming for (a winding boss after them, or a telegraph under them).
 - **Flanking and Pincers:** a hit from an enemy's back 120° does +10% damage and posture. If a party member is on the opposite side (at least 120° apart around it, both within ~6 m of its edge), both of you get a **Pincer**: +20% damage and more posture, with a small "Pincer" tag only the two of you see. Melee bots (Swordsman, Berserker, Lancer) take the side opposite the tank. Tuning: `shared/threat.js`; rules: `server/threat.js`; HUD: `public/threat.js`; bots: `shared/bots/threat.js`; tests: `node test/threat.js`.
+
+## Team combat: combos and the Team Burst
+
+- **Skill combos:** one player sets an enemy up, a *different* player pays it off within 2.5 s (data: `shared/teamplay.js`; server: `server/teamplay.js`). The same combo lands on the same enemy at most once per 6 s.
+
+  | Combo | Setup | Payoff | Effect |
+  | --- | --- | --- | --- |
+  | **Skewer** | Lancer Sky Lance or Sweep (launch) | any ranged hit (Ranger, Cleric Smite, Bard Sonic Bolt / Dissonance) | ×1.35 damage, extra posture |
+  | **Execute** | Guardian Ground Slam or Bash finisher (stun) | Berserker heavy hit, or Swordsman Burst Combo | always a crit, ×1.1, extra posture |
+  | **Pin** | Ranger Hunter's Mark (or a heavy arrow on their own mark) | Lancer Thrust or Lance Charge | rooted 1.5 s (a boss is slowed), ×1.1 |
+  | **Shatter Chorus** | Bard Discord, 3+ stacks | anyone else's Break | the breaker's party near it heals 12%, the chord bursts for 1.8× the Bard's attack |
+  | **Sanctified Switch** | Cleric Sanctuary (standing in it) or Blessing | a Switch | the Broken window lasts 1.5 s longer |
+
+  A partner's setup you can cash in shows "→ Skewer" over the target (only to you). Every combo shows a chain counter over the target for everyone ("Combo ×2 · Skewer", combos within 6 s of each other chain); the two players who made it get a bright flash, a white ring and the combo's name.
+- **Team Burst:** a shared bar at the top of the party frames (solo players get their own, filling at half speed). Combos (+8), Switches (+5), Breaks (+4), parries (+4), perfect dodges (+2), revives (+15) and saves (+8) fill it; parties over 3 fill a little slower; it drains when nobody has fought for 6 s. When it's full anyone presses **T** (or taps the bar): a 3 s **sync window** opens and every member who presses T joins (it fires early once everyone's in). The finisher hits your locked target, the boss you're fighting or the nearest enemy you're fighting: each joiner deals 4.5× their attack × power (2 joiners ×1, 3 ×1.3, 4 ×1.6, 5 ×1.8, 6 ×2), a full posture **BREAK** (a Switch window for everyone), and the team near the starter gets +8–25% damage for 6 s. Solo: no window, ×0.6 power and a posture chunk instead of a Break. With no enemy in reach it won't start (the bar is kept). Off during a filmed director show.
+- **Bots** cash in partners' setups (Lancer charges a marked target, Swordsman bursts and Berserker leaps on a stunned one; capability 1–5: 15–100% notice), join a sync window (35–100%, 0.15–2.8 s late) and start one with a full bar on a boss or elite (a human in the party gets 5 s to start it first).
+- **Team stats (for the post-fight card):** `teamStat(p, key, n)` records per-fight counters on the boss fight record (`fight.team` / `fight2.team`: player id → { dmg, heal, tanked, switch, break, combo, setup, burst, parry, perfect, lastAttack, revive, save, cover, flank, mechanic }); `game.teamStats(fight)` reads them. G2 records dmg, switch, break, combo, setup, burst, parry, perfect and lastAttack; heal, tanked, save, cover and flank come from server/threat.js, revive from server/revive.js, mechanic from server/bossteam.js.
 
 ## Skill mastery and evolutions
 
@@ -308,6 +326,7 @@ server/combat.js posture/Break, perfect dodge, guard/parry, Horn Sweep, Quake Ri
 shared/threat.js, server/threat.js, public/threat.js  team threat: who bosses target (snapshot `th`), threat meter (`me.th`), healer threat, Guardian Cover, flank / Pincer; bots in shared/bots/threat.js; test/threat.js
 server/bossteam.js boss team mechanics: shared meteor (stack), spread markers, tether (mixed into Game; public/bossteam.js, shared/bots/bossteam.js)
 server/poses.js  kneel / sit / bow: setPose, /kneel /sit /bow /stand chat, cleared by moving or acting (public/poses.js on the client)
+server/teamplay.js  skill combos between players, the Team Burst gauge and sync window, teamStat() per-fight counters (tables: shared/teamplay.js; client: public/teamplay.js; bots: shared/bots/teamplay.js)
 server/index.js  static file server + WebSocket server (20 ticks/sec)
 server/shutdown.js  deploy drain on SIGTERM: "Update incoming", waits out a boss fight (4 min max), saves, exits
 public/          Three.js client (no build step): main.js, world.js, style.css
@@ -316,6 +335,7 @@ test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
 test/bubbles.js  speech bubble logic: duration, one per speaker, who sees which line; film subtitle hold (public/bubbles.js)
 test/filmsubs.mjs  film dialogue in a browser: subtitles in the letterbox bar, voice-over files played (needs Playwright for Node)
+test/teamplay.js  combos (each trigger, timeout, chain), Team Burst gauge fill/drain, sync window joining and scaling, team stats
 test/feeltext.js in-process checks for who sees combat text (`to` tags on reactions) and which boss hits hit-stop their victim
 test/bossteam.js boss team mechanics: meteor split, spread overlap, tether break distance, solo unchanged, director safety, bot positioning
 test/warden3.js  in-process checks for the Quake Ring (jump / roll / out of reach), Warden scaling and bot jump timing per capability
@@ -501,7 +521,7 @@ node test/team.js                           # Brann (tank), Kael (DPS), Lyra (he
 - **Admin page → Director:** pick a sheet from `docs/story/*.yaml` or paste one, Validate (every problem with its scene and cue), Run (from any scene), Stop, live status. A server without a database (the filming setup) shows only this tab, from localhost. How to film: `docs/story/FILMING.md`.
 - **Test:** `node test/director.js` (sheet validation, timing rules, a short in-process show); `FULL=1 node test/director.js` plays Episode 1 end to end on its own server (port 3712, about 4 min).
 
-Other testing aids: `SPAWN_AT=0,172` spawns players at the chamber gate. `TEST_HOOKS=1` lets a client set its own health (`{ type: 'test', hurt: 0.4 }`, for test/botbrain.js) or gain XP (`{ type: 'test', xp: 850 }`, for the bot level sync in test/playerbots.js and test/shutdown.js). `WARDEN_TWIST=<id>` forces a Warden twist (see above). `MAX_PLAYERS` caps the server (default 64).
+Other testing aids: `SPAWN_AT=0,172` spawns players at the chamber gate. `TEST_HOOKS=1` lets a client set its own health (`{ type: 'test', hurt: 0.4 }`, for test/botbrain.js) or gain XP (`{ type: 'test', xp: 850 }`, for the bot level sync in test/playerbots.js and test/shutdown.js). `{ type: 'test', tb: 100 }` sets your team's Team Burst bar (screenshots). `WARDEN_TWIST=<id>` forces a Warden twist (see above). `MAX_PLAYERS` caps the server (default 64).
 
 Floor 2: `SPAWN_AT=600,150` spawns at the Sunken Gate (spawning on Floor 2 also unlocks it; deaths respawn there too). The bot party goes to Floor 2 with `FLOOR=2`: from Floor 1 they kill the Warden and take the Stairway (or use the town waystone if already unlocked), farm the Mire until level 15, then fight the Sovereign.
 
