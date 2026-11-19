@@ -409,6 +409,11 @@ server/index.js  static file server + WebSocket server (20 ticks/sec)
 server/shutdown.js  deploy drain on SIGTERM: "Update incoming", waits out a boss fight (4 min max), saves, exits
 public/          Three.js client (no build step): main.js, world.js, style.css
 public/models/   rigged character models (glTF) with shared animations
+shared/controls.js  every game action, default keyboard & mouse and controller bindings, resolve / conflict / chord / reserved-key rules (DOM-free); test/controls.js
+public/input.js  the input layer: keys and mouse buttons -> actions by key code (on, held, axis, label, setBinding, capture; window.__fb.input), saved in localStorage fb_controls
+public/panels.js  the panel registry (open, close, top, isOpen): which windows free the cursor and close on Esc
+public/settings.js  the Settings panel; fb_settings (this browser) vs fb_controls (bindings, sensitivity, invert-Y)
+test/keys.mjs    every default key and mouse action in a real browser, checked by what it sends or changes (needs Playwright for Node)
 test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
 test/bubbles.js  speech bubble logic: duration, one per speaker, who sees which line; film subtitle hold (public/bubbles.js)
