@@ -161,9 +161,9 @@ const hp = (C, f) => { C.hp = Math.round(C.maxHp * f); };
   C.ov = null; C.busyUntil = 0; (g.btActive ||= []).push(fakeBt); // a G4 move
   tick(g, 2); assert.equal(C.ar.stage, 1, 'pending while a G4 move runs');
   g.btActive = g.btActive.filter(a => a !== fakeBt);
-  ps[1].trap = { k: 'crystal' }; // a J1 trap
-  tick(g, 2); assert.equal(C.ar.stage, 1, 'pending while someone is trapped');
-  delete ps[1].trap;
+  assert.ok(g.forceBossMove(C, 'crystal', ps[1].id)); // a J1 trap (server/rescue.js)
+  tick(g, 2); assert.ok(ps[1].trap, 'trapped'); assert.equal(C.ar.stage, 1, 'pending while someone is trapped');
+  g.trapEnd(ps[1], 'off');
   const since = g.time;
   const seen = until(g, C, () => C.ar.stage >= 2, 15);
   assert.ok(seen.some(e => e.s === 'crack'));
