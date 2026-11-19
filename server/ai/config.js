@@ -24,6 +24,8 @@
 //   AI_NAMED_CALLS_MIN Named talk calls per minute, counted apart from AI_MAX_CALLS_MIN (default 12)
 //   AI_NAMED_DAILY     Named talk calls per player per day (resets 10:00 UTC with friendship; default 30)
 //   AI_NAMED_GAP_S     seconds between two lines from one player to the Named (default 4)
+//   AI_NAMED_PHRASE_DAILY  requests and invitations the Named phrase in their own words, per player per day (on the
+//                      Named slice, not the player's talk calls; then canned lines; default 10)
 export const DEFAULT_MODEL = { anthropic: 'claude-haiku-5-5', openai: 'gpt-6-luna', gemini: 'gemini-3.1-flash-lite', mock: 'mock' };
 // Key env var names per provider, first one wins. The extra names are common misnamings, accepted on purpose.
 export const KEY_ENV = {
@@ -95,6 +97,8 @@ export function readConfig(env = process.env) {
     namedConcurrent: 2, // Named calls in flight at once, apart from AI_MAX_CONCURRENT (companions always keep theirs)
     namedDaily: num(envGet(env, 'AI_NAMED_DAILY'), 30, 0),
     namedGapS: num(envGet(env, 'AI_NAMED_GAP_S'), 4, 1),
+    namedPhraseDaily: num(envGet(env, 'AI_NAMED_PHRASE_DAILY'), 10, 0),
+    namedPhraseMs: 3000, // a phrasing that takes longer than this keeps the canned line
   };
 }
 

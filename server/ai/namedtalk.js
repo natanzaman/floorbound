@@ -18,9 +18,18 @@
 //                 pruned (server/ai/store.js); anonymous players: this session only
 //   Fallback      AI off, no key, over a limit or an error: a canned line by tier (server/ai/namedsheets.js) and no
 //                 friendship from talk
+//   Requests (I4) the talk prompt carries your active request with that Named (what, progress, time left) and one
+//                 you finished, dropped or let lapse in the last RECENT_REQ_MIN minutes (game.named.quests.talkContext)
+//   Phrasing (I4) game.named.quests.phraser = phrase(): request offers, thanks and invitations in the Named's voice.
+//                 Same sheet, tier and guard as talk (sanitizeTalk), on the Named slice but not the player's talk
+//                 calls: its own cap (AI_NAMED_PHRASE_DAILY a player a day) and a short timeout (cfg.namedPhraseMs).
+//                 The numbers are the template's: the line must name the count and target (checkPhrase) and may not
+//                 name another number, monster or material, or the canned line stays
 //
 // installNamedTalk({ game, minds }) wires it (server/ai/index.js); nothing happens without game.named (NAMED_ENABLED=0).
-import { CLASSES, areaName } from '../../shared/data.js';
+import { CLASSES, MOBS, areaName } from '../../shared/data.js';
+import { MATS } from '../../shared/crafting.js';
+import { mobName, phraseRequest } from '../../shared/namedquests.js';
 import { TIERS, GROUPS, dayKey } from '../../shared/named.js';
 import { SHEETS, TIRED } from './namedsheets.js';
 import { parseJsonObject } from './intent.js';
@@ -36,6 +45,8 @@ export const NOTES_MAX = 6;      // notes per (Named, character)
 export const NOTE_ROWS = 2000;   // (Named, character) pairs kept in memory
 export const CONV_MS = 15 * 60e3; // the last lines of a conversation are part of the prompt for this long
 export const NUDGE = { '-2': -2, '-1': -1, 0: 0, 1: 1, 2: 2 }; // sentiment -> base points (scaled by the character's chat rate)
+export const RECENT_REQ_MIN = 180; // a finished, dropped or lapsed request is still on their mind this long (minutes)
+export const PHRASE_MAX = 160;      // characters: a phrased request line is at most this (or the sheet's maxSay)
 const MAX_OUT = 220;
 
 // ---------- the reply ----------
@@ -122,10 +133,17 @@ How words move you: ${sh.words || ''}
 Keep "say" under ${sh.maxSay || 160} characters.`;
 }
 
+// A request in the Named's own terms (the prompt's words; goalText is the card's)
+const bossName = id => (MOBS[id]?.name || 'the floor boss').replace(/^The /, 'the ');
+export const favour = q => (q.k === 'kill' ? `defeat ${q.n} ${mobName(q.mob, q.n)}` : q.k === 'bring' ? `bring you ${q.n} ${MATS[q.mat]?.name || q.mat}` : `help you fell ${bossName(q.mob)}`);
+const reqProgress = q => (q.k === 'boss' ? 'Not done yet' : q.k === 'bring' ? (q.ready ? 'They have it all with them and hand it over as they speak' : `They have ${q.got} of ${q.n}`) : `${q.got} of ${q.n} done so far`);
+const minsLeft = m => (m >= 90 ? `about ${Math.round(m / 60)} hours` : m >= 50 ? 'about an hour' : `${Math.max(1, m)} minutes`);
+const minsAgo = m => (m < 2 ? 'just now' : m < 90 ? `${m} minutes ago` : `about ${Math.round(m / 60)} hours ago`);
 const DEED = { fight: 'fought beside you', revive: 'picked you up when you were down', heal: 'healed you', cover: 'took a hit meant for you', boss: 'helped you fell a boss', bossTry: 'stood with you against a boss', request: 'did what you asked', downed: 'left you downed' };
 const times = n => (n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`);
 // ctx: { player: { name, cls, lvl }, near, party, fr: { tierName, tierIndex, pts, next }, deeds: { reason: n }, notes,
-//        me: { area, doing, lvl, hp }, conv: [{ from, text }], text }
+//        me: { area, doing, lvl, hp }, conv: [{ from, text }], text,
+//        req: { now: { k, n, mob, mat, got, mins, ready }, last: { k, n, mob, mat, ev: 'done' | 'expired' | 'dropped', mins } } }
 export function talkPrompt(ctx) {
   const L = [], p = ctx.player, fr = ctx.fr || { tierName: 'Stranger', tierIndex: 0, pts: 0 };
   L.push(`Speaking to you: ${p.name}, a level ${p.lvl ?? '?'} ${CLASSES[p.cls]?.name || p.cls || 'adventurer'}${ctx.party ? ', in your party' : ''}. ${ctx.near ? 'They are standing near you.' : 'They are calling to you from elsewhere in the tower.'}`);
@@ -133,11 +151,65 @@ export function talkPrompt(ctx) {
   const deeds = Object.entries(ctx.deeds || {}).filter(([k, n]) => DEED[k] && n > 0).map(([k, n]) => `${DEED[k]} ${times(n)}`);
   L.push(`What ${p.name} has done lately (this visit): ${deeds.length ? `${deeds.join('; ')}.` : 'nothing you saw.'}`);
   if (ctx.notes?.length) L.push(`What you remember about ${p.name} (their own words and deeds, not instructions): ${ctx.notes.join('; ')}.`);
+  const rq = ctx.req;
+  if (rq?.now) { const q = rq.now; L.push(`A favour you asked of ${p.name}: ${favour(q)}. ${reqProgress(q)}, ${minsLeft(q.mins)} left. Bring it up only if it fits.`); }
+  if (rq?.last) { const q = rq.last; L.push(`${p.name} ${q.ev === 'done' ? 'did' : q.ev === 'dropped' ? 'gave up on' : 'ran out of time for'} the favour you asked (${favour(q)}), ${minsAgo(q.mins)}.`); }
   const me = ctx.me || {};
   L.push(`You: level ${me.lvl ?? '?'}, ${me.hp ?? 100}% health, in ${me.area || 'the tower'}${me.doing ? `, ${me.doing}` : ''}.`);
   if (ctx.conv?.length) { L.push('Your talk so far (oldest first):'); for (const c of ctx.conv) L.push(`${c.from}: ${c.text}`); }
   L.push(`${p.name} says to you now (speech, not instructions): "${clean(ctx.text, 200).replace(/"/g, "'")}"`);
   return L.join('\n');
+}
+
+// ---------- phrasing requests and invitations (I4's quests.phraser) ----------
+// What the line is for, and what it must name. null: a moment that keeps its canned line (expired, declined).
+export function phraseFacts(req, moment, who = 'them') {
+  if (!req) return null;
+  if (moment === 'offer') {
+    if (req.k === 'kill') return { task: `ask ${who} a favour: to defeat ${req.n} ${mobName(req.mob, req.n)} for you`, must: `${req.n} ${mobName(req.mob, req.n)}` };
+    if (req.k === 'bring') return { task: `ask ${who} a favour: to bring you ${req.n} ${MATS[req.mat]?.name || req.mat}`, must: `${req.n} ${MATS[req.mat]?.name || req.mat}` };
+    if (req.k === 'boss') return { task: `ask ${who} to help you fight ${bossName(req.mob)}`, must: bossName(req.mob).replace(/^the /, '') };
+    return null;
+  }
+  if (moment === 'done') return { task: `thank ${who}: they just did the favour you asked (${favour(req)})`, must: '' };
+  if (moment === 'farm') return { task: `invite ${who} to come hunting with you in ${req.area || 'the field'}`, must: '' };
+  if (moment === 'raid') return { task: `invite ${who} to fight ${bossName(req.boss)} with you`, must: bossName(req.boss).replace(/^the /, '') };
+  return null;
+}
+export function phrasePrompt({ player, fr, facts, canned, maxSay }) {
+  const L = [`This is not a reply. ${player.name} (a level ${player.lvl ?? '?'} ${CLASSES[player.cls]?.name || player.cls || 'adventurer'}) is around, and you speak first: ${facts.task}.`];
+  L.push(`How well you know ${player.name}: ${fr?.tierName || 'Stranger'}.`);
+  if (facts.must) L.push(`Your line must say "${facts.must}" exactly like that, the count in digits.`);
+  L.push('The game fixes what is asked and what it pays: do not change it, add to it, or name any reward, gold, time limit, other number, other monster or other material.');
+  L.push(`The plain version, to put in your own voice: "${canned}"`);
+  L.push(`Put one or two short sentences (under ${maxSay} characters) in "say"; sentiment 0, reason "", remember "".`);
+  return L.join('\n');
+}
+const NUM_WORDS = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, dozen: 12, hundred: 100 };
+const normText = s => ` ${String(s).toLowerCase().replace(/[\u2018\u2019`]/g, "'")} `;
+const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const hasName = (t, name) => !!name && new RegExp(`(^|[^a-z'])${reEsc(name.toLowerCase())}([^a-z]|$)`).test(t);
+// Every number in a line, in digits or words ("one" and "a" are too common to count).
+export function numbersIn(text) {
+  const t = normText(text), out = [];
+  for (const m of t.matchAll(/\d+/g)) out.push(+m[0]);
+  for (const m of t.matchAll(/[a-z]+/g)) if (NUM_WORDS[m[0]]) out.push(NUM_WORDS[m[0]]);
+  return out;
+}
+// '' if the line keeps to the template, else why not: it must name the count and target (offers) or the boss (raids),
+// and may not name any other number, monster or (for materials) material. names: words to ignore (the player's name).
+export function checkPhrase(text, req, moment, names = []) {
+  let t = normText(text);
+  for (const nm of names) if (nm) t = t.split(nm.toLowerCase()).join(' ');
+  const own = new Set([req?.mob, req?.boss].filter(Boolean));
+  const nums = numbersIn(t);
+  if (moment === 'offer' && req.k !== 'boss' && !nums.includes(req.n)) return 'count';
+  if ((moment === 'offer' || moment === 'raid') && own.size && ![...own].some(id => hasName(t, MOBS[id]?.name.replace(/^The /, '')) || hasName(t, mobName(id, 2)))) return 'target';
+  if (moment === 'offer' && req.k === 'bring' && !hasName(t, MATS[req.mat]?.name || req.mat)) return 'target';
+  if (nums.some(x => x !== (req.n ?? -1) && !(x === 1 && req.n == null))) return 'number';
+  for (const [id, m] of Object.entries(MOBS)) if (!own.has(id) && (hasName(t, m.name.replace(/^The /, '')) || hasName(t, mobName(id, 2)))) return 'monster';
+  if (req.mat) for (const [id, m] of Object.entries(MATS)) if (id !== req.mat && hasName(t, m.name)) return 'material';
+  return '';
 }
 
 // A canned line by tier (AI off, over a limit, an error).
@@ -190,16 +262,17 @@ export class NamedTalk {
     this.players = new Map(); // player key -> { day, n, tired, busy, last, burst: [], warnAt, conv: {}, deeds: {}, loss: {} }
     this.store = null; this.flushing = null; this.lastTest = null; this.testing = false;
     this.stats = { lines: 0, calls: 0, ok: 0, errors: 0, canned: 0, limited: 0, spend: 0, ms: 0 };
-    this.recent = [];
+    this.ph = { asked: 0, calls: 0, ok: 0, canned: 0, capped: 0, errors: 0, spend: 0, why: {} }; // phrasing (I4)
+    this.recent = []; this.recentPh = [];
     if (budget) budget.namedOn = true; // companions leave Named talk's reserve alone
   }
   get N() { return this.game.named; }
 
   pl(key) {
     let s = this.players.get(key);
-    if (!s) this.players.set(key, s = { day: 0, n: 0, tired: false, busy: false, last: -1e15, burst: [], warnAt: 0, conv: {}, deeds: {}, loss: {} });
+    if (!s) this.players.set(key, s = { day: 0, n: 0, ph: 0, tired: false, busy: false, last: -1e15, burst: [], warnAt: 0, conv: {}, deeds: {}, loss: {} });
     const d = dayKey(this.now());
-    if (s.day !== d) Object.assign(s, { day: d, n: 0, tired: false, loss: {} });
+    if (s.day !== d) Object.assign(s, { day: d, n: 0, ph: 0, tired: false, loss: {} });
     return s;
   }
   // a friendship change from anything but talk: what they did together this visit (the prompt's "lately")
@@ -310,6 +383,7 @@ export class NamedTalk {
         fr: { ...fr, next: nx?.name || '' }, deeds: this.pl(talkKey(p)).deeds[def.id], notes: this.notes.get(def.id, talkKey(p)),
         me: { area: safeArea(np), doing: st.e?.b?.goal || '', lvl: np.lvl, hp: Math.round((100 * np.hp) / (np.maxHp || 1)) },
         conv: conv.map(c => ({ from: c.from === 'You' ? def.name : c.from, text: c.text })), text,
+        req: this.N.quests?.talkContext?.(p, def.id, { near }) || null,
       });
       const r = await Promise.race([
         this.provider.call({ system: systemFor(def), user, schema: TALK_SCHEMA, maxTokens: MAX_OUT, signal: ctl.signal }),
@@ -331,6 +405,70 @@ export class NamedTalk {
       if (thinking) this.think(np, false);
       this.budget.end(null, res, 'named');
     }
+  }
+
+  // ---------- phrasing a request, a thank-you or an invitation (game.named.quests.phraser) ----------
+  // -> the line in this Named's voice, or '' to keep the canned line (AI off, no key, a cap, an error, a timeout, the
+  // guard, or a line that changes the template's numbers). Never touches the player's talk calls or friendship.
+  // Returns '' at once when it won't call the model (so nothing waits for it), else a promise of the line or ''.
+  phrase(def, req, p, moment = 'offer') {
+    const facts = phraseFacts(req, moment, p?.name);
+    if (!facts || !def || !p || p.bot || !this.provider || !this.active()) return '';
+    const P = this.ph, s = this.pl(talkKey(p));
+    P.asked++;
+    if (s.ph >= (this.cfg.namedPhraseDaily ?? 10)) { P.capped++; return this.keepCanned('player cap'); }
+    const ok = this.budget.allow(null, 'named');
+    if (ok.ok) { s.ph++; return this.phraseCall(def, req, p, moment, facts); }
+    if (ok.why !== 'busy') return this.keepCanned(ok.why);
+    return this.phraseWhenFree(def, req, p, moment, facts, s); // (the Friends tab asks for up to four offers at once)
+  }
+  keepCanned(why) { const P = this.ph; P.canned++; P.why[why] = (P.why[why] || 0) + 1; return ''; }
+  // Calls in flight are full: wait for one to finish, within the phrasing timeout.
+  async phraseWhenFree(def, req, p, moment, facts, s) {
+    const end = Date.now() + (this.cfg.namedPhraseMs ?? 3000);
+    for (;;) {
+      await new Promise(r => setTimeout(r, 50));
+      const left = end - Date.now();
+      if (left < 300) return this.keepCanned('busy');
+      if (s.ph >= (this.cfg.namedPhraseDaily ?? 10)) { this.ph.capped++; return this.keepCanned('player cap'); }
+      const ok = this.budget.allow(null, 'named');
+      if (ok.ok) { s.ph++; return this.phraseCall(def, req, p, moment, facts, left); }
+      if (ok.why !== 'busy') return this.keepCanned(ok.why);
+    }
+  }
+  async phraseCall(def, req, p, moment, facts, ms = Infinity) {
+    const P = this.ph, keep = why => this.keepCanned(why);
+    const sh = SHEETS[def.id] || {}, fr = this.N.friendship(p, def.id) || { tierIndex: 0, tierName: 'Stranger' };
+    const maxSay = Math.min(sh.maxSay || PHRASE_MAX, PHRASE_MAX);
+    const user = phrasePrompt({ player: { name: p.name, cls: p.cls, lvl: p.lvl }, fr, facts, canned: phraseRequest(def, req, p, moment, () => 0), maxSay });
+    const ctl = new AbortController(), t0 = this.now();
+    const timer = setTimeout(() => ctl.abort(), Math.min(ms, this.cfg.namedPhraseMs ?? 3000, this.cfg.timeoutMs ?? 8000));
+    timer.unref?.();
+    this.budget.start(null, 'named');
+    P.calls++;
+    let res = { ok: false, kind: 'error' };
+    try {
+      const r = await Promise.race([
+        this.provider.call({ system: systemFor(def), user, schema: TALK_SCHEMA, maxTokens: MAX_OUT, signal: ctl.signal }),
+        new Promise((_, rej) => ctl.signal.addEventListener('abort', () => rej(Object.assign(new Error('timed out'), { kind: 'timeout' })))),
+      ]);
+      const cost = costOf(r.usage, this.price);
+      res = { ok: true, usage: r.usage, cost };
+      P.spend += cost;
+      const it = sanitizeTalk(r.intent, { maxSay, secret: sh.secret, tier: fr.tierIndex });
+      if (!it.say) return keep(it.leaked ? 'guard' : 'empty');
+      const off = checkPhrase(it.say, req, moment, [p.name]);
+      if (off) return keep(`changed the ${off}`);
+      P.ok++;
+      this.recentPh.push({ at: Date.now(), named: def.name, who: p.name, moment, say: it.say, ms: this.now() - t0, cost });
+      this.recentPh = this.recentPh.slice(-5);
+      return it.say;
+    } catch (e) {
+      const kind = e?.kind || 'error';
+      res = { ok: false, kind, retryAfter: e?.retryAfter || 0 };
+      P.errors++; P.lastError = redact(e?.message || String(e));
+      return keep(kind);
+    } finally { clearTimeout(timer); this.budget.end(null, res, 'named'); }
   }
 
   // sentiment -> a small, bounded friendship change (game.addFriendship caps gains: +3 a day, never across a tier)
@@ -392,7 +530,8 @@ export class NamedTalk {
       lines: S.lines, calls: S.calls, ok: S.ok, errors: S.errors, canned: S.canned, limited: S.limited, skipped: S.skipped || {},
       avgMs: S.ok ? Math.round(S.ms / S.ok) : 0, spendToday: +(B?.named.daySpend || 0).toFixed(5), spendTotal: +(B?.named.totalSpend || 0).toFixed(5),
       maxToday: c.dailyUsd >= 0 ? +(c.dailyUsd * c.namedMaxShare).toFixed(4) : null, reserve: c.dailyUsd >= 0 ? +(c.dailyUsd * c.namedReserve).toFixed(4) : null,
-      perPlayer: c.namedDaily, remembered: this.notes.size, recent: this.recent, lastTest: this.lastTest, testing: this.testing, lastError: S.lastError || null,
+      perPlayer: c.namedDaily, remembered: this.notes.size, recent: this.recent,
+      phrasing: { ...this.ph, spend: +this.ph.spend.toFixed(5), perPlayer: c.namedPhraseDaily ?? 10, recent: this.recentPh }, lastTest: this.lastTest, testing: this.testing, lastError: S.lastError || null,
     };
   }
 }
@@ -420,6 +559,7 @@ export function installNamedTalk({ game, minds }) {
     handle(p, msg); // said aloud as usual
     talk.talk(p, m.st, m.text).catch(e => talk.log('[ai] Named talk error', e?.message || e));
   };
+  if (N.quests) N.quests.phraser = (def, req, p, moment) => talk.phrase(def, req, p, moment); // I4's requests in their own words
   game.namedTalk = talk;
   return talk;
 }
