@@ -635,7 +635,7 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
 
 | Task | Branch | Status | Owner | Merge |
 |---|---|---|---|---|
-| K1a Input contract + keyboard rewire + keys test | `feat/input` | todo | | |
+| K1a Input contract + keyboard rewire + keys test | `feat/input` | in progress | agent input | |
 | K1b Gamepad + focus navigation | `feat/gamepad` | todo (after K1a) | | |
 | K2 Controls screen (pictures, lists, editing) | `feat/controlsui` | todo (after K1's action/binding contract lands) | | |
 | K3 Accessibility options | `feat/access` | todo (with K2) | | |
