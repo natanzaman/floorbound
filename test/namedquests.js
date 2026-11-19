@@ -17,7 +17,7 @@ import WebSocket from 'ws';
 import { Game } from '../server/game.js';
 import { BotManager } from '../server/botmanager.js';
 import { NamedManager } from '../server/named.js';
-import { NamedQuests, makeQuestStore } from '../server/namedquests.js';
+import { NamedQuests, makeQuestStore, PHRASE_WAIT } from '../server/namedquests.js';
 import { NamedTalk } from '../server/ai/namedtalk.js';
 import { MOBS } from '../shared/data.js';
 import { floorOf } from '../shared/floor2.js';
@@ -277,6 +277,16 @@ function world({ store = null } = {}) {
   const o2 = qs.offerFor(nat, 'sennet'); const c2 = o2.text;
   await sleep(5);
   ok(c2 && o2.text === c2, 'a failing phraser keeps the canned line');
+  qs.rec(nat, 'sennet').offer = null; clock.t += 1000;
+  qs.phraser = () => new Promise(() => {}); // (never answers)
+  const o3 = qs.offerFor(nat, 'sennet'); const c3 = o3.text;
+  ok(o3.phrasing && qs.cardFor(nat, 'sennet').state === 'none', 'an offer waits for its line…');
+  await sleep(PHRASE_WAIT + 100);
+  ok(!o3.phrasing && o3.text === c3 && qs.cardFor(nat, 'sennet').state === 'offer', `…at most ${PHRASE_WAIT / 1000} s, then the canned line`);
+  qs.phraser = () => ''; // (AI off: answers at once)
+  qs.rec(nat, 'sennet').offer = null; clock.t += 1000;
+  const o4 = qs.offerFor(nat, 'sennet');
+  ok(!o4.phrasing && qs.cardFor(nat, 'sennet').state === 'offer', 'a phraser that answers at once holds nothing up');
   qs.phraser = null;
 }
 

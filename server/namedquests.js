@@ -13,9 +13,13 @@
 //              Decline): OUTREACH.cd per Named per player, OUTREACH.gap between any two, none from a Named you turned
 //              down this session, none during a director show, none while you or they are in a boss fight. Accept:
 //              they join your party (the usual busy, one-per-party and party-full rules) and come to you.
-//  phrasing    phrase(def, req, player, moment) is the canned line (shared/namedquests.js phraseRequest). I3 can set
-//              quests.phraser = async (def, req, player, moment) => text: its text replaces the canned one when it
-//              arrives (an empty answer or an error keeps the canned line).
+//  phrasing    phrase(def, req, player, moment) is the canned line (shared/namedquests.js phraseRequest). I3 sets
+//              quests.phraser = async (def, req, player, moment) => text (server/ai/namedtalk.js phrase()): an offer
+//              is shown once phrased (and its line kept on the offer, then the request: never phrased twice); the
+//              thank-you and an invitation go out once phrased. An empty answer, an error or PHRASE_WAIT ms without
+//              one keeps the canned line. Expired and declined lines stay canned.
+//  talk        talkContext(p, id) is what I3's talk prompt knows of your requests with that Named: the active one and
+//              one finished, dropped or lapsed in the last RECENT_REQ ms.
 //
 // Client messages: { type: 'named', op: 'req', id, act: 'take' | 'drop' | 'turnin' } and { type: 'named', op: 'out',
 // id, yes } (TEST_HOOKS=1 also: { op: 'out', test: 1, id } and { op: 'req', test: 1, id, got }). Server: { type: 'named', op: 'req', ev: 'progress' | 'done' | 'expired', … } and { type: 'named', op: 'out',
@@ -35,7 +39,10 @@ const isHuman = p => !!p && !p.bot;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r2 = v => Math.round(v * 100) / 100;
 const inBossRoom = p => inArena(p.x, p.z) || inArena2(p.x, p.z) || inArena3(p.x, p.z);
-const newRec = () => ({ req: null, offer: null, nextAt: 0, day: 0, got: 0 });
+const newRec = () => ({ req: null, offer: null, nextAt: 0, day: 0, got: 0, last: null });
+export const PHRASE_WAIT = 3500;        // ms: the most a phrased line may hold up a card, a thank-you or an invitation
+export const RECENT_REQ = 3 * 3600e3;   // ms: a finished, dropped or lapsed request is still on their mind this long
+const lastOf = (req, ev, at) => ({ k: req.k, n: req.n, ...(req.mob ? { mob: req.mob } : {}), ...(req.mat ? { mat: req.mat } : {}), ev, at });
 
 // ---------- Postgres (server/db.js makes the table) ----------
 export function makeQuestStore(q) {
@@ -109,13 +116,32 @@ export class NamedQuests {
 
   // ---------- phrasing (the hook for I3) ----------
   phrase(def, req, player, moment = 'offer') { return phraseRequest(def, req, player, moment, this.rnd); }
-  // The canned line now; an AI line (quests.phraser) replaces it on `obj.text` if one comes back.
+  // The canned line now (obj.text); with a phraser, an AI line replaces it if one comes back within PHRASE_WAIT
+  // (obj.phrasing is set until then). Resolves with the final text.
+  // A phraser may answer at once ('' or a line, not a promise): then nothing waits (AI off, a cap: the usual case).
   phraseInto(obj, def, req, player, moment = 'offer') {
     obj.text = this.phrase(def, req, player, moment);
-    if (typeof this.phraser !== 'function') return obj.text;
-    Promise.resolve().then(() => this.phraser(def, req, player, moment)).then(t => { if (typeof t === 'string' && t.trim()) obj.text = t.trim().slice(0, 240); }, () => {});
-    return obj.text;
+    if (typeof this.phraser !== 'function') return Promise.resolve(obj.text);
+    let first;
+    try { first = this.phraser(def, req, player, moment); } catch { first = ''; }
+    if (typeof first?.then !== 'function') {
+      if (typeof first === 'string' && first.trim()) obj.text = first.trim().slice(0, 240);
+      return Promise.resolve(obj.text);
+    }
+    obj.phrasing = true;
+    let timer = null;
+    const wait = new Promise(res => { timer = setTimeout(res, PHRASE_WAIT, ''); timer.unref?.(); });
+    return Promise.race([first, wait])
+      .then(t => { if (typeof t === 'string' && t.trim()) obj.text = t.trim().slice(0, 240); }, () => {})
+      .then(() => { clearTimeout(timer); delete obj.phrasing; return obj.text; });
   }
+  // deliver(text) with the line for this moment: at once (canned) without a phraser, else once phrased.
+  phraseThen(def, req, player, moment, deliver) {
+    const obj = {}, run = t => { try { deliver(t); } catch (e) { console.error('[namedquests] deliver', e); } };
+    const later = this.phraseInto(obj, def, req, player, moment);
+    if (obj.phrasing) later.then(run); else run(obj.text);
+  }
+  online(p) { return this.game.players.get(p.id) === p; }
 
   // ---------- requests ----------
   ctx(p, id) { return { pts: this.nm.peek(p, id)?.pts || 0, lvl: p.lvl, floor: floorOf(p.x) || 1 }; }
@@ -151,6 +177,7 @@ export class NamedQuests {
     const r = this.rec(p, id);
     if (!r.req) return 'No request to drop.';
     this.game.track(p, 'named_req', { named: id, k: r.req.k, ev: 'drop' });
+    r.last = lastOf(r.req, 'dropped', this.now());
     r.req = null; r.nextAt = this.now() + REQ.dropAfter * 1000;
     this.touch(p, id);
     return '';
@@ -225,14 +252,15 @@ export class NamedQuests {
     }
     g.invChanged(p);
     const goal = goalText(req);
-    r.req = null; r.nextAt = now + (PERSONA[id]?.every ?? 2700) * 1000;
+    r.req = null; r.nextAt = now + (PERSONA[id]?.every ?? 2700) * 1000; r.last = lastOf(req, 'done', now);
     this.touch(p, id);
-    const thanks = {};
-    this.phraseInto(thanks, def, req, p, 'done');
-    const np = this.nm.playerOf(this.nm.chars.get(id));
-    if (np && dist(np, p) < 40 && floorOf(np.x) === floorOf(p.x)) this.nm.say(np, thanks.text);
     g.sys(`Request done for ${def.name}: ${goal}. +${pay.gold} gold${item ? `, ${item.name}` : ''}${fr > 0 ? `, +${r2(fr)} friendship` : ''}.`, p.id);
-    this.nm.send(p, { op: 'req', ev: 'done', id, name: def.name, goal, gold: pay.gold, item, fr: r2(fr), text: thanks.text });
+    this.phraseThen(def, req, p, 'done', text => { // their thanks: a bubble if you're close, and on the toast
+      if (!this.online(p)) return;
+      const np = this.nm.playerOf(this.nm.chars.get(id));
+      if (np && dist(np, p) < 40 && floorOf(np.x) === floorOf(p.x)) this.nm.say(np, text);
+      this.nm.send(p, { op: 'req', ev: 'done', id, name: def.name, goal, gold: pay.gold, item, fr: r2(fr), text });
+    });
     g.track(p, 'named_req', { named: id, k: req.k, ev: 'done', gold: pay.gold, fr: r2(fr), ...(item ? { r: item.r } : {}) });
     return { gold: pay.gold, item, fr };
   }
@@ -240,6 +268,7 @@ export class NamedQuests {
     const r = this.rec(p, id), def = NAMED_BY_ID[id];
     this.game.track(p, 'named_req', { named: id, k: r.req.k, ev: 'expired' });
     const goal = goalText(r.req);
+    r.last = lastOf(r.req, 'expired', now);
     r.req = null; r.nextAt = now + REQ.dropAfter * 1000;
     this.touch(p, id);
     this.nm.send(p, { op: 'req', ev: 'expired', id, name: def.name, goal, text: this.phrase(def, null, p, 'expired') });
@@ -258,10 +287,26 @@ export class NamedQuests {
       return { state: 'active', k: q.k, goal: goalText(q), text: q.text, n: q.n, got, prog: r2(progressOf({ ...q, got })), mins: Math.max(0, Math.ceil((q.until - now) / 60000)), gold: gold(q), left, ...(turn !== null ? { turnIn: turn ? { ok: false, why: turn } : { ok: true } } : {}) };
     }
     const o = this.offerFor(h, id, now);
+    if (o?.phrasing) return { state: 'none', why: '' }; // (shown once it is in their words: a moment at most)
     if (o) return { state: 'offer', k: o.k, goal: goalText(o), text: o.text, n: o.n, gold: gold(o), left, ttl: REQ.ttl };
     const P = PERSONA[id], ti = tierIndex(this.nm.peek(h, id)?.pts || 0);
     if (P && ti < tierAt(P.from)) return { state: 'none', why: `${def.name} only asks favours of someone ${TIERS[tierAt(P.from)].name} or closer.` };
     return { state: 'none', why: now < r.nextAt ? `${def.name} has nothing for you right now.` : '' };
+  }
+
+  // What I3's talk prompt knows of this player's requests with this Named (null: nothing to mention). Small on purpose.
+  // -> { now: { k, n, mob, mat, got, mins (left), ready (materials in hand, near) }, last: { k, n, mob, mat, ev, mins (ago) } }
+  talkContext(p, id, { near = false } = {}) {
+    if (!isHuman(p)) return null;
+    const r = this.recs.get(this.nm.keyOf(p))?.get(id), now = this.now();
+    if (!r) return null;
+    const out = {};
+    if (r.req && now <= r.req.until) {
+      const q = r.req, got = q.k === 'bring' ? Math.min(q.n, this.have(p, q.mat)) : q.got || 0;
+      out.now = { k: q.k, n: q.n, ...(q.mob ? { mob: q.mob } : {}), ...(q.mat ? { mat: q.mat } : {}), got, mins: Math.max(1, Math.ceil((q.until - now) / 60000)), ready: q.k === 'bring' && got >= q.n && near };
+    }
+    if (r.last && now - r.last.at < RECENT_REQ) { const { at, ...l } = r.last; out.last = { ...l, mins: Math.floor((now - at) / 60000) }; }
+    return out.now || out.last ? out : null;
   }
 
   // ---------- outreach ----------
@@ -299,13 +344,16 @@ export class NamedQuests {
     if (!np) return null;
     const raid = !!boss && h.lvl >= (MOBS[boss]?.level ?? 99) - BOSS_BAND && this.rnd() < OUTREACH.raid;
     const msg = { k: raid ? 'raid' : 'farm', boss, area: FLOOR_REQ[floor]?.area || 'the field' };
-    o.open = { id: def.id, kind: msg.k, until: now + OUTREACH.ttl * 1000 };
-    o.at = now; o.per[def.id] = now;
-    this.phraseInto(msg, def, msg, h, msg.k);
-    this.game.sys(`${def.name} whispers: "${msg.text}"`, h.id);
-    this.nm.send(h, { op: 'out', id: def.id, name: def.name, kind: msg.k, text: msg.text, until: o.open.until, ttl: OUTREACH.ttl });
+    const open = o.open = { id: def.id, kind: msg.k, until: now + OUTREACH.ttl * 1000 };
+    o.at = now; o.per[def.id] = now; // (the limits count from now, before it is phrased)
     this.game.track(h, 'named_out', { named: def.id, kind: msg.k, ev: 'sent' });
-    return o.open;
+    this.phraseThen(def, msg, h, msg.k, text => {
+      if (o.open !== open || !this.online(h)) return; // (gone, or it lapsed while being phrased)
+      open.until = Math.max(open.until, this.now() + OUTREACH.ttl * 1000);
+      this.game.sys(`${def.name} whispers: "${text}"`, h.id);
+      this.nm.send(h, { op: 'out', id: def.id, name: def.name, kind: msg.k, text, until: open.until, ttl: OUTREACH.ttl });
+    });
+    return open;
   }
   // The player's answer. Returns '' or why it didn't work.
   respond(h, id, yes) {

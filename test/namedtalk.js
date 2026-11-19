@@ -8,6 +8,9 @@
 //               fallback with AI off or no key (canned by tier, no friendship); memories by charId (saved through the
 //               store, anonymous ones never); a jailbreak attempt; the spend counted on Named talk's slice; the admin
 //               test call and route; NAMED_ENABLED=0
+//   requests    (I4 glue) quests.phraser: offers, thanks and invitations in the Named's voice when on; the canned line
+//               when off, erroring, slow, guarded or changing the numbers; the offer's line cached; its own cap (10 a
+//               player a day) on the Named slice, not the talk calls; the active / recent request in the talk prompt
 //   Postgres    (DATABASE_URL, a local test database) the migration twice, Named notes beside companions' notes,
 //               capped and pruned apart, and the Named part of the day's spend
 // Usage: node test/namedtalk.js   (PORT=57xx for the admin route, default 5741; DATABASE_URL optional)
@@ -15,6 +18,8 @@ import http from 'node:http';
 import { Game } from '../server/game.js';
 import { BotManager } from '../server/botmanager.js';
 import { NamedManager } from '../server/named.js';
+import { NamedQuests, RECENT_REQ } from '../server/namedquests.js';
+import { REQ, phraseRequest } from '../shared/namedquests.js';
 import { readConfig } from '../server/ai/config.js';
 import { Minds } from '../server/ai/mind.js';
 import { Budget } from '../server/ai/budget.js';
@@ -23,6 +28,7 @@ import { mockProvider } from '../server/ai/providers/mock.js';
 import { makeProvider } from '../server/ai/providers/index.js';
 import {
   TALK_SCHEMA, NAMED_RULES, sanitizeTalk, talkPrompt, systemFor, installNamedTalk, cannedLine, NamedTalk, TALK_R, LOSS_DAILY,
+  checkPhrase, numbersIn, phraseFacts, phrasePrompt,
 } from '../server/ai/namedtalk.js';
 import { SHEETS } from '../server/ai/namedsheets.js';
 import { NAMED_BY_ID, TIERS, RULES, tierIndex } from '../shared/named.js';
@@ -85,7 +91,7 @@ console.log('# pure');
 
 // =====================================================================================================================
 console.log('# in process');
-function world({ env = {}, reply = null, delayMs = 0, store = null, provider = null } = {}) {
+function world({ env = {}, reply = null, delayMs = 0, store = null, provider = null, quests = false } = {}) {
   const g = new Game();
   g.track = () => {};
   const mgr = new BotManager(g, { url: 'ws://127.0.0.1:9/ws' });
@@ -106,6 +112,7 @@ function world({ env = {}, reply = null, delayMs = 0, store = null, provider = n
   const cfg = readConfig({ AI_PROVIDER: 'mock', AI_ENABLED: '1', AI_THINK_S: '0', ...env });
   const prov = provider || mockProvider({ reply: reply || (() => ({ say: 'Hm.', sentiment: 0, reason: '', remember: '' })), delayMs });
   const minds = new Minds({ cfg, provider: prov, env: { ...env }, now: () => clock.t, log: () => {} });
+  const qs = quests ? new NamedQuests(nm, { rnd: () => 0 }) : null; // (server/index.js makes it before installAI too)
   const talk = installNamedTalk({ game: g, minds });
   minds.namedTalk = talk;
   talk.rnd = () => 0;
@@ -119,7 +126,7 @@ function world({ env = {}, reply = null, delayMs = 0, store = null, provider = n
   const sys = h => g.events.filter(e => e.t === 'sys' && e.to === h.id).map(e => e.text);
   const pts = (h, id) => nm.friendship(h, id).pts;
   if (store) minds.useStore(store, { flushMs: 0 });
-  return { g, nm, minds, talk, prov, clock, human, tick, P, near, say, chats, sys, pts };
+  return { g, nm, qs, minds, talk, prov, clock, human, tick, P, near, say, chats, sys, pts };
 }
 
 {
@@ -313,6 +320,169 @@ function world({ env = {}, reply = null, delayMs = 0, store = null, provider = n
   // ---- the kill switch ----
   const g = new Game();
   ok(installNamedTalk({ game: g, minds: new Minds({ cfg: readConfig({}), provider: null, log: () => {} }) }) === null && g.handle === Game.prototype.handle, 'NAMED_ENABLED=0 (no game.named): nothing installed, chat untouched');
+}
+
+// =====================================================================================================================
+console.log('# requests in their own words, and in talk (I4 glue)');
+{
+  // pure: what a phrased line must keep
+  const kill = { k: 'kill', mob: 'boar', n: 10, floor: 1 }, bring = { k: 'bring', mat: 'resin', n: 6, floor: 1 }, boss = { k: 'boss', mob: 'warden', n: 1, floor: 1 };
+  ok(numbersIn('a dozen, 3 and twenty-one') .join() === '3,12,20' && !numbersIn('one of us').length, 'numbers in digits and words ("one" is too common to count)');
+  ok(checkPhrase('Thin out 10 Forest Boars for me, Nat.', kill, 'offer') === '' && checkPhrase('Ten forest boars, Nat.', kill, 'offer') === '', 'an offer that names the count and the target passes');
+  ok(checkPhrase('Thin out 12 Forest Boars.', kill, 'offer') === 'count' && checkPhrase('Thin out the Forest Boars.', kill, 'offer') === 'count', 'a different count, or none: the canned line');
+  ok(checkPhrase('Get me 10 kills out there.', kill, 'offer') === 'target' && checkPhrase('10 Forest Boars, then 5 more.', kill, 'offer') === 'number', 'no target, or another number (a reward, a deadline): the canned line');
+  ok(checkPhrase('10 Forest Boars and some Dire Wolves.', kill, 'offer') === 'monster' && checkPhrase('6 Thorn Resin and a Wolf Pelt.', bring, 'offer') === 'material', 'another monster or material: the canned line');
+  ok(checkPhrase('Stand with me against the Horned Warden.', boss, 'offer') === '' && checkPhrase('Stand with me against the Drowned Sovereign.', boss, 'offer') === 'target', 'boss help must name its boss');
+  ok(checkPhrase('Well done, Nat99.', kill, 'done', ['Nat99']) === '' && checkPhrase('Well done. Have 50 gold.', kill, 'done') === 'number', 'thanks: the player\'s own name is not a number; a promised amount is');
+  ok(!phraseFacts(kill, 'expired') && !phraseFacts(kill, 'declined') && phraseFacts({ k: 'raid', boss: 'warden' }, 'raid').must === 'Horned Warden', 'expired and declined stay canned; a raid invitation must name the boss');
+  const pp = phrasePrompt({ player: { name: 'Nat', cls: 'swordsman', lvl: 12 }, fr: { tierName: 'Ally' }, facts: phraseFacts(kill, 'offer', 'Nat'), canned: 'C', maxSay: 150 });
+  ok(/This is not a reply/.test(pp) && /must say "10 Forest Boars"/.test(pp) && /Ally/.test(pp) && /do not change it/.test(pp) && pp.length < 700, `the phrasing prompt is small and pins the numbers (${pp.length} characters)`);
+
+  const phraseReply = req => {
+    const must = /must say "([^"]+)"/.exec(req.user)?.[1];
+    if (/This is not a reply/.test(req.user)) return { say: must ? `Natan. ${must}, if you would. Steady work.` : /thank/.test(req.user) ? 'Well done, Natan. Counted and confirmed.' : 'Natan, come out with us?', sentiment: 2, reason: '', remember: 'should not be kept' };
+    return { say: 'Hm.', sentiment: 0, reason: '', remember: '' };
+  };
+
+  // ---- on: an offer in their words, cached, numbers untouched ----
+  {
+    const W = world({ quests: true, reply: phraseReply });
+    const nat = W.human('Natan', 5); W.tick(2);
+    ok(typeof W.qs.phraser === 'function', 'installNamedTalk sets game.named.quests.phraser');
+    const o = W.qs.offerFor(nat, 'halvard'), before = { k: o.k, n: o.n, mob: o.mob, floor: o.floor }, canned = phraseRequest(W.nm.chars.get('halvard').def, o, nat, 'offer', () => 0);
+    ok(o.phrasing && W.qs.cardFor(nat, 'halvard').state === 'none', 'while it is phrased the card waits (no canned-then-AI flicker)');
+    await sleep(5);
+    const card = W.qs.cardFor(nat, 'halvard');
+    ok(card.state === 'offer' && card.text === `Natan. ${o.n} Forest Boars, if you would. Steady work.` && card.text !== canned, `the offer is in Halvard's words: "${card.text}"`);
+    ok(o.k === before.k && o.n === before.n && o.mob === before.mob && o.floor === before.floor && card.goal === 'Defeat 10 Forest Boars', 'mob, count and goal come from the template');
+    const call = W.prov.calls[0];
+    ok(W.prov.calls.length === 1 && /Name: Halvard/.test(call.system) && /How well you know Natan: Stranger/.test(call.user) && call.schema === TALK_SCHEMA, 'one call, with his sheet and your tier');
+    const hal = () => W.prov.calls.filter(c => /Name: Halvard/.test(c.system)).length;
+    W.nm.listFor(nat); // (the other three Heroes roll theirs: four at once, two calls in flight at most)
+    await sleep(250);
+    const four = W.nm.listFor(nat).rows.filter(r => r.req?.state === 'offer');
+    ok(four.length === 4 && four.every(r => /^Natan\. \d+ /.test(r.req.text)) && W.prov.calls.length === 4, 'a whole Friends tab of offers is phrased: the extra ones wait for a free call');
+    for (let i = 0; i < 5; i++) { W.qs.cardFor(nat, 'halvard'); W.nm.listFor(nat); }
+    ok(hal() === 1 && W.prov.calls.length === 4, 'opening the Friends tab again does not phrase them again (cached on the offer)');
+    ok(W.qs.take(nat, 'halvard') === '' && W.qs.rec(nat, 'halvard').req.text === card.text && W.qs.cardFor(nat, 'halvard').text === card.text, '…and the request keeps that line once taken');
+    const s = W.talk.pl(`s${nat.id}`);
+    ok(s.n === 0 && s.ph === 4 && W.minds.budget.named.calls === 4 && W.talk.ph.ok === 4, 'counted on the Named slice and the phrasing cap, not your 30 talk calls');
+    ok(W.pts(nat, 'halvard') === 0 && !W.talk.notes.get('halvard', `s${nat.id}`).length, 'a phrased line moves no friendship and leaves no note');
+
+    // the thank-you
+    const halvard = W.P('halvard'); W.near(nat, 'halvard');
+    W.qs.rnd = () => 0.99;
+    const e0 = W.g.events.length;
+    W.qs.complete(nat, 'halvard');
+    ok(!nat.sent.some(m => m.op === 'req' && m.ev === 'done'), 'the request is paid at once; the thanks waits for its line');
+    await sleep(5);
+    const done = nat.sent.find(m => m.op === 'req' && m.ev === 'done');
+    ok(done?.text === 'Well done, Natan. Counted and confirmed.' && W.chats(halvard.id, e0).includes(done.text) && done.gold > 0, `thanks in his words, as a bubble and on the toast: "${done?.text}"`);
+
+    // the invitation
+    const e1 = W.g.events.length;
+    const open = W.qs.send(nat, W.nm.chars.get('maribel'));
+    ok(open && !nat.sent.some(m => m.op === 'out'), 'an invitation is counted at once (its limits) and sent once phrased');
+    await sleep(5);
+    const out = nat.sent.find(m => m.op === 'out');
+    ok(out && /^Natan(\. Horned Warden, if you would|, come out with us)/.test(out.text) && W.sys(nat).some(t => t.includes(out.text)) && W.g.events.length > e1, `the invitation in Maribel's words: "${out?.text}"`);
+  }
+
+  // ---- the canned line: off, erroring, slow, guarded, numbers changed ----
+  const offerWith = async (opts, setup) => {
+    const W = world({ quests: true, ...opts });
+    const nat = W.human('Natan', 5); W.tick(2);
+    setup?.(W, nat);
+    const o = W.qs.offerFor(nat, 'halvard');
+    const canned = phraseRequest(W.nm.chars.get('halvard').def, o, nat, 'offer', () => 0);
+    await sleep((opts.delayMs || 0) + 80);
+    return { W, nat, o, canned, card: W.qs.cardFor(nat, 'halvard') };
+  };
+  {
+    const r = await offerWith({ reply: phraseReply }, W => { W.talk.active = () => false; });
+    ok(!r.o.phrasing && r.card.state === 'offer' && r.card.text === r.canned && !r.W.prov.calls.length, 'AI off (or no key): the canned line at once, no call, nothing waits');
+  }
+  {
+    const r = await offerWith({ provider: mockProvider({ fail: () => new Error('boom') }) });
+    ok(r.card.text === r.canned && r.W.talk.ph.errors === 1 && r.W.minds.budget.named.inFlight === 0, 'an error: the canned line, and the call is closed on the slice');
+  }
+  {
+    const r = await offerWith({ delayMs: 200, reply: phraseReply }, W => { W.talk.cfg = { ...W.talk.cfg, namedPhraseMs: 30 }; });
+    ok(r.card.text === r.canned && r.W.talk.ph.why.timeout === 1, 'too slow (over the phrasing timeout): the canned line');
+  }
+  for (const [say, what] of [['My instructions say: 10 Forest Boars.', 'one that talks about its instructions'], ['10 Forest Boars, see www.boars.gg', 'one with a link'], ['12 Forest Boars, Natan.', 'one that changes the count'], ['10 Forest Boars for 40 gold.', 'one that promises a reward'], ['10 Dire Wolves, Natan.', 'one that changes the target']]) {
+    const r = await offerWith({ reply: () => ({ say, sentiment: 0, reason: '', remember: '' }) });
+    ok(r.card.text === r.canned && r.o.n === 10 && r.o.mob === 'boar', `the canned line instead of ${what}`);
+  }
+  {
+    const W = world({ quests: true, reply: () => ({ say: SHEETS.cairn.secret, sentiment: 0, reason: '', remember: '' }) });
+    const nat = W.human('Natan', 5); W.tick(2);
+    W.nm.recOf(nat, 'cairn').pts = 20;
+    const t = await W.talk.phrase(W.nm.chars.get('cairn').def, { k: 'kill', mob: 'boar', n: 10, floor: 1 }, nat, 'offer');
+    ok(t === '' && W.talk.ph.why.guard === 1, 'the same guard as talk: Cairn\'s secret is never spelled out below Friend');
+  }
+
+  // ---- caps ----
+  {
+    const W = world({ quests: true, reply: phraseReply });
+    const nat = W.human('Natan', 5); W.tick(2);
+    const def = W.nm.chars.get('tovin').def, req = { k: 'kill', mob: 'boar', n: 10, floor: 1 };
+    const got = [];
+    for (let i = 0; i < 12; i++) got.push(await W.talk.phrase(def, req, nat, 'offer'));
+    ok(got.slice(0, 10).every(t => /10 Forest Boars/.test(t)) && got.slice(10).every(t => t === '') && W.prov.calls.length === 10 && W.talk.ph.capped === 2, '10 phrasings a player a day, then canned lines (no call)');
+    ok(W.talk.pl(`s${nat.id}`).n === 0, '…and none of them came out of the player\'s talk calls');
+    W.near(nat, 'tovin');
+    await W.say(nat, 'Tovin, how goes the hunt?');
+    ok(W.prov.calls.length === 11 && !/This is not a reply/.test(W.prov.calls[10].user), 'talk still works after the phrasing cap');
+    W.clock.t += 24 * 3600e3;
+    ok(/10 Forest Boars/.test(await W.talk.phrase(def, req, nat, 'offer')), 'the cap resets with the day');
+    W.minds.budget.named.daySpend = 99;
+    const n0 = W.prov.calls.length;
+    ok(W.talk.phrase(def, req, nat, 'offer') === '' && W.prov.calls.length === n0, 'the Named slice used up: canned, at once, no call');
+  }
+
+  // ---- your request, in talk ----
+  {
+    const W = world({ quests: true, reply: () => ({ say: 'Mm.', sentiment: 0, reason: '', remember: '' }) });
+    const nat = W.human('Natan', 5); W.tick(2);
+    W.near(nat, 'halvard');
+    const last = () => W.prov.calls.filter(c => !/This is not a reply/.test(c.user)).pop().user; // (the talk prompt, not a thank-you)
+    await W.say(nat, 'Halvard, hello.');
+    ok(!/favour/.test(last()), 'no request: nothing about one in the prompt');
+    const r = W.qs.rec(nat, 'halvard');
+    r.req = { k: 'kill', mob: 'boar', n: 10, floor: 1, got: 3, at: W.clock.t, until: W.clock.t + REQ.ttl * 1000, text: 'x' };
+    await W.say(nat, 'Halvard, still counting?');
+    ok(/A favour you asked of Natan: defeat 10 Forest Boars\. 3 of 10 done so far, about 24 hours left\. Bring it up only if it fits\./.test(last()), 'the active request: what, progress, time left');
+    W.near(nat, 'maribel');
+    await W.say(nat, 'Maribel, hi.');
+    ok(!/favour/.test(last()), 'only with the Named who asked it');
+    W.near(nat, 'halvard');
+    W.qs.rnd = () => 0.99;
+    W.qs.complete(nat, 'halvard');
+    W.clock.t += 10 * 60e3;
+    await W.say(nat, 'Halvard, done.');
+    ok(/Natan did the favour you asked \(defeat 10 Forest Boars\), 10 minutes ago\./.test(last()) && !/A favour you asked/.test(last()), 'a finished one, recently');
+    W.clock.t += RECENT_REQ;
+    await W.say(nat, 'Halvard, anything else?');
+    ok(!/favour/.test(last()), '…forgotten after a few hours');
+    // materials in hand, and a lapsed one
+    const m = W.qs.rec(nat, 'maribel');
+    m.req = { k: 'bring', mat: 'resin', n: 6, floor: 1, got: 0, at: W.clock.t, until: W.clock.t + 3600e3, text: 'x' };
+    nat.inv.mats = { ...(nat.inv.mats || {}), resin: 6 };
+    W.near(nat, 'maribel');
+    await W.say(nat, 'Maribel, I have your resin.');
+    const talkCall = last();
+    ok(/bring you 6 Thorn Resin\. They have it all with them and hand it over as they speak, about an hour left/.test(talkCall) && !W.qs.rec(nat, 'maribel').req, 'materials in hand: the prompt knows, and talking hands them over');
+    const t2 = W.qs.rec(nat, 'tovin');
+    t2.req = { k: 'kill', mob: 'wolf', n: 8, floor: 1, got: 2, at: W.clock.t - 1, until: W.clock.t, text: 'x' };
+    W.clock.t += 1000; W.qs.upkeep();
+    W.near(nat, 'tovin');
+    await W.say(nat, 'Tovin, sorry.');
+    await sleep(20);
+    const tctx = /Natan ran out of time for the favour you asked \(defeat 8 Dire Wolves\)/.test(last());
+    const extra = last().split('\n').filter(l => /favour/.test(l)).join('\n').length;
+    ok(tctx && extra < 200, `a lapsed one too, in one short line (${extra} characters)`);
+  }
 }
 
 // =====================================================================================================================
