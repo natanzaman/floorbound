@@ -63,6 +63,12 @@ async function setup() {
   await q(`CREATE INDEX IF NOT EXISTS ai_memories_updated ON ai_memories (updated_at)`);
   await q(`CREATE TABLE IF NOT EXISTS ai_spend (
     day DATE PRIMARY KEY, usd DOUBLE PRECISION NOT NULL DEFAULT 0, calls INT NOT NULL DEFAULT 0)`);
+  // Talk with the Named (server/ai/namedtalk.js): their notes about player characters live beside the companions' (kind
+  // 'named', capped and pruned apart), and the day's spend keeps the part that was Named talk.
+  await q(`ALTER TABLE ai_memories ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'bot'`);
+  await q(`CREATE INDEX IF NOT EXISTS ai_memories_kind ON ai_memories (kind, updated_at)`);
+  await q(`ALTER TABLE ai_spend ADD COLUMN IF NOT EXISTS named_usd DOUBLE PRECISION NOT NULL DEFAULT 0`);
+  await q(`ALTER TABLE ai_spend ADD COLUMN IF NOT EXISTS named_calls INT NOT NULL DEFAULT 0`);
   // The Named (server/named.js): each character's level and switch, and each player character's friendship with them.
   // Their own clears are kept apart in the Hall (floor_clears.heroes).
   await q(`CREATE TABLE IF NOT EXISTS named_chars (

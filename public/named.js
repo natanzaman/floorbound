@@ -1,6 +1,8 @@
 // The Friends tab of the Players panel: the Named (shared/named.js, server/named.js) with your standing with each of
 // them: portrait colour, tier, a bar toward the next tier, what's left of today's limit, where they are and what
-// they're doing, and Invite / Call buttons by tier. Tier-ups get a banner; the one loss (leaving them downed) a log line.
+// they're doing, and Talk / Invite / Call buttons. Tier-ups get a banner; the one loss (leaving them downed) a log line.
+// Talk (I3, server/ai/namedtalk.js): fills the chat box with "@Name " (touch: asks for the line); replies from afar come
+// back as { op: 'talk', id, name, text, you } and go in the chat log.
 // A tab for public/playerbots.js (addTab): { id, label, root, show(), onMessage(msg) }. { type: 'named' } messages.
 import { CLASSES } from '/shared/data.js';
 import { TIERS, GROUPS, NAMED_BY_ID } from '/shared/named.js';
@@ -9,7 +11,16 @@ import { lookSwatch } from '/looks.js'; // each character's badge (I2)
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const hex = v => `#${(v >>> 0).toString(16).padStart(6, '0').slice(-6)}`;
 const TIER_COLOR = ['#94a3b8', '#7dd3fc', '#4ade80', '#fbbf24', '#f472b6'];
-const WHY = { fight: 'fought beside them', revive: 'revived them', heal: 'healed them', cover: 'Covered them', boss: 'helped fell their boss', bossTry: 'stood with them against a boss', request: 'kept your word', chat: 'a good talk', admin: 'set by an admin' };
+const WHY = { fight: 'fought beside them', revive: 'revived them', heal: 'healed them', cover: 'Covered them', boss: 'helped fell their boss', bossTry: 'stood with them against a boss', request: 'kept your word', chat: 'had a good talk with them', admin: 'set by an admin' };
+
+// Start a line to a Named: "@Name " in the chat box (focused), or a prompt where there's no chat box (touch).
+export function talkTo(name, send) {
+  const ci = document.getElementById('chat-input');
+  document.getElementById('players')?.classList.add('hidden');
+  if (ci && ci.offsetParent !== null) { document.exitPointerLock?.(); ci.value = `@${name} `; ci.focus(); return; }
+  const t = prompt(`Say to ${name}:`);
+  if (t && t.trim()) send({ type: 'chat', text: `@${name} ${t.trim()}` });
+}
 
 export function initNamed({ $, send, state, log, sfx, banner }) {
   const ui = { data: null, at: 0, sig: '', note: null, last: null };
@@ -28,6 +39,7 @@ export function initNamed({ $, send, state, log, sfx, banner }) {
   root.addEventListener('click', e => {
     const b = e.target.closest('button[data-op]');
     if (!b || b.disabled) return;
+    if (b.dataset.op === 'talk') { sfx?.play('ui'); return talkTo(NAMED_BY_ID[b.dataset.id]?.name || b.dataset.id, send); }
     send({ type: 'named', op: b.dataset.op, id: b.dataset.id });
     sfx?.play('ui');
     b.disabled = true;
@@ -46,7 +58,7 @@ export function initNamed({ $, send, state, log, sfx, banner }) {
       <div class="nf-bar"><div style="width:${pct}%"></div></div>
       <div class="nf-pts">${toNext}${today}</div>
       <div class="nf-where">${r.online ? `<span class="nf-hp" title="Health ${hp}%"><i style="width:${hp}%"></i></span>` : ''}${where}</div>
-      <div class="nf-ctl">${btn('invite', 'Invite', r.invite, r.inviteAt)}${r.mine ? '<span class="tag">Party</span>' : btn('call', 'Call', r.call, r.callAt)}</div>
+      <div class="nf-ctl"><button data-op="talk" data-id="${r.id}" ${r.online ? '' : 'disabled'} title="${r.online ? `Say something to ${esc(r.name)}` : `${esc(r.name)} isn't around`}">Talk</button>${btn('invite', 'Invite', r.invite, r.inviteAt)}${r.mine ? '<span class="tag">Party</span>' : btn('call', 'Call', r.call, r.callAt)}</div>
     </div>`;
   }
 
@@ -66,7 +78,7 @@ export function initNamed({ $, send, state, log, sfx, banner }) {
     const reset = d.reset ? new Date(d.reset).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
     root.innerHTML = `${n ? `<div class="nf-note ${n.err ? 'err' : ''}">${esc(n.text)}</div>` : ''}
       ${(d.away || []).map(a => `<div class="nf-away">${esc(a)}</div>`).join('')}${groups}
-      <div class="nf-foot">Friendship grows when you fight beside them on the same enemy, revive, heal or Cover them, and truly help in their boss fights. It only drops if you leave them downed. Each has a daily limit${reset ? ` (resets at ${reset})` : ''}. ${esc(d.rows[0]?.inviteAt || 'Ally')}s can invite a Hero, Sworn friends can call one from anywhere: <i>/b name: come</i>.</div>`;
+      <div class="nf-foot">Friendship grows when you fight beside them on the same enemy, revive, heal or Cover them, and truly help in their boss fights. It only drops if you leave them downed. Talk to them by name nearby, or with Talk / <i>@name</i> from anywhere: a good talk helps a little, never past a tier. Each has a daily limit${reset ? ` (resets at ${reset})` : ''}. ${esc(d.rows[0]?.inviteAt || 'Ally')}s can invite a Hero, Sworn friends can call one from anywhere: <i>/b name: come</i>.</div>`;
   }
 
   function onFriendship(m) {
@@ -93,6 +105,7 @@ export function initNamed({ $, send, state, log, sfx, banner }) {
     onMessage(msg) {
       if (msg.type !== 'named') return false;
       if (msg.op === 'fr') { onFriendship(msg); return true; }
+      if (msg.op === 'talk') { log(`You → ${msg.name}: ${msg.you}`, 'me'); log(`${msg.name} (from afar): ${msg.text}`, 'pm'); return true; }
       if (msg.list) ui.data = msg.list;
       const text = msg.error || msg.msg;
       if (text && msg.op !== 'list') { ui.note = { text, err: !!msg.error, at: Date.now() }; if (msg.error) log(text, 'sys'); }

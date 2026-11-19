@@ -25,7 +25,7 @@ import { initClassesB } from '/classes-b.js';
 import { initClassesA } from '/classes-a.js';
 import { initStyles } from '/styles.js';
 import { initPlayerBots } from '/playerbots.js';
-import { initNamed } from '/named.js'; // the Friends tab: the Named and your friendship with them
+import { initNamed, talkTo } from '/named.js'; // the Friends tab: the Named and your friendship with them
 import { snapPoses, poseFrame } from '/poses.js'; // kneel / sit / bow (F5)
 import { initTalents } from '/talents.js';
 import { initLoot } from '/loot.js'; // affixes, set progress, loadouts, item tooltips (H2)
@@ -674,7 +674,7 @@ function handleEvent(e) {
       if (e.s === 'open') { sfx.play('gate', { x: 0, z: 161 }, 1.5); if (Math.abs(state.x) < 30 && state.z > 120) banner('THE RAID GATE OPENS', 'The Horned Warden awaits'); }
       break;
     case 'invite': if (e.to === me) showInvite(e.from, e.name); break;
-    case 'mind': if (bubbles.mind(e) && !state.spectator) guide.tip('botmind'); break; // an AI companion is thinking about a line said to it (H3)
+    case 'mind': if (bubbles.mind(e) && !state.spectator && !e.ch) guide.tip('botmind'); break; // an AI companion is thinking about a line said to it (H3)
     case 'chat': // ch 'p': party chat (only your party sees it), 's': say (heard within 40 m)
       if (bubbles.chat(e) && e.id !== me && !state.spectator) guide.tip('bubbles'); // a bubble over the speaker's head (same rules as the log)
       cine.say(e); // film view: a scripted line as a subtitle
@@ -1773,6 +1773,9 @@ function animateEntity(e, dt) {
     else if (e.def.elite && !e.label.el.classList.contains('elite')) e.label.el.classList.add('elite');
     const isSel = (e.kind === 'mob' ? state.lock : state.focus) === e.id;
     e.label.el.classList.toggle('sel', !!isSel);
+    const nm = e.kind === 'player' && !state.spectator && isSel && d <= 20 ? state.roster.get(e.id)?.named : null; // a selected Named close by: Talk (I3)
+    if (nm && !e.label.talk) { const b = e.label.talk = document.createElement('button'); b.className = 'talk'; b.textContent = 'Talk'; b.onclick = ev => { ev.stopPropagation(); talkTo(e.name, send); }; e.label.el.appendChild(b); }
+    if (e.label.talk) e.label.talk.style.display = nm ? '' : 'none';
     e.label.el.classList.toggle('hov', !isSel && hovered === e);
   }
 }

@@ -1,5 +1,6 @@
 // Admin page: the "AI companions" card on the Bots tab (server/ai/). Shows the status line (on/off, calls, spend
-// estimate), a toggle, a "Test call" button (one tiny real call: OK/error, latency, cost) and the last few decisions.
+// estimate), a toggle, a "Test call" button (one tiny real call: OK/error, latency, cost) and the last few decisions,
+// plus Named talk (I3): its line, a "Test Named talk" button (the same, in Cairn's voice) and the last few exchanges.
 // Self-contained so admin.js stays untouched; polls every 5 s while the page is visible. Keys are never shown: the
 // server says which env var it reads, whether it's set, and after a test call at most the key's last 4 characters.
 const token = localStorage.getItem('fb_session');
@@ -18,9 +19,13 @@ function mount() {
   el.className = 'card'; el.id = 'ai-card';
   el.innerHTML = `<h2>AI companions <span class="pill" id="ai-pill">…</span><span class="grow" style="flex:1"></span>
     <button class="small" id="ai-test" disabled title="One tiny real call to check the key works (costs a fraction of a cent)">Test call</button>
+    <button class="small" id="ai-ntest" disabled title="One tiny real call in Cairn's voice: the Named talk path (costs a fraction of a cent)">Test Named talk</button>
     <button class="small" id="ai-toggle" disabled>…</button></h2>
     <div id="ai-line" style="font-size:13px"></div>
     <div id="ai-test-out" style="font-size:13px;margin-top:6px"></div>
+    <div id="ai-ntest-out" style="font-size:13px;margin-top:6px"></div>
+    <div id="ai-named" class="dim" style="font-size:12px;margin-top:6px"></div>
+    <ul id="ai-nrecent" style="margin:6px 0 0;padding-left:18px;font-size:12px"></ul>
     <div id="ai-more" class="dim" style="font-size:12px;margin-top:6px"></div>
     <ul id="ai-recent" style="margin:8px 0 0;padding-left:18px;font-size:12px"></ul>`;
   host.prepend(el);
@@ -43,6 +48,14 @@ function render(s, err) {
   btn.title = !s.keySet ? `Set ${s.provider ? s.keyEnv : 'AI_PROVIDER and its API key'} in Render first` : '';
   tb.disabled = busy || s.testing || !s.keySet;
   tb.textContent = s.testing ? 'Testing…' : 'Test call';
+  const nb = document.getElementById('ai-ntest'), N = s.named;
+  nb.style.display = N ? '' : 'none';
+  nb.disabled = busy || !s.keySet || !!N?.testing;
+  document.getElementById('ai-ntest-out').innerHTML = N ? namedTestLine(N.lastTest) : '';
+  // Named talk (I3): its own slice of the daily cap, per-player limit, and the last few exchanges
+  document.getElementById('ai-named').textContent = N ? `Named talk: ${N.lines} lines · ${N.calls} calls (${N.errors} failed, ${N.canned} canned, ${N.limited} rate-limited) · $${N.spendToday.toFixed(4)} today of $${N.maxToday ?? '∞'} max ($${N.reserve ?? 0} kept for it) · ${N.perPlayer} calls per player a day · remembers ${N.remembered} players${N.avgMs ? ` · avg ${N.avgMs} ms` : ''}${N.lastError ? ` · last error: ${N.lastError}` : ''}` : '';
+  document.getElementById('ai-nrecent').innerHTML = (N?.recent || []).slice().reverse().map(d =>
+    `<li><b>${esc(d.who)}</b> → <b>${esc(d.named)}</b>: “${esc(d.text)}” → “${esc(d.say)}” <span class="faint">sentiment ${d.sentiment > 0 ? '+' : ''}${d.sentiment}${d.d ? ` (${d.d > 0 ? '+' : ''}${d.d})` : ''}${d.reason ? ` · ${esc(d.reason)}` : ''} · ${d.ms} ms · $${(d.cost || 0).toFixed(5)}</span></li>`).join('');
   document.getElementById('ai-line').textContent = s.line;
   document.getElementById('ai-test-out').innerHTML = testLine(s.lastTest);
   const bits = [];
@@ -69,6 +82,13 @@ function testLine(t) {
   return `<span class="pill">Test failed</span> ${esc(t.error)}${who ? ` · ${who}` : ''}${t.ms !== undefined ? ` · ${t.ms} ms` : ''} <span class="faint">${when}</span>`;
 }
 
+function namedTestLine(t) {
+  if (!t) return '';
+  const when = new Date(t.at).toLocaleTimeString();
+  if (t.ok) return `<span class="pill on">Named talk OK</span> ${t.ms} ms · $${(t.cost || 0).toFixed(6)} · ${esc(t.named)} heard “${esc(t.line)}” and said “${esc(t.say)}” (sentiment ${t.sentiment}) <span class="faint">${when}</span>`;
+  return `<span class="pill">Named talk failed</span> ${esc(t.error)}${t.ms !== undefined ? ` · ${t.ms} ms` : ''} <span class="faint">${when}</span>`;
+}
+
 async function refresh() {
   if (document.hidden) return;
   const r = await api('GET').catch(() => null);
@@ -79,6 +99,14 @@ async function refresh() {
 }
 
 document.addEventListener('click', async ev => {
+  if (ev.target?.id === 'ai-ntest' && !busy) {
+    busy = true; ev.target.disabled = true; ev.target.textContent = 'Testing…';
+    const r = await api('POST', {}, '/named-test').catch(() => null);
+    busy = false; ev.target.textContent = 'Test Named talk';
+    if (r?.j?.line) render(r.j);
+    else document.getElementById('ai-ntest-out').textContent = r?.j?.error || 'Could not reach the server.';
+    return;
+  }
   if (ev.target?.id === 'ai-test' && !busy) {
     busy = true; ev.target.disabled = true; ev.target.textContent = 'Testing…';
     const r = await api('POST', {}, '/test').catch(() => null);

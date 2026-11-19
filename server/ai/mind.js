@@ -99,9 +99,12 @@ export class Minds {
       this.budget.rollDay();
       const day = this.budget.day, usd = await store.loadSpend(day);
       if (this.budget.day === day && usd > 0) { this.budget.daySpend += usd; this.budget.savedDay = day; } // (spend before this boot counts)
+      const nUsd = (await store.loadNamedSpend?.(day)) || 0;
+      if (this.budget.day === day && nUsd > 0) this.budget.named.daySpend += nUsd;
       await store.pruneMemories();
       this.log(`[ai] loaded ${this.memory.size} memories, $${usd.toFixed(4)} spent today before this start`);
     } catch (e) { this.log('[ai] could not load memories / spend:', redact(e?.message || e)); }
+    await this.namedTalk?.useStore(store); // the Named's notes (server/ai/namedtalk.js)
     if (flushMs) { const t = setInterval(() => this.flush(), flushMs); t.unref?.(); this.flushTimer = t; }
     return true;
   }
@@ -112,11 +115,16 @@ export class Minds {
     return (this.flushing ||= (async () => {
       const { keys, rows } = this.memory.takeDirty();
       if (rows.length) try { await this.store.saveMemories(rows); } catch (e) { this.memory.markDirty(keys); this.log('[ai] memory save failed:', redact(e?.message || e)); }
+      await this.namedTalk?.flush();
       const B = this.budget, usd = B.totalSpend - this.spendSaved, calls = B.calls - this.callsSaved;
+      const nUsd = B.named.totalSpend - (this.namedSaved || 0), nCalls = B.named.calls - (this.namedCallsSaved || 0);
       if (usd > 0 || calls > 0) {
-        try { await this.store.addSpend(B.day, usd, calls); this.spendSaved += usd; this.callsSaved += calls; } catch (e) { this.log('[ai] spend save failed:', redact(e?.message || e)); }
+        try {
+          await this.store.addSpend(B.day, usd, calls, nUsd, nCalls);
+          this.spendSaved += usd; this.callsSaved += calls; this.namedSaved = (this.namedSaved || 0) + nUsd; this.namedCallsSaved = (this.namedCallsSaved || 0) + nCalls;
+        } catch (e) { this.log('[ai] spend save failed:', redact(e?.message || e)); }
       }
-      if (++this.flushes % 240 === 0) await this.store.pruneMemories().catch(() => {}); // about once an hour
+      if (++this.flushes % 240 === 0) { await this.store.pruneMemories().catch(() => {}); await this.store.pruneNamedMemories?.().catch(() => {}); } // about once an hour
     })().finally(() => { this.flushing = null; }));
   }
   // ---------- admin "Test call": one tiny real call to prove the key, model and request shape work ----------
@@ -332,7 +340,7 @@ export class Minds {
       spendToday: +B.daySpend.toFixed(5), spendTotal: +B.totalSpend.toFixed(5), dailyCap: this.cfg.dailyUsd,
       paused: B.pausedUntil > this.now() ? { why: B.pauseWhy, s: Math.ceil((B.pausedUntil - this.now()) / 1000) } : null,
       lastError: S.lastError || null, lastErrorAt: S.lastErrorAt || null, memories: this.memory.size, saved: !!this.store, recent: this.recent,
-      lastTest: this.lastTest, testing: this.testing,
+      lastTest: this.lastTest, testing: this.testing, named: this.namedTalk?.status() || null,
       limits: { thinkS: this.cfg.thinkS, botMinGapS: this.cfg.botMinGapS, botTokensHour: this.cfg.botTokensHour, maxCallsMin: this.cfg.maxCallsMin, maxConcurrent: this.cfg.maxConcurrent, timeoutMs: this.cfg.timeoutMs, maxBots: this.cfg.maxBots },
       line: this.line(),
     };
