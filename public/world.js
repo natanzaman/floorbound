@@ -11,6 +11,7 @@ import { makeF3Mob, decorateColossus, F3_POSES, F3_WINDUPS } from '/floor3world.
 import { attachClassA } from '/classes-a.js';
 import { makePropModel } from '/rescue.js'; // rescue trap objects (J1)
 import { fxCount, segs } from '/quality.js'; // effect density and circle detail (graphics quality)
+import { col, patterned } from '/palette.js'; // telegraph colours + the colour-blind dashed edge (Settings → Accessibility)
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
 
@@ -804,14 +805,17 @@ export class Effects {
   // reads clearly), and a bright ring closing in from outside that meets the edge exactly on impact.
   telegraph(x, z, r, life, follow) {
     const g = new THREE.Group(), n = segs(56);
-    const edge = new THREE.Mesh(new THREE.RingGeometry(r - 0.35, r, n), this.fadeMat(0xff2a2a, 0.9));
-    const fill = new THREE.Mesh(new THREE.CircleGeometry(r, n), this.fadeMat(0xff3b3b, 0.32));
-    const base = new THREE.Mesh(new THREE.CircleGeometry(r, n), this.fadeMat(0x7f1d1d, 0.16));
-    const closer = new THREE.Mesh(this.shared(`closer${n}`, () => new THREE.RingGeometry(0.93, 1, n)), this.fadeMat(0xffd0c0, 0.85));
+    const edge = new THREE.Mesh(new THREE.RingGeometry(r - 0.35, r, n), this.fadeMat(col('dangerEdge'), 0.9));
+    const fill = new THREE.Mesh(new THREE.CircleGeometry(r, n), this.fadeMat(col('dangerFill'), 0.32));
+    const base = new THREE.Mesh(new THREE.CircleGeometry(r, n), this.fadeMat(col('dangerBase'), 0.16));
+    const closer = new THREE.Mesh(this.shared(`closer${n}`, () => new THREE.RingGeometry(0.93, 1, n)), this.fadeMat(col('dangerCloser'), 0.85));
     for (const o of [edge, fill, base, closer]) o.rotation.x = -Math.PI / 2;
     base.position.y = -0.01; fill.position.y = 0.005; closer.position.y = 0.012;
     g.add(base, edge, fill, closer); g.position.set(x, 0.08, z);
-    this.add(g, life, (mesh, k) => {
+    const dashes = patterned() ? this.dashes(r) : null; // colour-blind palettes: a turning dashed ring as well
+    if (dashes) g.add(dashes);
+    this.add(g, life, (mesh, k, dt) => {
+      if (dashes) dashes.rotation.y += (dt || 0) * 1.5;
       fill.scale.setScalar(Math.max(0.01, k * k * (3 - 2 * k)));
       fill.material.opacity = 0.3 + 0.25 * k;
       edge.material.opacity = 0.65 + 0.3 * Math.sin(k * (14 + 22 * k));
@@ -820,7 +824,17 @@ export class Effects {
     });
   }
 
-  wedge(x, z, face, r, half, life, color = 0xff3b3b) {
+  // A ring of dashes (the pattern cue for the colour-blind palettes): colour is never the only sign of danger.
+  dashes(r, color = 0xffffff) {
+    const g = new THREE.Group(), geo = this.shared('dash', () => new THREE.RingGeometry(0.8, 0.93, 4, 1, 0, 0.32));
+    for (let i = 0; i < 12; i++) {
+      const d = new THREE.Mesh(geo, this.fadeMat(color, 0.9)); d.rotation.set(-Math.PI / 2, 0, (i * Math.PI) / 6); d.position.y = 0.02; g.add(d);
+    }
+    g.scale.set(r, 1, r);
+    return g;
+  }
+
+  wedge(x, z, face, r, half, life, color = col('dangerFill')) {
     const g = new THREE.Group();
     const geo = () => new THREE.CircleGeometry(r, 20, face - Math.PI / 2 - half, half * 2);
     const edge = new THREE.Mesh(geo(), this.fadeMat(color, 0.18));
@@ -832,7 +846,7 @@ export class Effects {
 
   aimLine(x0, z0, x1, z1, life) {
     const len = Math.hypot(x1 - x0, z1 - z0) || 0.1;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.35, len), this.fadeMat(0xff3b3b, 0.35));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.35, len), this.fadeMat(col('dangerFill'), 0.35));
     m.rotation.x = -Math.PI / 2; m.rotation.z = -Math.atan2(x1 - x0, z1 - z0) + Math.PI;
     m.position.set((x0 + x1) / 2, 0.08, (z0 + z1) / 2);
     this.add(m, life, (mesh, k) => { mesh.material.opacity = 0.2 + 0.5 * k; mesh.scale.x = 1 + k; });
@@ -841,8 +855,8 @@ export class Effects {
   lane(x0, z0, x1, z1, w, life) { // the Warden's charge lane
     const len = Math.hypot(x1 - x0, z1 - z0) || 0.1;
     const g = new THREE.Group();
-    const edge = new THREE.Mesh(new THREE.PlaneGeometry(w * 2, len), this.fadeMat(0xff2a2a, 0.22));
-    const fill = new THREE.Mesh(new THREE.PlaneGeometry(w * 2, len), this.fadeMat(0xff3b3b, 0.45));
+    const edge = new THREE.Mesh(new THREE.PlaneGeometry(w * 2, len), this.fadeMat(col('dangerEdge'), 0.22));
+    const fill = new THREE.Mesh(new THREE.PlaneGeometry(w * 2, len), this.fadeMat(col('dangerFill'), 0.45));
     edge.rotation.x = fill.rotation.x = -Math.PI / 2; fill.position.y = 0.01;
     edge.position.z = fill.position.z = len / 2;
     g.add(edge, fill); g.position.set(x0, 0.09, z0); g.rotation.y = Math.atan2(x1 - x0, z1 - z0);

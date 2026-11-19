@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { MOBS, inArena } from '/shared/data.js';
 import { TWISTS, TOTEM, rewardText } from '/shared/twists.js';
+import { col, patterned } from '/palette.js'; // telegraph colours + pattern cue (Settings → Accessibility)
 import { SOV_TWISTS, inArena2 } from '/shared/floor2.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -101,10 +102,11 @@ export class TwistClient {
   // Echo: a purple telegraph for the repeat strike.
   echo(x, z, r, life) {
     const fx = this.fx, g = new THREE.Group();
-    const edge = new THREE.Mesh(new THREE.RingGeometry(r - 0.3, r, 48), fx.fadeMat(0xc084fc, 0.9));
-    const fill = new THREE.Mesh(new THREE.CircleGeometry(r, 48), fx.fadeMat(0xa855f7, 0.32));
+    const edge = new THREE.Mesh(new THREE.RingGeometry(r - 0.3, r, 48), fx.fadeMat(col('echoEdge'), 0.9));
+    const fill = new THREE.Mesh(new THREE.CircleGeometry(r, 48), fx.fadeMat(col('echoFill'), 0.32));
     edge.rotation.x = fill.rotation.x = -Math.PI / 2;
     g.add(edge, fill); g.position.set(x, 0.09, z);
+    if (patterned()) g.add(fx.dashes(r));
     fx.add(g, life, (mesh, k) => { fill.scale.setScalar(Math.max(0.01, k)); });
   }
 

@@ -2,6 +2,7 @@
 // the Warden's perilous Horn Sweep telegraph and its Quake Rings. main.js calls initCombat() once and routes events here first.
 import * as THREE from 'three';
 import { GUARD } from '/shared/data.js';
+import { col, patterned, cue } from '/palette.js'; // telegraph colours, pattern cue, sound cue (Settings → Accessibility)
 
 const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);
 
@@ -125,12 +126,13 @@ export function initCombat(ctx) {
   function sweepTelegraph(e) {
     const m = mobs.get(e.follow), pos = () => m?.model.group.position || { x: e.x, z: e.z };
     const g = new THREE.Group();
-    const edge = new THREE.Mesh(new THREE.RingGeometry(e.r - 0.4, e.r, 64), fx.fadeMat(0xf59e0b, 0.95));
-    const inner = new THREE.Mesh(new THREE.RingGeometry(e.r - 0.9, e.r - 0.75, 64), fx.fadeMat(0xfde047, 0.7));
-    const fill = new THREE.Mesh(new THREE.CircleGeometry(e.r, 64), fx.fadeMat(0xfb923c, 0.28));
+    const edge = new THREE.Mesh(new THREE.RingGeometry(e.r - 0.4, e.r, 64), fx.fadeMat(col('sweepEdge'), 0.95));
+    const inner = new THREE.Mesh(new THREE.RingGeometry(e.r - 0.9, e.r - 0.75, 64), fx.fadeMat(col('sweepInner'), 0.7));
+    const fill = new THREE.Mesh(new THREE.CircleGeometry(e.r, 64), fx.fadeMat(col('sweepFill'), 0.28));
     for (const o of [edge, inner, fill]) o.rotation.x = -Math.PI / 2;
     fill.position.y = 0.01;
     g.add(edge, inner, fill); g.position.set(e.x, 0.1, e.z);
+    if (patterned()) g.add(fx.dashes(e.r)); // colour-blind palettes: a dashed ring as well
     fx.add(g, e.d, (mesh, k) => {
       const p = pos(); mesh.position.set(p.x, 0.1, p.z);
       fill.scale.setScalar(Math.max(0.01, k));
@@ -147,6 +149,7 @@ export function initCombat(ctx) {
     });
     sweeps.set(e.follow, [ring, lastFx()]);
     sfx.play('peril', pos(), 1.4);
+    cue(sfx, pos(), 1.2);
     m?.model.anim?.windup?.('sweep', e.d); // coils round, axe wound back (world.js WINDUPS)
     if (near(e.x, e.z, e.r + 6)) guide.tip('peril');
   }

@@ -139,11 +139,13 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
 
   // ---- devices ----
   function readPads() { return []; } // K1b: navigator.getGamepads(), standard mapping
+  const devSubs = new Set(); // onDevice(fn): called after every device switch (holds already released)
   function setDevice(d) {
     if (d === device) return true;
     if (d === 'pad' && !readPads().length) return false; // Controller only while one is connected
     for (const [code] of active) release(code, null, device, false); // let go of every hold
     device = d; settings.device = d === 'touch' ? undefined : d; save();
+    for (const fn of devSubs) fn(d);
     return true;
   }
   addEventListener('gamepaddisconnected', () => {
@@ -159,6 +161,7 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     label: action => { const d = device === 'pad' ? 'pad' : 'kbm'; return bindingLabel(B[d][action]?.[0] || B[d][action]?.[1] || null); },
     get device() { return device; },
     setDevice,
+    onDevice(fn) { devSubs.add(fn); return () => devSubs.delete(fn); },
     bindings: (d = 'kbm') => B[d],
     setBinding(d, action, slot, binding, mode = 'unbind') {
       const r = assign(B[d], d, action, slot, binding, mode);

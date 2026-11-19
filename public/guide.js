@@ -71,7 +71,7 @@ const TIPS = {
   f3fire: 'Fire is about to break out where the rings glow. Step out before they burn: standing in the flames hurts several times a second.',
   f3sludge: 'Stuck in sludge: it slows you to under half speed and you can\'t roll. Wade out (or jump) before a big hit lands.',
   mvp: 'That was the post-fight card: everyone in the fight sees it after a boss kill or wipe. Titles go to whoever led: Lifeline for revives, Rescuer for freeing trapped partymates, Wall for tanking, Conductor for combos, Last Word for the Last Attack...',
-  menu: () => `${touch() ? 'Tap ☰' : 'Press Esc'} for the Game Menu: Settings (graphics quality too), controls, change character, log out. The game keeps running while it's open.`,
+  menu: () => `${touch() ? 'Tap ☰' : 'Press Esc'} for the Game Menu: Settings (graphics quality and accessibility too), controls, change character, log out. The game keeps running while it's open.`,
   tbsync: () => `A partner started a TEAM BURST: ${touch() ? 'tap the prompt' : 'press T'} now to join it. More joiners, bigger burst.`,
   ...Object.fromEntries(Object.entries(COMBOS).map(([k, c]) => [`combo_${k}`, c.tip])),
 };

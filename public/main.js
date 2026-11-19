@@ -47,7 +47,8 @@ import { makeNetsim } from '/netsim.js'; // test-only bad network (?netsim=120,6
 import { initGameMenu } from '/gamemenu.js'; // the Game Menu (Esc / ☰)
 import { createInput } from '/input.js'; // keys, mouse buttons (and pads, K1b) -> actions, by the bindings in shared/controls.js
 import { createPanels } from '/panels.js'; // the panels that free the cursor / close on Esc
-import { loadSettings, saveSettings as storeSettings, initSettingsPanel } from '/settings.js'; // fb_settings + fb_controls, the Settings panel
+import { cue } from '/palette.js'; // sound cue for telegraphs
+import { loadSettings, saveSettings as storeSettings, initSettingsPanel, applyAccess } from '/settings.js'; // fb_settings + fb_controls, the Settings panel
 
 const sfx = new Sound();
 
@@ -61,6 +62,7 @@ if (isTouch) document.body.classList.add('touch');
 
 // ---------- settings (camera, chat, graphics; public/settings.js) ----------
 const settings = loadSettings();
+applyAccess(settings); // text/UI scale + high contrast (CSS variables, style.css)
 const saveSettings = () => storeSettings(settings);
 if (QS.get('quality')) settings.quality = QS.get('quality'); // (tests: ?quality=low)
 const lastAuto = (() => { try { return localStorage.getItem('fb_autoq'); } catch { return null; } })(); // where Auto settled last time
@@ -107,7 +109,7 @@ const state = {
 const players = new Map(); // id -> entity
 const mobs = new Map();
 let boss = null;
-const cine = initCine({ camera, state, players, mobs, slowMotion: (a, b) => slowMotion(a, b), twists, occluders }); // public/cine.js
+const cine = initCine({ camera, state, players, mobs, slowMotion: (a, b) => slowMotion(a, b, { force: true }), twists, occluders }); // public/cine.js
 // Floor 2 — The Glimmering Mire (floor2client.js): world, waystones, Stairway, hazards and its events.
 const f2 = initFloor2Client({
   scene, sun, occluders, fx, sfx, state, mobs, players, isTouch,
@@ -659,6 +661,7 @@ function handleEvent(e) {
       break;
     }
     case 'tele': {
+      cue(sfx, { x: e.x, z: e.z }, 1.2); // (Settings → Sound cue for attacks; once per telegraph, twists included)
       if (twists.tele(e)) break; // Warden twists: cracked ground, Echo strikes
       const mine = Math.hypot(e.x - state.x, e.z - state.z) < e.r + 2;
       if (e.k === 'line') {
@@ -714,7 +717,7 @@ function handleEvent(e) {
         if (e.id === me) { state.lastCombat = performance.now(); sfx.play('hurt'); }
         if (e.id === me) {
           floatNum(p.model.group.position, 2.2, `-${e.a}`, 'hurt');
-          if (e.big) { hitStop = Math.max(hitStop, BIG_HIT_STOP); shake(0.3); } else shake(0.15);
+          if (e.big) { if (!settings.reduceMotion) hitStop = Math.max(hitStop, BIG_HIT_STOP); shake(0.3); } else shake(0.15);
         } else if (state.spectator) floatNum(p.model.group.position, 2.2, `-${e.a}`, 'other hurt');
       }
       break;
@@ -930,9 +933,16 @@ onPress('skill2', () => useSkill(2));
 onPress('skill3', () => useSkill(3));
 onPress('dodge', () => dodge());
 onPress('skillTree', e => { if (!e.repeat) talents.toggle(); }); // Skill Tree window (public/talents.js)
-input.on('guard', e => { if (!e.down) combat.guard(false); else if (!e.repeat) combat.guard(true); });
+input.onDevice?.(() => combat.guard(false)); // a device switch lets go of every hold: a toggled guard would stay up
+input.on('guard', e => { // hold to guard; with Settings → Toggle guard, each press flips it
+  if (settings.guardToggle) { if (e.down && !e.repeat) combat.guard(!combat.guarding); }
+  else if (!e.down) combat.guard(false); else if (!e.repeat) combat.guard(true);
+});
 onPress('lockNext', () => cycleLock());
-input.on('botWheel', e => { if (!e.down) wheel.keyup(); else if (!e.repeat) wheel.keydown(e.event); }); // bot command wheel
+input.on('botWheel', e => { // bot command wheel; with Settings → Toggle the bot wheel, each press opens or closes it (no hold)
+  if (settings.wheelToggle) { if (e.down && !e.repeat) { if (wheel.isOpen()) wheel.close(); else wheel.open(); } }
+  else if (!e.down) wheel.keyup(); else if (!e.repeat) wheel.keydown(e.event);
+});
 onPress('teamBurst', e => { if (!e.repeat) teamplay.press(); }); // Team Burst: start it (full bar) or join the sync window
 onPress('players', () => $('players-btn').click());
 onPress('bag', () => toggleBag());
@@ -1738,9 +1748,10 @@ function hitJuice(m, e) {
 
 // Slow down visual time (animation and effects only; input and movement keep real time).
 let slowMo = 0, slowMoScale = 1, slowMoLen = 1;
-function slowMotion(secs, scale) {
+function slowMotion(secs, scale, { force = false } = {}) { // force: the film director's slow-mo (public/cine.js) ignores Reduce motion
+  if (settings.reduceMotion && !force) return; // (Settings → Reduce motion: no slow-mo, kill zoom, shake or hit-stop)
   slowMo = slowMoLen = secs; slowMoScale = scale;
-  shake(0.45); hitStop = 0;
+  shake(0.45); hitStop = 0; // (shake() is itself gated by Reduce motion)
 }
 
 const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
@@ -1773,7 +1784,7 @@ function updateRareHint(now) { // a small HUD line pointing at a live rare: "Old
 // ---------------- main loop ----------------
 const v3 = new THREE.Vector3();
 let shakeAmt = 0;
-const shake = a => { shakeAmt = Math.max(shakeAmt, a); };
+const shake = a => { if (!settings.reduceMotion) shakeAmt = Math.max(shakeAmt, a); };
 // A shake that fades with distance: full at the spot, 40% at r, nothing beyond (stomps, rockfall, Quake Rings).
 const shakeNear = (x, z, a, r) => { const d = Math.hypot(x - state.x, z - state.z); if (d < r && !state.dead) shake(a * (1 - (0.6 * d) / r)); };
 // Hit-stop: a boss's big hit landed on YOU (a `hurt` event tagged big). Only this client freezes; never on your own hits.
@@ -2176,4 +2187,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { input, panels, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality };
+window.__fb = { settings, combat, wheel, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };
