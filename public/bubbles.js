@@ -33,8 +33,10 @@ export function bubbleVisible(e, viewer) {
 // said to it. Shown like its reply will be (party chat): to its party, and to spectators. A "…" bubble that gives way
 // to the reply's own bubble; it never outlives THINK_MAX (a lost "off").
 export const THINK_MAX = 15; // s
+// A Named answering talk (I3, server/ai/namedtalk.js) sends ch 's' with its position: seen like its reply, by anyone close.
 export function thinkVisible(e, viewer) {
   if (!e || e.t !== 'mind' || !e.id) return false;
+  if (e.ch === 's') return !!viewer.spectator || Math.hypot((e.x ?? 0) - viewer.x, (e.z ?? 0) - viewer.z) < SAY_RANGE;
   return !!viewer.spectator || (!!viewer.party && e.party === viewer.party);
 }
 

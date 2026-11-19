@@ -2,7 +2,8 @@
 //   - registers the mind on the bot brain's onEvent hook (shared/bots/registry.js)
 //   - ticks the minds once a second (BotManager's bots)
 //   - serves GET /api/admin/ai (status), POST /api/admin/ai { on } (toggle) and POST /api/admin/ai/test (one tiny real
-//     call: OK/error, latency, cost), admins only
+//     call: OK/error, latency, cost) and POST /api/admin/ai/named-test (the same for Named talk, in Cairn's voice),
+//     admins only
 //   - tells clients when a bot is thinking about a line said to it ({ t: 'mind', id, on, party } in game.events)
 //   - memories and the day's spend survive restarts once index.js calls minds.useStore(makeStore(db.q)) after migrate
 // Nothing here runs a model unless AI_PROVIDER, its key and the toggle are all set (the test call needs provider + key).
@@ -10,6 +11,7 @@ import { registerBotHook } from '../../shared/bots/registry.js';
 import { readConfig } from './config.js';
 import { makeProvider } from './providers/index.js';
 import { Minds } from './mind.js';
+import { installNamedTalk } from './namedtalk.js'; // talking to the Named (I3)
 import * as accounts from '../accounts.js';
 import { isAdmin } from '../admin.js';
 
@@ -34,6 +36,7 @@ export function installAI({ game = null, bots, server = null }, opts = {}) {
   const onThink = game ? (b, on) => { if (b.id) game.events.push({ t: 'mind', id: b.id, on: on ? 1 : 0, party: b.party || 0 }); } : null;
   const minds = new Minds({ cfg, provider, listBots, env, now: opts.now, log: opts.log, onThink });
   if (game) game.aiOn = () => minds.active(); // (welcome: lets the client show the "talk to bots by name" tip)
+  if (game?.named) minds.namedTalk = installNamedTalk({ game, minds }); // (NAMED_ENABLED=0: no Named, nothing to talk to)
   registerBotHook('onEvent', (b, e) => minds.onEvent(b, e));
   const tickMs = opts.tickMs ?? 1000;
   if (tickMs) { const t = setInterval(() => { try { minds.tick(); } catch (err) { console.error('[ai] tick', err); } }, tickMs); t.unref?.(); minds.timer = t; }
@@ -42,7 +45,7 @@ export function installAI({ game = null, bots, server = null }, opts = {}) {
   if (server) {
     // Runs before the main request handler; claims /api/admin/ai synchronously (res.handled) so it isn't 404'd.
     server.prependListener('request', (req, res) => {
-      if (!req.url.startsWith('/api/admin/ai') || !/^\/api\/admin\/ai(\/test)?\/?(\?.*)?$/.test(req.url)) return;
+      if (!req.url.startsWith('/api/admin/ai') || !/^\/api\/admin\/ai(\/test|\/named-test)?\/?(\?.*)?$/.test(req.url)) return;
       res.handled = true;
       handle(req, res).catch(err => { console.error('[ai] admin', err); if (!res.headersSent) json(res, 500, { error: 'Server error.' }); });
     });
@@ -50,6 +53,12 @@ export function installAI({ game = null, bots, server = null }, opts = {}) {
   async function handle(req, res) {
     const code = await auth(req);
     if (code) return json(res, code, { error: code === 401 ? 'Signed out.' : 'Admins only.' });
+    if (/^\/api\/admin\/ai\/named-test/.test(req.url)) {
+      if (req.method !== 'POST') return json(res, 405, { error: 'POST.' });
+      if (!minds.namedTalk) return json(res, 400, { error: 'The Named are off (NAMED_ENABLED=0).', ...minds.status() });
+      const r = await minds.namedTalk.testCall();
+      return json(res, 200, { test: r, ...minds.status() });
+    }
     if (/^\/api\/admin\/ai\/test/.test(req.url)) {
       if (req.method !== 'POST') return json(res, 405, { error: 'POST.' });
       const r = await minds.testCall();

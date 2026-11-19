@@ -130,6 +130,8 @@ input { font: inherit; }
 .lbl.party { color: #c4b5fd; }
 .lbl.party .bar > div { background: #a78bfa; }
 .lbl .lv { opacity: .7; font-weight: 600; margin-right: 3px; }
+.lbl .talk { pointer-events: auto; display: block; margin: 3px auto 0; font: 700 11px system-ui, sans-serif; padding: 2px 9px; border-radius: 8px; cursor: pointer;
+  color: #1d2433; background: rgba(250, 248, 240, .94); border: 0; box-shadow: 0 1px 4px rgba(0,0,0,.4); } /* talk to a selected Named (I3) */
 /* speech bubbles over heads (public/bubbles.js): positioned by transform, above the nameplate */
 .bubble { position: absolute; left: 0; top: 0; max-width: 260px; width: max-content; padding: 6px 11px; border-radius: 12px;
   background: rgba(250, 248, 240, .94); color: #1d2433; font: 600 14px/1.3 system-ui, sans-serif; text-align: center;

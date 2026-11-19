@@ -13,7 +13,7 @@ export function makeProvider(cfg, { env = process.env, fetch } = {}) {
     case 'anthropic': return anthropicProvider(o);
     case 'openai': return openaiProvider(o);
     case 'gemini': return geminiProvider(o);
-    case 'mock': return mockProvider({ model: cfg.model });
+    case 'mock': return mockProvider({ model: cfg.model, delayMs: Number(env.AI_MOCK_DELAY_MS) || 0 }); // (AI_MOCK_DELAY_MS: see the "…" locally)
     default: return null;
   }
 }

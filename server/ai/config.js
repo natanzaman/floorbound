@@ -17,6 +17,13 @@
 //   AI_TIMEOUT_MS      per-call timeout (default 8000)
 //   AI_MAX_BOTS        most bots with a mind at once (default 10)
 //   AI_PRICE_IN / AI_PRICE_OUT   USD per 1M tokens, only for a model missing from server/ai/prices.js
+// Talking to the Named (server/ai/namedtalk.js) shares the provider, key, toggle and AI_DAILY_USD, with a slice each:
+//   AI_NAMED_RESERVE   share of AI_DAILY_USD kept for Named talk: companions stop that far short of the cap until the
+//                      Named have spent it (default 0.2)
+//   AI_NAMED_MAX_SHARE most of AI_DAILY_USD Named talk may spend, so companions keep the rest (default 0.5)
+//   AI_NAMED_CALLS_MIN Named talk calls per minute, counted apart from AI_MAX_CALLS_MIN (default 12)
+//   AI_NAMED_DAILY     Named talk calls per player per day (resets 10:00 UTC with friendship; default 30)
+//   AI_NAMED_GAP_S     seconds between two lines from one player to the Named (default 4)
 export const DEFAULT_MODEL = { anthropic: 'claude-haiku-5-5', openai: 'gpt-6-luna', gemini: 'gemini-3.1-flash-lite', mock: 'mock' };
 // Key env var names per provider, first one wins. The extra names are common misnamings, accepted on purpose.
 export const KEY_ENV = {
@@ -82,6 +89,12 @@ export function readConfig(env = process.env) {
     timeoutMs: num(envGet(env, 'AI_TIMEOUT_MS'), 8000, 500, 60000),
     maxBots: num(envGet(env, 'AI_MAX_BOTS'), 10, 1),
     maxOutTokens: num(envGet(env, 'AI_MAX_OUT_TOKENS'), 300, 64, 4000),
+    namedReserve: num(envGet(env, 'AI_NAMED_RESERVE'), 0.2, 0, 1),
+    namedMaxShare: num(envGet(env, 'AI_NAMED_MAX_SHARE'), 0.5, 0, 1),
+    namedCallsMin: num(envGet(env, 'AI_NAMED_CALLS_MIN'), 12, 1),
+    namedConcurrent: 2, // Named calls in flight at once, apart from AI_MAX_CONCURRENT (companions always keep theirs)
+    namedDaily: num(envGet(env, 'AI_NAMED_DAILY'), 30, 0),
+    namedGapS: num(envGet(env, 'AI_NAMED_GAP_S'), 4, 1),
   };
 }
 

@@ -39,7 +39,7 @@ const TIPS = {
   peril: 'Orange = perilous: dodge through it or parry (Guardian R). Shields won\'t save you.',
   rguard: 'R is the Guardian\'s guard: hold it to block, tap it just before a hit to parry.',
   bell: 'The Tower Bell: someone cleared a floor for the first time on this server. One bell per floor; a hundred bells and the tower lets you go. Their names are carved on the Hall of Clearers stone in town.',
-  named: 'The Named live in this tower too: the Hearthward (a party of four) and Cairn, who hunts alone. Fight beside them, revive or heal them and they warm to you: Players → Friends shows where you stand. Allies can invite a Hero; Sworn friends can call one.',
+  named: 'The Named live in this tower too: the Hearthward (a party of four) and Cairn, who hunts alone. Fight beside them, revive or heal them and they warm to you: Players → Friends shows where you stand. Talk to them too: say their name nearby ("Cairn, rough day?") or press Talk (@name works from anywhere). They remember you, and a good talk helps a little. Allies can invite a Hero; Sworn friends can call one.',
   bubbles: 'Chat lines pop up as speech bubbles over the speaker\'s head: /s is heard nearby, /p by your party. Settings turns bubbles off; the chat log keeps everything.',
   botmind: 'Talk to bots by name in chat: "Lyra, hang back and heal me". They answer in a speech bubble (the dots mean they\'re thinking) and remember how you like to play. /b orders still work as before.',
   bots: 'Bots in your party take orders: hold V for the order wheel, or type /b stay, /b follow, /b Lyra: heal (one bot). /b help lists them all; ordinary chat never gives orders.',

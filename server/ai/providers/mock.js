@@ -6,7 +6,11 @@ import { ProviderError } from './http.js';
 
 const tokens = s => Math.ceil(String(s || '').length / 4);
 
-export function defaultMockReply({ user }) {
+export function defaultMockReply({ user, system, schema }) {
+  if (schema?.properties?.sentiment) { // talk with the Named (server/ai/namedtalk.js)
+    const me = /^Name: (\S+),/m.exec(system || '')?.[1] || 'They', who = /^(\S+) says to you now/m.exec(user)?.[1] || 'you';
+    return { say: `(mock) ${me} heard you, ${who}.`, sentiment: 0, reason: 'mock', remember: '' };
+  }
   const who = /^Trigger: (.+?) spoke to you: "/m.exec(user)?.[1];
   return { say: who ? `(mock) Heard you, ${who}.` : '', order: 'none', stance: 'keep', focus: '', remember: '' };
 }
