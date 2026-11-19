@@ -96,7 +96,7 @@ export const F3_MOBS = {
   // rare named elites (the rare-spawn system: one at a time, announced server-wide)
   skyrender: { name: 'Skyrender', hp: 5200, atk: 44, speed: 6.2, aggro: 18, range: 2.8, atkCd: 1.4, xp: 900, radius: 1.3, level: 26, f3: true, ai: 'f3Harpy', fly: true, dives: 3, elite: true, rare: true },
   bastion: { name: 'The Old Bastion', hp: 7500, atk: 52, speed: 2.8, aggro: 12, range: 3.2, atkCd: 2.2, xp: 1100, radius: 1.9, level: 27, f3: true, ai: 'f3Sentinel', armor: 0.65, calls: 2, elite: true, rare: true },
-  colossus: { name: 'The Storm Colossus', hp: 16000, atk: 54, speed: 3.8, aggro: 20, range: 5.0, atkCd: 2.3, xp: 5000, radius: 2.6, level: 28, f3: true, ai: 'f3Colossus', boss: true, f3boss: true },
+  colossus: { name: 'The Storm Colossus', hp: 16000, atk: 125, speed: 3.8, aggro: 20, range: 5.0, atkCd: 2.3, xp: 5000, radius: 2.6, level: 28, f3: true, ai: 'f3Colossus', boss: true, f3boss: true },
 };
 export const F3_BITE = { ram: [3.2, 0.7], harpy: [2.8, 0.7], sentinel: [3.4, 0.8], skyrender: [3.4, 0.8], bastion: [4.2, 0.9], colossus: [6.4, 0.95] };
 
@@ -129,14 +129,14 @@ export const COLOSSUS = {
   phases: [0.66, 0.33],
   // Health scales with the fighters who walk in (like the Warden): (hpBase + hpPer * weight^hpExp) * (1 + hpLvl * avg
   // levels above 28); weight = the sum of role weights. Damage = atk * (1 + atkPer * fighters above 3).
-  hpBase: 9000, hpPer: 4300, hpExp: 1.35, hpLvl: 0.05, atkPer: 0.18,
+  hpBase: 8000, hpPer: 6800, hpExp: 1.9, hpLvl: 0.05, atkPer: 0.18,
   hpRole: { Tank: 0.7, Healer: 0.6, Support: 0.8, Damage: 1.2 },
   cleave: { wind: 0.9, mult: 1.0 },
-  strike: { every: [7, 6, 5], first: 4, r: 3.2, wind: 1.7, mult: 1.6, extra: [1, 3, 3] },
-  gust: { every: [11, 10, 9], first: 7, wind: 1.5, r: 11, half: 0.75, mult: 1.6, shove: 7 },
+  strike: { every: [7, 6, 5], first: 4, r: 3.2, wind: 1.7, mult: 2.2, extra: [2, 3, 4] },
+  gust: { every: [11, 10, 9], first: 7, wind: 1.5, r: 11, half: 0.75, mult: 2.4, shove: 7 },
   overload: { every: [0, 30, 26], first: 5, channel: 8, posture: 0.5, clap: 0.55, charged: 15, chargedMult: 1.25, stun: 4, weakD: 8, weak: 1.3 },
   harpies: { every: 26, n: 2, max: 3, first: 6 },
-  beam: { every: [0, 0, 14], first: 4, wind: 2.2, turn: 7, sweep: Math.PI * 2, len: 26, w: 0.8, mult: 2.6, from: 0.5 },
+  beam: { every: [0, 0, 14], first: 4, wind: 2.2, turn: 7, sweep: Math.PI * 2, len: 26, w: 0.8, mult: 3.2, from: 0.5 },
 };
 export const PHASE_TEXT3 = ['PHASE 1 · HAMMERFALL · LIGHTNING · GALE PUSH', 'PHASE 2 · OVERLOAD · HARPIES', 'PHASE 3 · TEMPEST BEAM'];
 

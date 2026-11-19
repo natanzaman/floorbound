@@ -53,6 +53,8 @@ async function run(i) {
         if (e.k === 'tether') { M.tether[0] += e.ok; M.tether[1]++; }
       }
     }
+    if (start) for (const r of msg.w.players) if (ids.has(r[0]) && !r[9]) res.minHp = Math.min(res.minHp ?? 100, Math.round((100 * r[4]) / r[5]));
+    if (start) for (const e of msg.w.events) if (e.t === 'hurt' && ids.has(e.id)) res.taken = (res.taken || 0) + e.a;
     const c = msg.w.mobs.find(m => m[1] === COLOSSUS);
     if (c && c[5] < c[6] && !hit) { hit = true; start = Date.now(); }
     if (c) res.hpLeft = Math.round((100 * c[5]) / c[6]);
@@ -73,7 +75,7 @@ async function run(i) {
 const out = [];
 for (let i = 0; i < RUNS; i++) {
   const r = await run(i); out.push(r);
-  console.log(`[skill ${SKILL} ${skillName(SKILL)}] run ${r.run}: ${r.result} in ${r.secs}s${r.result !== 'kill' ? ` (boss at ${r.hpLeft ?? '?'}%, phase ${r.phase + 1})` : ''}, ${r.deaths} deaths, ${r.downs} downed, ${r.revives} revived (twist ${r.twist})`
+  console.log(`[skill ${SKILL} ${skillName(SKILL)}] run ${r.run}: ${r.result} in ${r.secs}s${r.result !== 'kill' ? ` (boss at ${r.hpLeft ?? '?'}%, phase ${r.phase + 1})` : ''}, ${r.deaths} deaths, ${r.downs} downed, ${r.revives} revived, lowest ${r.minHp ?? '-'}% HP, ${r.taken || 0} taken (twist ${r.twist})`
     + ` · Overload ${r.ov}: stopped ${r.stop.sw} by Switch, ${r.stop.burst} by Team Burst, ${r.stop.brk} solo; ${r.clap} Thunderclaps`
     + ` · Tempest Beam ${r.beams}: ${r.beam.jump} jumped, ${r.beam.roll} rolled, ${r.beam.hit} hit`
     + `${r.causes ? ` · deaths to ${r.causes.join(', ')}` : ''}${r.mech ? ` · team mechanics: stacks ${r.mech.stack.join('/') || '-'} in, spread ${r.mech.spread[0]}/${r.mech.spread[1]} clean, tethers ${r.mech.tether[0]}/${r.mech.tether[1]} snapped` : ''}`
