@@ -45,7 +45,7 @@ function watcher(name) {
   return c;
 }
 
-const srv = spawn(process.execPath, [path.join(root, 'server/index.js')], { env: { ...process.env, PORT: String(PORT), MAX_BOTS: '10' }, stdio: ['ignore', 'pipe', 'pipe'] });
+const srv = spawn(process.execPath, [path.join(root, 'server/index.js')], { env: { ...process.env, PORT: String(PORT), MAX_BOTS: '10', NAMED_ENABLED: '0' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let log = '';
 srv.stdout.on('data', d => { log += d; }); srv.stderr.on('data', d => { log += d; });
 

@@ -72,9 +72,10 @@ export function initNamed({ $, send, state, log, sfx, banner }) {
   function onFriendship(m) {
     if (ui.data) { const r = ui.data.rows.find(x => x.id === m.id); if (r) { r.pts = m.pts; r.tierName = m.tierName; } }
     if (m.up) {
-      banner(`${String(m.tierName).toUpperCase()} · ${String(m.name).toUpperCase()}`, `${m.name} now counts you as ${/^[AEIOU]/.test(m.tierName) ? 'an' : 'a'} ${m.tierName}.`);
+      const line = `${m.name} now counts you as ${/^[AEIOU]/.test(m.tierName) ? 'an' : 'a'} ${m.tierName}.`;
+      banner(`${String(m.tierName).toUpperCase()} · ${String(m.name).toUpperCase()}`, line);
       sfx?.play('levelup');
-      log(`You are now ${m.tierName} with ${m.name}.`, 'sys');
+      log(line, 'sys');
     } else if (m.d < 0) log(`${m.name} thinks a little less of you (${m.d}).`, 'sys');
     else if (m.d > 0 && WHY[m.why] && Date.now() - (ui.last?.[m.id] || 0) > 60000) { // a quiet line now and then, not on every hit
       (ui.last ||= {})[m.id] = Date.now();
