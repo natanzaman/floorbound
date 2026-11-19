@@ -79,6 +79,48 @@ try {
   assert.equal(m1.shakeAmt, 0, 'no shake'); assert.equal(m1.slowMo, 0, 'no slow-mo');
   ok('reduceMotion: shake() and slowMotion() do nothing');
 
+  // the film director's slow-mo is exempt from Reduce motion (reduceMotion is still on here)
+  const cineSlow = () => S(() => { const f = window.__fb; f.state.spectator = true; f.cine.event({ t: 'cine', op: 'slowmo', secs: 1, scale: 0.4 }); f.state.spectator = false; return f.motion(); });
+  assert.ok((await cineSlow()).slowMo > 0, 'cine slow-mo runs under reduce motion');
+  assert.equal((await S(() => { window.__fb.slowMotion(1, 0.5); return window.__fb.motion().slowMo; })) > 0, true, 'slowMo still running from cine (the gated call changed nothing)');
+  await frames(90);
+  ok('reduceMotion: cine.js slow-mo still works');
+
+  // telegraph palette: the real ground telegraph's colours follow the setting (default = today's reds); colour-blind modes add dashes
+  const teleCols = () => S(() => {
+    const fx = window.__fb.fx, before = fx.list.length;
+    fx.telegraph(0, 0, 3, 5);
+    const g = fx.list[fx.list.length - 1].mesh, hex = g.children.slice(0, 4).map(m => m.material.color.getHex());
+    const dashes = g.children.length - 4;
+    fx.end(fx.list[fx.list.length - 1]);
+    return { hex, dashes, added: fx.list.length - before };
+  });
+  const t0 = await teleCols();
+  assert.deepEqual(t0.hex, [0x7f1d1d, 0xff2a2a, 0xff3b3b, 0xffd0c0]); assert.equal(t0.dashes, 0);
+  await setOpt('palette', 'deuter');
+  const t1 = await teleCols();
+  assert.deepEqual(t1.hex, [0x5a2d00, 0xffb000, 0xff7a00, 0xffffff]); assert.equal(t1.dashes, 1, 'dashed ring added');
+  await setOpt('palette', 'trit');
+  assert.equal((await teleCols()).hex[1], 0xff2d7a);
+  await setOpt('palette', 'off');
+  assert.deepEqual((await teleCols()).hex, t0.hex);
+  ok('palette: telegraph colours switch with the setting and default to today\'s');
+
+  // sound cue for telegraphs: a 'tele' event plays the cue only when the option is on
+  const teleSound = () => S(() => {
+    const f = window.__fb, played = [], orig = f.sfx.play;
+    f.sfx.play = (n, ...r) => { played.push(n); return orig.call(f.sfx, n, ...r); };
+    f.handleEvent({ t: 'tele', k: 'slam', x: 500, z: 500, r: 3, d: 1 });
+    f.sfx.play = orig;
+    return played;
+  });
+  assert.equal((await teleSound()).includes('cue'), false, 'no cue by default');
+  await setOpt('telegraphSound', true);
+  const pl = await teleSound();
+  assert.ok(pl.includes('cue') && pl.includes('warn'), `cue plays with the option on: ${pl}`);
+  await setOpt('telegraphSound', false);
+  ok('telegraphSound: off by default, a distinct cue when on');
+
   // text/UI scale and high contrast, as computed styles
   await setOpt('uiScale', 1.5);
   assert.equal(await S(() => getComputedStyle(document.documentElement).getPropertyValue('--ui-scale').trim()), '1.5');
@@ -90,7 +132,7 @@ try {
 
   // stick sensitivity is stored for the pad code; everything is saved under fb_controls.access
   await setOpt('padSens', 2.2);
-  assert.deepEqual(await stored(), { sens: 1, invertY: false, padSens: 2.2, guardToggle: true, wheelToggle: true, reduceMotion: true, uiScale: 1.5, highContrast: true });
+  assert.deepEqual(await stored(), { sens: 1, invertY: false, padSens: 2.2, guardToggle: true, wheelToggle: true, reduceMotion: true, uiScale: 1.5, highContrast: true, palette: 'off', telegraphSound: false });
   // and survives a reload
   await p.reload();
   await p.waitForFunction(() => !!window.__fb?.settings, null, { timeout: 60000 });

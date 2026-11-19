@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { F3, GATE3, STAIRWAY3, PHASE_TEXT3, F3_TWISTS, inArena3, inGateZone3, onFloor3, unlocked3 } from '/shared/floor3.js';
 import { createFloor3, makeBolt } from '/floor3world.js';
+import { cue } from '/palette.js'; // sound cue for telegraphs (Settings → Accessibility)
 import { losReach } from '/shared/arenas.js'; // the Undercroft's great pillars stop the Tempest Beam
 
 // ctx: { scene, occluders, fx, sfx, state, mobs, players, send, banner, callout, floatNum, log, shake, project, isTouch, hallOpen, tip }
@@ -70,6 +71,7 @@ export function initFloor3Client(ctx) {
         fx.telegraph(e.x, e.z, e.r, e.d, e.follow ? () => mobs.get(e.follow)?.model.group.position : null);
         const mine = near(e.x, e.z, e.r + 1.5);
         sfx.play('warn', { x: e.x, z: e.z }, e.k === 'strike' ? 0.7 : 1);
+        cue(sfx, { x: e.x, z: e.z }, 1.2);
         if (e.k === 'stomp') { const m = mobs.get(e.id); if (m && !m.model.anim) m.stomp = e.d; if (mine) ctx.tip('f3armor'); }
         if (e.k === 'strike' && mine && fighting()) ctx.callout('LIGHTNING', 'Step out of the circle', e.d);
         return true;

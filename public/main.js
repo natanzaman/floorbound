@@ -47,6 +47,7 @@ import { makeNetsim } from '/netsim.js'; // test-only bad network (?netsim=120,6
 import { initGameMenu } from '/gamemenu.js'; // the Game Menu (Esc / ☰)
 import { createInput } from '/input.js'; // keys, mouse buttons (and pads, K1b) -> actions, by the bindings in shared/controls.js
 import { createPanels } from '/panels.js'; // the panels that free the cursor / close on Esc
+import { cue } from '/palette.js'; // sound cue for telegraphs
 import { loadSettings, saveSettings as storeSettings, initSettingsPanel, applyAccess } from '/settings.js'; // fb_settings + fb_controls, the Settings panel
 
 const sfx = new Sound();
@@ -108,7 +109,7 @@ const state = {
 const players = new Map(); // id -> entity
 const mobs = new Map();
 let boss = null;
-const cine = initCine({ camera, state, players, mobs, slowMotion: (a, b) => slowMotion(a, b), twists, occluders }); // public/cine.js
+const cine = initCine({ camera, state, players, mobs, slowMotion: (a, b) => slowMotion(a, b, { force: true }), twists, occluders }); // public/cine.js
 // Floor 2 — The Glimmering Mire (floor2client.js): world, waystones, Stairway, hazards and its events.
 const f2 = initFloor2Client({
   scene, sun, occluders, fx, sfx, state, mobs, players, isTouch,
@@ -662,6 +663,7 @@ function handleEvent(e) {
     case 'tele': {
       if (twists.tele(e)) break; // Warden twists: cracked ground, Echo strikes
       const mine = Math.hypot(e.x - state.x, e.z - state.z) < e.r + 2;
+      cue(sfx, { x: e.x, z: e.z }, 1.2); // (Settings → Sound cue for attacks)
       if (e.k === 'line') {
         fx.lane(e.x, e.z, e.x2, e.z2, e.w, e.d);
         sfx.play('warn', { x: e.x, z: e.z }, 1.3);
@@ -1745,10 +1747,10 @@ function hitJuice(m, e) {
 
 // Slow down visual time (animation and effects only; input and movement keep real time).
 let slowMo = 0, slowMoScale = 1, slowMoLen = 1;
-function slowMotion(secs, scale) {
-  if (settings.reduceMotion) return; // (Settings → Reduce motion: no slow-mo, kill zoom, shake or hit-stop)
+function slowMotion(secs, scale, { force = false } = {}) { // force: the film director's slow-mo (public/cine.js) ignores Reduce motion
+  if (settings.reduceMotion && !force) return; // (Settings → Reduce motion: no slow-mo, kill zoom, shake or hit-stop)
   slowMo = slowMoLen = secs; slowMoScale = scale;
-  shake(0.45); hitStop = 0;
+  shake(0.45); hitStop = 0; // (shake() is itself gated by Reduce motion)
 }
 
 const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
@@ -2184,4 +2186,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { settings, combat, wheel, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality };
+window.__fb = { settings, combat, wheel, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };

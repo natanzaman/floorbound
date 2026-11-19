@@ -11,7 +11,10 @@ export const ACCESS_DEFAULTS = {
   reduceMotion: false, // no camera shake, hit-stop or kill zoom
   uiScale: 1,         // size of panels, frames and chat (x)
   highContrast: false, // stronger HUD text and panels
+  palette: 'off',     // telegraph colours: 'off' (the game's own) | 'deuter' (red-green) | 'trit' (blue-yellow); see palette.js
+  telegraphSound: false, // a short distinct cue when a telegraph starts
 };
+export const ENUMS = { palette: ['off', 'deuter', 'trit'] }; // string options and their allowed values
 export const RANGES = { sens: [0.3, 3], padSens: [0.3, 3], uiScale: [0.8, 1.5] };
 
 // Any stored value in, a complete valid access object out: unknown keys dropped, wrong types and NaN back to the
@@ -22,6 +25,7 @@ export function normalizeAccess(raw) {
   for (const [k, d] of Object.entries(ACCESS_DEFAULTS)) {
     const v = src[k];
     if (typeof d === 'boolean') out[k] = typeof v === 'boolean' ? v : d;
+    else if (typeof d === 'string') out[k] = ENUMS[k].includes(v) ? v : d;
     else if (typeof v === 'number' && Number.isFinite(v)) out[k] = Math.min(RANGES[k][1], Math.max(RANGES[k][0], v));
     else out[k] = d;
   }

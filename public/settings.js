@@ -6,6 +6,7 @@
 // camera 'classic': right-drag to look, or rest the cursor at a screen edge to turn.
 // quality: 'auto' (default) | 'low' | 'medium' | 'high' (public/quality.js) · perf: the diagnostics overlay · ping: the ping chip
 import { controlsStore } from '/input.js';
+import { setPalette, setTelegraphCues } from '/palette.js';
 import { ACCESS_DEFAULTS, RANGES, normalizeAccess } from '/access.js'; // the accessibility options (Settings → Accessibility)
 
 const LOCAL_DEFAULTS = { camera: 'mouse', bubbles: true, quality: 'auto', perf: false, ping: true };
@@ -26,6 +27,8 @@ export function loadSettings() {
 }
 // The CSS side of the options: --ui-scale and the high-contrast class (the commented block at the end of style.css).
 export function applyAccess(settings, root = document.documentElement) {
+  const a = normalizeAccess(settings);
+  setPalette(a.palette); setTelegraphCues(a.telegraphSound); // telegraph colours + sound cue (palette.js)
   root.style.setProperty('--ui-scale', String(normalizeAccess(settings).uiScale));
   root.classList.toggle('hc', !!settings.highContrast);
 }
@@ -55,6 +58,8 @@ export function initSettingsPanel({ el, settings, save, Q, PRESETS, perf, applyQ
     <label class="opt"><input type="checkbox" data-a="wheelToggle" ${settings.wheelToggle ? 'checked' : ''}> Toggle the bot wheel <small>press V to open it, again (or Esc) to close it</small></label>
     <label class="opt"><input type="checkbox" data-a="reduceMotion" ${settings.reduceMotion ? 'checked' : ''}> Reduce motion <small>no camera shake, hit-stop or kill-zoom</small></label>
     <label class="opt"><input type="checkbox" data-a="highContrast" ${settings.highContrast ? 'checked' : ''}> High-contrast HUD text <small>brighter text on darker panels</small></label>
+    <label class="opt">Telegraph colours <select data-a="palette">${[['off', 'Default'], ['deuter', 'Red-green friendly'], ['trit', 'Blue-yellow friendly']].map(([v, l]) => `<option value="${v}" ${settings.palette === v ? 'selected' : ''}>${l}</option>`).join('')}</select> <small>safer colours plus a dashed edge on danger rings</small></label>
+    <label class="opt"><input type="checkbox" data-a="telegraphSound" ${settings.telegraphSound ? 'checked' : ''}> Sound cue for attacks <small>a short chirp when a boss or trap telegraph starts</small></label>
     <h4>Text &amp; UI size <span id="uiscale-v">${Math.round(settings.uiScale * 100)}%</span></h4>
     <input type="range" min="${RANGES.uiScale[0]}" max="${RANGES.uiScale[1]}" step="0.05" value="${settings.uiScale}" data-a="uiScale">
     <h4>Chat</h4>
@@ -72,7 +77,8 @@ export function initSettingsPanel({ el, settings, save, Q, PRESETS, perf, applyQ
     if (t.dataset.a === 'sens') { settings.sens = +t.value; el.querySelector('#sens-v').textContent = `${settings.sens.toFixed(1)}×`; }
     if (t.dataset.a === 'inv') settings.invertY = t.checked;
     if (t.dataset.a === 'padSens') { settings.padSens = +t.value; el.querySelector('#padsens-v').textContent = `${settings.padSens.toFixed(1)}×`; }
-    for (const k of ['guardToggle', 'wheelToggle', 'reduceMotion', 'highContrast']) if (t.dataset.a === k) settings[k] = t.checked;
+    for (const k of ['guardToggle', 'wheelToggle', 'reduceMotion', 'highContrast', 'telegraphSound']) if (t.dataset.a === k) settings[k] = t.checked;
+    if (t.dataset.a === 'palette') settings.palette = t.value;
     if (t.dataset.a === 'uiScale') { settings.uiScale = +t.value; el.querySelector('#uiscale-v').textContent = `${Math.round(settings.uiScale * 100)}%`; }
     applyAccess(settings);
     if (t.dataset.a === 'bub') { settings.bubbles = t.checked; if (!t.checked) bubbles.clear(); }
