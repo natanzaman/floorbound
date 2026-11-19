@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { F3, GATE3, STAIRWAY3, PHASE_TEXT3, F3_TWISTS, inArena3, inGateZone3, onFloor3, unlocked3 } from '/shared/floor3.js';
 import { createFloor3, makeBolt } from '/floor3world.js';
+import { losReach } from '/shared/arenas.js'; // the Undercroft's great pillars stop the Tempest Beam
 
 // ctx: { scene, occluders, fx, sfx, state, mobs, players, send, banner, callout, floatNum, log, shake, project, isTouch, hallOpen, tip }
 export function initFloor3Client(ctx) {
@@ -259,6 +260,8 @@ export function initFloor3Client(ctx) {
       if (k < 0) { b.warn.material.opacity = 0.2 + 0.25 * (0.5 + 0.5 * Math.sin(now * 16)); const m = mobs.get(b.e.by); if (m) b.g.position.set(m.x, 0, m.z); continue; }
       b.core.visible = b.halo.visible = true; b.warn.visible = false;
       b.g.rotation.y = b.e.a0 + b.e.dir * Math.PI * 2 * Math.min(1, k);
+      const reach = losReach(b.g.position.x, b.g.position.z, b.g.rotation.y, b.e.len); // (cut short by a great pillar)
+      for (const o of [b.core, b.halo]) { o.scale.z = reach / b.e.len; o.position.z = reach / 2; }
       b.halo.material.opacity = 0.3 + Math.random() * 0.2; b.core.scale.x = 0.8 + Math.random() * 0.5;
       if (Math.random() < 0.3) fx.sparks(b.g.position.x + Math.sin(b.g.rotation.y) * b.e.len * Math.random(), 0.6, b.g.position.z + Math.cos(b.g.rotation.y) * b.e.len * Math.random(), 2, 0xdbeafe, 0.18, 4);
       if (k >= 1) { const an = anim(b.e.by); if (an?.wind?.W?.up === 'plant') an.cancelWindup(); for (const o of [b.g, b.rim]) { scene.remove(o); o.traverse(x => { x.geometry?.dispose(); x.material?.dispose(); }); } beams.splice(i, 1); }

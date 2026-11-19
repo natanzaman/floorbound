@@ -5,6 +5,7 @@ import { F2, SOVEREIGN, inArena2, onFloor2, floorOf } from '../floor2.js';
 import { FLOOR_X } from '../floor3.js';
 import { skillReady, pressed, aimNoise, sweepError, quakeError } from '../botskill.js';
 import { brainFor, registerBotHook } from './registry.js';
+import { botStep, botSpeedAt, botCanRoll, arenaEscape } from './arenas.js'; // boss arenas' areas (J2): sludge, fire, cover
 
 export const DT = 0.05; // one snapshot (20 Hz)
 export const d2 = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
@@ -24,8 +25,12 @@ export function moveToward(b, tx, tz, stop = 0.4, speed = PLAYER_SPEED) {
   const dx = tx - b.x, dz = tz - b.z, d = Math.hypot(dx, dz);
   if (d <= stop) return false;
   if (b.airUntil > clock(b)) speed *= JUMP.air; // jumping: air control is a little weaker (shared/data.js airStep)
+  speed *= botSpeedAt(b); // sludge (shared/arenas.js)
   const step = Math.min(d - stop, speed * (b.dt || DT)); // (b.dt: this snapshot's step, 0.1 s at 10 Hz)
   let nx = b.x + (dx / d) * step, nz = b.z + (dz / d) * step;
+  const safe = botStep(b, nx, nz, tx, tz); // round sludge and fire, not into it
+  if (!safe) return false;
+  [nx, nz] = safe;
   [nx, nz] = resolveCollision(nx, nz);
   if (!walkable(nx, nz, !b.gateOpen)) return false;
   b.x = nx; b.z = nz; b.face = Math.atan2(dx, dz);
@@ -41,7 +46,7 @@ function roll(b, dir) {
 // Roll out of danger if the dodge is ready; otherwise just run.
 export function evade(b, tx, tz) {
   if (b.roll) return;
-  if (b.dodgeCd <= 0 && !waveSoon(b, 1.4)) roll(b, Math.atan2(tx - b.x, tz - b.z));
+  if (b.dodgeCd <= 0 && !waveSoon(b, 1.4) && botCanRoll(b)) roll(b, Math.atan2(tx - b.x, tz - b.z)); // (no rolling in sludge)
   else moveToward(b, tx, tz);
 }
 
@@ -137,6 +142,8 @@ function airSteer(b, q) {
 // Point just outside any active telegraph we're standing in (or Floor 2 hazard), or null.
 export function dodgeSpot(b) {
   b.tele = b.tele.filter(t => t.until > b.t);
+  const hz = arenaEscape(b); // standing in sludge or fire (a boss arena's lower area): out first
+  if (hz) return hz;
   if (onFloor2(b.x)) { // homing orbs, mire pools, the Deluge
     for (const [, ox, oz] of b.orbs) {
       const d = d2(b.x, b.z, ox, oz);

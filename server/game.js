@@ -35,6 +35,7 @@ import { installPoses } from './poses.js';
 import { installThreat } from './threat.js'; // visible threat, healer threat, Cover, flanking (G3)
 import { installRevive } from './revive.js'; // downed + revive (G1)
 import { installBossTeam } from './bossteam.js'; // boss team mechanics: stack, spread, tether (G4)
+import { installArenas } from './arenas.js'; // multi-area boss fights: the Colossus's fall to the Undercroft (J2)
 import { installTeamplay } from './teamplay.js'; // skill combos + Team Burst + team stats (G2)
 import { installMvp } from './mvp.js'; // post-fight MVP card (G5)
 import { installLoot } from './loot.js';
@@ -1393,6 +1394,7 @@ installStaging(Game); // staging hooks for the scene director: boss moves, reser
 installBossTeam(Game); // boss team mechanics (server/bossteam.js); after staging: adds meteor / spread / tether to forceBossMove
 installFloor3Moves(Game); // the Storm Colossus's moves in forceBossMove, Floor 3 testing aids (server/floor3.js); after boss team mechanics
 installRevive(Game); // downed + revive (server/revive.js); after staging and boss team mechanics
+installArenas(Game); // multi-area boss fights (server/arenas.js); after revive (pauses bleed-out on landing) and the boss moves ('fall')
 installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js)
 installTeamplay(Game); // skill combos between players, the Team Burst gauge, teamStat() for the post-fight card (server/teamplay.js); after the talents
 installMvp(Game); // the post-fight MVP card from the team stats, downs and deaths; in the fight's tracking row (server/mvp.js); after the team play

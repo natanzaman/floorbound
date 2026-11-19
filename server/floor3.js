@@ -34,6 +34,7 @@ export const F3Methods = {
     }
     this.colossus = this.addMob('colossus', F3.arena.x, F3.arena.z + 4);
     this.f3Init(this.colossus);
+    this.arenaInit?.(); // multi-area boss fights (server/arenas.js): the Eye of the Storm, then the Undercroft
     this.newTwist3();
   },
 
@@ -165,6 +166,7 @@ export const F3Methods = {
     }
     if (m.chan) m.chan.hits++;
     if (m.def.f3boss) {
+      if (this.arenaHidden?.(m)) return 0; // falling / dropping into the Undercroft: out of reach
       if (m.ov && this._tbIn) m.ov.burst = true; // a Team Burst landed during Overload (server/teamplay.js)
       if (t < m.groundedUntil) base *= COLOSSUS.overload.weak; // Grounded after a stopped Overload
       const tw = this.twist3Def();
@@ -334,8 +336,9 @@ export const F3Methods = {
 
   f3Circle(m, x, z, r, wind, amount, kind, src) {
     this.events.push({ t: 'tele', x: r2(x), z: r2(z), r, d: wind, k: kind });
+    const ep = m.ep; // a boss arena's fall clears pending strikes (server/arenas.js)
     this.schedule(wind, () => {
-      if (m.dead) return;
+      if (m.dead || m.ep !== ep) return;
       this.events.push({ t: 'f3fx', k: kind, x: r2(x), z: r2(z), r });
       for (const p of this.players.values()) if (!p.dead && Math.hypot(p.x - x, p.z - z) <= r) this.damagePlayer(p, amount, { ground: true, src, mob: m });
     });
@@ -399,9 +402,11 @@ export const F3Methods = {
     const pick = () => fighters[Math.floor(Math.random() * fighters.length)] || target;
     const free = t >= m.busyUntil && !m.windupAt && !m.ov;
     if (m.ov) return; // channelling Overload: nothing else (updateFloor3 resolves it)
+    const hold = this.arenaHold?.(m) || 0; // the fall to the Undercroft (server/arenas.js): 1 pending (no new team mechanic), 2 running
+    if (hold === 2) return;
 
     // Overload: phase 2+ (phase 1 with Static)
-    if (t >= m.ovT && free && !this.director?.running) { this.startOverload(m, fighters); return; }
+    if (t >= m.ovT && free && !this.director?.running && !hold) { this.startOverload(m, fighters); return; }
     // Tempest Beam (phase 3)
     if (m.phase >= 2 && t >= m.beamT && free) { m.beamT = t + C.beam.every[2]; this.tempestBeam(m); return; }
     // Gale Push: a cone in front, then a shove
@@ -421,11 +426,11 @@ export const F3Methods = {
         this.events.push({ t: 'f3fx', k: 'swoop', id: h.id, x: r2(h.x), z: r2(h.z) });
       }
     }
-    this.bossTeam?.(m, fighters); // team mechanics: shared meteor, spread, tether (server/bossteam.js)
+    if (!hold) this.bossTeam?.(m, fighters); // team mechanics: shared meteor, spread, tether (server/bossteam.js)
   },
 
   lightningStrikes(m, fighters, target) {
-    const t = this.time, S = COLOSSUS.strike, tw = this.twist3Def();
+    const t = this.time, S = COLOSSUS.strike, tw = this.twist3Def(), ep = m.ep;
     const pick = () => fighters[Math.floor(Math.random() * fighters.length)] || target;
     const rndSpot = (rmax = 20) => { const a = Math.random() * Math.PI * 2, d = 3 + Math.random() * (rmax - 3); return [F3.arena.x + Math.sin(a) * d, F3.arena.z + Math.cos(a) * d]; };
     m.strikeT = t + S.every[m.phase];
@@ -436,17 +441,17 @@ export const F3Methods = {
     this.events.push({ t: 'f3fx', k: 'raise', id: m.id, d: S.wind }); // its free hand to the sky
     for (const [x, z] of spots) {
       this.f3Circle(m, x, z, S.r, S.wind, this.f3Atk(m) * S.mult, 'strike', 'colossus lightning');
-      if (tw.chain) this.schedule(tw.chain, () => { if (!m.dead && m.engaged) this.f3Circle(m, x, z, S.r, S.wind * 0.6, this.f3Atk(m) * S.mult * 0.7, 'strike', 'colossus lightning'); });
+      if (tw.chain) this.schedule(tw.chain, () => { if (!m.dead && m.engaged && m.ep === ep) this.f3Circle(m, x, z, S.r, S.wind * 0.6, this.f3Atk(m) * S.mult * 0.7, 'strike', 'colossus lightning'); });
     }
   },
 
   galePush(m, target) {
     const G = COLOSSUS.gust, t = this.time, tw = this.twist3Def();
     m.face = angleTo(m.x, m.z, target.x, target.z); m.busyUntil = t + G.wind + 0.45; m.windupAt = 0;
-    const face = m.face;
+    const face = m.face, ep = m.ep;
     this.events.push({ t: 'f3fx', k: 'gust', id: m.id, x: r2(m.x), z: r2(m.z), f: r2(face), r: G.r, h: G.half, d: G.wind });
     this.schedule(G.wind, () => {
-      if (m.dead || !m.engaged) return;
+      if (m.dead || !m.engaged || m.ep !== ep) return;
       this.events.push({ t: 'f3fx', k: 'gusthit', id: m.id, x: r2(m.x), z: r2(m.z), f: r2(face), r: G.r, h: G.half });
       for (const p of this.players.values()) {
         if (p.dead || !inArena3(p.x, p.z)) continue;
@@ -688,6 +693,7 @@ export const F3Methods = {
         const ap = angleTo(b.x, b.z, p.x, p.z), tol = Math.atan2(B.w + 0.45, d);
         const from = wrapAngle(ap - b.prev) * b.dir, to = (a - b.prev) * b.dir; // how far round the beam must go to reach p, and went
         if (!(from > -tol && from <= to + tol)) continue;
+        if (this.arenaCover?.(b.x, b.z, p)) { if (F3STATS && !b.hit.has(-p.id)) { b.hit.add(-p.id); console.log('[beam] cover'); } continue; } // behind a great pillar (the Undercroft)
         b.hit.add(p.id);
         if (F3STATS) console.log(`[beam] ${t < p.iframeUntil ? 'roll' : t >= p.airFrom && t < p.airUntil ? 'jump' : 'hit'}`);
         this.damagePlayer(p, b.atk, { ground: true, src: 'tempest beam', mob: b.m }); // airborne (jumping) or i-frames dodge it
@@ -718,6 +724,7 @@ export const F3Methods = {
       gr: c && t < c.groundedUntil ? r1(c.groundedUntil - t) : 0, ch: c && t < c.chargedUntil ? r1(c.chargedUntil - t) : 0,
       air, ward, crk, chan, down,
       stair: this.portal3 ? [this.portal3.x, this.portal3.z, r1(this.portal3.until - t)] : 0,
+      ar: this.arenaSnap?.(), // boss arenas' areas (server/arenas.js): which area, the fall's stage, the fire pattern
     };
   },
 };

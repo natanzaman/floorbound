@@ -76,7 +76,8 @@ async function run(i) {
   g.stop(); srv.kill();
   const n = re => (log.match(re) || []).length;
   res.stop = { sw: n(/\[ov\] stop switch/g), burst: n(/\[ov\] stop burst/g), brk: n(/\[ov\] stop break/g) }; res.clap = n(/\[ov\] clap/g);
-  res.beam = { jump: n(/\[beam\] jump/g), roll: n(/\[beam\] roll/g), hit: n(/\[beam\] hit/g) };
+  res.beam = { jump: n(/\[beam\] jump/g), roll: n(/\[beam\] roll/g), hit: n(/\[beam\] hit/g), cover: n(/\[beam\] cover/g) };
+  res.arena = { falls: n(/\[arena\] resume/g), fire: n(/\[arena\] fire hit/g) }; // the fall to the Undercroft (J2), fire ticks taken
   if (/Error|TypeError|ReferenceError/.test(log)) res.err = (log.match(/.*(Error).*/) || [''])[0];
   await sleep(300);
   return res;
@@ -87,12 +88,13 @@ for (let i = 0; i < RUNS; i++) {
   const r = await run(i); out.push(r);
   console.log(`[skill ${SKILL} ${skillName(SKILL)}] run ${r.run}: ${r.result} in ${r.secs}s${r.result !== 'kill' ? ` (boss at ${r.hpLeft ?? '?'}%, phase ${r.phase + 1})` : ''}, ${r.deaths} deaths, ${r.downs} downed, ${r.revives} revived, lowest ${r.minHp ?? '-'}% HP, ${r.taken || 0} taken (twist ${r.twist})`
     + ` · Overload ${r.ov}: stopped ${r.stop.sw} by Switch, ${r.stop.burst} by Team Burst, ${r.stop.brk} solo; ${r.clap} Thunderclaps`
-    + ` · Tempest Beam ${r.beams}: ${r.beam.jump} jumped, ${r.beam.roll} rolled, ${r.beam.hit} hit`
+    + ` · Tempest Beam ${r.beams}: ${r.beam.jump} jumped, ${r.beam.roll} rolled, ${r.beam.cover} in cover, ${r.beam.hit} hit`
+    + ` · Undercroft: ${r.arena.falls ? 'fell' : 'no fall'}, ${r.arena.fire} fire ticks`
     + `${r.causes ? ` · deaths to ${r.causes.join(', ')}` : ''}${r.mech ? ` · team mechanics: stacks ${r.mech.stack.join('/') || '-'} in, spread ${r.mech.spread[0]}/${r.mech.spread[1]} clean, tethers ${r.mech.tether[0]}/${r.mech.tether[1]} snapped` : ''}`
     + ` · combos ${Object.values(r.combos || {}).reduce((a, v) => a + v, 0)} · Team Bursts ${r.bursts?.length || 0}${r.err ? ` · SERVER ERROR: ${r.err}` : ''}`
     + (r.journey ? ` · journey: on Floor 3 after ${r.journey.f3 ?? '-'}s, all at the Storm Gate after ${r.journey.gate ?? '-'}s, ${r.journey.kills || 0} field kills on the way` : ''));
   if (process.env.MVP && r.card) for (const f of r.card.rows) console.log(`    ${f.id === r.card.mvp ? '★' : ' '} ${f.name} (${f.cls}): ${f.titles.map(k => MVP_TITLE[k].name).join(', ') || '-'} · dmg ${f.dmg} heal ${f.heal} tanked ${f.tanked} · mech ${f.mechanic} · down ${f.down} death ${f.death}`);
 }
 const wins = out.filter(r => r.result === 'kill');
-console.log(`[skill ${SKILL} ${skillName(SKILL)}] ${wins.length}/${out.length} kills · avg kill time ${wins.length ? Math.round(wins.reduce((s, r) => s + r.secs, 0) / wins.length) : '-'}s · avg deaths ${(out.reduce((s, r) => s + r.deaths, 0) / out.length).toFixed(1)} · Overloads stopped ${out.reduce((s, r) => s + r.stop.sw + r.stop.burst + r.stop.brk, 0)}/${out.reduce((s, r) => s + r.ov, 0)} · beam hits ${out.reduce((s, r) => s + r.beam.hit, 0)}/${out.reduce((s, r) => s + r.beam.hit + r.beam.jump + r.beam.roll, 0)}`);
+console.log(`[skill ${SKILL} ${skillName(SKILL)}] ${wins.length}/${out.length} kills · avg kill time ${wins.length ? Math.round(wins.reduce((s, r) => s + r.secs, 0) / wins.length) : '-'}s · avg deaths ${(out.reduce((s, r) => s + r.deaths, 0) / out.length).toFixed(1)} · Overloads stopped ${out.reduce((s, r) => s + r.stop.sw + r.stop.burst + r.stop.brk, 0)}/${out.reduce((s, r) => s + r.ov, 0)} · beam hits ${out.reduce((s, r) => s + r.beam.hit, 0)}/${out.reduce((s, r) => s + r.beam.hit + r.beam.jump + r.beam.roll + r.beam.cover, 0)} (${out.reduce((s, r) => s + r.beam.cover, 0)} in cover) · falls ${out.reduce((s, r) => s + r.arena.falls, 0)} · fire ticks ${out.reduce((s, r) => s + r.arena.fire, 0)}`);
 process.exit(0);

@@ -19,6 +19,8 @@ import { MOBS, MOB_IDS, CLASS_IDS, PLAYER_SPEED, SPRINT_SPEED, inGateZone, inAre
 import { WAYSTONES, STAIRWAY, inGateZone2, inArena2, floorOf, floorUnlocked } from '../floor2.js';
 import { FLOOR_BOSS, FLOOR_X, inGateZone3, inArena3 } from '../floor3.js';
 import { beamDodge, overloadTurn } from './floor3.js'; // Floor 3 reflexes: Tempest Beam jumps, Overload Breaks
+import { arenaTurn } from './arenas.js'; // boss arenas' areas (J2): the fall, cover from the beam
+import { applyArenaSnap } from '../arenas.js';
 import { MASTERY, BRANCHES, masteryLevel } from '../mastery.js';
 import { TREES, spendBlock } from '../talents.js';
 import { perceive, potionAt, setSkill, clampSkill } from '../botskill.js';
@@ -122,6 +124,7 @@ function onSnap(b, msg) {
   b.gateOpen = !!gate?.[0];
   b.gateReady = gate?.[2] || 0;
   b.ovOn = !!f3?.ov; b.air = f3?.air || []; // Floor 3: the Colossus's Overload; harpies aloft
+  applyArenaSnap(f3?.ar); // boss arenas: which area (colliders, sludge, fire) (shared/arenas.js; a no-op inside the server)
   b.orbs = f2?.orbs || []; b.pools = f2?.pools || []; b.deluge = !!(f2?.del || f2?.dcall); // (dcall: the Deluge is being called: head in now)
   b.tb = msg.w.tb || null; // Team Burst gauges (server/teamplay.js teamSnap)
   b.players = msg.w.players.map(p => ({ id: p[0], x: p[1], z: p[2], face: p[3], hp: p[4], maxHp: p[5], lvl: p[6], cls: CLASS_IDS[p[7]], party: p[8], dead: !!p[9], style: STYLE_IDS[p[11]] || null }));
@@ -374,6 +377,7 @@ function think(b) {
   social(b, P);
   if (b.dead) { b.goal = 'down'; return; }
   if (downedTurn(b, P)) return; // downed: crawl to help
+  if (arenaTurn(b, moveToward)) return; // a boss arena: frozen through the fall, cover from the Tempest Beam
   if (b.healFocus && (b.healFocus.until < b.t || !P.all.some(p => p.id === b.healFocus.id))) b.healFocus = null;
   const M = decideMode(b, P);
   b.mode = M.mode;

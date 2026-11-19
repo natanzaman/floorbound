@@ -3,6 +3,7 @@
 import { CLASSES, JUMP } from '../data.js';
 import { quakeError } from '../botskill.js';
 import { registerBotHook } from './registry.js';
+import { losBlocked } from '../arenas.js';
 import { d2, useSkill, moveToward } from './motor.js';
 
 const clock = b => (b.clock ? b.clock() : performance.now() / 1000);
@@ -19,6 +20,7 @@ export function beamEta(b, now = clock(b)) {
   for (const m of b.beams || []) {
     const d = d2(b.x, b.z, m.x, m.z);
     if (d > m.len + 0.5) continue;
+    if (losBlocked(m.x, m.z, b.x, b.z)) continue; // behind a great pillar (the Undercroft): it passes us by
     const ap = Math.atan2(b.x - m.x, b.z - m.z), tol = Math.atan2(m.w + 0.45, Math.max(0.5, d));
     const ahead = wrap((ap - m.a0) * m.dir); // how far round the beam must sweep from its start to reach us
     const k = (now - m.start) / m.turn, swept = Math.max(0, k) * Math.PI * 2;

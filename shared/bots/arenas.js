@@ -1,0 +1,111 @@
+// Bots in multi-area boss fights (docs/ROADMAP.md J2, shared/arenas.js): stand still through the fall and the landing,
+// step round sludge and fire (moveToward asks hazardStep), get out of a hazard they're in (dodgeSpot asks arenaEscape),
+// and hide behind a great pillar from the Tempest Beam when they can reach one in time (else they jump it as before).
+// Capability (shared/botskill.js): from 3, sludge is avoided and cover is used; from 4, warning fire is avoided too
+// (below that only burning fire); every level leaves burning fire.
+import { PLAYER_SPEED } from '../data.js';
+import { ARENAS, ARENA_KEYS, arenaState, sludgeAt, fireAt, speedAt, losBlocked, inRoom, areaOf, AREA_COLLIDERS } from '../arenas.js';
+import { beamEta } from './floor3.js';
+
+const clock = b => (b.clock ? b.clock() : performance.now() / 1000);
+const skillOf = b => b?.skill ?? 5;
+
+/** Is (x, z) a hazard this capability level avoids? */
+export function hazardAt(x, z, skill = 5) {
+  const f = fireAt(x, z, 0.45);
+  if (f >= (skill >= 4 ? 1 : 2)) return true;
+  return skill >= 3 && !!sludgeAt(x, z, 0.25);
+}
+
+/** A step of length `step` from (x0, z0) toward (tx, tz) that doesn't walk into a hazard (turning up to ~120°), or null. */
+export function hazardStep(x0, z0, tx, tz, step, skill = 5) {
+  const a = Math.atan2(tx - x0, tz - z0);
+  for (const off of [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2.1, -2.1]) {
+    const x = x0 + Math.sin(a + off) * step, z = z0 + Math.cos(a + off) * step;
+    if (!hazardAt(x, z, skill)) return [x, z];
+  }
+  return null;
+}
+
+/** The bot's movement speed factor here (sludge), and whether it may roll. */
+export const botSpeedAt = b => (AREA_COLLIDERS.length ? speedAt(b.x, b.z) : 1);
+export const botCanRoll = b => !AREA_COLLIDERS.length || !sludgeAt(b.x, b.z);
+/** moveToward's hook: the next step, steered round hazards (null: no safe step). */
+export function botStep(b, nx, nz, tx, tz) {
+  if (!AREA_COLLIDERS.length) return [nx, nz];
+  const sk = skillOf(b);
+  if (!hazardAt(nx, nz, sk) || hazardAt(b.x, b.z, sk)) return [nx, nz]; // (already in one: any way out will do)
+  return hazardStep(b.x, b.z, tx, tz, Math.hypot(nx - b.x, nz - b.z), sk);
+}
+
+/** A spot out of the hazard the bot stands in (for dodgeSpot), or null. */
+export function arenaEscape(b) {
+  if (!AREA_COLLIDERS.length) return null;
+  const sk = skillOf(b);
+  if (!hazardAt(b.x, b.z, sk)) return null;
+  for (const k of ARENA_KEYS) {
+    const a = areaOf(k), L = arenaState(k);
+    if (!a || !inRoom(ARENAS[k], b.x, b.z, 2)) continue;
+    const blobs = [...(L.fk ? a.fire.spots[L.fi % a.fire.spots.length] : []), ...(sk >= 3 ? a.pools || [] : [])];
+    const here = blobs.filter(o => Math.hypot(b.x - o.x, b.z - o.z) < o.r + 0.5);
+    if (!here.length) continue;
+    const o = here[0], d = Math.hypot(b.x - o.x, b.z - o.z), base = d > 0.1 ? Math.atan2(b.x - o.x, b.z - o.z) : Math.random() * 6.28;
+    for (const off of [0, 0.6, -0.6, 1.2, -1.2, 1.9, -1.9, Math.PI]) {
+      const x = o.x + Math.sin(base + off) * (o.r + 1.4), z = o.z + Math.cos(base + off) * (o.r + 1.4);
+      if (!hazardAt(x, z, sk) && inRoom(ARENAS[k], x, z, -1.5)) return [x, z];
+    }
+    return [o.x + Math.sin(base) * (o.r + 1.4), o.z + Math.cos(base) * (o.r + 1.4)];
+  }
+  return null;
+}
+
+/** The cover spot behind a line-of-sight pillar from a beam at (bx, bz) nearest to (px, pz), or null. */
+export function coverSpot(bx, bz, px, pz, skill = 5) {
+  let best = null, bd = 1e9;
+  for (const o of AREA_COLLIDERS) {
+    if (!o.los || o.kind !== 'pillar') continue;
+    const d = Math.hypot(o.x - bx, o.z - bz);
+    if (d < 1) continue;
+    const ux = (o.x - bx) / d, uz = (o.z - bz) / d, x = o.x + ux * (o.r + 1.1), z = o.z + uz * (o.r + 1.1);
+    if (!losBlocked(bx, bz, x, z) || hazardAt(x, z, skill) || AREA_COLLIDERS.some(c => c !== o && Math.hypot(x - c.x, z - c.z) < c.r + 0.6)) continue;
+    const dd = Math.hypot(x - px, z - pz);
+    if (dd < bd) { bd = dd; best = [x, z]; }
+  }
+  return best;
+}
+
+// One bot turn in a boss arena. True when it took the turn (the brain does nothing else this snapshot).
+export function arenaTurn(b, moveToward) {
+  for (const k of ARENA_KEYS) {
+    const L = arenaState(k);
+    if (!inRoom(ARENAS[k], b.x, b.z, 2)) continue;
+    if (L.stage === 3 || L.stage === 4) { // falling, landing: frozen (the server ignores us anyway)
+      b.roll = null; b.tele = []; b.beams = []; b.sweep = null; b.coverAt = null;
+      b.goal = 'Landing';
+      return true;
+    }
+    if (L.area && b.beams?.length) return coverTurn(b, moveToward);
+  }
+  return false;
+}
+
+// The Tempest Beam in an area with great pillars: get behind one if we can make it before the beam reaches us.
+function coverTurn(b, moveToward) {
+  const now = clock(b);
+  const live = b.beams.filter(m => now < m.start + m.turn + 0.2);
+  if (!live.length) { b.coverAt = null; return false; }
+  const m = live[0];
+  if (losBlocked(m.x, m.z, b.x, b.z)) { b.goal = 'In cover from the beam'; return true; } // stay put until it's done
+  const sk = skillOf(b);
+  if (sk < 3) return false;
+  const e = beamEta(b, now);
+  if (!e) return false;
+  const spot = b.coverAt?.m === m ? b.coverAt.spot : coverSpot(m.x, m.z, b.x, b.z, sk);
+  if (!spot) return false;
+  const secs = Math.hypot(spot[0] - b.x, spot[1] - b.z) / (PLAYER_SPEED * Math.max(0.45, botSpeedAt(b)));
+  if (secs + 0.3 > e.tIn && b.coverAt?.m !== m) return false; // too far: jump it instead
+  b.coverAt = { m, spot };
+  b.goal = 'Taking cover from the beam';
+  moveToward(b, spot[0], spot[1], 0.15);
+  return true;
+}
