@@ -2,7 +2,8 @@
 // Floor 2 lives in the same coordinate space as Floor 1, 600 units east (everything with x > F2.split is Floor 2).
 // Its layout mirrors Floor 1's skeleton (camp in the south, field, corridor + raid gate at z≈161, boss court at z≈190),
 // so z-based heuristics (gate, boss bar, music) work on both floors.
-// This module must not import shared/data.js (data.js imports it).
+// This module must not import shared/data.js (data.js imports it). Floor 3 (x > 900) is shared/floor3.js.
+import { F3, WAYSTONE3, unlocked3 } from './floor3.js';
 
 export const F2 = {
   x: 600, split: 300,
@@ -12,8 +13,8 @@ export const F2 = {
   camp: { x: 600, z: 0, r: 18 },
 };
 
-export const onFloor2 = x => x > F2.split;
-export const floorOf = x => (x > F2.split ? 2 : 1);
+export const onFloor2 = x => x > F2.split && x <= F3.split;
+export const floorOf = x => (x > F3.split ? 3 : x > F2.split ? 2 : 1);
 export const inCamp2 = (x, z, pad = 0) => Math.hypot(x - F2.camp.x, z - F2.camp.z) < F2.camp.r + pad;
 export const inArena2 = (x, z) => Math.hypot(x - F2.arena.x, z - F2.arena.z) < F2.arena.r;
 
@@ -43,14 +44,16 @@ export function areaName2(x, z) {
 export const WAYSTONES = [
   { floor: 1, x: 0, z: -11, r: 1.4, name: 'Town of Beginnings' },
   { floor: 2, x: 600, z: -9, r: 1.4, name: 'Mirelight Camp' },
+  WAYSTONE3, // Floor 3: Windbreak Camp
 ];
 export const WAYSTONE_USE = 3.2; // how close you need to stand
 export const nearWaystone = (x, z) => WAYSTONES.find(w => Math.hypot(x - w.x, z - w.z) < WAYSTONE_USE);
 // The Stairway: a portal that appears in the Warden's chamber for a while after a kill.
 export const STAIRWAY = { x: 0, z: 207, r: 2.2, use: 3.6, secs: 60 };
 
-// Floor 2 unlocks once a character has helped kill the Horned Warden (stats.wardenKills), or via the floor2 flag.
-export const floorUnlocked = (stats, f) => f <= 1 || (f === 2 && ((stats?.wardenKills || 0) > 0 || (stats?.floor2 || 0) > 0));
+// Floor 2 unlocks once a character has helped kill the Horned Warden (stats.wardenKills), or via the floor2 flag;
+// Floor 3 once they've helped kill the Drowned Sovereign (or the floor3 flag).
+export const floorUnlocked = (stats, f) => f <= 1 || (f === 2 && ((stats?.wardenKills || 0) > 0 || (stats?.floor2 || 0) > 0)) || (f === 3 && unlocked3(stats));
 
 function rng(seed) {
   return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };

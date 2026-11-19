@@ -12,6 +12,7 @@ export const BOSSTEAM = {
   // draws from (in turn, from a random start).
   warden: { every: [26, 22, 18], first: 16, moves: [['meteor', 'spread'], ['meteor', 'spread', 'tether'], ['meteor', 'spread', 'tether']] },
   sovereign: { every: [26, 22, 18], first: 14, moves: [['meteor', 'spread'], ['meteor', 'spread', 'tether'], ['meteor', 'spread', 'tether']] },
+  colossus: { every: [28, 26, 22], first: 18, moves: [['meteor', 'spread'], ['meteor', 'spread', 'tether'], ['spread', 'tether']] }, // Floor 3
   // Shared meteor: a golden circle follows one fighter; when it lands, `total` (× each victim's max HP) is split between
   // everyone inside: per person = total / n^split (1 alone: near-lethal; 2: ~37%; 3: ~22%; 4: ~15%).
   // Rolling and jumping don't dodge it: stand in it together.

@@ -8,6 +8,7 @@
 // Bots' own rows are kept out of play tracking by BotManager (except deaths, recorded as 'bot_death').
 import { inArena, areaName } from '../shared/data.js';
 import { inArena2, floorOf } from '../shared/floor2.js';
+import { inArena3 } from '../shared/floor3.js';
 import { defaultStyle } from '../shared/styles.js';
 
 const who = p => ({ bot: !!p.bot, cls: p.cls, key: p.charId ? `c${p.charId}` : `s${p.sid}`, lvl: p.lvl });
@@ -16,6 +17,7 @@ const TrackMethods = {
   activeFightOf(p) {
     if (this.fight && this.boss && (this.fight.ids.has(p.id) || inArena(p.x, p.z))) return [1, this.fight, this.boss];
     if (this.fight2 && this.sovereign && (this.fight2.ids.has(p.id) || inArena2(p.x, p.z))) return [2, this.fight2, this.sovereign];
+    if (this.fight3 && this.colossus && (this.fight3.ids.has(p.id) || inArena3(p.x, p.z))) return [3, this.fight3, this.colossus];
     return null;
   },
   fightCtx(p) {
@@ -23,7 +25,7 @@ const TrackMethods = {
     if (!a) return {};
     const [boss, f, m] = a;
     if (p.bot) f.bd = (f.bd || 0) + 1; else f.hd = (f.hd || 0) + 1;
-    return { boss, phase: m.phase | 0, ...(boss === 1 && this.twist ? { twist: this.twist.id } : {}) };
+    return { boss, phase: m.phase | 0, ...(boss === 1 && this.twist ? { twist: this.twist.id } : boss === 3 && this.twist3 ? { twist: this.twist3.id } : {}) };
   },
   quitCtx(p) { return p.quitAt || this.quitNow(p); },
   quitNow(p) {
@@ -41,7 +43,7 @@ const TrackMethods = {
     const mvp = this.mvpCompact?.(f);
     this.track(null, 'fight', {
       floor, result, secs: Math.round(this.time - f.start), phase: m.phase | 0, hpLeft: result === 'wipe' ? Math.round((m.hp / m.maxHp) * 100) : 0,
-      ...(floor === 1 && this.twist ? { twist: this.twist.id } : {}),
+      ...(floor === 1 && this.twist ? { twist: this.twist.id } : floor === 3 && this.twist3 ? { twist: this.twist3.id } : {}),
       humans: hum.length, bots: bots.length, deaths: f.hd || 0, botDeaths: f.bd || 0,
       party: hum.map(x => x.key).sort(), cls: hum.map(x => x.cls).sort(), botCls: bots.map(x => x.cls).sort(),
       lvl: hum.length ? Math.round(hum.reduce((s, x) => s + x.lvl, 0) / hum.length) : Math.round(bots.reduce((s, x) => s + x.lvl, 0) / (bots.length || 1)),
@@ -55,7 +57,7 @@ export function installTracking(Game) {
   const P = Game.prototype;
   const rm = P.removePlayer; // removePlayer leaves the party before session_end: note the party first
   P.removePlayer = function (p, ...a) { try { p.quitAt = this.quitNow(p); } catch {} return rm.call(this, p, ...a); };
-  for (const [floor, start, end, field] of [[1, 'startFight', 'endFight', 'fight'], [2, 'startFight2', 'endFight2', 'fight2']]) {
+  for (const [floor, start, end, field] of [[1, 'startFight', 'endFight', 'fight'], [2, 'startFight2', 'endFight2', 'fight2'], [3, 'startFight3', 'endFight3', 'fight3']]) {
     const s = P[start], e = P[end];
     if (!s || !e) continue;
     P[start] = function (...a) { const r = s.apply(this, a); this.trackFightStart(this[field]); return r; };

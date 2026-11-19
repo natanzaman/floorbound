@@ -17,6 +17,8 @@ import { MATS, MAT_IDS } from '/shared/crafting.js';
 import { initCombat } from '/combat.js';
 import { F2, inGateZone2, inArena2, onFloor2, floorOf, WAYSTONES } from '/shared/floor2.js';
 import { initFloor2Client } from '/floor2client.js';
+import { initFloor3Client } from '/floor3client.js';
+import { inArena3, inGateZone3, onFloor3 } from '/shared/floor3.js';
 import { initMastery } from '/mastery.js';
 import { initClassesB } from '/classes-b.js';
 import { initClassesA } from '/classes-a.js';
@@ -76,6 +78,12 @@ const cine = initCine({ camera, state, players, mobs, slowMotion: (a, b) => slow
 // Floor 2 — The Glimmering Mire (floor2client.js): world, waystones, Stairway, hazards and its events.
 const f2 = initFloor2Client({
   scene, sun, occluders, fx, sfx, state, mobs, players, isTouch,
+  send: o => send(o), banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a),
+  log: (a, b) => log(a, b), shake: a => shake(a), project: (x, y, z) => project(x, y, z), hallOpen: () => !$('hall').classList.contains('hidden'),
+});
+// Floor 3 — The Gale Spires (floor3client.js): world, the Storm Gate, the Stairway from the Sunken Court, the Colossus's mechanics.
+const f3 = initFloor3Client({
+  scene, occluders, fx, sfx, state, mobs, players, isTouch, tip: id => guide.tip(id),
   send: o => send(o), banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a),
   log: (a, b) => log(a, b), shake: a => shake(a), project: (x, y, z) => project(x, y, z), hallOpen: () => !$('hall').classList.contains('hidden'),
 });
@@ -337,6 +345,7 @@ function onSnapshot({ me, w }) {
   if (w.gi) ground.set(w.gi);
   if (w.gate) { state.gate = w.gate; state.gateOpen = !!w.gate[0]; gateMesh.set(state.gateOpen); }
   if (w.f2) f2.snap(w.f2); // on Floor 2, state.gate/gateOpen become Floor 2's gate
+  if (w.f3) f3.snap(w.f3); // likewise Floor 3's Storm Gate
   state.phase = w.phase || 0;
   twists.snap(w);
   threat.snap(w, me); // boss / elite targets, my threat meter, Cover cooldown
@@ -378,6 +387,7 @@ function handleEvent(e) {
   const me = state.myId;
   if (e.t === 'cine' && (e.op === 'reset' || (e.op === 'fade' && e.to === 'black'))) sfx.hush(); // no voice-over under black or after a stop
   if (cine.event(e)) return; // shots, titles, fades, letterbox, clean feed, light
+  if (f3.onEvent(e)) return; // Floor 3 (floor3client.js)
   f2.onEvent(e);
   if (bell.event(e)) return; // the Tower Bell
   if (bossTeam.event(e)) return; // boss team mechanics (stack / spread / tether)
@@ -620,6 +630,7 @@ function handleEvent(e) {
     }
     case 'clear': sfx.play('clear'); banner('FLOOR 1 CLEARED', e.names.join(' · ')); if (inArena(state.x, state.z)) guide.did('boss'); break;
     case 'clear2': if (inArena2(state.x, state.z)) guide.did('boss'); break; // banner/sound in floor2client.js
+    case 'clear3': if (inArena3(state.x, state.z)) guide.did('boss'); break; // banner/sound in floor3client.js
     case 'forge': smith.onForge(e); break;
     case 'loot': {
       if (e.to !== me) break;
@@ -1123,8 +1134,8 @@ function interactKind() {
   if (smith.near()) return 'smith';
   if (mastery.near()) return 'shrine'; // Skill Shrine (public/mastery.js)
   if (ground.near()) return 'pickup';
-  if (!state.gateOpen && (inGateZone(state.x, state.z) || inGateZone2(state.x, state.z))) return 'gate';
-  return f2.interactKind(); // waystones and the Stairway
+  if (!state.gateOpen && (inGateZone(state.x, state.z) || inGateZone2(state.x, state.z) || inGateZone3(state.x, state.z))) return 'gate';
+  return f3.interactKind() || f2.interactKind(); // waystones and the Stairways
 
 }
 function interact() {
@@ -1135,7 +1146,7 @@ function interact() {
   else if (k === 'shrine') talents.toggle();
   else if (k === 'pickup') { send({ type: 'pickup', id: ground.near() }); }
   else if (k === 'gate') { send({ type: 'ready' }); sfx.play('ui'); state.meReady = state.meReady ? 0 : 1; updateGateBox(true); }
-  else f2.interact(k);
+  else if (!f3.interact(k)) f2.interact(k);
 }
 
 // ---------------- titles & Hall of Clearers ----------------
@@ -1290,17 +1301,17 @@ let gateKey = '';
 function updateGateBox(force) {
   const el = $('gatebox');
   const [open, waiting, ready, count] = state.gate;
-  const show = !state.spectator && !state.dead && !open && (inGateZone(state.x, state.z) || inGateZone2(state.x, state.z));
+  const show = !state.spectator && !state.dead && !open && (inGateZone(state.x, state.z) || inGateZone2(state.x, state.z) || inGateZone3(state.x, state.z));
   const key = `${show}|${waiting}|${ready}|${Math.ceil(count)}|${state.meReady}`;
   if (key === gateKey && !force) return;
   gateKey = key;
   el.classList.toggle('hidden', !show);
   if (!show) return;
-  const gate2 = onFloor2(state.x);
-  el.innerHTML = `<b>${gate2 ? 'THE SUNKEN GATE' : 'RAID GATE'}</b><div class="sub">${f2.gateText()} · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}</div>`
+  const gate2 = onFloor2(state.x) || onFloor3(state.x);
+  el.innerHTML = `<b>${onFloor3(state.x) ? 'THE STORM GATE' : gate2 ? 'THE SUNKEN GATE' : 'RAID GATE'}</b><div class="sub">${onFloor3(state.x) ? f3.gateText() : f2.gateText()} · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}</div>`
     + (count > 0 ? `<div class="count">${Math.ceil(count)}</div>` : '')
     + `<button class="${state.meReady ? 'on' : ''}">${state.meReady ? 'Ready ✓' : `Ready${isTouch ? '' : ' (F)'}`}</button>`;
-  twists.gateBox(el, gate2); // the twist of the boss behind this gate (the Warden's, or the Sovereign's on Floor 2)
+  if (!onFloor3(state.x)) twists.gateBox(el, onFloor2(state.x)); // the twist of the boss behind this gate (the Warden's, or the Sovereign's on Floor 2)
   el.querySelector('button').onclick = interact;
 }
 
@@ -1381,7 +1392,7 @@ function renderPlayers() {
     const p = players.get(id);
     const inParty = state.party && p?.party === state.party;
     const lfgTag = (p?.buffs || 0) & 4 ? '<span class="tag">LFG</span>' : '';
-    const floorTag = p && onFloor2(p.tx ?? p.x) ? '<span class="tag f2">F2</span>' : '';
+    const pf = p ? floorOf(p.tx ?? p.x) : 1, floorTag = pf > 1 ? `<span class="tag f2">F${pf}</span>` : '';
     rows.push(`<div class="p"><span>${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}</div>`);
   }
   const meE = players.get(state.myId), seeking = !!((meE?.buffs || 0) & 4);
@@ -1446,8 +1457,8 @@ function updateHud(now) {
   if (partyHtml !== hudParty) { hudParty = partyHtml; $('party').innerHTML = partyHtml; }
 
   // boss bar (the boss of the floor you're on)
-  const onF2 = state.x > F2.split;
-  if (!boss || !!boss.def.f2 !== onF2) boss = [...mobs.values()].find(m => m.def?.boss && !!m.def.f2 === onF2 && !m.dying) || null;
+  const onF2 = onFloor2(state.x), onF3 = onFloor3(state.x), bossOf = m => !!m.def?.f2 === onF2 && !!m.def?.f3 === onF3; // the boss of your floor
+  if (!boss || !bossOf(boss)) boss = [...mobs.values()].find(m => m.def?.boss && bossOf(m) && !m.dying) || null;
   const showBoss = boss && (boss.engaged || boss.hp < boss.maxHp) && state.z > 120;
   $('boss').classList.toggle('hidden', !showBoss);
   if (showBoss) {
@@ -1455,8 +1466,8 @@ function updateHud(now) {
     const bn = $('boss').querySelector('.boss-name'); if (bn.textContent !== boss.def.name) bn.textContent = boss.def.name;
     combat.bossBar(boss);
     threat.bossBar(boss); // who it's after, my threat meter
-    $('boss-phase').textContent = onF2 ? f2.phaseText() : ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '';
-    twists.bossLine($('boss-phase'), onF2);
+    $('boss-phase').textContent = onF3 ? f3.phaseText() : onF2 ? f2.phaseText() : ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '';
+    if (!onF3) twists.bossLine($('boss-phase'), onF2); // the Warden's twist, or the Sovereign's on Floor 2
   }
 
   // items, raid gate, merchant, guide
@@ -1467,7 +1478,7 @@ function updateHud(now) {
   if (near !== state.wasNear) { state.wasNear = near; if (!near) state.shopOpen = false; renderBag(); }
   if (loot.canSwap() !== state.wasTown) { state.wasTown = loot.canSwap(); renderBag(); } // loadout swaps: town only
   if (!state.dead && state.hp / state.maxHp < 0.35 && state.hp > 0) guide.tip('lowhp');
-  if (inArena(state.x, state.z) || inArena2(state.x, state.z)) guide.did('gate');
+  if (inArena(state.x, state.z) || inArena2(state.x, state.z) || inArena3(state.x, state.z)) guide.did('gate');
 
   // cooldowns
   for (const btn of $('skills').children) {
@@ -1489,7 +1500,7 @@ function updateHud(now) {
   }
 
   const fightingBoss = boss && (boss.engaged || boss.hp < boss.maxHp) && state.z > 150;
-  sfx.setMood(inTown(state.x, state.z) ? 'town' : fightingBoss ? 'boss' : state.x > F2.split ? 'mire' : 'field');
+  sfx.setMood(inTown(state.x, state.z) ? 'town' : fightingBoss ? 'boss' : onFloor2(state.x) ? 'mire' : 'field');
   const a = areaName(state.x, state.z);
   if (a !== state.area) { state.area = a; showArea(a + (inTown(state.x, state.z) ? ' — Safe Zone' : '')); }
 }
@@ -1904,6 +1915,7 @@ function frame(now) {
   crystal.rotation.y += vdt;
   gateMesh.update(vdt);
   f2.update(vdt);
+  f3.update(vdt);
   if (merchantNpc?.anim) merchantNpc.anim.update(vdt);
   smith.frame(vdt);
   ground.frame(vdt, isTouch);
@@ -1940,7 +1952,7 @@ function frame(now) {
     camera.lookAt(0, 2, 30);
   }
   sun.position.set(cx + 30, 60, cz - 20); sun.target.position.set(cx, 0, cz);
-  floor1.visible = !onFloor2(cx); // Floor 1's town, field, chamber and skyline (incl. the tower spire) aren't drawn from Floor 2
+  floor1.visible = floorOf(cx) === 1; // Floor 1's town, field, chamber and skyline (incl. the tower spire) aren't drawn from Floors 2 and 3
   if (state.joined) treeFader.update(dt, camera.position, cx, cz);
   twists.frame(vdt, cx, cz); // Eclipse darkness
   sfx.listener.x = cx; sfx.listener.z = cz;

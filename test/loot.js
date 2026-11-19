@@ -371,7 +371,7 @@ const sysTo = p => g.events.filter(e => e.t === 'sys' && e.to === p.id).map(e =>
 
 // ---------- the admin "Maxed" set and role-fit affixes ----------
 {
-  assert.equal(bestSetFor('swordsman'), 'hornbound'); assert.equal(bestSetFor('guardian'), 'hornbound');
+  assert.equal(bestSetFor('swordsman'), 'stormforged'); assert.equal(bestSetFor('guardian'), 'stormforged'); // the highest floor's set that fits (Floor 3)
   assert.equal(bestSetFor('cleric'), 'tidebound'); assert.equal(bestSetFor('bard'), 'tidebound');
   const w = makeSetPiece('hornbound', 'weapon', 'swordsman', () => 0.5, 'dual');
   assert.equal(w.style, 'dual'); assert.equal(w.set, 'hornbound');
