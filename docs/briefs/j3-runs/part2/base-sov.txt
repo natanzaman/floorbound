@@ -1,0 +1,9 @@
+[skill 5 Perfect Sovereign] run 1: kill in 138s, 0 deaths, 0 downed, 0 revived (twist hightide) · Tidal Waves: 29 rolled, 3 hit · geyser hits 2 · deluge ticks 18 · team mechanics: stacks 1 in, spread 4/4 clean, tethers 2/2 snapped · traps: 1 timeout · Covers 0 (0 hits taken), Pincer tags 91 · combos execute 9, sanctified 6 · Team Bursts 4 (joiners 3/3/3/3) · threat: tank held it 94% · 14 locks, DPS at lock end 71% of L (39–102), healer 61%
+    guardian/shield dmg 6803 (49.3/s) basic 153
+    swordsman/sword dmg 9442 (68.4/s) basic 67
+    cleric/staff dmg 4550 (33.0/s) basic 146
+[skill 5 Perfect Sovereign] run 2: kill in 152s, 1 deaths, 1 downed, 0 revived (twist brackish) · Tidal Waves: 20 rolled, 3 hit · geyser hits 5 · deluge ticks 7 · deaths to tidal wave · team mechanics: stacks 3/3 in, spread 2/2 clean, tethers 1/1 snapped · traps: 1 freed, 1 timeout · Covers 1 (0 hits taken), Pincer tags 92 · combos execute 7, sanctified 5 · Team Bursts 4 (joiners 3/3/3/2) · threat: tank held it 89% · 12 locks, DPS at lock end 69% of L (48–116), healer 59%
+    guardian/shield dmg 7953 (52.2/s) basic 177
+    swordsman/sword dmg 9226 (60.5/s) basic 72
+    cleric/staff dmg 3916 (25.7/s) basic 137
+[skill 5 Perfect Sovereign] 2/2 kills · avg kill time 145s · avg deaths 0.5 · avg revives 0.0 (of 0.5 downs) · Tidal Waves rolled 49, hit 6 · combos/fight 13.5 · bursts/fight 4.0 · tank share 92% · DPS at lock end avg 70% (median 70, 12% in 75–85) over 26 locks

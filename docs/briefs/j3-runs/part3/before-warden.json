@@ -1,0 +1,1078 @@
+[
+ {
+  "boss": "warden",
+  "party": 3,
+  "skill": 3,
+  "knobs": {},
+  "label": "3p s3",
+  "rs": [
+   {
+    "run": 1,
+    "result": "kill",
+    "secs": 87,
+    "deaths": 0,
+    "downs": 1,
+    "revives": 1,
+    "twist": "twinhorns",
+    "team": {
+     "cover": 0,
+     "covered": 0,
+     "pincer": 48
+    },
+    "combos": {
+     "execute": 6,
+     "sanctified": 2
+    },
+    "traps": {
+     "freed": 1
+    },
+    "mech": {
+     "stack": [],
+     "spread": [
+      0,
+      2
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     2
+    ],
+    "threat": {
+     "share": 93,
+     "locks": 7,
+     "dps": [
+      59,
+      106,
+      99,
+      52,
+      16,
+      27,
+      58
+     ],
+     "heal": [
+      0,
+      19,
+      35,
+      45,
+      50,
+      56,
+      58
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 1886,
+      "swordsman": 3380,
+      "cleric": 796
+     },
+     "downs": {
+      "swordsman": 1
+     },
+     "deaths": {},
+     "open": {
+      "n": 4,
+      "secs": 10,
+      "slices": 20,
+      "used": 11,
+      "hits": 16
+     },
+     "uses": {
+      "swing": 4,
+      "slam": 7,
+      "charge": 12,
+      "quake": 5,
+      "sweep": 1,
+      "rock": 4,
+      "spin": 2
+     },
+     "hits": {
+      "warden cleave": 4,
+      "warden quake": 11,
+      "thornbind": 5,
+      "warden charge": 2,
+      "hound bite": 3,
+      "spread": 2,
+      "warden slam": 1
+     }
+    },
+    "quake": {
+     "jump": 20,
+     "roll": 1,
+     "hit": 13
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   },
+   {
+    "run": 2,
+    "result": "wipe",
+    "secs": 105,
+    "deaths": 3,
+    "downs": 6,
+    "revives": 3,
+    "twist": "packmaster",
+    "team": {
+     "cover": 3,
+     "covered": 0,
+     "pincer": 41
+    },
+    "combos": {
+     "execute": 2
+    },
+    "mech": {
+     "stack": [
+      3
+     ],
+     "spread": [
+      0,
+      2
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     2
+    ],
+    "traps": {
+     "freed": 1
+    },
+    "causes": [
+     "warden quake",
+     "spread",
+     "warden quake"
+    ],
+    "hpLeft": 100,
+    "threat": {
+     "share": 74,
+     "locks": 6,
+     "dps": [
+      111,
+      50,
+      50,
+      86
+     ],
+     "heal": [
+      37,
+      37,
+      53,
+      54,
+      2
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 1804,
+      "cleric": 585,
+      "swordsman": 2839
+     },
+     "downs": {
+      "guardian": 1,
+      "swordsman": 2,
+      "cleric": 3
+     },
+     "deaths": {
+      "swordsman": 1,
+      "cleric": 2
+     },
+     "open": {
+      "n": 6,
+      "secs": 15.5,
+      "slices": 31,
+      "used": 10,
+      "hits": 15
+     },
+     "uses": {
+      "swing": 6,
+      "slam": 12,
+      "quake": 9,
+      "sweep": 1,
+      "charge": 3,
+      "rock": 6,
+      "spin": 4
+     },
+     "hits": {
+      "warden cleave": 6,
+      "hound bite": 42,
+      "warden slam": 2,
+      "warden quake": 18,
+      "meteor": 3,
+      "warden sweep": 1,
+      "thornbind": 7,
+      "rockfall": 1,
+      "spread": 2,
+      "warden spin": 1,
+      "tether": 2
+     }
+    },
+    "quake": {
+     "jump": 21,
+     "roll": 3,
+     "hit": 19
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   }
+  ]
+ },
+ {
+  "boss": "warden",
+  "party": 3,
+  "skill": 5,
+  "knobs": {},
+  "label": "3p s5",
+  "rs": [
+   {
+    "run": 1,
+    "result": "kill",
+    "secs": 105,
+    "deaths": 0,
+    "downs": 0,
+    "revives": 0,
+    "twist": "twinhorns",
+    "combos": {
+     "execute": 6,
+     "sanctified": 2
+    },
+    "team": {
+     "cover": 0,
+     "covered": 0,
+     "pincer": 42
+    },
+    "mech": {
+     "stack": [
+      2
+     ],
+     "spread": [
+      2,
+      2
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     3
+    ],
+    "traps": {
+     "freed": 1
+    },
+    "threat": {
+     "share": 96,
+     "locks": 10,
+     "dps": [
+      91,
+      85,
+      70,
+      61,
+      70,
+      52,
+      55,
+      50,
+      50,
+      91
+     ],
+     "heal": [
+      67,
+      52,
+      44,
+      43,
+      59,
+      51,
+      51,
+      53,
+      50,
+      62
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 1747,
+      "cleric": 931,
+      "swordsman": 3461
+     },
+     "downs": {},
+     "deaths": {},
+     "open": {
+      "n": 4,
+      "secs": 11,
+      "slices": 22,
+      "used": 17,
+      "hits": 26
+     },
+     "uses": {
+      "swing": 2,
+      "slam": 11,
+      "charge": 11,
+      "quake": 7,
+      "sweep": 1,
+      "rock": 5,
+      "spin": 3
+     },
+     "hits": {
+      "warden cleave": 2,
+      "spread": 2,
+      "hound bite": 18,
+      "tether": 4,
+      "meteor": 2,
+      "thornbind": 8
+     }
+    },
+    "quake": {
+     "jump": 45,
+     "roll": 0,
+     "hit": 0
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   },
+   {
+    "run": 2,
+    "result": "kill",
+    "secs": 70,
+    "deaths": 0,
+    "downs": 0,
+    "revives": 0,
+    "twist": "packmaster",
+    "combos": {
+     "execute": 4,
+     "sanctified": 2
+    },
+    "team": {
+     "cover": 0,
+     "covered": 0,
+     "pincer": 53
+    },
+    "traps": {
+     "freed": 1
+    },
+    "bursts": [
+     3
+    ],
+    "mech": {
+     "stack": [],
+     "spread": [
+      2,
+      2
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "threat": {
+     "share": 100,
+     "locks": 7,
+     "dps": [
+      93,
+      71,
+      56,
+      78,
+      57,
+      69,
+      57
+     ],
+     "heal": [
+      67,
+      61,
+      54,
+      60,
+      64,
+      60,
+      59
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 1970,
+      "cleric": 1196,
+      "swordsman": 2972
+     },
+     "downs": {},
+     "deaths": {},
+     "open": {
+      "n": 4,
+      "secs": 10.5,
+      "slices": 21,
+      "used": 14,
+      "hits": 26
+     },
+     "uses": {
+      "swing": 4,
+      "slam": 7,
+      "quake": 6,
+      "sweep": 1,
+      "charge": 2,
+      "spin": 2,
+      "rock": 3
+     },
+     "hits": {
+      "warden cleave": 3,
+      "hound bite": 19,
+      "warden quake": 3,
+      "thornbind": 5,
+      "spread": 2
+     }
+    },
+    "quake": {
+     "jump": 39,
+     "roll": 0,
+     "hit": 3
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   }
+  ]
+ },
+ {
+  "boss": "warden",
+  "party": 6,
+  "skill": 3,
+  "knobs": {},
+  "label": "6p s3",
+  "rs": [
+   {
+    "run": 1,
+    "result": "kill",
+    "secs": 208,
+    "deaths": 19,
+    "downs": 31,
+    "revives": 11,
+    "twist": "echo",
+    "combos": {
+     "execute": 16,
+     "chorus": 7,
+     "sanctified": 3
+    },
+    "team": {
+     "cover": 4,
+     "covered": 0,
+     "pincer": 95
+    },
+    "traps": {
+     "freed": 1
+    },
+    "bursts": [
+     5,
+     4,
+     2
+    ],
+    "mech": {
+     "stack": [
+      3,
+      1
+     ],
+     "spread": [
+      4,
+      8
+     ],
+     "tether": [
+      2,
+      2
+     ]
+    },
+    "causes": [
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden charge",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "meteor",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden slam"
+    ],
+    "threat": {
+     "share": 77,
+     "locks": 12,
+     "dps": [
+      89,
+      90,
+      68,
+      98,
+      25,
+      65,
+      58,
+      69,
+      56,
+      71,
+      66,
+      67,
+      67,
+      66,
+      63,
+      83,
+      11,
+      10,
+      19,
+      57,
+      6,
+      11,
+      75,
+      8,
+      67,
+      2,
+      5,
+      86,
+      13,
+      12,
+      0,
+      65,
+      6,
+      6,
+      19,
+      12,
+      5,
+      9,
+      11,
+      0,
+      10,
+      7,
+      9,
+      0
+     ],
+     "heal": [
+      21,
+      33,
+      48,
+      57,
+      10,
+      15,
+      16,
+      8,
+      0,
+      13,
+      0
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "cleric": 1597,
+      "bard": 2962,
+      "guardian": 4109,
+      "ranger": 7859,
+      "berserker": 5453,
+      "swordsman": 2749
+     },
+     "downs": {
+      "swordsman": 7,
+      "bard": 6,
+      "berserker": 7,
+      "cleric": 5,
+      "guardian": 2,
+      "ranger": 4
+     },
+     "deaths": {
+      "swordsman": 5,
+      "bard": 5,
+      "berserker": 3,
+      "cleric": 3,
+      "ranger": 2,
+      "guardian": 1
+     },
+     "open": {
+      "n": 13,
+      "secs": 36,
+      "slices": 72,
+      "used": 17,
+      "hits": 19
+     },
+     "uses": {
+      "swing": 7,
+      "slam": 22,
+      "quake": 15,
+      "sweep": 3,
+      "charge": 7,
+      "rock": 12,
+      "spin": 10
+     },
+     "hits": {
+      "warden cleave": 4,
+      "warden slam echo": 3,
+      "warden quake": 47,
+      "thornbind": 8,
+      "warden sweep": 2,
+      "warden slam": 4,
+      "spread": 5,
+      "hound bite": 15,
+      "warden charge": 2,
+      "tether": 4,
+      "rockfall": 2,
+      "meteor": 4,
+      "wolf bite": 1,
+      "warden spin": 1
+     }
+    },
+    "quake": {
+     "jump": 70,
+     "roll": 5,
+     "hit": 85
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   },
+   {
+    "run": 2,
+    "result": "wipe",
+    "secs": 76,
+    "deaths": 6,
+    "downs": 12,
+    "revives": 6,
+    "twist": "thornbound",
+    "combos": {
+     "execute": 8,
+     "chorus": 3,
+     "sanctified": 3
+    },
+    "team": {
+     "cover": 1,
+     "covered": 0,
+     "pincer": 50
+    },
+    "mech": {
+     "stack": [
+      2
+     ],
+     "spread": [
+      3,
+      3
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     4,
+     1
+    ],
+    "causes": [
+     "warden slam",
+     "warden charge",
+     "warden slam",
+     "warden quake",
+     "meteor",
+     "meteor"
+    ],
+    "hpLeft": 100,
+    "threat": {
+     "share": 84,
+     "locks": 5,
+     "dps": [
+      63,
+      105,
+      85,
+      65,
+      50,
+      50,
+      17,
+      56,
+      55,
+      55,
+      28,
+      13,
+      14,
+      74,
+      12,
+      33,
+      50,
+      13,
+      9
+     ],
+     "heal": [
+      44,
+      9,
+      29,
+      28,
+      7
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "cleric": 1052,
+      "bard": 2006,
+      "guardian": 2065,
+      "ranger": 2662,
+      "berserker": 4549,
+      "swordsman": 2924
+     },
+     "downs": {
+      "cleric": 2,
+      "ranger": 4,
+      "guardian": 2,
+      "bard": 2,
+      "swordsman": 1,
+      "berserker": 1
+     },
+     "deaths": {
+      "swordsman": 1,
+      "cleric": 1,
+      "bard": 1,
+      "ranger": 1,
+      "berserker": 1,
+      "guardian": 1
+     },
+     "open": {
+      "n": 2,
+      "secs": 5,
+      "slices": 10,
+      "used": 6,
+      "hits": 7
+     },
+     "uses": {
+      "swing": 8,
+      "slam": 10,
+      "quake": 6,
+      "sweep": 2,
+      "charge": 4
+     },
+     "hits": {
+      "warden cleave": 4,
+      "warden slam": 8,
+      "warden quake": 12,
+      "spitter thorn": 5,
+      "spread": 3,
+      "warden sweep": 3,
+      "hound bite": 7,
+      "warden charge": 1,
+      "meteor": 2
+     }
+    },
+    "quake": {
+     "jump": 22,
+     "roll": 1,
+     "hit": 23
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   }
+  ]
+ },
+ {
+  "boss": "warden",
+  "party": 6,
+  "skill": 5,
+  "knobs": {},
+  "label": "6p s5",
+  "rs": [
+   {
+    "run": 1,
+    "result": "kill",
+    "secs": 137,
+    "deaths": 2,
+    "downs": 4,
+    "revives": 2,
+    "twist": "berserk",
+    "combos": {
+     "execute": 10,
+     "chorus": 3
+    },
+    "team": {
+     "cover": 1,
+     "covered": 0,
+     "pincer": 70
+    },
+    "mech": {
+     "stack": [
+      1,
+      4
+     ],
+     "spread": [
+      3,
+      3
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "traps": {
+     "freed": 2
+    },
+    "bursts": [
+     6,
+     4
+    ],
+    "causes": [
+     "warden quake",
+     "warden quake"
+    ],
+    "threat": {
+     "share": 54,
+     "locks": 8,
+     "dps": [
+      93,
+      96,
+      82,
+      93,
+      31,
+      64,
+      0,
+      46,
+      56,
+      56,
+      10,
+      82,
+      100,
+      95,
+      49,
+      90,
+      11,
+      93,
+      72,
+      57,
+      9,
+      94,
+      61,
+      91,
+      55,
+      65,
+      55,
+      82,
+      96,
+      103
+     ],
+     "heal": [
+      69,
+      1,
+      14,
+      26,
+      31,
+      35,
+      44,
+      55
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 2142,
+      "bard": 1851,
+      "cleric": 1001,
+      "berserker": 5386,
+      "ranger": 4269,
+      "swordsman": 3919
+     },
+     "downs": {
+      "swordsman": 2,
+      "bard": 1,
+      "ranger": 1
+     },
+     "deaths": {
+      "bard": 1,
+      "ranger": 1
+     },
+     "open": {
+      "n": 9,
+      "secs": 25,
+      "slices": 50,
+      "used": 28,
+      "hits": 47
+     },
+     "uses": {
+      "swing": 1,
+      "spin": 11,
+      "slam": 11,
+      "quake": 10,
+      "rock": 14,
+      "charge": 4
+     },
+     "hits": {
+      "spitter thorn": 1,
+      "warden cleave": 3,
+      "hound bite": 10,
+      "meteor": 5,
+      "thornbind": 10,
+      "warden quake": 9,
+      "spread": 1
+     }
+    },
+    "quake": {
+     "jump": 117,
+     "roll": 4,
+     "hit": 15
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   },
+   {
+    "run": 2,
+    "result": "kill",
+    "secs": 97,
+    "deaths": 0,
+    "downs": 0,
+    "revives": 0,
+    "twist": "ironhide",
+    "combos": {
+     "execute": 13,
+     "chorus": 5,
+     "sanctified": 1
+    },
+    "team": {
+     "cover": 0,
+     "covered": 0,
+     "pincer": 97
+    },
+    "traps": {
+     "freed": 1
+    },
+    "mech": {
+     "stack": [
+      6
+     ],
+     "spread": [
+      3,
+      3
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     6,
+     6
+    ],
+    "threat": {
+     "share": 85,
+     "locks": 8,
+     "dps": [
+      93,
+      91,
+      94,
+      91,
+      82,
+      76,
+      105,
+      85,
+      93,
+      75,
+      60,
+      88,
+      84,
+      65,
+      88,
+      74,
+      66,
+      55,
+      50,
+      62,
+      58,
+      56,
+      50,
+      68,
+      76,
+      55,
+      81,
+      64,
+      60,
+      51,
+      61,
+      61
+     ],
+     "heal": [
+      79,
+      61,
+      58,
+      52,
+      51,
+      54,
+      59,
+      50
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 2772,
+      "bard": 2821,
+      "cleric": 1990,
+      "berserker": 6045,
+      "ranger": 5821,
+      "swordsman": 5276
+     },
+     "downs": {},
+     "deaths": {},
+     "open": {
+      "n": 3,
+      "secs": 7.5,
+      "slices": 15,
+      "used": 12,
+      "hits": 18
+     },
+     "uses": {
+      "swing": 3,
+      "slam": 9,
+      "quake": 6,
+      "sweep": 2,
+      "charge": 4,
+      "spin": 3,
+      "rock": 4
+     },
+     "hits": {
+      "warden cleave": 6,
+      "thornbind": 7,
+      "hound bite": 4,
+      "spread": 3,
+      "warden quake": 2,
+      "rockfall": 1,
+      "tether": 4,
+      "meteor": 2
+     }
+    },
+    "quake": {
+     "jump": 55,
+     "roll": 2,
+     "hit": 2
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   }
+  ]
+ }
+]

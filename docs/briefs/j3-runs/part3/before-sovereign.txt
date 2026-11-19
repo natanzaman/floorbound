@@ -1,0 +1,4 @@
+tuneboss: 4 cells x 2 runs, 1 at a time, ports 37410-37410
+  done sovereign 3p s3: 1/2 kills, 164s (164-164) (269s in)
+  done sovereign 3p s5: 2/2 kills, 148s (133-162) (585s in)
+  done sovereign 6p s3: 1/2 kills, 221s (221-221) (1024s in)

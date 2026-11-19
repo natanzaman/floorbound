@@ -1,0 +1,4 @@
+J3 part 3 checkpoint
+- done: server/game.js hooks (BOSS_KNOBS, TUNE_STATS), scripts/tuneboss.js, TUNE_JSON hooks in test/wardenskill.js + test/floor3boss.js; smoke run OK
+- running: before batch (tables at f6245f4) -> before-<boss>.txt
+- left: tuning in shared/bosstiming.js, after batch, README section, tests

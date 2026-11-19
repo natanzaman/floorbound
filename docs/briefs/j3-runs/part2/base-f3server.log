@@ -1,0 +1,85 @@
+--- run 1
+Warden twist: quaking
+Sovereign twist: moonless
+Colossus twist: stoneskin
+[ai] companions off: AI_PROVIDER isn't set (ANTHROPIC_API_KEY is)
+Floorbound running on http://localhost:37453
+[threat] lockend colossus by guardian L 2199 swordsman:71 cleric:50
+[threat] lockend colossus by guardian L 2199 swordsman:102 cleric:60
+[threat] lockend colossus by guardian L 6040 swordsman:62 cleric:47
+[threat] lockend colossus by guardian L 6716 swordsman:59 cleric:46
+[threat] lockend colossus by guardian L 2440 swordsman:91 cleric:61
+[threat] lockend colossus by guardian L 2199 swordsman:83 cleric:60
+[threat] lockend colossus by guardian L 2892 swordsman:71 cleric:46
+[phase] 2 at 61s
+[arena] crack colossus -> undercroft at 66%, 61s
+[threat] lockend colossus by guardian L 3868 swordsman:69 cleric:38
+[arena] resume colossus in undercroft, 69s
+[threat] lockend colossus by guardian L 2199 swordsman:61 cleric:42
+[threat] lockend colossus by guardian L 2199 swordsman:50 cleric:9
+[threat] lockend colossus by guardian L 2199 swordsman:18
+[ov] stop switch after 0.8s
+[threat] lockend colossus by guardian L 4076 swordsman:102 cleric:2
+[threat] lockend colossus by guardian L 7978 swordsman:60 cleric:6
+[threat] lockend colossus by guardian L 2199 swordsman:96 cleric:27
+[threat] lockend colossus by guardian L 2580 swordsman:57 cleric:6
+[threat] lockend colossus by guardian L 2199 swordsman:162 cleric:20
+[phase] 3 at 131s
+[ov] clap (broke 0)
+[threat] lockend colossus by guardian L 2199 swordsman:83 cleric:28
+[beam] hit
+[beam] jump
+[beam] jump
+[threat] lockend colossus by guardian L 2428 swordsman:60 cleric:5
+[threat] lockend colossus by guardian L 2199 swordsman:97 cleric:16
+[beam] jump
+[beam] jump
+[beam] roll
+[threat] lockend colossus by guardian L 4706 swordsman:80 cleric:18
+[ov] stop switch after 7s
+[threat] lockend colossus by guardian L 4416 swordsman:96 cleric:29
+[beam] hit
+[threat] lockend colossus by guardian L 6532 swordsman:67 cleric:35
+[beam] jump
+--- run 2
+Warden twist: twinhorns
+Sovereign twist: moonless
+Colossus twist: static
+[ai] companions off: AI_PROVIDER isn't set (ANTHROPIC_API_KEY is)
+Floorbound running on http://localhost:37453
+[threat] lockend colossus by guardian L 2199 cleric:50 swordsman:91
+[threat] lockend colossus by guardian L 3848 cleric:57 swordsman:92
+[ov] clap (broke 0)
+[threat] lockend colossus by guardian L 6104 cleric:52 swordsman:64
+[threat] lockend colossus by guardian L 5000 cleric:8 swordsman:50
+[threat] lockend colossus by guardian L 2199 cleric:44 swordsman:94
+[threat] lockend colossus by guardian L 4348 cleric:37 swordsman:92
+[phase] 2 at 53s
+[threat] lockend colossus by guardian L 6076 cleric:41 swordsman:67
+[ov] stop switch after 4.1s
+[threat] lockend colossus by guardian L 8352 cleric:41 swordsman:66
+[arena] crack colossus -> undercroft at 54%, 67s
+[threat] lockend colossus by guardian L 3672 cleric:40 swordsman:84
+[arena] resume colossus in undercroft, 75s
+[threat] lockend colossus by guardian L 2199 cleric:56 swordsman:102
+[threat] lockend colossus by guardian L 5280 cleric:48 swordsman:56
+[arena] fire hit
+[threat] lockend colossus by guardian L 2199 cleric:53 swordsman:92
+[ov] stop switch after 0.5s
+[threat] lockend colossus by guardian L 4024 cleric:44 swordsman:76
+[phase] 3 at 109s
+[threat] lockend colossus by guardian L 2199 cleric:67 swordsman:141
+[beam] cover
+[beam] hit
+[threat] lockend colossus by guardian L 9282 cleric:38 swordsman:60
+[beam] cover
+[ov] stop switch after 2.2s
+[threat] lockend colossus by guardian L 2199 cleric:49 swordsman:97
+[beam] cover
+[beam] cover
+[threat] lockend colossus by guardian L 2984 cleric:41 swordsman:98
+[beam] cover
+[threat] lockend colossus by guardian L 2604 cleric:48 swordsman:116
+[beam] roll
+[beam] cover
+[threat] lockend colossus by guardian L 6164 cleric:34 swordsman:54
