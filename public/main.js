@@ -1813,6 +1813,14 @@ function project(x, y, z) {
 let drawT = null, frameNo = 0;
 const SMP = {}, frustum = new THREE.Frustum(), frM4 = new THREE.Matrix4(), frSphere = new THREE.Sphere();
 const entStats = { interp: 0, extrap: 0, hold: 0 };
+// Drawn at any distance (up to the fog), whatever the quality's character draw distance: bosses, your party, and
+// anyone in the boss arena you're in (their telegraphs are effects, never culled).
+function keepDrawn(e) {
+  if (e.def?.boss) return true;
+  if (e.kind === 'player' && state.party && e.party === state.party) return true;
+  const x = state.x, z = state.z;
+  return (inArena(x, z) && inArena(e.x, e.z)) || (inArena2(x, z) && inArena2(e.x, e.z)) || (inArena3(x, z) && inArena3(e.x, e.z));
+}
 function animateEntity(e, dt) {
   const g = e.model.group;
   const self = e.id === state.myId && e.kind === 'player';
@@ -1840,11 +1848,14 @@ function animateEntity(e, dt) {
   // Far characters: past the fog they're invisible anyway, so they leave the scene (no animation, no draw); off screen
   // or beyond Q.animNear they animate every few frames (public/quality.js).
   const cdist = Math.hypot(g.position.x - camera.position.x, g.position.z - camera.position.z);
-  if (!self && cdist > scene.fog.far * Q.fog + 8) {
+  if (!self && cdist > (state.spectator || keepDrawn(e) ? scene.fog.far * Q.fog + 8 : Math.min(scene.fog.far * Q.fog + 8, Q.charDist))) {
     if (!e.culled) { e.culled = true; scene.remove(g); if (e.label) setShown(e.label, false); }
     return;
   }
   if (e.culled) { e.culled = false; scene.add(g); }
+  // shadows only from characters near the camera (each caster is another draw in the shadow pass); bosses always
+  const cast = self || !!e.def?.boss || cdist < Q.charShadow + (e.cast === false ? 0 : 2); // (2 m of hysteresis)
+  if (cast !== (e.cast ?? true)) { e.cast = cast; g.traverse(o => { if (!o.isMesh) return; o.userData.cast ??= o.castShadow; o.castShadow = cast && o.userData.cast; }); }
   frSphere.center.set(g.position.x, g.position.y + 1, g.position.z); frSphere.radius = Math.max(2, e.model.height || 2);
   const onScreen = frustum.intersectsSphere(frSphere), lod = !self && (!onScreen || cdist > Q.animNear);
   const speed = Math.hypot(g.position.x - px, g.position.z - pz) / Math.max(dt, 1e-3);

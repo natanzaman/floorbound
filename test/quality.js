@@ -12,6 +12,10 @@ assert.ok(PRESETS.low.fx < PRESETS.medium.fx && PRESETS.medium.fx < PRESETS.high
 assert.ok(PRESETS.low.fog < PRESETS.high.fog, 'shorter view on Low');
 assert.equal(PRESETS.high.antialias, true); assert.equal(PRESETS.low.antialias, false);
 
+assert.ok(PRESETS.low.charDist < PRESETS.medium.charDist && PRESETS.medium.charDist < PRESETS.high.charDist, 'character draw distance rises with the level (review #7)');
+assert.deepEqual(LEVELS.map(l => PRESETS[l].charDist), [70, 100, 140]);
+assert.ok(LEVELS.every(l => PRESETS[l].charShadow === 25), 'characters cast shadows within 25 m');
+
 // starting level
 assert.equal(startLevel('low'), 'low');
 assert.equal(startLevel('medium', { lastAuto: 'low' }), 'medium', 'an explicit choice wins');

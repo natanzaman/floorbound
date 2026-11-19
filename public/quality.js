@@ -7,11 +7,14 @@
 //  - animNear / animEvery: characters beyond animNear (m) animate every animEvery frames (off screen: every 6th);
 //    past the (scaled) fog they leave the scene altogether (main.js animateEntity)
 //  - antialias: needs a reload (it's fixed when the WebGL canvas is created)
+//  - charDist: characters farther than this (m) from the camera aren't drawn (fewer draw calls), except bosses, your
+//    party and anyone in the boss arena you're in (main.js keepDrawn); the film view uses the fog only
+//  - charShadow: only characters this close (m) cast shadows (bosses always do)
 export const LEVELS = ['low', 'medium', 'high'];
 export const PRESETS = {
-  low:    { pixelRatio: 1,   shadows: false, shadowSize: 512,  fx: 0.4, segs: 0.5, auraGlow: false, fog: 0.7,  animNear: 18, animEvery: 3, antialias: false },
-  medium: { pixelRatio: 1.5, shadows: true,  shadowSize: 1024, fx: 0.7, segs: 0.75, auraGlow: true, fog: 0.85, animNear: 30, animEvery: 2, antialias: false },
-  high:   { pixelRatio: 2,   shadows: true,  shadowSize: 1024, fx: 1,   segs: 1,   auraGlow: true,  fog: 1,    animNear: 55, animEvery: 2, antialias: true },
+  low:    { pixelRatio: 1,   shadows: false, shadowSize: 512,  fx: 0.4, segs: 0.5, auraGlow: false, fog: 0.7,  animNear: 18, animEvery: 3, antialias: false, charDist: 70,  charShadow: 25 },
+  medium: { pixelRatio: 1.5, shadows: true,  shadowSize: 1024, fx: 0.7, segs: 0.75, auraGlow: true, fog: 0.85, animNear: 30, animEvery: 2, antialias: false, charDist: 100, charShadow: 25 },
+  high:   { pixelRatio: 2,   shadows: true,  shadowSize: 1024, fx: 1,   segs: 1,   auraGlow: true,  fog: 1,    animNear: 55, animEvery: 2, antialias: true,  charDist: 140, charShadow: 25 },
 };
 /** The live settings (mutated in place by apply / main.js; modules read Q.fx etc. every time they need them). */
 export const Q = { level: 'high', ...PRESETS.high };
