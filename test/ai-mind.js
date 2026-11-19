@@ -328,8 +328,8 @@ const INTENT = { say: 'Hi!', order: 'none', stance: 'keep', focus: '', remember:
   ok(t.key === K && t.r.found === 'ANTHROPIC_KEY', 'env: ANTHROPIC_KEY is a fallback for anthropic');
   t = rep({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: '', 'ANTHROPIC_API_KEY ': K });
   ok(t.key === K, 'env: a set name wins over a blank one with the same name');
-  t = rep({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: '  ', MY_CLAUDE_TOKEN: 'abc', HOME: '/root' });
-  ok(!t.key && t.r.empty.includes('ANTHROPIC_API_KEY') && t.r.related.includes('MY_CLAUDE_TOKEN') && !t.r.related.includes('HOME') && /looked for ANTHROPIC_API_KEY, CLAUDE_API_KEY, ANTHROPIC_KEY/.test(t.r.text), 'report: lists the names looked for, blank ones and other related names');
+  t = rep({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: '  ', MY_CLAUDE_TOKEN: 'abc', CLAUDE_HOME: 'x', HOME: '/root' });
+  ok(!t.key && t.r.empty.includes('ANTHROPIC_API_KEY') && t.r.related.includes('MY_CLAUDE_TOKEN') && !t.r.related.includes('HOME') && !t.r.related.includes('CLAUDE_HOME') && /looked for ANTHROPIC_API_KEY, CLAUDE_API_KEY, ANTHROPIC_KEY/.test(t.r.text), 'report: lists the names looked for, blank ones and other related names');
   t = rep({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'sk-proj-0123456789abcdef' });
   ok(t.key && /may not be a anthropic key/.test(t.r.text), 'report: warns when the value does not look like that provider\'s key');
   const all = [rep({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: K }), rep({ AI_PROVIDER: 'anthropic', ' CLAUDE_API_KEY': `'${K}'` })];

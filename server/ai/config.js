@@ -96,7 +96,7 @@ export const keyHint = k => (k.length >= 12 ? `…${k.slice(-4)}` : k ? '(set)' 
 
 // Which env var names were looked for and what was found: names, whether set, at most the key's last 4 characters.
 // Never a value. -> { looked, found, foundAs, hint, empty, related, warn, text }
-const RELATED = /ANTHROPIC|CLAUDE|OPENAI|GEMINI|GOOGLE_API|API_?KEY/i;
+const RELATED = /(ANTHROPIC|CLAUDE|OPENAI|GEMINI|GOOGLE).*(KEY|TOKEN|SECRET)|API_?KEY/i; // key-like names only
 export function keyReport(cfg, env = process.env) {
   const looked = [...cfg.keyEnvs], empty = [];
   let found = null, foundAs = null, hint = '', warn = '';
@@ -110,7 +110,7 @@ export function keyReport(cfg, env = process.env) {
     break;
   }
   const lookedN = new Set(looked.map(normName));
-  const related = Object.keys(env).filter(k => RELATED.test(k) && !lookedN.has(normName(k)) && normName(k) !== 'AI_KEY_ENV').sort().slice(0, 12);
+  const related = Object.keys(env).filter(k => RELATED.test(k) && !lookedN.has(normName(k)) && normName(k) !== 'AI_KEY_ENV').sort().slice(0, 8);
   let text;
   if (cfg.provider === 'mock') text = 'mock provider: no key needed';
   else if (!looked.length) text = 'no key names to look for (set AI_PROVIDER)';
