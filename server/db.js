@@ -73,4 +73,10 @@ async function setup() {
     pts REAL NOT NULL DEFAULT 0, day INT NOT NULL DEFAULT 0, got REAL NOT NULL DEFAULT 0, chat REAL NOT NULL DEFAULT 0,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (char_id, named_id))`);
   await q(`ALTER TABLE floor_clears ADD COLUMN IF NOT EXISTS heroes BOOLEAN NOT NULL DEFAULT false`);
+  // The Named's requests (server/namedquests.js): each character's active request per Named (null: none), when the
+  // next offer is due (ms), and the request friendship earned today (its own cap).
+  await q(`CREATE TABLE IF NOT EXISTS named_requests (
+    char_id INT NOT NULL REFERENCES characters(id) ON DELETE CASCADE, named_id TEXT NOT NULL, req JSONB,
+    next_at BIGINT NOT NULL DEFAULT 0, day INT NOT NULL DEFAULT 0, got REAL NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (char_id, named_id))`);
 }

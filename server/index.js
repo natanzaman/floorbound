@@ -19,6 +19,7 @@ import { Director } from './director.js'; // the scene director (filming), serve
 import { installDirectorAdmin } from './director-admin.js';
 import { NamedManager, makeNamedStore, namedOn } from './named.js'; // the Named: the Hearthward and the loner (NAMED_ENABLED=0 turns them off)
 import { installNamedAdmin } from './named-admin.js';
+import { NamedQuests, makeQuestStore } from './namedquests.js'; // the Named's requests and invitations (I4)
 import { TICK_RATE } from '../shared/data.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -51,6 +52,7 @@ const bots = new BotManager(game, { url: () => `ws://127.0.0.1:${server.address(
 const playerBots = new PlayerBots(game, bots); // bots players add in game (P → Bots), server/playerbots.js
 game.director = new Director(game, bots); // plays cue sheets with bot actors (docs/ROADMAP.md F2)
 const named = namedOn() ? new NamedManager(game, bots) : null; // server/named.js (only while a human is online)
+if (named) new NamedQuests(named); // named.quests: requests and outreach (server/namedquests.js)
 
 const server = http.createServer(async (req, res) => {
   if (res.handled) return;
@@ -259,6 +261,6 @@ db.migrate()
   .then(() => hall.load())
   .then(() => { game.hadFirstClear = hall.hasFirst(); game.hadFirstClear2 = hall.hasFirst(2); game.hadFirstClear3 = hall.hasFirst(3); })
   .then(() => { if (db.enabled) aiMinds.useStore(aiStore(db.q)); }) // (async, never blocks or fails startup)
-  .then(() => { if (db.enabled && named) return named.useStore(makeNamedStore(db.q, { adminIds: (process.env.ADMIN_DISCORD_IDS || '').split(',').map(s => s.trim()).filter(Boolean) })); })
+  .then(() => { if (db.enabled && named) { named.quests.useStore(makeQuestStore(db.q)); return named.useStore(makeNamedStore(db.q, { adminIds: (process.env.ADMIN_DISCORD_IDS || '').split(',').map(s => s.trim()).filter(Boolean) })); } })
   .then(() => server.listen(PORT, () => console.log(`Floorbound running on http://localhost:${PORT}${db.enabled ? ' (accounts on' + (accounts.discordOn() ? ', Discord sign-in on' : '') + ')' : ''}`)))
   .catch(err => { console.error('Startup failed', err); process.exit(1); });
