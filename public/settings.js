@@ -33,7 +33,7 @@ export function saveSettings(settings) {
 const QLABEL = { auto: 'Auto <small>picks a level that keeps the game smooth</small>', low: 'Low <small>fastest: no shadows, fewer effects, shorter view</small>', medium: 'Medium', high: 'High <small>sharpest, with shadows and full effects</small>' };
 
 // The Settings panel (#settings). Returns { render, open, toggle }.
-export function initSettingsPanel({ el, settings, save, Q, perf, applyQuality, freeCursor, bubbles, sfx }) {
+export function initSettingsPanel({ el, settings, save, Q, PRESETS, perf, applyQuality, freeCursor, bubbles, sfx }) {
   function render() {
     el.innerHTML = `<div class="top"><b>Settings</b><button class="x" data-a="close">✕</button></div>
     <h4>Camera</h4>
@@ -45,7 +45,7 @@ export function initSettingsPanel({ el, settings, save, Q, perf, applyQuality, f
     <h4>Chat</h4>
     <label class="opt"><input type="checkbox" data-a="bub" ${settings.bubbles !== false ? 'checked' : ''}> Speech bubbles <small>chat lines over the speaker's head (the chat log keeps everything)</small></label>
     <h4>Graphics</h4>
-    ${['auto', 'low', 'medium', 'high'].map(q => `<label class="opt"><input type="radio" name="gq" value="${q}" ${settings.quality === q ? 'checked' : ''}> ${QLABEL[q]}${q === 'auto' && settings.quality === 'auto' ? ` <small>now: ${Q.level}</small>` : ''}</label>`).join('')}
+    ${['auto', 'low', 'medium', 'high'].map(q => `<label class="opt"><input type="radio" name="gq" value="${q}" ${settings.quality === q ? 'checked' : ''}> ${QLABEL[q]}${q === 'auto' && settings.quality === 'auto' ? ` <small>now: ${Q.level}${!Q.shadows && PRESETS[Q.level]?.shadows ? ', shadows off' : ''}</small>` : ''}</label>`).join('')}
     <small class="note">Lower settings draw fewer pixels, effects and shadows. Smoothing edges (High) changes after a reload.</small>
     <label class="opt"><input type="checkbox" data-a="perf" ${settings.perf ? 'checked' : ''}> Performance overlay <small>F3 · frame rate, ping, snapshots</small></label>
     <label class="opt"><input type="checkbox" data-a="ping" ${settings.ping !== false ? 'checked' : ''}> Show ping in the corner</label>`;

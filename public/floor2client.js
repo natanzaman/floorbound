@@ -133,6 +133,7 @@ export function initFloor2Client(ctx) {
       case 'f2wave': wave(e); break;
       case 'f2phase': {
         const b = mobs.get(e.id);
+        if (!b) break; // the Sovereign isn't on your floor (snapshots carry your floor's mobs): not your fight
         if (e.n === 1) b?.model.anim?.shot('Spellcast_Long', 1.2 / PACE); // (phase 3: the Deluge call has its own pose, 'dcall')
         sfx.play('roar', b?.model.group.position || null, 1.3);
         if (e.n === 1) ctx.banner('THE TIDE RISES', 'Phase 2: Tidal Waves (roll THROUGH them), Drowned Thralls, mire pools');

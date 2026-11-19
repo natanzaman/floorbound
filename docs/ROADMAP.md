@@ -475,7 +475,7 @@ Same rules as F–I: flock lock, push with `--force-with-lease`.
 | J1 Rescue mechanics | `feat/rescue` | in progress | agent rescue | |
 | J2 Multi-area boss fights (Floor 3 first) | `feat/arenas` | in progress | agent arenas | |
 | J3 Boss timing tables + melee openings + tuning harness | `feat/openings` | todo (after J1 and J2) | | |
-| J4 Threat rules | `feat/threatrules` | in progress | agent threatrules | |
+| J4 Threat rules | `feat/threatrules` | done | agent threatrules | 2e52b29 |
 
 ### Shared contracts for J
 - **Every new mechanic** is telegraphed, has a guide tip and a first-few-times prompt, works with bots at all capability levels, respects the director (no surprise mechanics during a show unless a cue asks), and skips downed and dead players.
@@ -834,6 +834,7 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
 ## Known issues and backlog
 - **Performance (done, c8d8fb4):** server bots on in-process sockets, 10 Hz brains far from humans, the Named rest at home until a player is in the field (invites / calls / outreach wake them). Bench CPU 0.084-0.098 → 0.040-0.057 s/s with players in town, about -11% with everyone in the field (README → Performance, `scripts/perfbench.js`, `/status` cpu + bot counts). Next if needed: don't simulate floors nobody is on (Floor 2/3 mobs cost CPU with no one there).
 - **Client performance + Game Menu (done, 43cd3d9):** F3 diagnostics overlay and ping chip, Settings → Graphics (Auto default / Low / Medium / High), snapshot interpolation ~100 ms behind with adaptive buffer (`shared/netsmooth.js`, `?netsim=120,60,2` to test, `?interp=0` old smoothing), shaders warmed at load and never recompiled mid-fight, DOM-on-change HUD; Esc / ☰ Game Menu (Resume, Settings, Controls & guide, Change character, Log out, Admin). Headless 6-bot Warden fight: High ≈ before (3 fps, GPU-bound in swiftshader), Low 2.1× faster (6.3 fps, 712 → 389 draw calls); remote motion wobble 2.75 → 0.96 m/s (good network), 4.69 → 0.59 (120±60 ms + 2% reorder). Next if needed: fewer draw calls (merge/instance static scenery; ~700 in a boss fight).
+- **Perf review fixes (done, efe107c):** empty floors sleep (mob AI only where someone is) and each browser gets only its floor's mobs: CPU 0.028 → 0.005 s/s with nobody on, 0.053 → 0.036 with 4 players + 9 bots in town, 0.088 → 0.068 in the field; bytes 316 → 176 KB/s; plus the stall stutter fix (wall-clock `st`), Auto quality settling, character draw distance / shadows, MSAA only once High held, nameplates after close-ups, the anonymous-leave warning, `@Name` turn-ins on Floors 2–3 (README → Performance).
 - Floor 2 is untested by the owner: do a play pass before any Floor 3 work.
 - Bots ignore Floor 2 specifics? (check during C if cheap)
 - `test/bots.js` is an old standalone smoke bot (records 0 hits): retire or update.

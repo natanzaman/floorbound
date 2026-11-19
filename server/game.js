@@ -617,8 +617,7 @@ export class Game {
         fx('ring', { r: R, c: 'gold' });
         for (const m of this.mobs.values()) {
           if (!this.targetable(m) || dist(m, p) > R + m.def.radius) continue; // burrowed lurkers can't be taunted
-          let top = 0; for (const v of m.threat.values()) top = Math.max(top, v);
-          m.threat.set(p.id, top + 100);
+          this.tauntMob(m, p, 'taunt'); // lock + cuts (server/threat.js)
         }
         this.hitCircle(p, p.x, p.z, R, atk * 0.5, { sk: S });
         p.dr = { until: t + 4, v: 0.3 * pow, by: p.id, sk: S };
@@ -735,7 +734,7 @@ export class Game {
       this.bumpStat(p, 'switches');
       this.styleOnSwitch(p); // Dual Blades: cooldowns
     }
-    m.threat.set(p.id, (m.threat.get(p.id) || 0) + amount * threat * (p.threatMult || 1)); // Spear & Shield: +threat
+    this.addThreat(m, p, amount * threat * (p.threatMult || 1)); // Spear & Shield: +threat; clean multiplier, locks (server/threat.js)
     m.contributors.add(p.id);
     if (stun && !m.def.boss) m.stunUntil = t + stun;
     if (stun && m.def.boss) m.stunUntil = Math.max(m.stunUntil, t + stun * 0.3);
@@ -932,7 +931,12 @@ export class Game {
     this.zones = this.zones.filter(zn => t < zn.until);
     this.updateMastery(); // Renew, Bulwark, Aegis upkeep
 
-    for (const m of [...this.mobs.values()]) this.updateMob(m, dt);
+    // Mob AI only where someone is (see activeFloors): elsewhere mobs stand still, but the dead still come back on time.
+    const live = this.activeFloors();
+    for (const m of [...this.mobs.values()]) {
+      if (m.dead || live.has(floorOf(m.x))) this.updateMob(m, dt);
+      else m.moving = false;
+    }
     this.updateCombat(dt); // posture decay, Horn Sweep
     this.updateProjectiles(dt);
     this.updateClassesA?.(dt); // arrows, traps, Rage (server/classes-a.js)
@@ -943,17 +947,39 @@ export class Game {
     this.updateRare();
     if (t >= this.lfgT) { this.lfgT = t + 1; this.matchParties(); }
 
-    // keep mobs from stacking
-    const list = [...this.mobs.values()].filter(m => !m.dead);
-    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
-      const a = list[i], b = list[j];
-      const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz), min = a.def.radius + b.def.radius;
-      if (d < min && d > 1e-3) {
-        const push = (min - d) / 2, ux = dx / d, uz = dz / d;
-        if (!a.def.boss) { a.x -= ux * push; a.z -= uz * push; }
-        if (!b.def.boss) { b.x += ux * push; b.z += uz * push; }
+    // keep mobs from stacking: per floor (mobs on different floors never meet), and only where they move
+    const byFloor = this._sepLists ||= { 1: [], 2: [], 3: [] };
+    for (const k in byFloor) byFloor[k].length = 0;
+    for (const m of this.mobs.values()) { const f = floorOf(m.x); if (!m.dead && live.has(f)) byFloor[f].push(m); }
+    for (const k in byFloor) {
+      const list = byFloor[k];
+      for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+        const a = list[i], b = list[j];
+        const dx = b.x - a.x, dz = b.z - a.z, min = a.def.radius + b.def.radius;
+        if (dx > min || dx < -min || dz > min || dz < -min) continue; // (cheap reject before the square root)
+        const d = Math.hypot(dx, dz);
+        if (d < min && d > 1e-3) {
+          const push = (min - d) / 2, ux = dx / d, uz = dz / d;
+          if (!a.def.boss) { a.x -= ux * push; a.z -= uz * push; }
+          if (!b.def.boss) { b.x += ux * push; b.z += uz * push; }
+        }
       }
     }
+  }
+
+  // The floors whose mobs are simulated this tick (the empty world was ~60% of the tick on the free plan's 0.15 vCPU):
+  // a floor with a human on it (anywhere, town included), a server bot out of the safe zones (bot-only parties and
+  // tests, farming bots, the Named, who only come out near humans), a boss mid-fight (a fight with only bots counts;
+  // so does a wipe being reset), or anyone at all while a director show runs. Nobody human online and no bot out: no
+  // mob AI anywhere, the world sleeps (respawn timers still run). WORLD_SLEEP=0: every floor, always (benchmarks).
+  activeFloors() {
+    const on = this._liveFloors ||= new Set();
+    on.clear();
+    if (process.env.WORLD_SLEEP === '0') { on.add(1); on.add(2); on.add(3); return on; }
+    const show = !!this.director?.running;
+    for (const p of this.players.values()) if (!p.bot || show || (!p.dead && !inTown(p.x, p.z))) on.add(floorOf(p.x));
+    for (const b of [this.boss, this.sovereign, this.colossus]) if (b && !b.dead && (b.engaged || b.threat.size || b.hp < b.maxHp)) on.add(floorOf(b.x));
+    return on;
   }
 
   validTarget(m, p) {
@@ -984,8 +1010,7 @@ export class Game {
     }
     if (!def.boss && Math.hypot(m.x - m.sx, m.z - m.sz) > 35) m.threat.clear();
 
-    let target = null, top = -1;
-    for (const [pid, v] of m.threat) if (v > top) { top = v; target = this.players.get(pid); }
+    const target = this.targetOf(m); // the one target picker (server/threat.js)
 
     if (t < m.stunUntil) return;
 
@@ -1343,17 +1368,31 @@ export class Game {
         | (cresc ? 4096 : 0) | (sk === 'cresc' ? 8192 : 0) | (sk === 'talent' ? 16384 : 0);
       players.push([p.id, r2(p.x), r2(p.z), r2(p.face), p.hp, p.maxHp, p.lvl, CLASS_IDS.indexOf(p.cls), p.party || 0, p.dead ? 1 : 0, buffs, this.styleIdx(p)]); // [11]: weapon style (shared/styles.js STYLE_IDS, -1 none)
     }
-    const mobs = [];
+    const mobs = [], fl = [];
     for (const m of this.mobs.values()) {
       if (m.dead || m.hidden) continue; // burrowed lurkers are sent as w.f2.bur
+      fl.push(floorOf(m.x));
       mobs.push([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase >= 2 ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0) | (m.windupAt ? 16 : 0) | (this.time < m.staggerUntil ? 32 : 0) | (this.time < m.frenzyUntil ? 64 : 0) | (this.time < (m.launchUntil || 0) ? 128 : 0) | (this.time < (m.weakUntil || 0) ? 256 : 0), this.posturePct(m)]);
     }
     const g = this.gate;
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
     const gate = [g.open ? 1 : 0, waiting, g.ready.size, g.countAt ? r1(Math.max(0, g.countAt - this.time)) : 0];
-    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
+    // The mobs go in last-minute (one JSON array per floor, joined for the full world): browsers get only their floor's
+    // (snapFor); spectators, the director's film view and the server's own bots get every floor (this string).
+    const parts = [[], [], [], []];
+    for (let i = 0; i < mobs.length; i++) parts[fl[i]].push(JSON.stringify(mobs[i]));
+    const pre = JSON.stringify({ players, mobs: 0, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
+    const at = pre.indexOf('"mobs":0') + 7; // (the first "mobs" key: the players array before it holds only numbers)
+    const head = pre.slice(0, at), tail = pre.slice(at + 1);
+    this.snapParts = { head, tail, floors: parts.map(a => a.join(',')), byFloor: [] };
     this.events = [];
-    return out;
+    return `${head}[${parts.slice(1).map(a => a.join(',')).filter(Boolean).join(',')}]${tail}`;
+  }
+  /** The last snapshot for a browser on `floor`: only that floor's mobs (bandwidth); the rest is the same. */
+  snapFor(floor) {
+    const S = this.snapParts;
+    if (!S) return null;
+    return S.byFloor[floor] ||= `${S.head}[${S.floors[floor] || ''}]${S.tail}`;
   }
 
   meFor(p) {

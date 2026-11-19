@@ -10,23 +10,121 @@
 //  - Flanking: a hit from the enemy's back 120° does +10% damage and posture; with a party member on the opposite side
 //    (≥120° apart around it, both in melee-ish reach) both get a Pincer (+20%), tagged only to the two players.
 //  - Team stats for the MVP card (G5): teamStat(p, 'heal' | 'save' | 'cover' | 'flank' | 'tanked', n) when G2's teamStat exists.
-import { GUARD, inTown, resolveCollision } from '../shared/data.js';
-import { THREAT, COVER, FLANK, fromBehind, apartAround, inFlankReach } from '../shared/threat.js';
+import { GUARD, CLASSES, inTown, resolveCollision } from '../shared/data.js';
+import { THREAT, COVER, FLANK, TAUNT, CLEAN, cleanMult, fromBehind, apartAround, inFlankReach } from '../shared/threat.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r2 = v => Math.round(v * 100) / 100;
 const shown = m => m && !m.dead && !m.hidden && (m.def.boss || m.def.elite);
 
-// [id, value] of the highest threat on m (living players only), or null.
+// [id, value] of who m is after (targetOf), or null.
 export function topThreat(g, m) {
-  let id = 0, top = -1;
-  for (const [pid, v] of m.threat) { const p = g.players.get(pid); if (p && !p.dead && v > top) { top = v; id = pid; } }
-  return id ? [id, top] : null;
+  const p = g.targetOf(m);
+  return p ? [p.id, m.threat.get(p.id) || 0] : null;
 }
+const free = p => p && !p.dead && !p.downed && !p.trap; // can be picked as a target
+const fighter = (g, m) => [...m.threat.keys()].map(id => g.players.get(id)).filter(p => p && !p.dead);
+const STATS = !!process.env.THREAT_STATS; // bot runs: log each lock's end (test/wardenskill.js, test/floor3boss.js)
 
 const methods = {
+  // ---------- the target picker (J4) ----------
+  // The only place targets are chosen: the taunt-lock holder, otherwise the top threat among living, non-downed,
+  // non-trapped players (a tie goes to the current target). If nobody free is left, the top of the rest (still alive),
+  // so a party that is all downed / trapped isn't read as a wipe.
+  targetOf(m) {
+    if (!m?.threat?.size) { if (m) m.tgtId = 0; return null; }
+    const lk = this.lockOf(m);
+    if (lk) { m.tgtId = lk.by; return this.players.get(lk.by); }
+    let best = null, top = -1, any = null, atop = -1;
+    for (const [pid, v] of m.threat) {
+      const p = this.players.get(pid);
+      if (!p || p.dead) continue;
+      const better = (x) => v > x || (v === x && pid === m.tgtId);
+      if (free(p)) { if (better(top)) { top = v; best = p; } } else if (better(atop)) { atop = v; any = p; }
+    }
+    const t = best || any;
+    m.tgtId = t ? t.id : 0;
+    return t;
+  },
+
+  // m's taunt lock while it holds, else null. Ends it here: on time (handover: the taunter drops to TAUNT.handover × L),
+  // or early (no handover) if the taunter is dead, downed, trapped or out of the room (their entry was dropped).
+  lockOf(m) {
+    const lk = m.lock;
+    if (!lk) return null;
+    const p = this.players.get(lk.by);
+    if (!free(p) || !m.threat.has(lk.by)) { m.lock = null; return null; }
+    if (this.time < lk.until) return lk;
+    m.lock = null;
+    m.threat.set(lk.by, TAUNT.handover * lk.L);
+    m.tgtId = lk.by; // a tie at the handover goes to the taunter
+    if (STATS && m.def.boss) {
+      const others = fighter(this, m).filter(o => o.id !== lk.by).map(o => `${o.cls}:${Math.round((100 * m.threat.get(o.id)) / lk.L)}`);
+      console.log(`[threat] lockend ${m.type} by ${p.cls} L ${Math.round(lk.L)} ${others.join(' ')}`);
+    }
+    return null;
+  },
+
+  // Add threat to p's entry on m. kind 'dmg': × the clean multiplier on bosses and elites; 'heal': as is.
+  // A lock holder's entry stays frozen at L. Gains (before the clean multiplier) are kept for TAUNT.window s (a taunt's
+  // R: the taunt resets everyone's multiplier, so R is the pace they rebuild from).
+  addThreat(m, p, amount, kind = 'dmg') {
+    if (!m || !p || !(amount > 0)) return;
+    const big = m.def.boss || m.def.elite, base = amount;
+    if (kind === 'dmg' && big) amount *= this.cleanHit(p);
+    if (m.lock && m.lock.by === p.id && this.time < m.lock.until) return;
+    m.threat.set(p.id, (m.threat.get(p.id) || 0) + amount);
+    if (!big) return;
+    const log = (m.thLog ||= []), t = this.time;
+    log.push([t, p.id, base]);
+    while (log.length && t - log[0][0] > TAUNT.window) log.shift();
+  },
+
+  // ---------- clean-damage multiplier ----------
+  cleanOf(p) { return (p.clean ||= { s: 0, at: this.time, hit: -1e9 }); },
+  // Clean seconds as of now (they only run while p damaged a boss / elite in the last CLEAN.recent s).
+  cleanSecs(p) { const c = this.cleanOf(p); return c.s + Math.max(0, Math.min(this.time, c.hit + CLEAN.recent) - c.at); },
+  cleanMul(p) { return p?.clean ? cleanMult(this.cleanSecs(p)) : 1; },
+  // p damaged a boss / elite now: bank the clean time, mark the hit, return the multiplier for it.
+  cleanHit(p) { const c = this.cleanOf(p); c.s = this.cleanSecs(p); c.at = this.time; c.hit = this.time; return cleanMult(c.s); },
+  cleanReset(p) { if (p?.clean) { p.clean.s = 0; p.clean.at = this.time; } },
+
+  // ---------- taunts ----------
+  // How long kind's lock lasts for p: TAUNT.lock × Provoke's duration bonus, never more than the cooldown − TAUNT.cdGap.
+  lockSecs(p, kind) {
+    let secs = (TAUNT.lock[kind] ?? TAUNT.lock.taunt) * (1 + (p.tal?.sk?.taunt?.dur || 0) / 100);
+    const sk = CLASSES[p.cls]?.skills.find(s => s.id === 'taunt'), slot = sk ? CLASSES[p.cls].skills.indexOf(sk) : -1;
+    if (sk) secs = Math.min(secs, this.skillCd(p, sk, slot) - TAUNT.cdGap);
+    return Math.max(0.5, secs);
+  },
+  // R: the best non-taunter threat/s (before clean multipliers) over the last TAUNT.window s, at least TAUNT.atkMul × the highest fighter's attack.
+  tauntRate(m, by) {
+    const t = this.time, sum = new Map();
+    for (const [at, id, a] of m.thLog || []) if (id !== by.id && t - at <= TAUNT.window) sum.set(id, (sum.get(id) || 0) + a);
+    const best = Math.max(0, ...sum.values()) / TAUNT.window;
+    const atk = Math.max(by.atk || 0, ...fighter(this, m).map(o => o.atk || 0));
+    return Math.max(best, TAUNT.atkMul * atk);
+  },
+  // T taunts m (Taunt, War Cry, Challenge): renormalise to L, T = L, others cut to TAUNT.cut × L, locked on T.
+  tauntMob(m, T, kind = 'taunt') {
+    if (!m || !T || m.def.prop) return; // trap objects (J1) can't be taunted
+    const L = TAUNT.Lmul * this.tauntRate(m, T);
+    let top = 0; for (const v of m.threat.values()) top = Math.max(top, v);
+    const k = L / Math.max(top, 1);
+    for (const [pid, v] of m.threat) { m.threat.set(pid, Math.min(v * k, TAUNT.cut * L)); this.cleanReset(this.players.get(pid)); }
+    m.threat.set(T.id, L);
+    this.cleanReset(T);
+    m.lock = { by: T.id, L, until: this.time + this.lockSecs(T, kind) };
+    m.tgtId = T.id;
+  },
+  // Phalanx: p goes to the top (no lock, no cuts).
+  threatToTop(m, p) {
+    let top = 0; for (const [pid, v] of m.threat) if (pid !== p.id) top = Math.max(top, v);
+    if ((m.threat.get(p.id) || 0) <= top) m.threat.set(p.id, top + 1);
+  },
+
   // ---------- visible threat ----------
-  // (talents.js has topThreat(m) -> id over every entry; threatTop(m) -> [id, value] over living players only)
+  // (talents.js topThreat(m) -> id; threatTop(m) -> [id, value]: both go through targetOf)
   threatTop(m) { return topThreat(this, m); },
 
   // [[mobId, targetId]] for engaged bosses and elites (snapshot `th`). Empty -> undefined (not sent).
@@ -40,18 +138,25 @@ const methods = {
     return out;
   },
 
-  // My meter against the boss I'm fighting: [bossId, my % of the top, runner-up % of mine when I'm the top].
+  // My meter against the boss I'm fighting: [bossId, pct, nextPct, mult×10, lockSecs, lockById].
+  //   No lock: pct = my % of the top (99 at most unless I'm it); when I'm the top, nextPct = the runner-up as % of mine.
+  //   During a lock: pct = v / L (up to TAUNT.meterMax); the holder gets 100 and nextPct = the runner-up's v / L.
   threatMe(p) {
     for (const m of this.mobs.values()) {
       if (!m.def.boss || m.dead || !m.threat.has(p.id)) continue;
-      const mine = m.threat.get(p.id) || 0;
-      let top = 0, second = 0, topId = 0;
-      for (const [pid, v] of m.threat) {
-        const o = this.players.get(pid); if (!o || o.dead) continue;
-        if (v > top) { second = top; top = v; topId = pid; } else if (v > second) second = v;
+      const tg = this.targetOf(m), lk = m.lock;
+      if (!tg) return null;
+      const mine = m.threat.get(p.id) || 0, mul = Math.round(this.cleanMul(p) * 10);
+      let second = 0;
+      for (const [pid, v] of m.threat) { const o = this.players.get(pid); if (pid !== tg.id && o && !o.dead && v > second) second = v; }
+      if (lk) {
+        const secs = Math.max(1, Math.ceil(lk.until - this.time));
+        return tg.id === p.id ? [m.id, 100, Math.round((100 * second) / lk.L), mul, secs, lk.by]
+          : [m.id, Math.min(TAUNT.meterMax, Math.round((100 * mine) / lk.L)), 0, mul, secs, lk.by];
       }
+      const top = m.threat.get(tg.id) || 0;
       if (!top) return null;
-      return topId === p.id ? [m.id, 100, Math.round((100 * second) / top)] : [m.id, Math.min(99, Math.round((100 * mine) / top)), 0];
+      return tg.id === p.id ? [m.id, 100, Math.round((100 * second) / top), mul, 0, 0] : [m.id, Math.min(99, Math.round((100 * mine) / top)), 0, mul, 0, 0];
     }
     return null;
   },
@@ -71,7 +176,7 @@ const methods = {
     }
     if (!foes.length) return;
     const share = (amount * THREAT.heal) / foes.length;
-    for (const m of foes) m.threat.set(by.id, (m.threat.get(by.id) || 0) + share);
+    for (const m of foes) this.addThreat(m, by, share, 'heal');
   },
 
   // ---------- Cover ----------
@@ -206,9 +311,10 @@ export function installThreat(Game) {
       }
     }
     if (c && t >= c.until) p.cover = null;
-    const before = p.hp;
+    const before = p.hp, sh = s => (s && t < s.until ? s.hp : 0), sh0 = sh(p.shield);
     const out = orig.call(this, p, base, opts);
     const lost = before - Math.max(0, p.hp);
+    if (lost > 0 || sh(p.shield) < sh0 || p.downed) this.cleanReset(p); // any HP or shield loss (evaded / parried / Covered: none)
     if (lost > 0 && this.teamStat) {
       const a = this.attackerOf(p, opts.src, opts.mob);
       if (a && topThreat(this, a)?.[0] === p.id) this.teamStat(p, 'tanked', lost);
@@ -218,6 +324,24 @@ export function installThreat(Game) {
         const by = this.players.get(h.by);
         if (by) this.teamStat(by, 'save');
       }
+    }
+    return out;
+  });
+
+  // The clean multiplier resets at the end of a fight (boss: endFight / 2 / 3; an elite: when it dies), and locks go.
+  for (const [end, field] of [['endFight', 'fight'], ['endFight2', 'fight2'], ['endFight3', 'fight3']]) {
+    if (!P[end]) continue;
+    wrap(end, function (orig, result, m, ...a) {
+      for (const id of this[field]?.ids || []) this.cleanReset(this.players.get(id));
+      if (m) m.lock = null;
+      return orig.call(this, result, m, ...a);
+    });
+  }
+  wrap('killMob', function (orig, m, killer) {
+    const out = orig.call(this, m, killer);
+    if (m.dead || m.hp <= 0) {
+      if (m.def.boss || m.def.elite) for (const id of m.threat.keys()) this.cleanReset(this.players.get(id));
+      m.lock = null; m.thLog = null;
     }
     return out;
   });
