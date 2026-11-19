@@ -628,6 +628,16 @@ Measured on the dev box (2026-11-19; Render's vCPU is slower, so compare ratios)
 
 In town the Named rest (about half the CPU); in the field, where they're out, the in-process channel and 10 Hz brains save about 11%. What's left is mostly the world itself (every floor's mobs are simulated) and the bots' own thinking.
 
+Then empty floors sleeping and per-floor snapshots (2026-11-19, same box, same runs):
+
+| Run (60 s, the 5 Named enabled) | CPU s/s before → after | tick p50 before → after | serialised before → after |
+|---|---|---|---|
+| nobody online | 0.028 → 0.005 | 1.18 → 0.09 ms | 0 → 0 KB/s |
+| 2 players in town, 0 bots | 0.041 → 0.024 | 1.37 → 0.61 ms | 141 → 71 KB/s |
+| 2 players in town, 6 bots | 0.053 → 0.037 | 1.51 → 0.77 ms | 151 → 103 KB/s |
+| 4 players in town, 9 bots | 0.053 → 0.036 | 1.48 → 0.78 ms | 316 → 176 KB/s |
+| 4 players in the field, 9 bots (all 5 Named out) | 0.088 → 0.068 | 1.95 → 1.11 ms | 322 → 185 KB/s |
+
 ## Testing
 
 ```bash
