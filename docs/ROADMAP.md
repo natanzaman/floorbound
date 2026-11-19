@@ -522,7 +522,7 @@ Threat stays a raw number per player per enemy, but the rules below are stated i
    - The taunter becomes the top for the taunt's duration (the boss is locked on them), and their threat is set to the top value.
    - Every other player's threat on that boss is cut to 50% of the top, if it was above that, and everyone's clean-damage multiplier resets to ×1.0.
    - During the taunt, others still build threat, but the boss stays on the taunter even if someone passes 100%.
-   - When the taunt ends, the taunter's threat drops to 90% of the highest other player's threat or stays where it is, whichever is higher. Concretely: the boss goes to whoever is above the taunter at that moment. Anyone who built past 90% during the taunt takes the boss when it ends. This creates a real "burst while it's taunted, but don't overdo it" rhythm.
+   - When the taunt ends, the taunter's threat drops to **90** on the taunt's scale: 90% of the lock value L, the top value set when the taunt started. Anyone who built above 0.9 × L during the taunt takes the boss; otherwise the tank keeps it. This creates a real "burst while it's taunted, but don't overdo it" rhythm.
    - A second taunt overrides the first: the new taunter becomes the locked top and the same cuts apply. The latest taunt wins.
 3. **Losing aggro to a taunt.** A player who held the boss when someone else taunted it drops to 50% of the top (not 0 and not 100), then builds back up normally.
 4. Keep healer threat (G3) and the "about to pull" warning at 90%. The threat meter shows "TAUNTED (Halvard) 3s" while a taunt lock is on.
