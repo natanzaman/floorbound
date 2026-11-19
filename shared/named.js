@@ -67,6 +67,15 @@ export const RULES = {
   tagR: 60,            // a field mob a human damaged pays them in full on a Named's kill only within this range (m)
 };
 
+// Presence: who is simulated (each Named is a bot the free Render plan pays for in CPU). A group comes into the world
+// when a human is in its home area (its home floor outside the town or camps) and stays while a human has been within
+// `near` m of one of them in the last `idle` seconds (it follows them across floors as before); then it goes home. In a
+// boss fight or a human's party it stays. An invite, a call or an accepted invitation wakes a resting group at once
+// (for at least `wake` seconds). With few humans online at most cap[humans] Named at once, a party group (the
+// Hearthward) counting as one: all of them or none. NAMED_PRESENCE=0 (and NAMED_ALWAYS=1) keep the old rule: present
+// whenever a human is on their floor.
+export const PRESENCE = { near: 60, idle: 180, wake: 300, cap: { 1: 2, 2: 3 } };
+
 const HERO_TRUST = { rate: { fight: 1, revive: 1, heal: 1, cover: 1, boss: 1, bossTry: 1, request: 1, chat: 1 }, daily: [18, 18, 9, 8, 5], loss: { downed: 4 }, invite: 'ally', summon: 'sworn' };
 // The loner: slow trust that grows mostly from fighting beside him; help he didn't ask for counts for little.
 const LONER_TRUST = { rate: { fight: 1, revive: 0.5, heal: 0.25, cover: 0.5, boss: 1, bossTry: 1, request: 0.75, chat: 0.5 }, daily: [7, 7, 7, 6, 4], loss: { downed: 6 }, invite: 'friend', summon: 'sworn' };

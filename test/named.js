@@ -27,7 +27,7 @@ import { loadoutFor } from '../shared/playerbots.js';
 import { buildCard } from '../shared/mvp.js';
 import {
   NAMED, NAMED_BY_ID, TIERS, GAINS, RULES, GROUPS, tierIndex, tierOf, newFriendship, gainFriendship, loseFriendship, dailyLeft,
-  canInvite, canSummon, namedLevel, dayKey, isNamedName, awayLine,
+  canInvite, canSummon, namedLevel, dayKey, isNamedName, awayLine, PRESENCE,
 } from '../shared/named.js';
 
 const PORT = Number(process.env.PORT) || 5320;
@@ -93,7 +93,7 @@ console.log('# pure rules (shared/named.js)');
 // =====================================================================================================================
 console.log('# in process (server/named.js on a Game)');
 // The real BotManager with an in-process start(): a "bot" is just a player added here (no WebSocket, no brain).
-function world({ store = null } = {}) {
+function world({ store = null, presence = false } = {}) { // (presence: PRESENCE's rules, off here unless a check turns them on)
   const g = new Game();
   const tracked = [];
   g.track = (p, kind, data) => { tracked.push({ p, kind, data }); };
@@ -114,7 +114,7 @@ function world({ store = null } = {}) {
     return [{ bid: e.bid }];
   };
   const clock = { t: Date.UTC(2026, 10, 18, 12) };
-  const nm = new NamedManager(g, mgr, { store, interval: 0, now: () => clock.t });
+  const nm = new NamedManager(g, mgr, { store, interval: 0, now: () => clock.t, presence });
   const human = (name, lvl = 10, cls = 'swordsman', saved = null) => {
     const sent = [];
     const p = g.addPlayer({ readyState: 1, send: s => sent.push(JSON.parse(s)) }, name, cls, saved);
@@ -623,6 +623,57 @@ console.log('# review fixes');
   ok(writes === before + 1 && db.get('42:halvard').pts === 33, 'review #7: and resolves after they land (shutdown waits for it)');
 }
 
+// ---- presence (PRESENCE: CPU on the free plan) ----
+{
+  const { g, nm, human, tick, P, sys, set } = world({ presence: true });
+  const heroes = ['halvard', 'maribel', 'tovin', 'sennet'];
+  const nat = human('Natan', 10);
+  nat.x = 0; nat.z = 0; // (in town)
+  tick(3);
+  ok(nm.online().length === 0, 'presence: a human in town, none of the Named in the world (their home is the field)');
+  let row = nm.listFor(nat).rows.find(r => r.id === 'cairn');
+  ok(row.resting && !row.online && /Resting at home/.test(row.doing) && nm.restingView(nm.chars.get('cairn'))?.resting, 'they rest at home: the Friends tab says so (Talk still works, from afar)');
+  nat.x = 0; nat.z = 70; tick(2);
+  ok(nm.online().length === 5, 'a human walks into the field (their home area): both groups come');
+  const far = () => { for (const id of [...heroes, 'cairn']) { const p = P(id); if (p) { p.x = 0; p.z = 125; } } };
+  nat.x = 0; nat.z = 0; far(); tick(PRESENCE.idle - 5);
+  ok(nm.online().length === 5, `away from every human for under ${PRESENCE.idle} s: they stay`);
+  nat.x = 0; nat.z = 110; tick(1); nat.x = 0; nat.z = 0; far(); tick(PRESENCE.idle - 5);
+  ok(nm.online().length === 5, 'a human came within 60 m: the clock starts again');
+  tick(10);
+  ok(nm.online().length === 0 && nm.listFor(nat).rows.every(r => r.resting), `${PRESENCE.idle} s with no human near: they go home`);
+  // a resting Hero: an Ally's invite wakes the Hearthward (all four), then the invite goes out
+  set(nat, 'halvard', 40);
+  nm.handle(nat, { type: 'named', op: 'invite', id: 'halvard' });
+  const reply = nat.sent.filter(m => m.type === 'named' && m.op === 'invite').at(-1);
+  ok(/on the way/.test(reply?.msg || '') && heroes.every(id => nm.chars.get(id).e) && !nm.chars.get('cairn').e, 'invite a resting Hero: the Hearthward wake at once (all four, not Cairn)');
+  tick(2);
+  ok(P('halvard')?.invite?.from === nat.id && nat.sent.some(m => m.type === 'named' && m.op === 'invite' && /Invited Halvard/.test(m.msg || '')), 'once they are in, the invite reaches Halvard');
+  g.accept(P('halvard'), nat.id);
+  ok(P('halvard').party === nat.party && !!nat.party, 'and he joins your party');
+  nat.x = 0; nat.z = 0; far(); P('halvard').x = 1; P('halvard').z = 1;
+  tick(PRESENCE.wake + PRESENCE.idle + 5);
+  ok(P('halvard')?.party === nat.party && ['maribel', 'tovin', 'sennet'].every(id => !nm.chars.get(id).e), 'in your party he stays; the rest of the Hearthward go home when idle');
+  // a resting loner: a Sworn friend's call wakes him and he comes
+  set(nat, 'cairn', 90); g.leaveParty(P('halvard')); tick(1);
+  const before = nat.party;
+  ok(nm.resting(nm.chars.get('cairn')) && nm.listFor(nat).rows.find(r => r.id === 'cairn').call.ok, 'a resting Named can still be called');
+  ok(nm.call(nat, 'cairn') === '' && /heard your call/.test(sys(nat).join()), 'call a resting Cairn: he heard and is on the way');
+  tick(2);
+  ok(P('cairn') && P('cairn').party && P('cairn').party === nat.party && Math.hypot(P('cairn').x - nat.x, P('cairn').z - nat.z) < 5, 'he comes in, joins your party and stands beside you');
+  void before;
+  // the cap: with few humans, at most PRESENCE.cap[humans] Named, the Hearthward counting as one
+  const cap1 = PRESENCE.cap[1];
+  for (const id of [...heroes, 'cairn']) nm.despawn(nm.chars.get(id));
+  for (const k of Object.keys(nm.pres)) nm.pres[k] = { seen: 0, wakeUntil: 0 };
+  PRESENCE.cap[1] = 1;
+  nat.x = 0; nat.z = 70; tick(2);
+  ok(heroes.every(id => nm.chars.get(id).e) && !nm.chars.get('cairn').e, 'cap 1 with one human: the Hearthward (one, as a group) come and Cairn waits');
+  PRESENCE.cap[1] = cap1;
+  tick(2);
+  ok(nm.online().length === 5, `cap ${cap1} (the default for one human): both groups`);
+}
+
 // ---- the kill switch ----
 {
   const g = new Game();
@@ -639,7 +690,7 @@ console.log('# a real server');
 const servers = new Set(); // (a failed check must not leave a server behind)
 process.on('exit', () => { for (const s of servers) try { s.kill('SIGKILL'); } catch {} });
 function startServer(env = {}) {
-  const srv = spawn(process.execPath, [path.join(root, 'server/index.js')], { env: { ...process.env, PORT: String(PORT), DATABASE_URL: '', TEST_HOOKS: '1', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const srv = spawn(process.execPath, [path.join(root, 'server/index.js')], { env: { ...process.env, PORT: String(PORT), DATABASE_URL: '', TEST_HOOKS: '1', NAMED_PRESENCE: '0', ...env }, stdio: ['ignore', 'pipe', 'pipe'] }); // (presence's own server check turns it on)
   srv.log = '';
   srv.stdout.on('data', d => { srv.log += d; }); srv.stderr.on('data', d => { srv.log += d; });
   srv.ready = until(() => /running on/.test(srv.log), 15000, 'the server');
@@ -756,6 +807,25 @@ function client(name, cls = 'swordsman', join = {}) {
   ok(a.welcome && !('named' in a.welcome), 'review #4: NAMED_ENABLED=0: welcome has no named flag (no Friends tab, no polling)');
   a.close();
   await srv.stop();
+}
+
+{ // presence on a real server: a player in town meets nobody; one in the field brings them in
+  let srv = startServer({ NAMED_PRESENCE: '1' });
+  await srv.ready;
+  let a = client('Natan');
+  await until(() => a.id, 5000, 'join');
+  await sleep(3000);
+  ok(a.named().length === 0, 'server, presence: a player in town, no Named in the world');
+  const st = await (await fetch(`http://localhost:${PORT}/status`)).json();
+  ok(st.online?.humans === 1 && st.online.named === 0 && typeof st.cpu?.pct === 'number', '/status: who is online by kind, and CPU');
+  a.close(); await srv.stop();
+  srv = startServer({ NAMED_PRESENCE: '1', SPAWN_AT: '0,70' });
+  await srv.ready;
+  a = client('Natan');
+  await until(() => a.id, 5000, 'join');
+  await until(() => a.named().length === 5, 8000, 'the Named to come');
+  ok(true, 'server, presence: a player in the field (their home), the five come');
+  a.close(); await srv.stop();
 }
 
 if (DB) {

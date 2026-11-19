@@ -89,7 +89,7 @@ function memStore() {
     save: async (charId, id, r) => { rows.set(`${charId}:${id}`, { char_id: charId, named_id: id, req: r.req ? JSON.stringify(r.req) : null, next_at: r.nextAt, day: r.day, got: r.got }); },
   };
 }
-function world({ store = null } = {}) {
+function world({ store = null, presence = false } = {}) {
   const g = new Game();
   const tracked = [];
   g.track = (p, kind, data) => { tracked.push({ p, kind, data }); };
@@ -108,7 +108,7 @@ function world({ store = null } = {}) {
     return [{ bid: e.bid }];
   };
   const clock = { t: Date.UTC(2026, 10, 18, 12) };
-  const nm = new NamedManager(g, mgr, { interval: 0, now: () => clock.t });
+  const nm = new NamedManager(g, mgr, { interval: 0, now: () => clock.t, presence });
   const R = { f: Math.random };
   const qs = new NamedQuests(nm, { store, rnd: () => R.f() });
   const human = (name, lvl = 12, cls = 'swordsman', saved = null) => {
@@ -288,6 +288,23 @@ function world({ store = null } = {}) {
   const o4 = qs.offerFor(nat, 'sennet');
   ok(!o4.phrasing && qs.cardFor(nat, 'sennet').state === 'offer', 'a phraser that answers at once holds nothing up');
   qs.phraser = null;
+}
+
+// ---- outreach from a Named resting at home (presence, shared/named.js PRESENCE) ----
+{
+  const { nm, qs, R, human, tick, P, set, msgs } = world({ presence: true });
+  const nat = human('Natan', 12);
+  nat.x = 0; nat.z = 0; // (in town: they rest at home in the field)
+  R.f = () => 0;
+  set(nat, 'tovin', 60);
+  tick(OUTREACH.settle + OUTREACH.every * 2);
+  const m = msgs(nat, 'out').find(o => o.kind);
+  ok(nm.online().length === 0 && m?.id === 'tovin', 'resting at home, a Friend still hears from Tovin');
+  nm.handle(nat, { type: 'named', op: 'out', id: 'tovin', yes: true });
+  ok(['halvard', 'maribel', 'tovin', 'sennet'].every(id => nm.chars.get(id).e), 'Accept wakes the Hearthward');
+  tick(2);
+  ok(P('tovin')?.party === nat.party && !!nat.party && Math.hypot(P('tovin').x - nat.x, P('tovin').z - nat.z) < 6, 'and Tovin joins your party and comes to you');
+  void qs;
 }
 
 // ---- outreach ----

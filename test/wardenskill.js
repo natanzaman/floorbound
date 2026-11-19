@@ -6,7 +6,9 @@
 //        (env: START_LEVEL=10, SPAWN_AT=0,150, LIMIT=300 s per run, WARDEN_TWIST to force a twist,
 //         ROLES=guardian,ranger,bard,cleric, START_STYLE=daggers,drum to arm each class with the first of its styles listed,
 //         LOG_TALENTS=1, STATS=1 for each bot's damage, DPS and basic-attack presses; styled melee / ring combos also report how many landed,
-//         MVP=1 prints each run's post-fight MVP card (G5), MVP_JSON=file saves the last one)
+//         MVP=1 prints each run's post-fight MVP card (G5), MVP_JSON=file saves the last one,
+//         LOCAL=1 runs the party as the server's own bots (in-process sockets, server/localws.js, with their think-rate
+//         rule) and watches as a spectator; STATS' basic-attack presses are not counted then)
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,13 +29,31 @@ const BOSS = SOV
   : { type: MOB_IDS.indexOf('warden'), lvl: '10', at: '0,150', fell: /Horned Warden has fallen/, twist: /Warden twist: (\w+)/ };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+const LOCAL = !!process.env.LOCAL;
+// LOCAL=1: a spectator socket stands in for the lead bot's; the team is read off the roster (the server's bots).
+async function watchLocal(roles) {
+  const ws = new WebSocket(`ws://localhost:${PORT}/ws`);
+  const team = [];
+  ws.on('open', () => ws.send(JSON.stringify({ type: 'spectate' })));
+  ws.on('message', raw => {
+    const m = JSON.parse(raw.toString());
+    if (m.type === 'roster' && !team.length && m.players.filter(r => r.bot).length >= roles.length) team.push(...m.players.filter(r => r.bot).map(r => ({ id: r.id, cls: r.cls, name: r.name, send: () => {} })));
+  });
+  for (let k = 0; k < 100 && !team.length; k++) await sleep(100);
+  if (!team.length) throw new Error('the server\'s team never joined');
+  team[0].ws = ws;
+  return { team, stop: () => ws.close() };
+}
+
 async function run(i) {
   const env = { ...process.env, PORT: String(PORT), START_LEVEL: process.env.START_LEVEL || BOSS.lvl, SPAWN_AT: process.env.SPAWN_AT || BOSS.at, DATABASE_URL: '', QUAKE_STATS: '1', NAMED_ENABLED: process.env.NAMED_ENABLED || '0' }; // (the bots here join as players: keep the Named out of the run)
+  const roles = process.env.ROLES ? process.env.ROLES.split(',') : ['guardian', 'swordsman', 'cleric'];
+  if (LOCAL) env.TEST_TEAM = `${roles.join(',')}:${SKILL}:${SOV ? 'floor2' : 'warden'}`; // the server runs them (server/index.js)
   const srv = spawn(process.execPath, [path.join(root, 'server/index.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
   srv.stdout.on('data', d => { log += d; }); srv.stderr.on('data', d => { log += d; });
   for (let k = 0; k < 150 && !/running on/.test(log); k++) await sleep(100);
-  const g = startTeam({ url: `ws://localhost:${PORT}/ws`, WebSocket, skill: SKILL, ...(process.env.ROLES ? { roles: process.env.ROLES.split(',') } : {}), log: m => { if (process.env.LOG_TALENTS && m.startsWith('[talent]')) console.log(m); } });
+  const g = LOCAL ? await watchLocal(roles) : startTeam({ url: `ws://localhost:${PORT}/ws`, WebSocket, skill: SKILL, roles, log: m => { if (process.env.LOG_TALENTS && m.startsWith('[talent]')) console.log(m); } });
   const lead = g.team[0];
   const res = { run: i + 1, result: 'timeout', secs: 0, deaths: 0, downs: 0, revives: 0, twist: (log.match(BOSS.twist) || [])[1] || '?' };
   let start = null, hit = false, done = false;

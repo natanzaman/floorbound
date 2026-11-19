@@ -315,11 +315,11 @@ export class NamedQuests {
   outBlock(h, st, now) {
     const g = this.game, def = st.def, np = this.nm.playerOf(st), o = this.outOf(h);
     if (!PERSONA[def.id]?.outreach) return 'never';
-    if (!np) return 'away';
+    if (!np && !this.nm.resting?.(st)) return 'away'; // (resting at home: an Accept wakes them, server/named.js)
     if (tierIndex(this.nm.peek(h, def.id)?.pts || 0) < tierAt('friend')) return 'tier';
     if (o.no.has(def.id)) return 'declined';
     if (now - (o.per[def.id] ?? -1e15) < OUTREACH.cd * 1000) return 'cooldown';
-    if (this.nm.hostOf(np) || np.dead || np.downed || inBossRoom(np) || g.activeFightOf?.(np)) return 'busy';
+    if (np && (this.nm.hostOf(np) || np.dead || np.downed || inBossRoom(np) || g.activeFightOf?.(np))) return 'busy';
     const party = g.partyOf(h);
     if (this.nm.namedInParty(party).length || (party?.members.length || 1) >= PARTY_MAX) return 'party';
     return '';
@@ -341,7 +341,7 @@ export class NamedQuests {
   }
   send(h, st, now = this.now()) {
     const def = st.def, np = this.nm.playerOf(st), o = this.outOf(h), floor = floorOf(h.x) || 1, boss = FLOOR_REQ[floor]?.boss;
-    if (!np) return null;
+    if (!np && !this.nm.resting?.(st)) return null;
     const raid = !!boss && h.lvl >= (MOBS[boss]?.level ?? 99) - BOSS_BAND && this.rnd() < OUTREACH.raid;
     const msg = { k: raid ? 'raid' : 'farm', boss, area: FLOOR_REQ[floor]?.area || 'the field' };
     const open = o.open = { id: def.id, kind: msg.k, until: now + OUTREACH.ttl * 1000 };
@@ -369,8 +369,24 @@ export class NamedQuests {
       return '';
     }
     const np = this.nm.playerOf(st);
+    if (!np && this.nm.resting?.(st)) { // resting at home: they come in, then join you (named.runPending -> join)
+      const why = this.joinBlock(h, st, null);
+      if (why) { g.sys(why, h.id); return why; }
+      this.nm.wake(st, h, 'out', { out: kind });
+      g.sys(`${st.def.name} is on the way.`, h.id);
+      return '';
+    }
+    return this.join(h, st, kind);
+  }
+  joinBlock(h, st, np) {
+    const g = this.game;
+    return (np && this.nm.freeBlock(h, st, np)) || (this.nm.namedInParty(g.partyOf(h)).length || this.nm.namedInvited(h, st) ? 'One of the Named per party.' : (g.partyOf(h)?.members.length || 1) >= PARTY_MAX ? 'Your party is full.' : '');
+  }
+  // An accepted invitation: the Named joins the player's party and comes to them. Returns '' or why not.
+  join(h, st, kind) {
+    const g = this.game, np = this.nm.playerOf(st);
     if (!np) return `${st.def.name} isn't around any more.`;
-    const why = this.nm.freeBlock(h, st, np) || (this.nm.namedInParty(g.partyOf(h)).length || this.nm.namedInvited(h, st) ? 'One of the Named per party.' : (g.partyOf(h)?.members.length || 1) >= PARTY_MAX ? 'Your party is full.' : '');
+    const why = this.joinBlock(h, st, np);
     if (why) { g.sys(why, h.id); return why; }
     if (h.dead || h.downed) return 'Wait until you are back on your feet.';
     this.nm.mgr.joinParty(np, h);
