@@ -17,7 +17,10 @@
 //  NamedManager         runs them as server bots of their own kind (BotManager entries with e.named: reserved slots
 //    outside MAX_BOTS, not in the Bots tab, never removed by "remove all"):
 //    presence        only while a human is online, and only on a floor a human is on; parked (gone) during a
-//                    director show; nothing is written to the database with nobody online
+//                    director show; nothing is written to the database with nobody online. On top (PRESENCE in
+//                    shared/named.js, CPU on the free plan): a group comes when a human is in its home area, stays while
+//                    one has been near them lately, then goes home; an invite, a call or an accepted invitation wakes a
+//                    resting group at once (the request is carried out when they're in); few humans online: a cap
 //    level           the top-3 average of non-admin characters active in the last 14 days, + the offset; never drops.
 //                    Gear, mastery and talents are the premade setup for that level (shared/playerbots.js)
 //    plans           each group farms, and now and then goes for the boss of its floor, but only while no human is in
@@ -30,7 +33,7 @@
 // error? } and, when friendship changes, { type: 'named', op: 'fr', id, name, d, pts, tier, tierName, up, why }.
 // Testing aids: TEST_HOOKS=1 accepts { type: 'test', friend: { id, pts } } (sets your friendship); NAMED_ALWAYS=1 keeps them in the world with nobody online (floor 1); NAMED_LEVEL=<n> is the least level
 // they have; NAMED_BOSS_AFTER=<s> is how long they farm before their first boss attempt of a visit.
-import { CLASSES, MAX_LEVEL, PARTY_MAX, areaName, inArena, inGateZone, resolveCollision } from '../shared/data.js';
+import { CLASSES, MAX_LEVEL, PARTY_MAX, areaName, inArena, inGateZone, inTown, resolveCollision } from '../shared/data.js';
 import { F2, floorOf, inArena2, inGateZone2 } from '../shared/floor2.js';
 import { F3, inArena3, inGateZone3 } from '../shared/floor3.js';
 import { makeItem, SLOTS } from '../shared/items.js';
@@ -40,7 +43,7 @@ import { loadoutFor, charmFor, defaultBranch } from '../shared/playerbots.js';
 import {
   NAMED, NAMED_BY_ID, NAMED_MAX, NAMED_SKILL, LEVEL_OFFSET, LEVEL_DAYS, LEVEL_TOP, GROUPS, TIERS, GAINS, RULES,
   tierIndex, tierAt, tierProgress, lookColor, isNamedName, namedLine, newFriendship, gainFriendship, loseFriendship,
-  dailyLeft, canInvite, canSummon, namedLevel, awayLine, nextReset,
+  dailyLeft, canInvite, canSummon, namedLevel, awayLine, nextReset, PRESENCE,
 } from '../shared/named.js';
 
 export const namedOn = () => process.env.NAMED_ENABLED !== '0';
@@ -57,6 +60,7 @@ const FLOORS = {
   3: { home: () => [F3.camp.x, F3.camp.z], arena: inArena3, near: (x, z) => inArena3(x, z) || inGateZone3(x, z) || (z > 132 && Math.abs(x - F3.x) < 24), fight: 'fight3', minLvl: 25, beh: { farm: 'floor3', boss: 'floor3' } },
 };
 const inBossRoom = p => inArena(p.x, p.z) || inArena2(p.x, p.z) || inArena3(p.x, p.z);
+const inHome = (home, p) => floorOf(p.x) === (home?.floor || 1) && !inTown(p.x, p.z); // a Named's home area: its floor, outside the town and camps
 
 // ---------- Postgres (server/db.js makes the tables) ----------
 export function makeNamedStore(q, { adminIds = [] } = {}) {
@@ -80,8 +84,11 @@ export function makeNamedStore(q, { adminIds = [] } = {}) {
 
 // ---------- the manager ----------
 export class NamedManager {
-  constructor(game, mgr, { store = null, always = process.env.NAMED_ALWAYS === '1', minLevel = Number(process.env.NAMED_LEVEL) || 1, bossAfter = Number(process.env.NAMED_BOSS_AFTER) || 0, now = Date.now, interval = 1000 } = {}) {
+  constructor(game, mgr, { store = null, always = process.env.NAMED_ALWAYS === '1', presence = process.env.NAMED_PRESENCE !== '0', minLevel = Number(process.env.NAMED_LEVEL) || 1, bossAfter = Number(process.env.NAMED_BOSS_AFTER) || 0, now = Date.now, interval = 1000 } = {}) {
     this.game = game; this.mgr = mgr; this.store = store; this.always = always; this.now = now; this.minLevel = minLevel; this.bossAfter = bossAfter;
+    this.presence = presence && !always; // (PRESENCE: off, they're present whenever a human is on their floor)
+    this.pres = Object.fromEntries(Object.keys(GROUPS).map(k => [k, { seen: 0, wakeUntil: 0 }])); // group -> last time a human was near / in its home area; woken until
+    this.pending = []; // invites, calls and accepted invitations waiting for a woken Named to come in: { id, hid, kind, at, out }
     this.chars = new Map(NAMED.slice(0, NAMED_MAX).map(def => [def.id, { def, lvl: 1, off: LEVEL_OFFSET, enabled: true, e: null, pid: 0, seenAt: 0, seenSaved: 0, summonAt: -1e15, hostT: null, dirty: false }]));
     this.friends = new Map();   // player key -> Map(named id -> record)
     this.dirtyFr = new Set();   // `${charId}:${namedId}` waiting to be saved
@@ -221,11 +228,11 @@ export class NamedManager {
   // Why this human can't invite this Named right now ('' = they can).
   inviteBlock(h, st) {
     const def = st.def, p = this.playerOf(st), g = this.game;
-    if (!p) return `${def.name} isn't around right now.`;
+    if (!p && !this.resting(st)) return `${def.name} isn't around right now.`;
     if (h.party && p.party === h.party) return `${def.name} is already in your party.`;
     const rec = this.peek(h, def.id) || newFriendship();
     if (!canInvite(def, rec.pts)) return `${def.name} only joins ${art(TIERS[tierAt(def.trust.invite)].name)} (you: ${TIERS[tierIndex(rec.pts)].name}).`;
-    return this.freeBlock(h, st, p) || (this.namedInParty(g.partyOf(h)).length ? 'One of the Named per party.' : (g.partyOf(h)?.members.length || 1) >= PARTY_MAX ? 'Your party is full.' : '');
+    return (p && this.freeBlock(h, st, p)) || (this.namedInParty(g.partyOf(h)).length ? 'One of the Named per party.' : (g.partyOf(h)?.members.length || 1) >= PARTY_MAX ? 'Your party is full.' : '');
   }
   freeBlock(h, st, p) { // busy rules, the same for an invite and a call
     const def = st.def, host = this.hostOf(p);
@@ -237,14 +244,14 @@ export class NamedManager {
   }
   callBlock(h, st) {
     const def = st.def, p = this.playerOf(st), g = this.game, now = this.now();
-    if (!p) return `${def.name} isn't around right now.`;
-    if (h.party && p.party === h.party) return `${def.name} is already with you.`;
+    if (!p && !this.resting(st)) return `${def.name} isn't around right now.`;
+    if (p && h.party && p.party === h.party) return `${def.name} is already with you.`;
     const rec = this.peek(h, def.id) || newFriendship();
     if (!canSummon(def, rec.pts)) return `${def.name} only comes when ${art(TIERS[tierAt(def.trust.summon)].name)} friend calls.`;
     const left = st.summonAt + RULES.summonCd * 1000 - now;
     if (left > 0) return `${def.name} was called away a moment ago. Try again in ${Math.ceil(left / 60000)} min.`;
     if (h.dead || h.downed) return 'Wait until you are back on your feet.';
-    return this.freeBlock(h, st, p) || (this.namedInParty(g.partyOf(h)).length || this.namedInvited(h, st) ? 'One of the Named per party.' : (g.partyOf(h)?.members.length || 1) >= PARTY_MAX ? 'Your party is full.' : '');
+    return (p && this.freeBlock(h, st, p)) || (this.namedInParty(g.partyOf(h)).length || this.namedInvited(h, st) ? 'One of the Named per party.' : (g.partyOf(h)?.members.length || 1) >= PARTY_MAX ? 'Your party is full.' : '');
   }
   // game.invite(h, a Named): true = let the invite through (the bot accepts it).
   onInvite(h, t) {
@@ -264,6 +271,7 @@ export class NamedManager {
     if (!st || !isHuman(h)) return 'Nobody by that name.';
     const why = this.callBlock(h, st);
     if (why) { g.sys(why, h.id); return why; }
+    if (!this.playerOf(st)) { this.wake(st, h, 'call'); g.sys(`${st.def.name} heard your call and is on the way.`, h.id); return ''; } // resting: they come in, then answer (runPending)
     const p = this.playerOf(st);
     this.mgr.joinParty(p, h);
     if (p.party !== h.party || !h.party) { g.sys(`${st.def.name} couldn't join your party.`, h.id); return 'failed'; }
@@ -295,6 +303,11 @@ export class NamedManager {
     if (!st) return this.send(p, { op, error: 'Nobody by that name.' });
     if (op === 'invite') {
       const t = this.playerOf(st);
+      if (!t && this.resting(st)) { // resting: wake them; the invite goes out once they're in (runPending)
+        const why = this.inviteBlock(p, st);
+        if (!why) this.wake(st, p, 'invite');
+        return this.send(p, { op, ...(why ? { error: why } : { msg: `${st.def.name} is on the way: your invite goes out when they arrive.` }), list: this.listFor(p) });
+      }
       if (!t) return this.send(p, { op, error: `${st.def.name} isn't around right now.`, list: this.listFor(p) });
       const why = this.inviteBlock(p, st);
       this.game.invite(p, t.id); // (the gate in installNamed answers a refusal in character)
@@ -314,7 +327,7 @@ export class NamedManager {
       const def = st.def, p = this.playerOf(st), rec = this.peek(h, def.id) || newFriendship(), i = tierIndex(rec.pts);
       const host = p && this.hostOf(p), mine = !!(p && h.party && p.party === h.party);
       let doing;
-      if (!p) doing = !st.enabled ? 'Away' : this.parked ? 'Resting (a show is on)' : 'Elsewhere in the tower';
+      if (!p) doing = !st.enabled ? 'Away' : this.parked ? 'Resting (a show is on)' : this.resting(st) ? 'Resting at home (comes if you invite or call)' : 'Elsewhere in the tower';
       else if (p.dead) doing = 'Down';
       else if (mine) doing = 'With you';
       else if (host) doing = `With ${host.name}`;
@@ -322,7 +335,7 @@ export class NamedManager {
       const ib = this.inviteBlock(h, st), cb = this.callBlock(h, st);
       return {
         id: def.id, name: def.name, cls: def.cls, role: def.role, group: def.group, gname: GROUPS[def.group].name, color: lookColor(def), blurb: def.blurb,
-        online: !!p, lvl: p?.lvl ?? st.lvl, hp: p?.hp ?? 0, maxHp: p?.maxHp ?? 0, area: p ? areaName(p.x, p.z) : '', floor: p ? floorOf(p.x) : 0, doing, mine,
+        online: !!p, resting: this.resting(st), lvl: p?.lvl ?? st.lvl, hp: p?.hp ?? 0, maxHp: p?.maxHp ?? 0, area: p ? areaName(p.x, p.z) : '', floor: p ? floorOf(p.x) : 0, doing, mine,
         pts: rec.pts, tier: i, tierName: TIERS[i].name, prog: r2(tierProgress(rec.pts)), next: TIERS[i + 1] ? { name: TIERS[i + 1].name, at: TIERS[i + 1].at } : null,
         left: dailyLeft(rec, def, now), inviteAt: TIERS[tierAt(def.trust.invite)].name, callAt: TIERS[tierAt(def.trust.summon)].name,
         invite: ib ? { ok: false, why: ib } : { ok: true }, call: cb ? { ok: false, why: cb } : { ok: true },
@@ -447,6 +460,7 @@ export class NamedManager {
     this.parked = !!g.director?.running;
     if (this.parked) return this.despawnAll(); // a show is being filmed
     for (const group of Object.keys(GROUPS)) this.runGroup(group, humans, now);
+    if (this.pending.length) this.runPending(now);
     for (const st of this.chars.values()) if (st.e && now - st.seenSaved > 120000) { st.seenAt = now; st.dirty = true; }
     if (humans.length && now - this.flushAt > 3000) { this.flushAt = now; this.flushFriends(); this.flushChars(); }
   }
@@ -459,7 +473,7 @@ export class NamedManager {
     const busy = members.some(st => { const p = this.playerOf(st); return p && !p.dead && inBossRoom(p) && !this.hostOf(p); });
     if (!count[plan.floor] && humans.length && !busy) plan.floor = +Object.keys(count).sort((a, b) => count[b] - count[a])[0];
     const floor = plan.floor, F = FLOORS[floor];
-    const present = !!F && (this.always || !!count[floor]);
+    const present = !!F && (this.always || (this.presence ? this.wanted(group, members, humans, now) : !!count[floor]));
     const free = [];
     for (const st of members) {
       let p = this.playerOf(st);
@@ -471,6 +485,7 @@ export class NamedManager {
       if (p.lvl < st.lvl) { this.mgr.setLevel(st.e, st.lvl); this.outfit(st, p); }
       if (host) this.withHost(st, p, host); else { st.hostT = null; if (st.e.b.cmd?.nm) st.e.b.cmd = null; free.push([st, p]); }
     }
+    if (!present && !members.some(st => st.e)) Object.assign(plan, { mode: 'farm', nextAt: 0, fought: false, homeAt: 0 }); // gone home: a fresh plan next visit
     if (this.away[group] === undefined && free.length) this.tellAway(group, members, humans, now);
     if (!free.length) return;
     // on the right floor, in one party (the Hearthward) or none (the loner)
@@ -487,6 +502,62 @@ export class NamedManager {
       const e = st.e;
       if (e.behaviour !== beh) { e.group.configure({ behaviour: beh, follow: '' }); e.behaviour = beh; }
       e.b.noBoss = plan.mode !== 'boss';
+    }
+  }
+
+  // ---------- presence (PRESENCE) ----------
+  // Should this group be in the world now? Woken; or already in and a human near them (or in their home area) within
+  // the last PRESENCE.idle s, or in a boss fight; or out, a human in their home area, and room under the cap.
+  wanted(group, members, humans, now) {
+    const ps = this.pres[group], live = members.map(st => this.playerOf(st)).filter(p => p && !this.hostOf(p)); // (one in a human's party stays anyway: not the rest's reason)
+    const home = humans.some(h => inHome(members[0].def.home, h));
+    const near = humans.some(h => live.some(p => floorOf(p.x) === floorOf(h.x) && dist(p, h) <= PRESENCE.near));
+    if (home || near) ps.seen = now;
+    if (now < ps.wakeUntil) return true;
+    if (members.some(st => st.e)) return now - ps.seen < PRESENCE.idle * 1000 || live.some(p => !p.dead && (inBossRoom(p) || this.game.activeFightOf?.(p)));
+    return home && this.capRoom(group, humans.length);
+  }
+  // With few humans online, at most PRESENCE.cap[humans] Named in the world (not counting those in a human's party);
+  // a party group (the Hearthward) counts as one.
+  capRoom(group, nHumans) {
+    const cap = PRESENCE.cap[nHumans];
+    if (cap === undefined) return true;
+    const unitsOf = g => (GROUPS[g].party ? 1 : 0);
+    let used = 0;
+    for (const g of Object.keys(GROUPS)) {
+      if (g === group) continue;
+      const free = [...this.chars.values()].filter(st => st.def.group === g && st.e && !(this.playerOf(st) && this.hostOf(this.playerOf(st))));
+      if (free.length) used += unitsOf(g) || free.length;
+    }
+    const mine = unitsOf(group) || [...this.chars.values()].filter(st => st.def.group === group && st.enabled).length;
+    return used + mine <= cap;
+  }
+  // Resting: enabled and not in the world only because nobody is near (a human is online, no show on). An invite,
+  // a call or an accepted invitation wakes them (wake).
+  resting(st) { return !!st && this.presence && st.enabled && !st.e && !this.parked && this.humans().length > 0; }
+  // A stand-in for a resting Named (I3's talk: answered from afar, never "near").
+  restingView(st) { return this.resting(st) ? { id: 0, x: 0, z: 70, lvl: st.lvl, hp: 1, maxHp: 1, party: 0, dead: false, downed: null, resting: true } : null; }
+  wake(st, h, kind, extra = {}) {
+    const group = st.def.group, now = this.now(), ps = this.pres[group];
+    ps.wakeUntil = now + PRESENCE.wake * 1000; ps.seen = now;
+    this.pending = this.pending.filter(q => !(q.hid === h.id && q.id === st.def.id));
+    this.pending.push({ id: st.def.id, hid: h.id, kind, at: now, ...extra });
+    this.runGroup(group, this.humans(), now); // in at once (the request goes through once they've joined)
+  }
+  runPending(now) {
+    for (const q of this.pending.splice(0)) {
+      const st = this.chars.get(q.id), h = this.game.players.get(q.hid), p = this.playerOf(st);
+      if (!h || !isHuman(h) || now - q.at > 20000) continue; // (gone, or they never came)
+      if (!p || st.fresh) { this.pending.push(q); continue; }
+      const name = st.def.name;
+      if (q.kind === 'invite') {
+        const why = this.inviteBlock(h, st);
+        this.game.invite(h, p.id);
+        this.send(h, { op: 'invite', ...(why ? { error: why } : { msg: `Invited ${name}.` }), list: this.listFor(h) });
+      } else if (q.kind === 'call') {
+        const why = this.call(h, q.id);
+        this.send(h, { op: 'call', ...(why ? { error: why } : { msg: `${name} is on the way.` }), list: this.listFor(h) });
+      } else if (q.kind === 'out') this.quests?.join?.(h, st, q.out);
     }
   }
 

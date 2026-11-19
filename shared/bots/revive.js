@@ -39,7 +39,7 @@ export function release(b) {
 function stepTo(b, x, z, stop, speed) {
   const dx = x - b.x, dz = z - b.z, d = Math.hypot(dx, dz);
   if (d <= stop) return false;
-  const k = Math.min(d - stop, speed * DT) / d;
+  const k = Math.min(d - stop, speed * (b.dt || DT)) / d;
   const [nx, nz] = resolveCollision(b.x + dx * k, b.z + dz * k);
   if (!walkable(nx, nz, !b.gateOpen)) return moveToward(b, x, z, stop, speed);
   b.x = nx; b.z = nz; b.face = Math.atan2(dx, dz);

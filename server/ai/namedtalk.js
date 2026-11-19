@@ -323,12 +323,12 @@ export class NamedTalk {
   // One line from player p to the Named st. Resolves when the reply is out (tests await it).
   async talk(p, st, text, { explicit = false, echo = null } = {}) {
     const N = this.N, def = st.def, now = this.now();
-    const np = N.playerOf(st), key = talkKey(p), s = this.pl(key);
+    const np = N.playerOf(st) || N.restingView?.(st), key = talkKey(p), s = this.pl(key); // (resting at home: they answer from afar)
     text = clean(text, 200);
     if (!text) return { why: 'empty' };
     if (!np) { this.game.sys(`${def.name} isn't around right now.`, p.id); return { why: 'away' }; }
     if (np.dead || np.downed) { this.game.sys(`${def.name} can't talk right now.`, p.id); return { why: 'down' }; }
-    const near = Math.hypot(np.x - p.x, np.z - p.z) <= SAY_R;
+    const near = !np.resting && Math.hypot(np.x - p.x, np.z - p.z) <= SAY_R;
     // spam: one line in flight, a gap, a burst cap (a short note, at most every 10 s)
     s.burst = s.burst.filter(t => t > now - 60e3);
     const limit = s.busy ? `${def.name} is still answering.` : now - s.last < this.cfg.namedGapS * 1000 ? `Give ${def.name} a moment.` : s.burst.length >= BURST ? 'Slow down a little.' : '';

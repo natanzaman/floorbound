@@ -57,7 +57,7 @@ export function createBot({ url, WebSocket: WS = globalThis.WebSocket, cls, name
   };
   b.role = roleOf(cls);
   b.skill = clampSkill(skill); // capability level; 5 = perfect
-  b.send = o => b.ws.readyState === 1 && b.ws.send(JSON.stringify(o));
+  b.send = o => b.ws.readyState === 1 && (b.ws.sendObj ? b.ws.sendObj(o) : b.ws.send(JSON.stringify(o))); // (sendObj: the server's in-process socket, server/localws.js)
   b.configure = o => configure(b, o);
   b.command = c => command(b, c);
   b.setSkill = v => setSkill(b, v);
@@ -67,7 +67,7 @@ export function createBot({ url, WebSocket: WS = globalThis.WebSocket, cls, name
   b.ws.addEventListener('close', () => { b.closed = true; b.goal = 'gone'; });
   b.ws.addEventListener('error', () => {}); // (Node's ws throws on an unhandled error event)
   b.ws.addEventListener('message', ev => {
-    try { onMessage(b, JSON.parse(typeof ev.data === 'string' ? ev.data : ev.data.toString())); } catch (err) { console.error(`bot ${b.name}`, err); }
+    try { onMessage(b, ev.obj || JSON.parse(typeof ev.data === 'string' ? ev.data : ev.data.toString())); } catch (err) { console.error(`bot ${b.name}`, err); } // (ev.obj: in process, already an object; read-only)
   });
   return b;
 }
@@ -112,7 +112,7 @@ function evolve(b, m) {
 }
 
 function onSnap(b, msg) {
-  b.t += DT;
+  b.dt = msg.dt || DT; b.t += b.dt; // (msg.dt: the server thinks this bot at 10 Hz while it's far from humans and fights, server/index.js)
   b.me = msg.me;
   b.cds = msg.me.cds.map((c, k) => (b.t - (b.pressed?.[k] || -9) < 0.3 ? Math.max(c, 0.2) : c));
   if (b.t - (b.dodgePressed || -9) > 0.3) b.dodgeCd = msg.me.dodge || 0;

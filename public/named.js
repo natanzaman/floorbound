@@ -60,7 +60,7 @@ export function initNamed({ $, send, state, log, sfx, banner }) {
       <div class="nf-bar"><div style="width:${pct}%"></div></div>
       <div class="nf-pts">${toNext}${today}</div>
       <div class="nf-where">${r.online ? `<span class="nf-hp" title="Health ${hp}%"><i style="width:${hp}%"></i></span>` : ''}${where}</div>
-      <div class="nf-ctl"><button data-op="talk" data-id="${r.id}" ${r.online ? '' : 'disabled'} title="${r.online ? `Say something to ${esc(r.name)}` : `${esc(r.name)} isn't around`}">Talk</button>${btn('invite', 'Invite', r.invite, r.inviteAt)}${r.mine ? '<span class="tag">Party</span>' : btn('call', 'Call', r.call, r.callAt)}</div>
+      <div class="nf-ctl"><button data-op="talk" data-id="${r.id}" ${r.online || r.resting ? '' : 'disabled'} title="${r.online || r.resting ? `Say something to ${esc(r.name)}` : `${esc(r.name)} isn't around`}">Talk</button>${btn('invite', 'Invite', r.invite, r.inviteAt)}${r.mine ? '<span class="tag">Party</span>' : btn('call', 'Call', r.call, r.callAt)}</div>
       ${requestCard(r)}
     </div>`;
   }

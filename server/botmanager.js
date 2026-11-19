@@ -1,6 +1,7 @@
 // Server-side bots, run inside the server process and managed from the admin page (/admin.html).
 //
-// Each bot is a real WebSocket connection to this server's own /ws (the `ws` package) with its OWN brain
+// Each bot is a client of this server's own /ws, on an in-process socket (server/localws.js; a real WebSocket with
+// BOT_TRANSPORT=ws), with its OWN brain
 // (shared/bots/brain.js via shared/teambots.js): its own class role, behaviour, capability level and goal. "Add team"
 // adds three such bots put into one party; editing one bot never changes another. Party members command their bots
 // with /b chat orders or the command wheel; admins also through POST /api/admin/bots/:bid/command.
@@ -31,8 +32,10 @@ const ROLES = ['guardian', 'swordsman', 'cleric'];
 const TEAM = { guardian: 'Brann', swordsman: 'Kael', cleric: 'Lyra' };
 
 export class BotManager {
-  constructor(game, { url, max = Number(process.env.MAX_BOTS) || 30 } = {}) {
-    this.game = game; this.url = url; this.max = max;
+  // local: the in-process socket hub (server/localws.js): bots talk to the game without JSON or a loopback socket.
+  // Without it (tests, BOT_TRANSPORT=ws) each bot is a real WebSocket client of `url`.
+  constructor(game, { url, local = null, max = Number(process.env.MAX_BOTS) || 30 } = {}) {
+    this.game = game; this.url = url; this.local = local; this.max = max;
     this.key = crypto.randomBytes(18).toString('base64url'); // only this process knows it
     this.bots = []; // { bid, b (the bot and its brain), group (startTeam handle), behaviour, follow, team, lvl, at }
     this.nextBid = 1; this.nextTeam = 1;
@@ -105,7 +108,7 @@ export class BotManager {
     skill = clampSkill(skill); // (default 4: Skilled)
     const url = typeof this.url === 'function' ? this.url() : this.url;
     const group = startTeam({
-      url, WebSocket, roles, names, behaviour, follow, skill,
+      url, WebSocket: this.local?.WebSocket || WebSocket, roles, names, behaviour, follow, skill,
       join: { bot: this.key, lvl, f2: behaviour === 'floor2' || behaviour === 'floor3' || behaviour === 'follow' ? 1 : 0, f3: behaviour === 'floor3' || behaviour === 'follow' ? 1 : 0, ...(join || {}) },
     });
     const out = group.team.map(b => ({ bid: bid || this.nextBid++, b, group, behaviour, follow, team, lvl, at: Date.now() }));

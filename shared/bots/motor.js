@@ -24,7 +24,7 @@ export function moveToward(b, tx, tz, stop = 0.4, speed = PLAYER_SPEED) {
   const dx = tx - b.x, dz = tz - b.z, d = Math.hypot(dx, dz);
   if (d <= stop) return false;
   if (b.airUntil > clock(b)) speed *= JUMP.air; // jumping: air control is a little weaker (shared/data.js airStep)
-  const step = Math.min(d - stop, speed * DT);
+  const step = Math.min(d - stop, speed * (b.dt || DT)); // (b.dt: this snapshot's step, 0.1 s at 10 Hz)
   let nx = b.x + (dx / d) * step, nz = b.z + (dz / d) * step;
   [nx, nz] = resolveCollision(nx, nz);
   if (!walkable(nx, nz, !b.gateOpen)) return false;
@@ -47,8 +47,9 @@ export function evade(b, tx, tz) {
 
 export function stepRoll(b) {
   if (!b.roll) return false;
-  const step = Math.min(b.roll.left, DT) * (DODGE.dist / DODGE.time);
-  b.roll.left -= DT;
+  const dt = b.dt || DT;
+  const step = Math.min(b.roll.left, dt) * (DODGE.dist / DODGE.time);
+  b.roll.left -= dt;
   const [nx, nz] = resolveCollision(b.x + Math.sin(b.roll.dir) * step, b.z + Math.cos(b.roll.dir) * step);
   if (walkable(nx, nz, !b.gateOpen)) { b.x = nx; b.z = nz; }
   if (b.roll.left <= 0) b.roll = null;
