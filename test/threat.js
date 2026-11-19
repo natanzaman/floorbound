@@ -83,7 +83,7 @@ function race(taunt) {
   let tankTop = 0, ticks = 0, pulledAt = null;
   for (let i = 0; i < 20 * 40; i++) {
     tick(g);
-    if (i % 10 === 0) { gu.hp = Math.max(1, gu.hp - Math.round(gu.maxHp * 0.06)); cl.hp = Math.max(1, cl.hp - Math.round(cl.maxHp * 0.03)); }
+    if (i % 10 === 0) { gu.hp = Math.max(1, gu.hp - Math.round(gu.maxHp * 0.06)); cl.hp = Math.max(1, cl.hp - Math.round(cl.maxHp * 0.03)); g.cleanReset(gu); g.cleanReset(cl); } // the boss's hits (no clean bonus)
     if (Math.floor(i / 40) % 2 === 0) g.useSkill(gu, 0, 0); // bashes half the time (guarding / moving the rest)
     if (taunt) g.useSkill(gu, 1, 0);
     if (i > 60) { g.useSkill(cl, 1, 0); g.useSkill(cl, 3, 0); g.useSkill(cl, 0, 0); } // heal, Sanctuary, Smite on cooldown
@@ -113,18 +113,18 @@ function race(taunt) {
   assert.equal(th.get(W.id), gu.id, 'the boss targets the top threat');
   assert.equal(th.get(alpha.id), sw.id, 'elites too');
   assert.ok(!th.has(boar.id), 'plain mobs are not sent');
-  assert.deepEqual(g.meFor(cl).th, [W.id, 62, 0], 'the Cleric is at 62% of top');
+  assert.deepEqual(g.meFor(cl).th, [W.id, 62, 0, 10, 0, 0], 'the Cleric is at 62% of top');
   const swMe = g.meFor(sw).th;
   assert.ok(swMe[1] === 93 && swMe[1] >= THREAT.warn, '93%: about to pull');
-  assert.deepEqual(g.meFor(gu).th, [W.id, 100, 93], 'the top sees the runner-up');
+  assert.deepEqual(g.meFor(gu).th, [W.id, 100, 93, 10, 0, 0], 'the top sees the runner-up');
   assert.ok(typeof g.meFor(gu).cov === 'number' && g.meFor(cl).cov === undefined, 'Cover cooldown only for Guardians');
   sw.dead = true;
-  assert.deepEqual(g.meFor(gu).th, [W.id, 100, 62], 'the dead do not count');
+  assert.deepEqual(g.meFor(gu).th, [W.id, 100, 62, 10, 0, 0], 'the dead do not count');
   W.threat.clear(); alpha.threat.clear();
   const w2 = JSON.parse(g.snapshot());
   assert.equal(w2.th, undefined, 'nothing engaged: no th');
   assert.equal(g.meFor(gu).th, undefined);
-  ok('snapshot th = [[boss/elite, target]]; me.th = [boss, my % of top, runner-up %]');
+  ok('snapshot th = [[boss/elite, target]]; me.th = [boss, my % of top, runner-up %, mult×10, lockSecs, lockBy]');
 }
 
 // ---------- Cover ----------

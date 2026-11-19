@@ -13,6 +13,7 @@ export function useSkill(b, slot, face, tid) {
   const sk = CLASSES[b.cls]?.skills[slot];
   if (!b.me || !sk || b.cds[slot] > 0 || (b.me.lvl || 1) < (sk.lvl || 1)) return false;
   if (!skillReady(b, slot)) return false; // capability: slower rotations
+  if (b.easeT === b.t) return false; // easing off threat this tick (shared/bots/threat.js easeOff)
   b.send({ type: 'skill', slot, face: face ?? b.face, ...(tid ? { tid } : {}) });
   pressed(b, slot);
   b.cds[slot] = 1; (b.pressed ||= [])[slot] = b.t;
