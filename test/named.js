@@ -154,7 +154,7 @@ function world({ store = null } = {}) {
   // ---- invites by tier ----
   const inv = (h, id) => { g.events = []; h.sent.length = 0; g.invite(h, P(id).id); return P(id).invite?.from === h.id; };
   nat.x = hp.x + 2; nat.z = hp.z;
-  ok(!inv(nat, 'halvard') && /only joins a Ally/.test(sys(nat).join()) && g.events.some(e => e.t === 'chat' && e.id === hp.id), 'a Stranger\'s invite is refused, in character');
+  ok(!inv(nat, 'halvard') && /only joins an Ally/.test(sys(nat).join()) && g.events.some(e => e.t === 'chat' && e.id === hp.id), 'a Stranger\'s invite is refused, in character');
   set(nat, 'halvard', 35);
   ok(inv(nat, 'halvard'), 'an Ally\'s invite reaches a Hero');
   g.accept(hp, nat.id);
@@ -504,7 +504,7 @@ function client(name, cls = 'swordsman', join = {}) {
   ok(list.rows.length === 5 && list.rows.every(r => r.online && r.tierName === 'Stranger' && !r.invite.ok && !r.call.ok), 'the Friends list over the wire: five Strangers');
   const hal = a.named().find(r => r.named === 'halvard');
   a.sys.length = 0; a.send({ type: 'invite', id: hal.id });
-  await until(() => a.sys.some(s => /only joins a Ally/.test(s)), 4000, 'the refusal');
+  await until(() => a.sys.some(s => /only joins an Ally/.test(s)), 4000, 'the refusal');
   await sleep(400);
   ok(!a.pl.get(a.id).party, 'a Stranger\'s invite is refused');
   a.send({ type: 'test', friend: { id: 'halvard', pts: 40 } });

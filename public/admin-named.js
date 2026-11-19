@@ -15,7 +15,7 @@ function mount() {
   if (!host || document.getElementById('nm-card')) return document.getElementById('nm-card');
   const el = document.createElement('div');
   el.className = 'card'; el.id = 'nm-card';
-  el.innerHTML = `<h2>The Named <span class="pill" id="nm-pill">…</span><span class="grow" style="flex:1"></span>
+  el.innerHTML = `<style>#nm-card th { position: static; }</style><h2>The Named <span class="pill" id="nm-pill">…</span><span class="grow" style="flex:1"></span>
     <label class="dim" style="font-size:12px;display:inline-flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0">Levels above the top players
       <input type="number" id="nm-off" min="-10" max="30" style="width:64px" /></label>
     <button class="small" id="nm-off-set">Set</button>
@@ -23,7 +23,7 @@ function mount() {
     <button class="small" data-nm="all/spawn">Spawn all</button><button class="small danger" data-nm="all/despawn">Despawn all</button></h2>
     <div id="nm-line" class="dim" style="font-size:12.5px;margin-bottom:8px"></div>
     <div id="nm-chars"></div>
-    <details id="nm-fr" style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">Friendship <span class="dim" id="nm-fr-n"></span></summary><div id="nm-friends" style="margin-top:8px;overflow:auto"></div></details>
+    <details id="nm-fr" style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">Friendship <span class="dim" id="nm-fr-n"></span></summary><div id="nm-friends" style="margin-top:8px"></div></details>
     <div id="nm-msg" style="font-size:12.5px;margin-top:6px"></div>`;
   host.prepend(el);
   return el;

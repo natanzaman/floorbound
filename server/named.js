@@ -47,6 +47,7 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r2 = v => Math.round(v * 100) / 100;
 const between = ([a, b]) => a + Math.random() * (b - a);
 const isHuman = p => !!p && !p.bot;
+const art = word => `${/^[AEIOU]/i.test(word) ? 'an' : 'a'} ${word}`;
 
 // Where a group stands when it arrives on a floor, the boss room and its approach, and the level its boss wants.
 const FLOORS = {
@@ -202,7 +203,7 @@ export class NamedManager {
     if (!p) return `${def.name} isn't around right now.`;
     if (h.party && p.party === h.party) return `${def.name} is already in your party.`;
     const rec = this.peek(h, def.id) || newFriendship();
-    if (!canInvite(def, rec.pts)) return `${def.name} only joins a ${TIERS[tierAt(def.trust.invite)].name} (you are ${TIERS[tierIndex(rec.pts)].name}).`;
+    if (!canInvite(def, rec.pts)) return `${def.name} only joins ${art(TIERS[tierAt(def.trust.invite)].name)} (you are ${art(TIERS[tierIndex(rec.pts)].name)}).`;
     return this.freeBlock(h, st, p) || (this.namedInParty(g.partyOf(h)).length ? 'One of the Named per party.' : (g.partyOf(h)?.members.length || 1) >= PARTY_MAX ? 'Your party is full.' : '');
   }
   freeBlock(h, st, p) { // busy rules, the same for an invite and a call
@@ -218,7 +219,7 @@ export class NamedManager {
     if (!p) return `${def.name} isn't around right now.`;
     if (h.party && p.party === h.party) return `${def.name} is already with you.`;
     const rec = this.peek(h, def.id) || newFriendship();
-    if (!canSummon(def, rec.pts)) return `${def.name} only comes when a ${TIERS[tierAt(def.trust.summon)].name} friend calls.`;
+    if (!canSummon(def, rec.pts)) return `${def.name} only comes when ${art(TIERS[tierAt(def.trust.summon)].name)} friend calls.`;
     const left = st.summonAt + RULES.summonCd * 1000 - now;
     if (left > 0) return `${def.name} was called away a moment ago. Try again in ${Math.ceil(left / 60000)} min.`;
     if (h.dead || h.downed) return 'Wait until you are back on your feet.';
@@ -694,6 +695,7 @@ export function installNamed(Game) {
     if (N) {
       if (msg.type === 'named') return N.handle(p, msg);
       if (msg.type === 'test' && process.env.TEST_HOOKS && msg.friend && N.chars.has(msg.friend.id) && !p.bot) { // testing aid: { friend: { id, pts } } sets your friendship
+        if (msg.friend.add) return void N.add(p, msg.friend.id, +msg.friend.add, String(msg.friend.why || 'fight')); // …or { id, add, why }: a gain through the rules
         N.recOf(p, msg.friend.id).pts = Math.max(0, Math.min(100, +msg.friend.pts || 0));
         if (p.charId) N.dirtyFr.add(`${p.charId}:${msg.friend.id}`);
         return;
