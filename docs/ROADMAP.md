@@ -259,7 +259,7 @@ Same rules as F and G: set Status/Owner on `main` first, then mark it **done** w
 | H1 Floor 2 polish + harder Sovereign | `feat/floor2polish` | in progress | agent floor2polish-2 | |
 | H2 Loot and builds | `feat/loot` | done: affixes, Hornbound + Tidebound sets, drop tables in `shared/loot.js` (H1/H4 add entries there), Smith reroll, loadouts, admin affix/set editor + Maxed set, bots | agent loot-2 | 0c63276, 3f7298d |
 | H3 AI companions: go live | `feat/ailive` | done | agent ailive-2 | c6bea00 |
-| H4 Floor 3 | `feat/floor3` | in progress | agent floor3-2 | |
+| H4 Floor 3 | `feat/floor3` | done | agent floor3-2 | 5bfdd51 |
 
 ### Shared contracts for H
 - **Loot tables are data** (H2 owns them in `shared/items.js` / new `shared/loot.js`): affixes, sets and drop tables keyed by source (`mob:<type>`, `boss:<id>`, `rare:<id>`). H1 and H4 add *entries* for their floor's bosses and mobs through those tables, never with custom drop code. If H2 hasn't merged yet, keep the floor's drops as today and leave a `TODO(H2)` note naming the set you'd add.
