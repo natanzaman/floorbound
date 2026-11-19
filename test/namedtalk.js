@@ -91,7 +91,7 @@ console.log('# pure');
 
 // =====================================================================================================================
 console.log('# in process');
-function world({ env = {}, reply = null, delayMs = 0, store = null, provider = null, quests = false } = {}) {
+function world({ env = {}, reply = null, delayMs = 0, store = null, provider = null, quests = false, presence = false } = {}) {
   const g = new Game();
   g.track = () => {};
   const mgr = new BotManager(g, { url: 'ws://127.0.0.1:9/ws' });
@@ -108,7 +108,7 @@ function world({ env = {}, reply = null, delayMs = 0, store = null, provider = n
     return [{ bid: e.bid }];
   };
   const clock = { t: Date.UTC(2026, 10, 19, 12) };
-  const nm = new NamedManager(g, mgr, { interval: 0, now: () => clock.t });
+  const nm = new NamedManager(g, mgr, { interval: 0, now: () => clock.t, presence });
   const cfg = readConfig({ AI_PROVIDER: 'mock', AI_ENABLED: '1', AI_THINK_S: '0', ...env });
   const prov = provider || mockProvider({ reply: reply || (() => ({ say: 'Hm.', sentiment: 0, reason: '', remember: '' })), delayMs });
   const minds = new Minds({ cfg, provider: prov, env: { ...env }, now: () => clock.t, log: () => {} });
@@ -127,6 +127,16 @@ function world({ env = {}, reply = null, delayMs = 0, store = null, provider = n
   const pts = (h, id) => nm.friendship(h, id).pts;
   if (store) minds.useStore(store, { flushMs: 0 });
   return { g, nm, qs, minds, talk, prov, clock, human, tick, P, near, say, chats, sys, pts };
+}
+
+{
+  // ---- a Named resting at home (presence): @Name still reaches them, answered from afar ----
+  const W = world({ presence: true, reply: () => ({ say: 'Not now.', sentiment: 1, reason: 'polite', remember: '' }) });
+  const nat = W.human('Natan'); nat.x = 0; nat.z = 0; W.tick(2);
+  ok(!W.P('cairn') && W.nm.resting(W.nm.chars.get('cairn')), 'presence: Cairn rests at home while you are in town');
+  await W.say(nat, '@Cairn are you out there?');
+  const pm = nat.sent.find(m => m.type === 'named' && m.op === 'talk');
+  ok(W.prov.calls.length === 1 && pm?.text === 'Not now.' && !W.P('cairn'), '@Cairn: he answers from afar (and stays at home)');
 }
 
 {
