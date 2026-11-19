@@ -20,7 +20,7 @@
 export const DEFAULT_MODEL = { anthropic: 'claude-haiku-5-5', openai: 'gpt-6-luna', gemini: 'gemini-3.1-flash-lite', mock: 'mock' };
 // Key env var names per provider, first one wins. The extra names are common misnamings, accepted on purpose.
 export const KEY_ENV = {
-  anthropic: ['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'ANTHROPIC_KEY', 'CLAUDE_KEY'],
+  anthropic: ['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'ANTHROPIC_KEY', 'CLAUDE_KEY', 'ANTHROPIC_API_TOKEN'],
   openai: ['OPENAI_API_KEY', 'OPENAI_KEY'],
   gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_KEY'],
   mock: [],
