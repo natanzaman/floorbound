@@ -3,12 +3,13 @@
 // and what the server says back. Presses are held for N polled frames (__fb.input.frames).
 //   1. main flow on the default layout: join by pad, move, camera, lock on / cycle / clear, attack, skills 1-3, dodge,
 //      jump, guard, items, interact, Game Menu, Settings, Bag, Skill Tree, Players, close everything
-//   2. the same flow on a rebound layout (input.setBinding with swaps; the script looks every button up in the bindings)
+//   2. the same flow on a rebound layout (Jump through the Controls screen by pad, the rest input.setBinding with swaps; the script looks every button up in the bindings)
 //   3. the modifier layer and chords: LB+X Team Burst, LB+Y bot wheel (hold) + right-stick pick, LB+A cover, LB+B select
 //      aimed, LB+R3 clear, LB+Up / LB+Right panels, and LB alone does nothing
 //   4. the Warden in a party with bots, fought on the pad, with a jump registered during a Quake Ring
 // Then it prints a coverage table: each action of shared/controls.js and where it was verified on the pad.
-// Not here (K4 part 2): rebinding through the Controls screen. Needs Playwright for Node (see test/keys.mjs).
+// Section 2 rebinds Jump (A -> X, with the Swap prompt) through the Controls screen by pad presses only; the other
+// rebinds of that layout use input.setBinding (one UI rebind keeps the run short). Needs Playwright for Node (see test/keys.mjs).
 // Usage: PORT=376xx node test/padtest.mjs      (uses PORT .. PORT+3; ONLY=1,2,3,4 picks sections)
 import assert from 'node:assert/strict';
 import { ACTIONS } from '../shared/controls.js';
@@ -40,15 +41,48 @@ async function mainFlow(tag, port, rebind) {
       assert.ok(!r.error, `rebind ${action} -> ${btn}: ${r.error}`);
     }
   }
-  const layout = await S(() => { const b = window.__fb.input.bindings('pad'); return Object.fromEntries(Object.entries(b).map(([k, v]) => [k, v[0]])); });
-  if (rebind) for (const [action, btn] of rebind) assert.equal(layout[action], btn, `${action} is on ${btn} now`);
-  if (rebind) assert.equal(await S(() => JSON.parse(localStorage.getItem('fb_controls')).pad.jump[0]), layout.jump, 'rebinding saved');
-
   // ---- join by pad ----
   await P.join(`Pad${tag[0]}`, 'guardian');
   assert.equal(await S(() => window.__fb.state.cls), 'guardian');
   ok(tag, 'joined by pad (character select: d-pad, A picks the class, A on Enter)');
   C('menu', 'Start opens / closes the Game Menu');
+
+  // ---- rebound layout: Jump -> X goes through the Controls screen with pad presses only ----
+  if (rebind) {
+    const jumpBefore = await S(() => window.__fb.input.bindings('pad').jump[0]);
+    assert.equal(jumpBefore, 'A', 'Jump starts on A');
+    await P.press(['Start'], 2);
+    assert.ok(await P.isOpen('gamemenu'), 'Start opens the Game Menu');
+    await P.goTo('BUTTON?a=bindings'); await P.press(['A']);
+    assert.ok(await P.isOpen('controlsui') && (await P.cur()).layer === 'controlsui', 'A opens the Controls screen, the pad drives it');
+    assert.ok(await S(() => !document.getElementById('cu-tab-pad').classList.contains('hidden')), 'on the Controller tab');
+    await P.goTo('cu-rb-pad-jump:0', 'Down', 80);
+    await P.press(['A']);
+    assert.ok(await S(() => window.__fb.input.capturing), 'A on Jump\'s Rebind listens for a button');
+    await P.press(['X']);
+    assert.ok(!(await S(() => window.__fb.input.capturing)), 'X ends the capture');
+    assert.ok(await S(() => !!document.getElementById('cu-prompt')), 'X is Skill 1\'s: the conflict prompt asks');
+    assert.equal(await S(() => window.__fb.input.bindings('pad').jump[0]), 'A', 'nothing changed before the answer');
+    // (focus restarts at the top after the capture; the prompt sits just above Reset, Swap left of Unbind)
+    await P.goTo('cu-reset-pad', 'Down', 60);
+    await P.goTo('cu-p-unbind', 'Up', 6);
+    await P.goTo('cu-p-swap', 'Left', 4);
+    assert.equal((await P.cur()).key, 'cu-p-swap', 'the pad reaches Swap');
+    await P.press(['A']); await P.frames(2);
+    assert.ok(await S(() => !document.getElementById('cu-prompt')), `Swap answers the prompt (${await S(() => document.getElementById('cu-msg-pad')?.textContent)})`);
+    assert.deepEqual(await S(() => { const b = window.__fb.input.bindings('pad'); return [b.jump[0], b.skill1[0]]; }), ['X', 'A'], 'Jump is on X, Skill 1 took A (swap)');
+    await P.press(['B']);
+    assert.ok(!(await P.isOpen('controlsui')) && await P.isOpen('gamemenu'), 'B back to the Game Menu');
+    await P.p.waitForTimeout(450); await P.press(['Start'], 2);
+    assert.ok(!(await P.isOpen('gamemenu')), 'Start closes it');
+    ok(tag, 'Controls screen by pad: Jump rebound A -> X (capture, Swap prompt), back to play');
+    C('jump', 'rebound through the Controls screen by pad (A -> X, Swap)');
+  }
+  const layout = await S(() => { const b = window.__fb.input.bindings('pad'); return Object.fromEntries(Object.entries(b).map(([k, v]) => [k, v[0]])); });
+  if (rebind) for (const [action, btn] of rebind) assert.equal(layout[action], btn, `${action} is on ${btn} now`);
+  if (rebind) assert.equal(await S(() => JSON.parse(localStorage.getItem('fb_controls')).pad.jump[0]), layout.jump, 'rebinding saved');
+  if (rebind) assert.equal(layout.jump, 'X', 'Jump is on X (rebound through the UI)');
+
 
   // ---- move along a path (left stick), relative to the camera ----
   await clearTarget();
@@ -179,8 +213,8 @@ async function mainFlow(tag, port, rebind) {
   // ---- menus ----
   await press(['Start'], 2);
   assert.ok(await P.isOpen('gamemenu'), 'Start opens the Game Menu');
-  assert.equal((await P.cur()).key, 'BUTTON?a=resume');
-  await press(['Down']); assert.equal((await P.cur()).key, 'BUTTON?a=settings');
+  if (!rebind) assert.equal((await P.cur()).key, 'BUTTON?a=resume'); // (the rebound run has been in the menu: focus is remembered)
+  await P.goTo('BUTTON?a=settings', 'Up', 8).catch(() => P.goTo('BUTTON?a=settings', 'Down', 8));
   await press(['A']);
   assert.ok(await P.isOpen('settings'), 'A opens Settings');
   await P.goTo('INPUT?a=sens');
@@ -451,7 +485,7 @@ try {
   browser = await chromium.launch({ headless: true, args: ['--enable-unsafe-swiftshader'] });
   if (ONLY.includes(1)) await mainFlow('default', PORT);
   // rebound layout: swaps keep one control per button (jump <-> skill1, attack <-> guard, dodge <-> skill3, item1 <-> item2)
-  if (ONLY.includes(2)) await mainFlow('rebound', PORT + 1, [['jump', 'X'], ['attack', 'LT'], ['dodge', 'B'], ['item1', 'Left']]);
+  if (ONLY.includes(2)) await mainFlow('rebound', PORT + 1, [['attack', 'LT'], ['dodge', 'B'], ['item1', 'Left']]);
   if (ONLY.includes(3)) await chords(PORT + 2);
   if (ONLY.includes(4)) await warden(PORT + 3);
 
