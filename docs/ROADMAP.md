@@ -460,6 +460,75 @@ Build it with the KayKit rig, procedural meshes and materials, the way `public/s
 - **Contract for I3:** `game.named.quests.phraser = async (def, req, player, moment) => text` replaces the canned line when it answers (moments: `offer`, `done`, `farm`, `raid`; errors or empty keep the canned line). `game.named.quests.turnIn(player, namedId, { talk: true })` hands materials over while talking; I3's talk path (`server/ai/namedtalk.js`) now calls it after a reply within 40 m. The phraser is not wired to the AI yet (canned lines for now).
 - **Screenshots:** `/home/claude/shots/i4-namedquests/`.
 
+## J. Interactive boss fights and threat rules (owner request 2026-11-19)
+The owner's words, summarised:
+- Boss fights should be more interactive, not just "the boss swings around and spams abilities". Players should have to run around and do things, and save each other: vines that root someone and others cut them free, a crystal prison others smash, a cone or beam of light someone is trapped in.
+- From Floor 3 on, fights should have multiple **areas**, not only phases: the ground breaks, everyone falls into a new arena with new environment rules (sludge that slows you, fire patches to move around).
+- Ranged players can still hang back and hit the boss, but melee players need **real openings** to get in without suicide, while staying the riskier, higher-damage role.
+- Threat changes are listed in J4.
+
+### Tracker
+Same rules as F–I: flock lock, push with `--force-with-lease`.
+
+| Task | Branch | Status | Owner | Merge |
+|---|---|---|---|---|
+| J1 Rescue mechanics | `feat/rescue` | todo | | |
+| J2 Multi-area boss fights (Floor 3 first) | `feat/arenas` | todo | | |
+| J3 Melee openings | `feat/openings` | todo (after J1) | | |
+| J4 Threat rules | `feat/threatrules` | todo | | |
+
+### Shared contracts for J
+- **Every new mechanic** is telegraphed, has a guide tip and a first-few-times prompt, works with bots at all capability levels, respects the director (no surprise mechanics during a show unless a cue asks), and skips downed and dead players.
+- **Solo stays fair.** A rescue mechanic either never targets a lone player, or the trapped player can free themselves more slowly (e.g. by mashing an action) so a solo player can't be soft-locked.
+- **Credit** through `teamStat` (`rescue` key) and the MVP card ("Rescuer" title).
+- **Data-driven:** mechanics are described in shared tables, with small server modules and client visuals. Bosses opt in per phase.
+
+### J1. Rescue mechanics (`feat/rescue`)
+A generic "trapped player" system plus three trap types. Each boss gets at least one:
+1. **Vines (root):** the target is rooted and takes light damage over time. Teammates free them by hitting the vine (it has its own small HP bar) or by standing next to them and holding the interact key for ~1.5 s. The Warden (Floor 1, forest) gets this, e.g. "Thornbind".
+2. **Crystal prison:** the target is encased (can't act, can't be hurt by the boss), and a crystal with HP spawns on them. Teammates must break it within ~8 s or the prison detonates and hurts the whole party. The Floor 3 Colossus gets this: storm crystal.
+3. **Cone or beam of light:** the target is pinned inside a beam from the sky or the boss. Teammates break the beam at its source (a pylon or orb somewhere in the arena), or a Guardian body-blocks the beam with Cover or Guard. The beam ticks damage and slows the boss's target swaps. The Sovereign (Floor 2) gets a water or moonlight variant: "Drowning Pillar".
+4. **Objectives that make people run:** in at least one phase per boss, a party-wide objective, e.g. light 3 braziers or pylons around the arena within a timer, or stand on plates together. Failing means a heavy party hit or an enrage.
+5. **Bots:** they free trapped allies (skill-scaled reaction time and priority) and run objectives. The tank keeps the boss.
+6. **Accept when:** tests cover each trap's free / fail / timeout path and the solo fallback; bot Warden, Sovereign and Colossus runs still clear at skill 5 with numbers reported; screenshots of each trap.
+
+### J2. Multi-area boss fights (`feat/arenas`), Floor 3 first
+1. **The Storm Colossus fight gets a second arena.** At a phase change the plateau cracks (telegraphed: rumble, cracks spreading, a few seconds' warning), and everyone falls to a lower area under the ruin: a different layout and lighting.
+2. **Environment rules in the new area:**
+   - **sludge pools:** strong slow, no dodge inside;
+   - **fire patches or lightning-charged ground:** damage over time, spreading or moving in patterns;
+   - **at least one cover or safe element:** a pillar to break line of sight from a beam, or a raised platform.
+3. Falling does no damage. There's a short "landing" pause, then the fight resumes. The boss follows: it drops down with a big entrance.
+4. Optional: a third area for the last phase (e.g. back up via a wind updraft).
+5. The arenas are built in `public/floor3world.js` (or a new file). The server keeps both arena layouts and teleports or offsets everyone at the transition. Spectators and the director handle it.
+6. Make it **generic** (an `arenas` list per boss with transitions per phase) so the Warden and the Sovereign can get one later.
+7. **Accept when:** a bot party clears the Colossus through the fall and the new hazards (trio and 6 at skill 5, numbers reported); there's a screenshot tour of the fall and the lower arena; tests cover the transition (everyone moved, nobody stuck in walls, late joiners spawn in the right arena).
+
+### J3. Melee openings (`feat/openings`), after J1
+1. **Recovery windows:** after each boss's big moves (slam, charge, Horn Sweep, Tidal Wave, Overload, etc.) the boss has a clearly shown 2–4 s window. It's planted, slow, or exposes a weak point (a glowing spot on its back or legs) that takes extra melee damage and posture. Show it with a visual and a "OPENING" tag above the boss, visible to everyone (it's a target state).
+2. **Less constant pressure at melee range:** the boss shouldn't chain point-blank attacks back to back. Add a short gap rule between close-range attacks, and make the boss favour telegraphed area moves over instant swings.
+3. **Melee still the riskier, higher-damage role:** the weak-point bonus applies to melee hits only (e.g. +25% damage and posture). Ranged stays steady but lower.
+4. Bots use the openings: melee bots move in when a window opens and step out before it closes.
+5. **Accept when:** bot runs on all three bosses show more melee damage share without more melee deaths; numbers before and after are reported.
+
+### J4. Threat rules (`feat/threatrules`)
+Threat stays a raw number per player per enemy, but the rules below are stated in **percent of the current top threat** (100 = the top). The meter already shows "You 62% of top" (G3).
+1. **Clean-damage multiplier.** While a player deals damage to a boss *without taking damage* from it, their threat multiplier grows over time:
+   - e.g. ×1.0 rising by +0.1 every 2 s of clean damage, up to ×2.5;
+   - it resets to ×1.0 when they take any damage from that boss or its mechanics.
+
+   A ranged player who never gets hit therefore eventually pulls the boss. Show the multiplier on the threat meter (e.g. "×1.6") so players see it coming.
+2. **Taunt (the Guardian's Taunt skill):**
+   - The taunter becomes the top for the taunt's duration (the boss is locked on them), and their threat is set to the top value.
+   - Every other player's threat on that boss is cut to 50% of the top, if it was above that, and everyone's clean-damage multiplier resets to ×1.0.
+   - During the taunt, others still build threat, but the boss stays on the taunter even if someone passes 100%.
+   - When the taunt ends, the taunter's threat drops to 90% of the highest other player's threat or stays where it is, whichever is higher. Concretely: the boss goes to whoever is above the taunter at that moment. Anyone who built past 90% during the taunt takes the boss when it ends. This creates a real "burst while it's taunted, but don't overdo it" rhythm.
+   - A second taunt overrides the first: the new taunter becomes the locked top and the same cuts apply. The latest taunt wins.
+3. **Losing aggro to a taunt.** A player who held the boss when someone else taunted it drops to 50% of the top (not 0 and not 100), then builds back up normally.
+4. Keep healer threat (G3) and the "about to pull" warning at 90%. The threat meter shows "TAUNTED (Halvard) 3s" while a taunt lock is on.
+5. Bots respect it: DPS bots ease off as their meter nears 90% during a taunt, and tanks re-taunt on cooldown when the boss turns.
+6. **Accept when:** unit tests cover multiplier growth and reset, taunt cuts, taunt lock, the taunt-end handover at 90%, the double taunt, and losing aggro to a taunt; bot runs still clear with the Guardian holding the boss most of the time (report the share of boss time on the tank).
+
 ## Known issues and backlog
 - **Performance (done, c8d8fb4):** server bots on in-process sockets, 10 Hz brains far from humans, the Named rest at home until a player is in the field (invites / calls / outreach wake them). Bench CPU 0.084-0.098 → 0.040-0.057 s/s with players in town, about -11% with everyone in the field (README → Performance, `scripts/perfbench.js`, `/status` cpu + bot counts). Next if needed: don't simulate floors nobody is on (Floor 2/3 mobs cost CPU with no one there).
 - **Client performance + Game Menu (done, 43cd3d9):** F3 diagnostics overlay and ping chip, Settings → Graphics (Auto default / Low / Medium / High), snapshot interpolation ~100 ms behind with adaptive buffer (`shared/netsmooth.js`, `?netsim=120,60,2` to test, `?interp=0` old smoothing), shaders warmed at load and never recompiled mid-fight, DOM-on-change HUD; Esc / ☰ Game Menu (Resume, Settings, Controls & guide, Change character, Log out, Admin). Headless 6-bot Warden fight: High ≈ before (3 fps, GPU-bound in swiftshader), Low 2.1× faster (6.3 fps, 712 → 389 draw calls); remote motion wobble 2.75 → 0.96 m/s (good network), 4.69 → 0.59 (120±60 ms + 2% reorder). Next if needed: fewer draw calls (merge/instance static scenery; ~700 in a boss fight).
