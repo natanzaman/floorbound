@@ -2,7 +2,7 @@
 // frame rate is low, up when there's headroom, without flipping back and forth.
 // Usage: node test/quality.js
 import assert from 'node:assert/strict';
-import { PRESETS, LEVELS, Q, setLevel, startLevel, fxCount, segs, AutoQuality, AUTO } from '../public/quality.js';
+import { PRESETS, LEVELS, Q, setLevel, startLevel, startAntialias, fxCount, segs, AutoQuality, AUTO } from '../public/quality.js';
 
 // presets
 assert.deepEqual(LEVELS, ['low', 'medium', 'high']);
@@ -11,6 +11,10 @@ assert.equal(PRESETS.low.shadows, false); assert.equal(PRESETS.high.shadows, tru
 assert.ok(PRESETS.low.fx < PRESETS.medium.fx && PRESETS.medium.fx < PRESETS.high.fx, 'effect density rises with the level');
 assert.ok(PRESETS.low.fog < PRESETS.high.fog, 'shorter view on Low');
 assert.equal(PRESETS.high.antialias, true); assert.equal(PRESETS.low.antialias, false);
+
+assert.ok(PRESETS.low.charDist < PRESETS.medium.charDist && PRESETS.medium.charDist < PRESETS.high.charDist, 'character draw distance rises with the level (review #7)');
+assert.deepEqual(LEVELS.map(l => PRESETS[l].charDist), [70, 100, 140]);
+assert.ok(LEVELS.every(l => PRESETS[l].charShadow === 25), 'characters cast shadows within 25 m');
 
 // starting level
 assert.equal(startLevel('low'), 'low');
@@ -66,4 +70,43 @@ function run(a, fps, ms, t0) {
   const r = run(a, 3, 12000, 0);
   assert.deepEqual(r.changes.map(c => c[1]), ['medium', 'low'], `a very slow machine (3 fps) still steps down (${JSON.stringify(r.changes)})`);
 }
+// review #3: a borderline machine (too slow for High, fine on Medium) settles instead of oscillating for good
+{
+  const a = new AutoQuality('high'), fpsOf = { high: 40, medium: 60, low: 60 };
+  let t = 0; const changes = [];
+  for (; t < 30 * 60000; t += 1000 / fpsOf[a.level]) { const c = a.frame(t, 1000 / fpsOf[a.level]); if (c) changes.push([Math.round(t / 1000), c]); }
+  assert.equal(changes.filter(c => c[1] === 'medium').length, AUTO.maxFails, `fails on High ${AUTO.maxFails} times (${JSON.stringify(changes)})`);
+  assert.equal(changes.length, 2 * AUTO.maxFails - 1, 'then High is off limits for the session: no more changes in 30 minutes');
+  assert.equal(a.level, 'medium');
+  assert.ok(changes.at(-1)[0] < 600, `settled within 10 minutes (${changes.at(-1)[0]} s)`);
+  // ... while a level that failed fewer than maxFails times is still retried after its ban
+  const b = new AutoQuality('medium');
+  let r = run(b, 30, 6000, 0);
+  assert.deepEqual(r.changes.map(c => c[1]), ['low']);
+  r = run(b, 60, 120000, r.t);
+  assert.equal(r.changes[0]?.[1], 'medium', 'one failure: Medium is tried again later');
+}
+// review #3: shadows: once Auto turns them off it keeps them off on the way back up (no shader recompiles)
+{
+  const a = new AutoQuality('medium');
+  assert.equal(a.over(), null, 'nothing overridden at first');
+  let r = run(a, 30, 6000, 0);
+  assert.deepEqual(r.changes.map(c => c[1]), ['low']);
+  assert.deepEqual(a.over(), { shadows: false });
+  r = run(a, 60, 120000, r.t);
+  assert.ok(r.changes.some(c => c[1] === 'medium'), 'back up to Medium');
+  setLevel('medium', a.over()); assert.equal(Q.shadows, false, 'Medium without shadows'); assert.equal(Q.pixelRatio, PRESETS.medium.pixelRatio, 'the rest of the preset applies');
+  setLevel('high', a.over()); assert.equal(Q.shadows, false, 'High too');
+  setLevel('high'); assert.equal(Q.shadows, true, 'a chosen level has its own shadows');
+  const h = new AutoQuality('high'); run(h, 30, 6000, 0);
+  assert.equal(h.level, 'medium'); assert.equal(h.over(), null, 'High to Medium keeps shadows (both have them)');
+}
+// review #8: edge smoothing (MSAA) is fixed when the renderer is made: Auto only asks for it once High has held
+assert.equal(startAntialias('auto'), false, 'Auto, first visit: High without MSAA');
+assert.equal(startAntialias('auto', { lastAuto: 'high' }), true, 'Auto settled on High last time: MSAA');
+assert.equal(startAntialias('auto', { lastAuto: 'medium' }), false);
+assert.equal(startAntialias('high'), true); assert.equal(startAntialias('medium', { lastAuto: 'high' }), false);
+assert.equal(startAntialias('high', { touch: true }), false, 'never on touch');
+{ const a = new AutoQuality('high'); run(a, 60, 11000, 0); assert.ok(a.windows >= 2, 'windows are counted (main saves the level after each)'); }
+
 console.log('quality: all checks passed');

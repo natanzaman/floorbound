@@ -234,6 +234,21 @@ function world({ store = null, presence = false } = {}) {
   nat.x = mar.x + 30; nat.z = mar.z;
   await talk.talk(nat, nm.chars.get('maribel'), 'Maribel, I brought what you asked for.');
   ok(!qs.rec(nat, 'maribel').req && msgs(nat, 'req', 'done').at(-1).id === 'maribel', 'talking to her nearby (I3\'s talk path) hands the materials over');
+  // review #9: on Floors 2–3 (where the Named rarely are) the card says @Name works, and it does, from anywhere there
+  clock.t = Math.max(qs.rec(nat, 'maribel').nextAt, clock.t) + 1000;
+  let mq4 = null;
+  for (let i = 0; i < 30 && mq4?.k !== 'bring'; i++) { qs.rec(nat, 'maribel').offer = null; R.f = Math.random; mq4 = qs.offerFor(nat, 'maribel'); }
+  R.f = () => 0.5;
+  qs.take(nat, 'maribel');
+  g.giveMats(nat, { [mq4.mat]: mq4.n });
+  const nx = nat.x, nz = nat.z;
+  nat.x = mar.x + 200; nat.z = mar.z;
+  ok(/Find Maribel/.test(card(nat, 'maribel').turnIn.why) && !/@Maribel/.test(card(nat, 'maribel').turnIn.why), 'Floor 1, far from her: find her (no @ hint)');
+  nat.x = 700; nat.z = 40; // (Floor 2)
+  ok(floorOf(nat.x) === 2 && /@Maribel/.test(card(nat, 'maribel').turnIn.why), `Floor 2: the card hints that @Maribel hands it over (${card(nat, 'maribel').turnIn.why})`);
+  await talk.talk(nat, nm.chars.get('maribel'), 'Here are the things you asked for.', { explicit: true });
+  ok(!qs.rec(nat, 'maribel').req && msgs(nat, 'req', 'done').at(-1).id === 'maribel', 'Floor 2: talking to her from afar hands the materials over');
+  nat.x = nx; nat.z = nz;
 
   // ---- boss help ----
   set(nat, 'halvard', 40);

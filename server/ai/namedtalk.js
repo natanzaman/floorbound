@@ -361,7 +361,7 @@ export class NamedTalk {
       conv.push({ t: now, from: p.name, text }, { t: now, from: 'You', text: out.say });
       while (conv.length > 6) conv.shift();
       this.deliver(p, st, out.say, text, near);
-      if (near) N.quests?.turnIn(p, def.id, { talk: true }); // a materials request ready: talking to them nearby hands it over (I4: server/namedquests.js)
+      if (near || N.quests?.talkFromAfar?.(p)) N.quests?.turnIn(p, def.id, { talk: true }); // a materials request ready: talking to them nearby (on Floors 2–3, from anywhere) hands it over (I4: server/namedquests.js)
       if (!out.canned) { this.recent.push({ at: Date.now(), named: def.name, who: p.name, text, say: out.say, sentiment: out.sentiment, reason: out.reason, d, ms: out.ms, cost: out.cost }); this.recent = this.recent.slice(-8); }
       return { ...out, d, near };
     } finally { s.busy = false; }

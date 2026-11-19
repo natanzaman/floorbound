@@ -1,5 +1,6 @@
 // Network smoothing maths (pure, no DOM / Three.js): public/main.js uses it, test/netsmooth.js checks it.
-//  - SnapClock: when to draw. Each snapshot carries the server's clock (`st`, ms). The client draws the world a little
+//  - SnapClock: when to draw. Each snapshot carries the server's clock (`st`, ms: a wall clock, so a server stall leaves
+//    a gap, not a lasting lag; if the stamps ever fall behind anyway, the clock resyncs within NET.shiftWin). The client draws the world a little
 //    in the past (about 100 ms, more when snapshots arrive unevenly), so there is nearly always a snapshot on each side
 //    of the moment drawn. The playout clock never runs backwards and never jumps: it speeds up or slows down by up to
 //    10% to follow the target.
@@ -21,6 +22,7 @@ export const NET = {
   corrTau: 40,     // your own position correction (tp) fades with this time constant (ms): ~95% within 120 ms
   corrSnap: 12,    // ... unless it's this far or more (a real teleport): then it snaps
   resync: 250,     // the playout clock jumps (instead of easing) when it's this far off (ms)
+  shiftWin: 1000,  // every snapshot in this long (ms) arrived over 2 ticks later than the best case: the clock moved
 };
 
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
@@ -47,6 +49,14 @@ export class SnapClock {
     const S = this.samples;
     S.push([arrival, off]);
     while (S.length > 2 && arrival - S[0][0] > this.o.window) S.shift();
+    // A lasting shift (the server stalled and its clock fell behind, or the route got slower): every snapshot for the
+    // last shiftWin ms came over two ticks later than the window's best case. That best case is stale: forget it now
+    // rather than drawing ahead of the newest snapshot (hold, stutter) until it leaves the window.
+    if (arrival - S[0][0] > this.o.shiftWin) {
+      let recent = Infinity, k = S.length;
+      while (k > 0 && arrival - S[k - 1][0] <= this.o.shiftWin) recent = Math.min(recent, S[--k][1]);
+      if (S.length - k >= 5 && recent - this.minOff > 2 * this.o.tick) { S.splice(0, k); this.shifts = (this.shifts || 0) + 1; }
+    }
     let min = Infinity;
     for (const s of S) if (s[1] < min) min = s[1];
     this.minOff = min;
