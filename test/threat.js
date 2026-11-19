@@ -76,7 +76,14 @@ const tick = (g, dt = 0.05) => {
 }
 
 // ---------- a careless Cleric pulls the boss off a Guardian who isn't taunting ----------
-function race(taunt) {
+// Seeded random (mulberry32) so the damage spread / crits are the same every run; the check also averages over SEEDS.
+const seeded = a => () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8];
+function race(taunt, seed) {
+  const random = Math.random; Math.random = seeded(seed);
+  try { return race1(taunt); } finally { Math.random = random; }
+}
+function race1(taunt) {
   const { g, W, gu, cl, sw } = setup();
   sw.x = 999; // out of it
   W.threat.set(gu.id, 1);
@@ -93,10 +100,13 @@ function race(taunt) {
   return { tankTop: tankTop / ticks, pulledAt };
 }
 {
-  const careless = race(false), held = race(true);
-  assert.ok(careless.pulledAt !== null && careless.pulledAt < 30, `the Cleric pulls it (at ${careless.pulledAt?.toFixed(1)} s)`);
-  assert.ok(careless.tankTop < 0.6, `the tank lost it most of the time (${(careless.tankTop * 100).toFixed(0)}% held)`);
-  assert.ok(held.tankTop > 0.85, `a taunting Guardian holds it (${(held.tankTop * 100).toFixed(0)}%)`);
+  const runs = SEEDS.map(s => ({ careless: race(false, s), held: race(true, s) }));
+  const mean = f => runs.reduce((a, r) => a + f(r), 0) / runs.length;
+  const careless = { tankTop: mean(r => r.careless.tankTop), pulledAt: mean(r => r.careless.pulledAt ?? 99) };
+  const held = { tankTop: mean(r => r.held.tankTop) };
+  assert.ok(runs.every(r => r.careless.pulledAt !== null && r.careless.pulledAt < 30), `the Cleric pulls it every time (at ${runs.map(r => r.careless.pulledAt?.toFixed(1)).join(', ')} s)`);
+  assert.ok(careless.tankTop < 0.6, `the tank lost it most of the time (${(careless.tankTop * 100).toFixed(0)}% held, mean of ${SEEDS.length} runs)`);
+  assert.ok(held.tankTop > 0.85, `a taunting Guardian holds it (${(held.tankTop * 100).toFixed(0)}%, mean of ${SEEDS.length} runs)`);
   ok(`careless Cleric pulls at ${careless.pulledAt.toFixed(1)} s off a non-taunting Guardian; a taunting one holds ${(held.tankTop * 100).toFixed(0)}% of the time`);
 }
 

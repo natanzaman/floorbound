@@ -1,4 +1,4 @@
-// Performance readouts: the diagnostics overlay (F3, or Settings → Graphics), the small ping chip in the corner, the
+// Performance readouts: the diagnostics overlay (F3, or Settings → Graphics), the small fps · ping chip in the corner ("62 fps · 45 ms"), the
 // ping itself ({type:'ping'} once a second; the server answers {type:'pong'} at once), and Auto graphics quality.
 // main.js calls frame() once per frame and pong() for each pong; everything on screen updates 4 times a second.
 import { Q, AutoQuality } from '/quality.js';
@@ -50,7 +50,7 @@ export function initPerf({ renderer, clock, settings, save, applyQuality, isJoin
     while (hitches.length && now - hitches[0] > 60000) hitches.shift();
     const showBox = !!settings.perf, showChip = !showBox && settings.ping !== false && isJoined() && P.rtt !== null;
     box.classList.toggle('hidden', !showBox); chip.classList.toggle('hidden', !showChip);
-    if (showChip) { const t = `ping ${Math.round(P.rtt)} ms`; if (t !== lastChip) { lastChip = t; chip.textContent = t; } }
+    if (showChip) { const t = `${Math.round(F.fps)} fps · ${Math.round(P.rtt)} ms`; if (t !== lastChip) { lastChip = t; chip.textContent = t; } }
     if (!showBox) return;
     const ri = renderer.info, c = clock;
     const lines = [
