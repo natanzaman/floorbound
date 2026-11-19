@@ -2,6 +2,7 @@
 import { CLASSES } from '../shared/data.js';
 import { BAG_SIZE, RARITY, makeItem } from '../shared/items.js';
 import { STYLES } from '../shared/styles.js';
+import { rollAffixes } from '../shared/loot.js';
 import {
   SMITH, MATS, rollMats, nearSmithAt, refineCost, applyRefine, salvageYield, reforgeCost, charmAffix, CHARM_AFFIXES,
   RECIPE_BY_ID, recipeName, canAfford,
@@ -55,13 +56,14 @@ export const SmithMethods = {
     return true;
   },
 
-  // Client message: { type: 'smith', a: 'refine'|'salvage'|'reforge'|'craft', u, mode, id }
+  // Client message: { type: 'smith', a: 'refine'|'salvage'|'reforge'|'craft'|'reroll', u, mode, id, i (reroll: affix index) }
   smith(p, msg) {
     switch (msg.a) {
       case 'refine': return this.refine(p, msg.u);
       case 'salvage': return this.salvage(p, msg.u);
       case 'reforge': return this.reforge(p, msg.u, String(msg.mode || 'stats'));
       case 'craft': return this.craft(p, String(msg.id || ''), msg.cls);
+      case 'reroll': return this.rerollAx(p, msg.u, msg.i | 0); // one affix (server/loot.js)
     }
     return false;
   },
@@ -111,7 +113,7 @@ export const SmithMethods = {
     if (mode === 'affix') { const others = CHARM_AFFIXES.filter(k => k !== cur); kind = others[Math.floor(Math.random() * others.length)]; }
     const fresh = makeItem(it.slot, it.r, it.cls || p.cls, Math.random, kind);
     it.b = { ...fresh.st };
-    if (it.slot === 'charm') it.bn = fresh.name;
+    if (it.slot === 'charm' && !it.set) it.bn = fresh.name; // a set piece keeps its set name
     applyRefine(it);
     if (f.eq) this.recompute(p);
     this.sys(`Reforged: ${it.name}`, p.id);
@@ -134,6 +136,7 @@ export const SmithMethods = {
     it.cr = rc.id;
     if (rc.style) it.style = rc.style;
     if (!rc.cls) delete it.cls;
+    rollAffixes(it, p.cls); // affixes by rarity (shared/loot.js); the recipe's own stats stay fixed
     p.inv.bag.push(it);
     this.sys(`Forged: ${it.name} (${RARITY[it.r].name})`, p.id);
     return this.forged(p, 'craft', it);

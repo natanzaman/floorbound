@@ -7,9 +7,11 @@ import {
   MATS, MAT_IDS, SMITH, nearSmithAt, refineCost, applyRefine, salvageYield, reforgeCost, RECIPES, recipeName, canAfford, REFINE_MAX,
 } from '/shared/crafting.js';
 import { STYLES } from '/shared/styles.js';
+import { rerollCost, affixText, isTeamAffix } from '/shared/loot.js';
+import { axHtml, setTagHtml } from '/loot.js';
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
-const TABS = [['refine', 'Refine'], ['craft', 'Craft'], ['salvage', 'Salvage'], ['reforge', 'Reforge']];
+const TABS = [['refine', 'Refine'], ['craft', 'Craft'], ['salvage', 'Salvage'], ['reforge', 'Reforge'], ['reroll', 'Affixes']];
 const statsText = st => Object.entries(st || {}).map(([k, v]) => statLabel(k, v)).join(' · ');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -97,7 +99,7 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
     const out = bagOnly ? [] : SLOTS.filter(s => inv.eq[s]).map(s => ({ it: inv.eq[s], eq: s }));
     return out.concat(inv.bag.map(it => ({ it, eq: null })));
   };
-  const itemHead = (it, eq) => `<span class="slot">${eq ? `${eq}<br><em>worn</em>` : it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}</b><small>${statsText(it.st)}${usable(it) ? '' : ` · ${CLASSES[it.cls]?.name || ''} only`}</small>`;
+  const itemHead = (it, eq) => `<span class="slot">${eq ? `${eq}<br><em>worn</em>` : it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${setTagHtml(it, state.inv?.eq)}</b><small>${statsText(it.st)}${usable(it) ? '' : ` · ${CLASSES[it.cls]?.name || ''} only`}${axHtml(it, state.cls)}</small>`;
 
   function matsStrip() {
     const have = mats();
@@ -142,12 +144,23 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
     }).join('');
   }
 
+  // Reroll one affix (shared/loot.js rerollCost): it becomes a different affix, the others stay.
+  function tabReroll() {
+    const list = gear().filter(({ it }) => rerollCost(it));
+    if (!list.length) return '<div class="it empty"><span class="nm"><small>No gear with affixes. Uncommon and better drops roll 1–3 bonus stats; Epic set pieces roll 2.</small></span></div>';
+    return '<p class="hint">Reroll ONE affix into a different one (the item keeps its other affixes, stats and refine level). Set pieces cost double.</p>' + list.map(({ it, eq }) => {
+      const cost = rerollCost(it), ok = usable(it), can = canAfford(gold(), mats(), cost);
+      const rows = it.ax.map((a, i) => `<div class="axrow"><span class="ax-l${isTeamAffix(a) ? ' team' : ''}">${esc(affixText(a, state.cls))}</span>${ok ? btn('reroll', 'Reroll', can, `data-u="${it.u}" data-i="${i}"`) : ''}</div>`).join('');
+      return `<div class="it" data-tu="${it.u}"><span class="slot">${eq ? `${eq}<br><em>worn</em>` : it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${setTagHtml(it, state.inv?.eq)}</b><small>${statsText(it.st)}</small>${rows}${costHtml(cost)}</span></div>`;
+    }).join('');
+  }
+
   function render() {
     if (!isOpen() || !state.inv) return;
     let h = `<div class="top"><span>THE SMITH <span class="gold">${gold()} gold</span></span><button class="x" data-a="close">✕</button></div>`;
     h += matsStrip();
     h += `<div class="tabs">${TABS.map(([id, name]) => `<button data-a="tab" data-t="${id}" class="${ui.tab === id ? 'on' : ''}">${name}</button>`).join('')}</div>`;
-    h += `<div class="body">${{ refine: tabRefine, craft: tabCraft, salvage: tabSalvage, reforge: tabReforge }[ui.tab]()}</div>`;
+    h += `<div class="body">${{ refine: tabRefine, craft: tabCraft, salvage: tabSalvage, reforge: tabReforge, reroll: tabReroll }[ui.tab]()}</div>`;
     const sc = panel.querySelector('.body')?.scrollTop || 0;
     panel.innerHTML = h;
     const body = panel.querySelector('.body'); if (body) body.scrollTop = sc;
@@ -162,6 +175,7 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
     const u = +b.dataset.u;
     if (a === 'refine') send({ type: 'smith', a: 'refine', u });
     if (a === 'reforge') send({ type: 'smith', a: 'reforge', u, mode: b.dataset.m });
+    if (a === 'reroll') send({ type: 'smith', a: 'reroll', u, i: +b.dataset.i });
     if (a === 'craft') send({ type: 'smith', a: 'craft', id: b.dataset.id, cls: state.cls });
     if (a === 'salvage') {
       const it = state.inv?.bag.find(x => x.u === u);

@@ -20,6 +20,7 @@
 // Admin "Respawn as…" keeps the bot id (BotManager), so the owner link and slot survive it.
 import { CLASSES, MAX_LEVEL, PARTY_MAX } from '../shared/data.js';
 import { makeItem, SLOTS } from '../shared/items.js';
+import { botAffixes } from '../shared/loot.js';
 import { MASTERY, masteryLevel } from '../shared/mastery.js';
 import { clampSkill, skillName } from '../shared/botskill.js';
 import { MODES, loadoutFor, charmFor, defaultBranch, cleanBotName } from '../shared/playerbots.js';
@@ -224,7 +225,7 @@ export class PlayerBots {
 
   kit(b) { // what an owner sees: equipped gear and skill mastery
     return {
-      gear: SLOTS.map(slot => b.inv.eq[slot]).filter(Boolean).map(it => ({ slot: it.slot, name: it.name, r: it.r, st: it.st })),
+      gear: SLOTS.map(slot => b.inv.eq[slot]).filter(Boolean).map(it => ({ slot: it.slot, name: it.name, r: it.r, st: it.st, ...(it.ax ? { ax: it.ax } : {}), ...(it.set ? { set: it.set } : {}) })),
       mastery: Object.entries(b.mastery || {}).map(([sk, m]) => ({ sk, lvl: masteryLevel(m.pts), br: m.br || null })),
     };
   }
@@ -237,6 +238,7 @@ export class PlayerBots {
       catch { const it = makeItem(slot, L.rarity, 'swordsman', mid, kind); it.cls = b.cls; it.name = `${CLASSES[b.cls].name}'s Weapon`; return it; } // a class without weapon names yet
     };
     b.inv.eq = { ...b.inv.eq, weapon: make('weapon'), armor: make('armor'), charm: make('charm', charmFor(role)) };
+    for (const s of SLOTS) botAffixes(b.inv.eq[s], b.cls); // role-fit affixes, mid rolls (shared/loot.js)
     const pts = MASTERY.need[L.mastery] || 0;
     for (const [sk, m] of Object.entries(b.mastery || {})) {
       m.pts = Math.max(m.pts || 0, pts);
