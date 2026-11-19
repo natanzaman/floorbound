@@ -617,8 +617,7 @@ export class Game {
         fx('ring', { r: R, c: 'gold' });
         for (const m of this.mobs.values()) {
           if (!this.targetable(m) || dist(m, p) > R + m.def.radius) continue; // burrowed lurkers can't be taunted
-          let top = 0; for (const v of m.threat.values()) top = Math.max(top, v);
-          m.threat.set(p.id, top + 100);
+          this.tauntMob(m, p, 'taunt'); // lock + cuts (server/threat.js)
         }
         this.hitCircle(p, p.x, p.z, R, atk * 0.5, { sk: S });
         p.dr = { until: t + 4, v: 0.3 * pow, by: p.id, sk: S };
@@ -735,7 +734,7 @@ export class Game {
       this.bumpStat(p, 'switches');
       this.styleOnSwitch(p); // Dual Blades: cooldowns
     }
-    m.threat.set(p.id, (m.threat.get(p.id) || 0) + amount * threat * (p.threatMult || 1)); // Spear & Shield: +threat
+    this.addThreat(m, p, amount * threat * (p.threatMult || 1)); // Spear & Shield: +threat; clean multiplier, locks (server/threat.js)
     m.contributors.add(p.id);
     if (stun && !m.def.boss) m.stunUntil = t + stun;
     if (stun && m.def.boss) m.stunUntil = Math.max(m.stunUntil, t + stun * 0.3);
@@ -984,8 +983,7 @@ export class Game {
     }
     if (!def.boss && Math.hypot(m.x - m.sx, m.z - m.sz) > 35) m.threat.clear();
 
-    let target = null, top = -1;
-    for (const [pid, v] of m.threat) if (v > top) { top = v; target = this.players.get(pid); }
+    const target = this.targetOf(m); // the one target picker (server/threat.js)
 
     if (t < m.stunUntil) return;
 

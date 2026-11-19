@@ -45,6 +45,8 @@ const TIPS = {
   bots: 'Bots in your party take orders: hold V for the order wheel, or type /b stay, /b follow, /b Lyra: heal (one bot). /b help lists them all; ordinary chat never gives orders.',
   poses: 'Posed! Chat /kneel, /sit or /bow to strike a pose, /stand (or just move, attack, dodge or jump) to get up.',
   threat: 'Threat: the red arrow (and "→ name" on the boss bar) shows who the boss is after. Your bar under it is your threat vs the top; amber means you are about to pull it off your tank. Ease off for a moment.',
+  taunted: 'TAUNTED: a Guardian locked the boss on themselves for a few seconds. Everyone else was cut to half their threat; burst now, but watch the meter: whoever is above 90% of the lock when it ends takes the boss.',
+  cleanmult: 'The ×1.6 on your threat meter: dealing damage without getting hit makes your threat grow, up to ×2.5. Any hit (or a taunt) resets it, so a ranged player who never gets touched will pull the boss eventually.',
   healthreat: 'Healing builds threat too (half the healing, shared across the enemies in the fight). Heal hard and the boss comes for you: let your Guardian Taunt it back.',
   cover: 'Cover (C): dash to an ally (the one you selected, else whoever needs it) and take their next hit, braced like a guard. Perilous hits still need a dodge or parry.',
   pincer: 'Pincer! You and a partymate are on opposite sides of the enemy: both of you deal +15% damage and more posture.',

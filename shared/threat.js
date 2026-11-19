@@ -8,6 +8,30 @@ export const THREAT = {
   saveWin: 3,  // s: a hit that would have downed someone within this long after a heal (or soaked by a shield) counts as a save
 };
 
+// Taunt locks (docs/ROADMAP.md J4). On a taunt of mob m by T:
+//   R = max(best non-taunter threat/s on m over the last `window` s, atkMul × the highest fighter's attack); L = Lmul × R
+//   every entry ×= L / max(top, 1); then T = L, everyone else = min(v, cut × L); everyone's clean multiplier resets
+//   m.lock = { by: T, L, until }: the target is T and T's entry stays at L; others build normally.
+//   Lock end: T = handover × L, the target becomes the highest entry (a tie goes to T). It ends early (no handover) if T
+//   is dead, downed, trapped or out of the room. A re-taunt by anyone does the same from the current values.
+export const TAUNT = {
+  lock: { taunt: 6, warcry: 6, challenge: 8 }, // s, × the Provoke talent's duration bonus
+  cdGap: 3,      // s: a lock never lasts longer than the taunt's cooldown minus this
+  window: 6,     // s of threat history for R
+  atkMul: 2,     // R's floor: this × the highest fighter's attack
+  Lmul: 24,      // L = Lmul × R
+  cut: 0.5,      // everyone else: at most this × L
+  handover: 0.9, // the taunter's entry when the lock ends
+  meterMax: 150, // during a lock the meter shows v / L, up to this %
+};
+
+// Clean-damage multiplier: one per player, on damage threat against bosses and elites (not heal threat).
+//   mult = min(max, 1 + per × cleanSecs); cleanSecs only advances while the player damaged a boss / elite in the last
+//   `recent` s. Reset to 0 on any HP or shield loss (not evaded / parried / Covered hits), a taunt, being downed, or the
+//   end of the fight.
+export const CLEAN = { per: 0.05, max: 2.5, recent: 3 };
+export const cleanMult = secs => Math.min(CLEAN.max, 1 + CLEAN.per * Math.max(0, secs));
+
 // Cover (Guardian, C): dash to an ally and take the next hit meant for them.
 export const COVER = {
   range: 8,    // m: how far the dash reaches (to an ally within this)

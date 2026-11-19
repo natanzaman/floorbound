@@ -2,7 +2,7 @@
 // boss / elite that turned on a partymate, and melee DPS take the side of the target opposite the tank (flank / Pincer).
 // Bot mobs carry `tgt` (who a boss / elite is after) from the snapshot's `th` (server/threat.js).
 import { BOT_SKILLS } from '../botskill.js';
-import { COVER } from '../threat.js';
+import { COVER, THREAT } from '../threat.js';
 
 const near = (a, x, z, r) => Math.hypot(a.x - x, a.z - z) <= r;
 // Is point o inside a telegraph the bot has seen (red circle, or a lane) that lands within `soon` seconds?
@@ -53,4 +53,23 @@ export function lostAggro(b, tgt, ctx) {
 export function oppositeSpot(tgt, anchor, r) {
   const tx = tgt.x - anchor.x, tz = tgt.z - anchor.z, tl = Math.hypot(tx, tz) || 1;
   return [tgt.x + (tx / tl) * r, tgt.z + (tz / tl) * r];
+}
+
+// Tank: another Guardian holds m (it's after them) or has it taunt-locked (me.th[5]): don't taunt it, so two tanks never
+// ping-pong a boss. b.noTaunt (bot runs comparing with / without taunting) never taunts.
+export function heldByTank(b, m) {
+  const th = b.me?.th;
+  if (th && th[0] === m.id && th[4] && th[5] && th[5] !== b.id) return true;
+  return !!m.tgt && m.tgt !== b.id && (b.players || []).some(p => p.id === m.tgt && p.cls === 'guardian' && !p.dead);
+}
+export const mayTaunt = (b, m) => !b.noTaunt && !heldByTank(b, m);
+
+// DPS ease off (capability 4 and up only): my meter on this boss reached THREAT.warn (90%: of the top, or of the lock
+// value L during a taunt) and I don't hold it, with a tank in the party to hold it.
+export function easeOff(b, m, ctx) {
+  if (b.role !== 'dps' || (b.skill || 5) < 4 || !m?.def?.boss || !ctx?.tank) return false;
+  const th = b.me?.th;
+  if (!th || th[0] !== m.id) return false;
+  const mine = th[4] ? th[5] === b.id : th[1] >= 100;
+  return !mine && th[1] >= THREAT.warn;
 }

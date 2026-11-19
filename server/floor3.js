@@ -78,8 +78,7 @@ export const F3Methods = {
       for (const p of this.players.values()) if (!m.threat.has(p.id) && this.f3Valid(m, p) && dist(m, p) <= def.aggro) m.threat.set(p.id, 1);
     }
     if (!def.boss && !m.temp3 && Math.hypot(m.x - m.sx, m.z - m.sz) > 35) m.threat.clear();
-    let target = null, top = -1;
-    for (const [pid, v] of m.threat) if (v > top) { top = v; target = this.players.get(pid); }
+    const target = this.targetOf(m); // the one target picker (server/threat.js)
     if (t < m.stunUntil) return false;
     return target;
   },

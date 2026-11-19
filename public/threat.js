@@ -2,7 +2,9 @@
 //  - Who a boss / elite is after: a red chevron over the target, a faint line from the enemy to them, and "→ Name" on
 //    the boss bar. Snapshot `w.th` = [[mobId, targetId]].
 //  - My threat meter under the boss bar: "You 62% of top", amber "about to pull" at ≥90%; the top sees the runner-up.
-//    `me.th` = [bossId, myPct, nextPct].
+//    During a taunt lock (J4): "TAUNTED (Halvard) 3s · You 72%" (% of the lock value; amber at 90%: you take it when
+//    the lock ends). My clean-damage threat multiplier shows as "×1.6" once it's above ×1.0.
+//    `me.th` = [bossId, myPct, nextPct, mult×10, lockSecs, lockById].
 //  - Cover (Guardian, C or the bar button): dash to the selected ally (else whoever needs it) and take their next hit.
 //  - Flanking tags: "Pincer" (only to the two players in it), a small "Flank" the first few times.
 import * as THREE from 'three';
@@ -67,12 +69,18 @@ export function initThreat({ scene, state, players, mobs, fx, sfx, guide, send, 
     const mine = me && boss && me[0] === boss.id && !state.spectator ? me : null;
     meterEl.classList.toggle('hidden', !mine);
     if (!mine) return;
-    const [, pct, next] = mine, top = pct >= 100, warn = !top && pct >= THREAT.warn;
-    meterEl.firstChild.firstChild.style.width = `${top ? 100 : pct}%`;
-    meterEl.classList.toggle('warn', warn); meterEl.classList.toggle('top', top);
-    const txt = top ? `You have its attention${next ? ` · next ${next}%` : ''}` : warn ? `You ${pct}% of top · about to pull!` : `You ${pct}% of top`;
+    const [, pct, next, mul = 10, lock = 0, by = 0] = mine;
+    const top = lock ? by === state.myId : pct >= 100, warn = !top && pct >= THREAT.warn;
+    meterEl.firstChild.firstChild.style.width = `${top ? 100 : Math.min(100, pct)}%`;
+    meterEl.classList.toggle('warn', warn); meterEl.classList.toggle('top', top); meterEl.classList.toggle('lock', !!lock);
+    const x = mul > 10 ? ` ×${(mul / 10).toFixed(1)}` : '';
+    const txt = lock
+      ? `TAUNTED (${top ? 'You' : nameOf(by)}) ${lock}s · ${top ? `next ${next}%` : `You ${pct}%${warn ? ' · ease off!' : ''}`}${x}`
+      : top ? `You have its attention${next ? ` · next ${next}%` : ''}${x}` : warn ? `You ${pct}% of top · about to pull!${x}` : `You ${pct}% of top${x}`;
     const span = meterEl.lastChild; if (span.textContent !== txt) span.textContent = txt;
     if (warn) guide.tip(state.cls === 'cleric' ? 'healthreat' : 'threat');
+    if (lock) guide.tip('taunted');
+    if (mul >= 13) guide.tip('cleanmult');
   }
 
   function snap(w, m) {
