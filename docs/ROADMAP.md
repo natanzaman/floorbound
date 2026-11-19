@@ -472,7 +472,7 @@ Same rules as F–I: flock lock, push with `--force-with-lease`.
 
 | Task | Branch | Status | Owner | Merge |
 |---|---|---|---|---|
-| J1 Rescue mechanics | `feat/rescue` | in progress | agent rescue | |
+| J1 Rescue mechanics | `feat/rescue` | done | agent rescue | db4a5a7 |
 | J2 Multi-area boss fights (Floor 3 first) | `feat/arenas` | done | agent arenas | f0fdc9c |
 | J3 Boss timing tables + melee openings + tuning harness | `feat/openings` | todo (after J1 and J2) | | |
 | J4 Threat rules | `feat/threatrules` | done | agent threatrules | 2e52b29 |
