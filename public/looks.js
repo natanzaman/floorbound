@@ -325,6 +325,7 @@ export function initLooks({ players, mobs }) {
     for (const o of rig.objs) { o.removeFromParent(); o.traverse(n => { n.geometry?.dispose(); n.material?.dispose(); }); }
     rig.fx?.removeFromParent(); rig.fx?.traverse(n => n.material?.dispose());
     for (const o of rig.hid) o.layers.set(0);
+    if (rig.idleWas && e.model.anim) e.model.anim.idle = rig.idleWas;
     for (const [m, map, color] of rig.skin) { m.map = map; m.color.setHex(color); m.needsUpdate = true; }
     if (rig.scaled) { e.model.root.scale.divideScalar(rig.scaled); e.model.height /= rig.scaled; if (e.model.cursor) e.model.cursor.position.y = e.model.height + 0.35; }
     if (e.mats) for (const m of rig.cloth) { const i = e.mats.indexOf(m); if (i >= 0) e.mats.splice(i, 1); }
@@ -349,6 +350,8 @@ export function initLooks({ players, mobs }) {
       if (look.cloak?.kind === 'coat') addCoat(rig, look.cloak);
       if (look.cloak?.kind === 'cape') addCape(rig, look.cloak);
       if (look.weapon) { addWeapon(rig, look.weapon); if (rig.weapon) hideHands(rig); }
+      const an = e.model.anim; // the look's own standing carry (main.js plays anim.idle when the entity stands)
+      if (rig.weapon?.idle && an?.actions?.[rig.weapon.idle] && an.idle !== rig.weapon.idle) { rig.idleWas = an.idle; an.idle = rig.weapon.idle; }
       if (e.mats) e.mats.push(...rig.cloth); // the cloth flashes with the body on a hit
     }
     if (look.aura) addAura(rig, look.aura, e);

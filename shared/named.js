@@ -108,7 +108,7 @@ export const NAMED = [
     trust: HERO_TRUST,
   },
   {
-    id: 'cairn', name: 'Cairn', cls: 'berserker', style: 'warhammer', group: 'loner', role: 'Damage',
+    id: 'cairn', name: 'Cairn', cls: 'lancer', style: 'glaive', group: 'loner', role: 'Damage', // (his look's lantern glaive: shared/looks.js)
     look: { id: 'cairn', color: 0xd8ff5a },
     home: { floor: 1, zone: 'the far side of the Verdant Field' },
     blurb: 'Hunts alone. Trusts what you do, not what you say.',
