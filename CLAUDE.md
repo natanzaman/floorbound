@@ -6,6 +6,7 @@ Start every session by reading `docs/ROADMAP.md`: it holds the current plan, the
 ## Stack
 - **Server:** Node 20, `ws`, authoritative at 20 Hz (`server/index.js` → `server/game.js`).
   - Feature modules install themselves onto `Game.prototype`: combat, twists, floor2, mastery, talents, styles, classes-a, classes-b, smith, hall, ground, playerbots.
+  - The Named (`shared/named.js`, `server/named.js`): NPC heroes (the Hearthward) and the loner Cairn, a separate bot kind (`e.named`), off with `NAMED_ENABLED=0`.
 - **Client:** Three.js ES modules with no build step (`public/`).
   - `main.js` wires everything together: HUD, input, prediction, snapshot handling.
   - `world.js` and `floor2world.js` build the scenery.

@@ -773,14 +773,20 @@ export class Game {
         if (p) { names.push(p.name); this.giveXp(p, m.def.xp); this.dropLoot(p, m); }
       }
       this.twistKill(m); // Warden twist reward bonus
+      const quiet = this.quietClear?.(m.contributors, 'the Horned Warden'); // the Named alone: one quiet line (server/named.js)
       // Last Attack Bonus: a unique reward for whoever landed the killing blow.
       if (this.giveItem(killer, lastAttackItem())) this.invChanged(killer);
-      this.events.push({ t: 'la', id: killer.id, name: killer.name, x: r2(m.x), z: r2(m.z) });
-      this.sys(`LAST ATTACK BONUS: ${killer.name} landed the final blow and earned the Horn of the Warden!`);
+      if (!quiet) {
+        this.events.push({ t: 'la', id: killer.id, name: killer.name, x: r2(m.x), z: r2(m.z) });
+        this.sys(`LAST ATTACK BONUS: ${killer.name} landed the final blow and earned the Horn of the Warden!`);
+      }
       this.clearHounds(); this.clearQuakes();
-      this.floorClears++;
-      this.events.push({ t: 'clear', names, n: this.floorClears });
-      this.sys(`The Horned Warden has fallen! Floor 1 cleared by ${names.join(', ')}. The Stairway to Floor 2 has opened!`);
+      if (quiet) this.sys(quiet);
+      else {
+        this.floorClears++;
+        this.events.push({ t: 'clear', names, n: this.floorClears });
+        this.sys(`The Horned Warden has fallen! Floor 1 cleared by ${names.join(', ')}. The Stairway to Floor 2 has opened!`);
+      }
       this.recordClear(m, killer);
       this.f2WardenKilled(m);
       this.endFight('kill', m);

@@ -49,6 +49,7 @@ export const BotEditMethods = {
     if (body.name !== undefined) {
       name = cleanName(body.name);
       if (name.length < 2) throw new BotError('Bot names are 2-16 letters, numbers, spaces, _ . -');
+      if (this.nameReserved?.(name) && !e.named) throw new BotError(`${name} is one of the Named: pick another name.`, 409);
       const lower = name.toLowerCase();
       if ([...g.players.values()].some(o => o !== p && o.name.toLowerCase() === lower)) throw new BotError('That name is taken.', 409);
     }

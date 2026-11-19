@@ -145,7 +145,7 @@ wss.on('connection', ws => {
         joining = false;
         if (!p || ws.readyState !== 1) { if (p) game.removePlayer(p); return; }
         player = p;
-        ws.send(JSON.stringify({ type: 'welcome', id: player.id, x: player.x, z: player.z, seq: player.posSeq, lvl: player.lvl, xp: player.xp, charId: player.charId || 0, ...(game.aiOn?.() ? { ai: 1 } : {}) }));
+        ws.send(JSON.stringify({ type: 'welcome', id: player.id, x: player.x, z: player.z, seq: player.posSeq, lvl: player.lvl, xp: player.xp, charId: player.charId || 0, ...(game.aiOn?.() ? { ai: 1 } : {}), ...(game.named ? { named: true } : {}) })); // named: the Friends tab (NAMED_ENABLED=0: none)
         ws.send(JSON.stringify(game.invFor(player))); player.invDirty = false;
         ws.send(JSON.stringify(game.masteryMsg(player))); player.masteryDirty = false; player.mSentT = game.time;
         ws.send(JSON.stringify(game.talentsMsg(player))); player.talentsDirty = false; // talent tree (server/talents.js)

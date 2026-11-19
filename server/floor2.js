@@ -441,13 +441,19 @@ export const F2Methods = {
       if (p) { names.push(p.name); this.giveXp(p, m.def.xp); this.dropLoot(p, m); }
     }
     this.twistKill2(m, ids); // Sovereign twist reward (server/sovtwists.js)
+    const quiet = this.quietClear?.(ids, 'the Drowned Sovereign'); // the Named alone: one quiet line (server/named.js)
     if (this.giveItem(killer, lastAttackItem2())) this.invChanged(killer);
-    this.events.push({ t: 'la2', id: killer.id, name: killer.name, x: r2(m.x), z: r2(m.z) });
-    this.sys(`LAST ATTACK BONUS: ${killer.name} landed the final blow and earned the Sovereign's Tidecloak!`);
+    if (!quiet) {
+      this.events.push({ t: 'la2', id: killer.id, name: killer.name, x: r2(m.x), z: r2(m.z) });
+      this.sys(`LAST ATTACK BONUS: ${killer.name} landed the final blow and earned the Sovereign's Tidecloak!`);
+    }
     this.clearF2Fight();
-    this.floorClears2++;
-    this.events.push({ t: 'clear2', names, n: this.floorClears2 });
-    this.sys(`The Drowned Sovereign has fallen! Floor 2 cleared by ${names.join(', ')}.`);
+    if (quiet) this.sys(quiet);
+    else {
+      this.floorClears2++;
+      this.events.push({ t: 'clear2', names, n: this.floorClears2 });
+      this.sys(`The Drowned Sovereign has fallen! Floor 2 cleared by ${names.join(', ')}.`);
+    }
     this.recordClear2(m, killer, ids);
     this.endFight2('kill', m);
     m.engaged = false;

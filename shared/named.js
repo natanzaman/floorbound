@@ -61,6 +61,9 @@ export const RULES = {
   bossRetry: 180,      // a human was at the arena: look again after this long
   bossGiveUp: 360,     // heading for a boss that never started: back to farming
   linger: 8,           // seconds they stay after the last human leaves
+  loadRetry: 5,        // a friendship load failed: try again after this long (s); nothing of theirs is saved until it's in
+  holdIdle: 20,        // a boss's killing blow is held for the humans only while one of them hit it in the last this long (s)
+  tagR: 60,            // a field mob a human damaged pays them in full on a Named's kill only within this range (m)
 };
 
 const HERO_TRUST = { rate: { fight: 1, revive: 1, heal: 1, cover: 1, boss: 1, bossTry: 1, request: 1, chat: 1 }, daily: [18, 18, 9, 8, 5], loss: { downed: 4 }, invite: 'ally', summon: 'sworn' };

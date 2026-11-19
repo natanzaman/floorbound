@@ -268,7 +268,7 @@ const looks = initLooks({ players, mobs }); // character looks: the Named's own 
 // Players panel tabs + player-owned bots (public/playerbots.js)
 const pbots = initPlayerBots({ $, send, state, players, log: (a, b) => log(a, b), sfx, rerender: () => { lobby.html = ''; renderPlayers(); } });
 const friends = initNamed({ $, send, state, log: (a, b) => log(a, b), sfx, banner: (a, b) => banner(a, b) }); // public/named.js
-pbots.addTab(friends);
+// (the Friends tab is added on welcome, only when the server runs the Named: msg.named)
 // talent trees + the Skill Tree window (K): progression track, talents, abilities (public/talents.js)
 const talents = initTalents({ state, players, fx, sfx, send, floatNum, mastery, guide, isTouch, $ });
 const loot = initLoot({ state, send, $, styleTitle: it => styles.title(it), fx, sfx, guide, players, floatNum: (...a) => floatNum(...a) });
@@ -304,6 +304,7 @@ function onMessage(msg) {
   }
   if (msg.type === 'welcome') {
     Object.assign(state, { myId: msg.id, x: msg.x, z: msg.z, seq: msg.seq, joined: true, aiOn: !!msg.ai }); // ai: AI companions are on (H3)
+    friends.on = !!msg.named; pbots.setTab(friends, friends.on); // the Friends tab only when the Named are on (NAMED_ENABLED=0: none)
     setTimeout(layoutChips, 50);
     $('login').classList.add('hidden'); $('hud').classList.remove('hidden');
     buildSkillBar();
