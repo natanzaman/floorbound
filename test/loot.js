@@ -9,7 +9,7 @@ import { makeItem, lastAttackItem, keepsakeItem, DROPS, SLOTS } from '../shared/
 import { SMITH } from '../shared/crafting.js';
 import {
   AFFIXES, AFFIX_COUNT, SETS, LOOT, SET_KEYS, SKCD_FLOOR, rollAffixes, rollAffix, rollGear, makeSetPiece, setCounts, gearFx, setProgress,
-  lootFor, sourceOf, rerollCost, affixText, cleanAffixes, pickSetSlot, gearScore, botAffixes,
+  lootFor, sourceOf, rerollCost, affixText, cleanAffixes, pickSetSlot, gearScore, botAffixes, fitAffixes, bestSetFor,
 } from '../shared/loot.js';
 import { talentTotals } from '../shared/talents.js';
 
@@ -367,6 +367,20 @@ const sysTo = p => g.events.filter(e => e.t === 'sys' && e.to === p.id).map(e =>
   assert.deepEqual(it.ax.map(a => a.k), ['heal', 'haste', 'revive'], 'premade healer charm: healing, haste, revive');
   assert.equal(botAffixes(makeItem('armor', 0, 'swordsman', () => 0.5), 'swordsman').ax, undefined, 'Common premade gear: no affixes');
   ok('bots: equip clearly better loot for their role; premade gear gets role-fit affixes');
+}
+
+// ---------- the admin "Maxed" set and role-fit affixes ----------
+{
+  assert.equal(bestSetFor('swordsman'), 'hornbound'); assert.equal(bestSetFor('guardian'), 'hornbound');
+  assert.equal(bestSetFor('cleric'), 'tidebound'); assert.equal(bestSetFor('bard'), 'tidebound');
+  const w = makeSetPiece('hornbound', 'weapon', 'swordsman', () => 0.5, 'dual');
+  assert.equal(w.style, 'dual'); assert.equal(w.set, 'hornbound');
+  for (const cls of Object.keys(CLASSES)) for (const slot of SLOTS) {
+    const it = fitAffixes(makeItem(slot, 3, slot === 'weapon' ? cls : undefined, () => 0.5), cls, 3, 0.999);
+    assert.equal(it.ax.length, 3, `${cls} ${slot}: 3 role-fit affixes`);
+    for (const a of it.ax) assert.ok(AFFIXES[a.k].slots.includes(slot) && a.v >= AFFIXES[a.k].v[3]);
+  }
+  ok('Maxed preset data: the set by role, a set weapon in a given style, 3 top role-fit affixes for every class and slot');
 }
 
 // ---------- old saves ----------

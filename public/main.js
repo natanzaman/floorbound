@@ -258,7 +258,7 @@ const styles = initStyles({ state, players, fx, sfx, shake: a => shake(a), float
 const pbots = initPlayerBots({ $, send, state, players, log: (a, b) => log(a, b), sfx, rerender: () => { lobby.html = ''; renderPlayers(); } });
 // talent trees + the Skill Tree window (K): progression track, talents, abilities (public/talents.js)
 const talents = initTalents({ state, players, fx, sfx, send, floatNum, mastery, guide, isTouch, $ });
-const loot = initLoot({ state, send, $, styleTitle: it => styles.title(it) });
+const loot = initLoot({ state, send, $, styleTitle: it => styles.title(it), fx, sfx, guide, players, floatNum: (...a) => floatNum(...a) });
 // the Tower Bell (toll, sway, banner) and the engraved Hall stones (public/bell.js)
 const bell = initBell({ scene, sfx, guide, banner: (a, b, c) => banner(a, b, c) });
 // downed + revive: your downed overlay, "Hold E to revive", markers over downed partymates (public/revive.js)
@@ -386,6 +386,7 @@ function handleEvent(e) {
   if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
   if (threat.event(e)) return; // Cover, flank / Pincer tags
   if (talents.event(e)) return; // talent points, learned talents, talent procs
+  if (loot.event(e)) return; // loadout swaps (H2)
   if (mastery.event(e)) return; // evolved skills, mastery level-ups, evolutions
   if (classesA.event(e)) return; // Ranger / Berserker
   if (styles.event(e)) return; // weapon styles: styled basic attacks
@@ -630,6 +631,7 @@ function handleEvent(e) {
         if (p) floatNum(p.model.group.position, 3.6, e.items[0].name, `loot r${best}`);
         sfx.play('loot', { x: e.x, z: e.z }, best >= 2 ? 1 : 0.5);
         guide.tip('loot');
+        loot.onLoot(e); // set pieces: a beam in the set's colour, set / affix tips
       } else if (e.g) sfx.play('coin', null, 0.5);
       break;
     }
@@ -1953,4 +1955,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { state, players, mobs, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp };
+window.__fb = { state, players, mobs, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m) };

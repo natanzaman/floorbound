@@ -203,9 +203,13 @@ export function installLoot(Game) {
     return out;
   });
 
-  // { type: 'loadout' } messages.
+  // { type: 'loadout' } messages; TEST_HOOKS=1 only: { type: 'test', giveSet: id } puts a full set in the bag (screenshots).
   wrap('handle', function (orig, p, msg) {
     if (msg?.type === 'loadout') return this.loadoutAction(p, msg);
+    if (msg?.type === 'test' && process.env.TEST_HOOKS && SETS[msg.giveSet]) {
+      for (const s of SLOTS) { const it = makeSetPiece(msg.giveSet, s, p.cls); if (it) this.giveItem(p, it); }
+      this.invChanged(p);
+    }
     return orig.call(this, p, msg);
   });
 
