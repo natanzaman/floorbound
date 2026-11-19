@@ -230,8 +230,11 @@ try {
 
   // ---- F3 overlay, wheel zoom ----
   const perf0 = await visible('perf');
-  await tap('F3'); assert.equal(await visible('perf'), !perf0, 'F3 toggles the overlay');
-  await tap('F3'); assert.equal(await visible('perf'), perf0, 'F3 toggles it back');
+  // perf.js shows/hides the overlay on its own 4-per-second UI tick, which a slow headless frame rate stretches past
+  // a couple of frames: poll the state for up to 3 s instead of reading it right after the key.
+  const perfIs = async want => { for (let i = 0; i < 60; i++) { if ((await visible('perf')) === want) return want; await sleep(50); } return visible('perf'); };
+  await tap('F3'); assert.equal(await perfIs(!perf0), !perf0, 'F3 toggles the overlay');
+  await tap('F3'); assert.equal(await perfIs(perf0), perf0, 'F3 toggles it back');
   {
     const d0 = await S(() => window.__fb.state.camDist);
     await p.mouse.move(vx, vy); await p.mouse.wheel(0, 300); await frames(2);
