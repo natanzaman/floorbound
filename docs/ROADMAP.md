@@ -330,7 +330,7 @@ Same rules as F/G/H (flock lock, push with `--force-with-lease`).
 | Task | Branch | Status | Owner | Merge |
 |---|---|---|---|---|
 | I1 Named characters + friendship (code) | `feat/named` | in progress | agent named | |
-| I2 The loner's look | `feat/lonerlook` | in progress | agent lonerlook | |
+| I2 The loner's look | `feat/lonerlook` | done: looks in `shared/looks.js` (Cairn + the Hearthward), `game.setLook`, snapshot `looks`, admin Look picker; I1 calls `setLook(p, def.look.id)` | agent lonerlook | f6686dc |
 | I3 Personalities, talk, memory, nudges (AI) | `feat/namedai` | todo (after I1) | | |
 | I4 Requests and invitations | `feat/namedquests` | todo (after I1; AI phrasing optional) | | |
 
