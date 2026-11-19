@@ -412,6 +412,7 @@ server/director.js, server/director-sheet.js  the scene director (filming): play
 scripts/film/voices.mjs, scripts/film/tts.py  voice-overs for a cue sheet's say lines (Kokoro-82M, local) -> public/voice/ep<N>/; voice map docs/story/ep<N>-voices.yaml
 server/staging.js  staging hooks for the scene director (filming): forceBossMove, reserveLastAttack, scriptDeath/scriptRevive, protect, setTwistOverride, spawnMob, giveKeepsake, clearStaging; test/staging.js
 server/admin.js  admin API (/api/admin/*) and /api/lobby; server/botmanager.js runs bots inside the server; public/admin.html the admin page
+server/localws.js  in-process sockets for the server's own bots (no JSON per bot per tick); scripts/perfbench.js the CPU benchmark
 ```
 
 Tuning lives in `shared/data.js` (class HP/ATK, cooldowns, mob stats). New skills are a `case` in `Game.useSkill` plus an entry in `CLASSES`.
@@ -555,6 +556,7 @@ Five characters live in the tower and play the game like players do (`shared/nam
 | **Cairn** | Lancer (Glaive), the loner | Hunts alone. Trusts what you do, not what you say. |
 
 - **Presence.** They are server bots at capability 5, of their own kind: five reserved slots outside `MAX_BOTS`, not in the Bots tab, never touched by the admin page's "remove all". They are only simulated while a player is online and only on a floor a player is on (the free Render plan sleeps when idle), they step out during a director show, and nothing is written to the database with nobody online. Coming back, you get a "while you were away" line (worked out from the time gone, not simulated).
+  - **At home until needed** (each one is a bot the free plan pays for in CPU; `PRESENCE` in `shared/named.js`): a group comes into the world when a player is in its home area (Floor 1 outside town, the Verdant Field), stays while a player has been within 60 m of one of them in the last 3 minutes (following you across floors as before), in a boss fight, or in a player's party, and otherwise goes home. Resting at home, the Friends tab says so and they still work: **Invite** or **Call** one (or Accept an outreach message) and their group wakes at once, then the invite, call or join goes through a moment later; `@Name` talk is answered from afar. With 1 player online at most 2 of the Named are out at once, with 2 players 3, the Hearthward counting as one (all four or none); more players, no cap. `NAMED_PRESENCE=0` (or `NAMED_ALWAYS=1`) brings back the old rule.
 - **Level and gear.** They sit 2 levels above the top players: the top-3 average of non-admin characters played in the last 14 days, capped at the level cap, and they never drop. Gear, mastery and talents are the premade setup for that level, in their own weapon style. They take no XP, loot or items.
 - **What they do.** The Hearthward travel as one party; Cairn roams alone. They farm, and every 15-25 minutes (4-7 the first time) a group goes for its floor's boss, one group at a time, **only while no player is at the gate or in the arena** (a Named not with a player can't ready at a gate a player stands at; the group turns back at once), and the Hearthward only go with all four (if one goes off with a player, the march is called off); they never walk into a player's fight unless they are in that player's party.
 - **Humans first.** One of the Named never lands a boss's killing blow while a player who fought it stands in the arena and has hit it in the last 20 s, so the Last Attack is yours. A field mob you damaged gives you full XP and your own loot even if they finish it (if you're still within 60 m), and in your party they take no share of the XP. On the MVP card, the MVP and the titles go to players first. A clear with no player in it is never a "first", rings no bell, adds nothing to the floor's clear count, has no banner or Last Attack shout (one quiet line: "The Hearthward felled the Horned Warden."), and is carved apart on the Hall's **Heroes' record**. Player bots clearing without a player are announced as before.
@@ -597,6 +599,27 @@ An LLM "mind" can sit on top of a bot's rule-based brain.
 - **The Named** use the same provider, key and toggle for talk, with their own slice of the daily cap (see The Named → Talking to them). `AI_MOCK_DELAY_MS` slows the mock provider so the dots show locally.
 - **More:** models, prices, costs per hour and the Render setup are in `docs/research/ai-companions.md`.
 - **Code and test:** code in `server/ai/` (adapters in `server/ai/providers/`, persistence in `server/ai/store.js`), the admin card is `public/admin-ai.js`, and the test is `node test/ai-mind.js` (mock provider and fake HTTP, no keys; with `DATABASE_URL` it also checks the tables). Named talk: `node test/namedtalk.js` (mock provider; with `DATABASE_URL` the migration twice and the Named's notes and spend).
+
+## Performance
+
+Production runs on Render's free plan: **0.15 vCPU**. Where the CPU goes and what keeps it down:
+- **Server bots talk in process** (`server/localws.js`): player-added, admin and the Named bots get each snapshot as an object (the world part parsed once a tick and shared, read-only), and their messages go straight to the same handler players use. No JSON or loopback socket per bot per tick. Browsers and external bot runners (`test/team.js`, `/bots.html`) still use WebSockets. `BOT_TRANSPORT=ws` puts server bots back on sockets; `BOT_FREEZE=1` deep-freezes what they're handed (tests: a bot writing into a shared snapshot throws).
+- **10 Hz brains when nobody's watching:** a server bot with no player within 60 m on its floor and not in a boss room or fight (or a show) gets every other snapshot; the skipped tick's events come with the next one and `msg.dt` gives the step. Near players, in boss fights and in shows: 20 Hz as before. `BOT_THINK=20` turns it off.
+- **The Named rest at home** until a player is in the field or near them (The Named → Presence).
+- **`/status`** shows the last minute's tick times (`tick.p50/p95/max`, ms), CPU (`cpu.pct` of one core over the last minute, `cpu.s` in all), snapshot bytes serialised (`bytes.perSec`, `bytes.total`) and who is online by kind (`online.humans/player/admin/named`).
+- **Benchmark:** `node scripts/perfbench.js` starts a server with fake players (moving like a browser) and their bots, waits 15 s, then measures 60 s: CPU seconds per wall second (0.15 = the whole free plan), tick p50/p95, bytes serialised. `HUMANS=4 BOTS=9 SPOT=field` for one run; `EXTRA="BOT_TRANSPORT=ws BOT_THINK=20 NAMED_PRESENCE=0"` runs the old paths.
+
+Measured on the dev box (2026-11-19; Render's vCPU is slower, so compare ratios):
+
+| Run (60 s, the 5 Named enabled) | CPU s/s before → after | tick p95 before → after | serialised before → after |
+|---|---|---|---|
+| 2 players in town, 0 bots | 0.084 → 0.040 | 2.36 → 2.00 ms | 502 → 140 KB/s |
+| 2 players in town, 6 bots | 0.095 → 0.050 | 2.68 → 2.19 ms | 997 → 150 KB/s |
+| 4 players in town, 9 bots | 0.098 → 0.057 | 2.57 → 2.31 ms | 1444 → 317 KB/s |
+| 2 players in the field, 6 bots (all 5 Named out) | 0.091 → 0.081 | 2.59 → 2.70 ms | 995 → 154 KB/s |
+| 4 players in the field, 9 bots (all 5 Named out) | 0.103 → 0.091 | 2.84 → 2.89 ms | 1452 → 329 KB/s |
+
+In town the Named rest (about half the CPU); in the field, where they're out, the in-process channel and 10 Hz brains save about 11%. What's left is mostly the world itself (every floor's mobs are simulated) and the bots' own thinking.
 
 ## Testing
 
@@ -650,7 +673,7 @@ ROLES=guardian,swordsman,cleric,ranger,berserker,bard node test/floor3boss.js   
 FROM_TOWN=1 node test/floor3boss.js                                  # the whole way: town waystone, the field, the gate, the boss
 ```
 
-The Named's requests and invitations: `node test/namedquests.js` (`DATABASE_URL=postgresql://postgres:pg@localhost/fb_namedq` adds the Postgres checks). The Named: `node test/named.js` (rules, the manager in process, then a real server; `DATABASE_URL=postgresql://postgres:pg@localhost/fb_named` adds the Postgres checks, `WARDEN=1` has the Hearthward clear the Warden on their own). `/status` reports the last minute's tick times (`tick.p95`). Test clients join as ordinary players, so the Named walk in on any test server: a harness that wants a quiet world starts its server with `NAMED_ENABLED=0` (the Warden and Colossus bot runs and `test/botbrain.js` do).
+The Named's requests and invitations: `node test/namedquests.js` (`DATABASE_URL=postgresql://postgres:pg@localhost/fb_namedq` adds the Postgres checks). The Named: `node test/named.js` (rules, the manager in process, then a real server; `DATABASE_URL=postgresql://postgres:pg@localhost/fb_named` adds the Postgres checks, `WARDEN=1` has the Hearthward clear the Warden on their own). `/status` reports the last minute's tick times (`tick.p95`), CPU, bytes and who is online by kind (see Performance). Server bots on the in-process channel: `node test/localws.js` (the same messages as on a WebSocket, the 10 Hz rule); `LOCAL=1 node test/wardenskill.js` runs the Warden party as the server's own bots. Test clients join as ordinary players, so the Named walk in on any test server whose players reach the field: a harness that wants a quiet world starts its server with `NAMED_ENABLED=0` (the Warden and Colossus bot runs and `test/botbrain.js` do).
 
 Measured on the prototype: 40 bots used about 5% of one CPU core, about 50 KB/s down per player.
 
