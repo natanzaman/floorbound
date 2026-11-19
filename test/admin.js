@@ -202,7 +202,7 @@ try {
   await until(() => watcher.last.roster && !watcher.last.roster.players.some(p => p.name === `Bot${tag}`), 4000, 'bot removed from roster');
   ok(r.status === 200, 'remove one bot (gone from the roster)');
   r = await call('DELETE', '/api/admin/bots', adminTok);
-  await until(() => watcher.last.roster && !watcher.last.roster.players.some(p => p.bot), 4000, 'all bots gone');
+  await until(() => watcher.last.roster && !watcher.last.roster.players.some(p => p.bot && !p.named), 4000, 'all bots gone'); // (the Named stay: server/named.js)
   ok(r.body.removed === 4, 'remove all bots');
   watcher.ws.close();
 

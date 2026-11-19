@@ -9,6 +9,7 @@
 //               admin "remove all" leaves them; the admin API; a director show parks them; tick p95 with 2 humans +
 //               6 player bots + 5 Named. With DATABASE_URL: migrations run twice, friendship and level survive a
 //               restart, the level follows non-admin characters, a Named-only fight isn't tracked.
+//               (The Postgres checks need a local test database: they clear named_chars and the Heroes' record.)
 //   WARDEN=1    also: the Hearthward clear the Warden on their own (about 3 minutes).
 // Usage: node test/named.js   (PORT=53xx DATABASE_URL=postgresql://postgres:pg@localhost/fb_named WARDEN=1)
 import { spawn } from 'node:child_process';
@@ -564,18 +565,21 @@ if (DB) {
   await srv.ready;
   ok(/Database connected/.test(srv.log), 'the migration runs');
   await srv.stop();
+  await q(`DELETE FROM accounts WHERE discord_name LIKE 'named-test-%'`);
+  await q('DELETE FROM named_chars'); await q('DELETE FROM floor_clears WHERE heroes'); // (what earlier runs left: the level never drops)
   srv = startServer({ DATABASE_URL: DB });
   await srv.ready;
   ok(/Database connected/.test(srv.log) && !/Database unavailable/.test(srv.log), 'and runs again on the same database');
   // two accounts: an admin with a level-20 character and a player with a level-9 one
   const tag = `t${Date.now() % 1e6}`;
-  await q(`DELETE FROM accounts WHERE discord_name LIKE 'named-test-%'`);
-  await q('DELETE FROM named_chars'); await q('DELETE FROM floor_clears WHERE heroes');
   const [adm] = await q(`INSERT INTO accounts (discord_name, is_admin) VALUES ('named-test-admin', true) RETURNING id`);
   const [usr] = await q(`INSERT INTO accounts (discord_name) VALUES ('named-test-user') RETURNING id`);
   await q(`INSERT INTO characters (account_id, name, cls, lvl) VALUES ($1, $2, 'swordsman', 20)`, [adm.id, `Adm${tag}`]);
   await q(`INSERT INTO characters (account_id, name, cls, lvl, updated_at) VALUES ($1, $2, 'swordsman', 18, now() - interval '30 days')`, [usr.id, `Old${tag}`]);
   const [ch] = await q(`INSERT INTO characters (account_id, name, cls, lvl) VALUES ($1, $2, 'swordsman', 9) RETURNING id, name`, [usr.id, `Usr${tag}`]);
+  // (characters other tests left in this database: out of the 14-day window while we look, put back at the end)
+  const others = await q(`SELECT id, updated_at FROM characters WHERE account_id NOT IN ($1, $2) AND updated_at > now() - interval '15 days'`, [adm.id, usr.id]);
+  await q(`UPDATE characters SET updated_at = now() - interval '30 days' WHERE id = ANY($1::int[])`, [others.map(o => o.id)]);
   const store = makeNamedStore(q);
   ok((await store.topLevels()).join() === '9', 'the levels they follow: non-admin characters played in the last 14 days');
   const token = (await import('node:crypto')).randomBytes(24).toString('hex');
@@ -610,6 +614,7 @@ if (DB) {
   }
   await sleep(500);
   await srv.stop();
+  for (const o of others) await q('UPDATE characters SET updated_at = $2 WHERE id = $1', [o.id, o.updated_at]);
   await q(`DELETE FROM accounts WHERE discord_name LIKE 'named-test-%'`);
   await pool.end();
 } else console.log('  (set DATABASE_URL for the Postgres checks)');

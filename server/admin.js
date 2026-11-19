@@ -385,7 +385,7 @@ async function playersList() {
   });
   // Anonymous (unsaved) players who are online right now
   const anon = livePlayers().filter(p => !p.charId && !p.bot).map(p => ({ gameId: p.id, name: p.name, cls: p.cls, lvl: p.lvl, area: areaName(p.x, p.z), floor: floorOf(p.x) }));
-  const nbots = livePlayers().filter(p => p.bot).length;
+  const nbots = livePlayers().filter(p => p.bot && !p.named).length; // (the Named have their own card: server/named.js)
   return { players: out, anon, bots: nbots };
 }
 
@@ -395,7 +395,7 @@ function summary() {
   const clears = [...(h.recent || []), ...(h.floors?.[2]?.recent || [])].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 6)
     .map(r => ({ at: r.at, floor: r.floor, secs: r.secs, deaths: r.deaths, players: r.players.map(p => ({ name: p.name, cls: p.cls })), lastAttack: r.lastAttack }));
   return {
-    players: live.filter(p => !p.bot).length, accounts: live.filter(p => !p.bot && p.charId).length, bots: live.filter(p => p.bot).length, maxBots: bots.max,
+    players: live.filter(p => !p.bot).length, accounts: live.filter(p => !p.bot && p.charId).length, bots: live.filter(p => p.bot && !p.named).length, named: live.filter(p => p.named).length, maxBots: bots.max,
     uptime: Math.round(process.uptime()), floorClears: game.floorClears,
     twist: game.twist ? { id: game.twist.id, name: game.twist.name } : null, clears,
   };

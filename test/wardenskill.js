@@ -23,7 +23,7 @@ const LIMIT = Number(process.env.LIMIT) || 300;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function run(i) {
-  const env = { ...process.env, PORT: String(PORT), START_LEVEL: process.env.START_LEVEL || '10', SPAWN_AT: process.env.SPAWN_AT || '0,150', DATABASE_URL: '', QUAKE_STATS: '1' };
+  const env = { ...process.env, PORT: String(PORT), START_LEVEL: process.env.START_LEVEL || '10', SPAWN_AT: process.env.SPAWN_AT || '0,150', DATABASE_URL: '', QUAKE_STATS: '1', NAMED_ENABLED: process.env.NAMED_ENABLED || '0' }; // (the bots here join as players: keep the Named out of the run)
   const srv = spawn(process.execPath, [path.join(root, 'server/index.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
   srv.stdout.on('data', d => { log += d; }); srv.stderr.on('data', d => { log += d; });

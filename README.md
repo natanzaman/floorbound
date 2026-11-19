@@ -609,7 +609,7 @@ ROLES=guardian,swordsman,cleric,ranger,berserker,bard node test/floor3boss.js   
 FROM_TOWN=1 node test/floor3boss.js                                  # the whole way: town waystone, the field, the gate, the boss
 ```
 
-The Named: `node test/named.js` (rules, the manager in process, then a real server; `DATABASE_URL=postgresql://postgres:pg@localhost/fb_named` adds the Postgres checks, `WARDEN=1` has the Hearthward clear the Warden on their own). `/status` reports the last minute's tick times (`tick.p95`).
+The Named: `node test/named.js` (rules, the manager in process, then a real server; `DATABASE_URL=postgresql://postgres:pg@localhost/fb_named` adds the Postgres checks, `WARDEN=1` has the Hearthward clear the Warden on their own). `/status` reports the last minute's tick times (`tick.p95`). Test clients join as ordinary players, so the Named walk in on any test server: a harness that wants a quiet world starts its server with `NAMED_ENABLED=0` (the Warden and Colossus bot runs and `test/botbrain.js` do).
 
 Measured on the prototype: 40 bots used about 5% of one CPU core, about 50 KB/s down per player.
 

@@ -21,7 +21,7 @@ const COLOSSUS = MOB_IDS.indexOf('colossus');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function run(i) {
-  const env = { ...process.env, PORT: String(PORT), START_LEVEL: process.env.START_LEVEL || '30', SPAWN_AT: FROM_TOWN ? '' : process.env.SPAWN_AT || '1200,150', DATABASE_URL: '', F3_STATS: '1', TEST_HOOKS: '1' };
+  const env = { ...process.env, PORT: String(PORT), START_LEVEL: process.env.START_LEVEL || '30', SPAWN_AT: FROM_TOWN ? '' : process.env.SPAWN_AT || '1200,150', DATABASE_URL: '', F3_STATS: '1', TEST_HOOKS: '1', NAMED_ENABLED: process.env.NAMED_ENABLED || '0' }; // (the bots here join as players: keep the Named out of the run)
   const srv = spawn(process.execPath, [path.join(root, 'server/index.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
   srv.stdout.on('data', d => { log += d; }); srv.stderr.on('data', d => { log += d; });
