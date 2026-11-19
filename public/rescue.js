@@ -98,7 +98,7 @@ function label(text, color) {
   return s;
 }
 
-export function initRescue({ state, players, mobs, send, project, layer, guide, sfx, fx, floatNum, callout, isTouch, revive }) {
+export function initRescue({ state, players, mobs, send, project, layer, guide, sfx, fx, floatNum, callout, isTouch, revive, keyLabel = () => 'E' }) { // keyLabel(action): the key the prompt names (input.label)
   const style = document.createElement('style'); style.textContent = CSS; document.head.appendChild(style);
   const banner = document.createElement('div'); banner.id = 'trapped'; banner.className = 'hidden';
   banner.innerHTML = '<div class="tp-title"></div><div class="tp-sub"></div><div class="tp-bar"><div></div></div>';
@@ -252,7 +252,7 @@ export function initRescue({ state, players, mobs, send, project, layer, guide, 
     if (held) {
       if (sent !== t.id || (t.trap.by !== me() && now - sentAt > 400)) { send({ type: 'free', on: 1, id: t.id }); sent = t.id; sentAt = now; }
     } else if (sent) { send({ type: 'free', on: 0 }); sent = 0; }
-    const ph = t ? `<div>${t.trap.by === me() ? 'Cutting' : isTouch ? 'Hold here to cut' : 'Hold <b>E</b> to cut'} ${esc(name(t.id))} free</div><div class="fp-bar"><div style="width:${Math.round((t.trap.by === me() ? t.trap.prog : 0) * 100)}%"></div></div>` : '';
+    const ph = t ? `<div>${t.trap.by === me() ? 'Cutting' : isTouch ? 'Hold here to cut' : `Hold <b>${esc(keyLabel('revive'))}</b> to cut`} ${esc(name(t.id))} free</div><div class="fp-bar"><div style="width:${Math.round((t.trap.by === me() ? t.trap.prog : 0) * 100)}%"></div></div>` : '';
     if (ph !== lastPrompt) { lastPrompt = ph; prompt.innerHTML = ph; prompt.classList.toggle('hidden', !t); }
     // markers over trapped partymates (all of them for spectators), through walls
     const seen = new Set();

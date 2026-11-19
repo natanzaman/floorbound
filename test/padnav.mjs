@@ -1,7 +1,8 @@
 // Controller menu navigation (public/focusnav.js, roadmap K1b) in a real browser with a fake standard pad.
 // Character select by pad (d-pad to a class, A picks it, A on Enter joins), the Game Menu (Start opens it, the d-pad
 // moves, A opens Settings, Right moves the slider, B backs out to the menu with the focus back on Settings, Start
-// closes it; Settings reopened another way: B only closes it; the right stick leaves the camera alone), the Bag and
+// closes it; Settings reopened another way: B only closes it; the right stick leaves the camera alone), the Controls
+// screen (K2: A opens it from the Game Menu, A on Rebind takes a pad button, Start cancels a rebind, B goes back), the Bag and
 // the Skill Tree (navigable, B closes, Start closes the Skill Tree), the MVP card (A / B close it), and the keyboard & mouse device leaves the menus alone. Needs Playwright for Node (see test/keys.mjs).
 // Usage: PORT=371xx node test/padnav.mjs
 import assert from 'node:assert/strict';
@@ -80,7 +81,7 @@ try {
   await press(['Up']); await press(['Down']);
   assert.equal((await cur()).key, 'BUTTON?a=settings');
   await S(() => { window.__pad.pad.axes = [0, 1, 0, 0]; }); await frames(2); await S(() => { window.__pad.pad.axes = [0, 0, 0, 0]; }); await frames(2);
-  assert.equal((await cur()).key, 'BUTTON?a=controls', 'the left stick moves the focus too');
+  assert.equal((await cur()).key, 'BUTTON?a=bindings', 'the left stick moves the focus too (to Controls, K2)');
   assert.equal(await S(() => window.__fb.state.x), x0, 'and does not walk');
   await press(['Up']);
   await press(['A']);
@@ -124,6 +125,46 @@ try {
   assert.ok(!(await isOpen('settings')), 'B closes Settings');
   assert.ok(!(await isOpen('gamemenu')), 'and does not open the Game Menu (it was not opened from it this time)');
   ok('B goes back only to the window that opened this one this time; the right stick stays off the camera in menus');
+
+  // ---- the Controls screen (K2) by pad: A opens it from the Game Menu, A on Rebind takes a pad button, Start cancels
+  // a rebind (the screen stays), B goes back to the Game Menu ----
+  await p.waitForTimeout(450);
+  await press(['Start'], 2);
+  await goTo('BUTTON?a=bindings');
+  await press(['A']);
+  assert.ok(await isOpen('controlsui') && !(await isOpen('gamemenu')), 'A on Controls opens the Controls screen');
+  assert.equal((await cur()).layer, 'controlsui', 'the Controls screen is driven by the pad');
+  assert.ok(await S(() => !document.getElementById('cu-tab-pad').classList.contains('hidden')), 'on the Controller tab');
+  await goTo('cu-rb-pad-jump:0', 'Down', 80);
+  await press(['A']);
+  assert.ok(await S(() => window.__fb.input.capturing), 'A on Rebind listens for a button');
+  const jump0 = await S(() => window.__fb.input.bindings('pad').jump[0]);
+  await press(['Y']);
+  assert.ok(!(await S(() => window.__fb.input.capturing)), 'a pad button ends the rebind');
+  { const r = await S(() => ({ jump: window.__fb.input.bindings('pad').jump[0], prompt: !!document.getElementById('cu-prompt'), msg: document.getElementById('cu-msg-pad').textContent }));
+    assert.ok(r.jump === 'Y' || r.prompt, `Y was taken for Jump, or a conflict prompt asks (${JSON.stringify(r)})`); }
+  await S(() => window.__fb.input.resetBindings('pad')); await S(() => document.querySelector('#controlsui .cu-tabs [data-tab=pad]').click()); await frames(2);
+  assert.equal(await S(() => window.__fb.input.bindings('pad').jump[0]), jump0);
+  await goTo('cu-rb-pad-jump:0', 'Down', 80);
+  await press(['A']);
+  assert.ok(await S(() => window.__fb.input.capturing), 'listening again');
+  await press(['Start'], 2);
+  assert.ok(!(await S(() => window.__fb.input.capturing)), 'Start cancels the rebind');
+  assert.ok(await isOpen('controlsui') && !(await isOpen('gamemenu')), 'and the screen stays open (no Game Menu)');
+  assert.match(await S(() => document.getElementById('cu-msg-pad').textContent), /Cancelled/);
+  await press(['B']);
+  assert.ok(!(await isOpen('controlsui')), 'B closes the Controls screen');
+  assert.ok(await isOpen('gamemenu'), 'and goes back to the Game Menu');
+  assert.deepEqual(await cur(), { layer: 'gamemenu', key: 'BUTTON?a=bindings' }, 'focus back on Controls');
+  await press(['B']);
+  assert.ok(!(await isOpen('gamemenu')), 'B closes the Game Menu');
+  await p.waitForTimeout(450);
+  await press(['Start'], 2); await goTo('BUTTON?a=bindings'); await press(['A']);
+  assert.ok(await isOpen('controlsui'));
+  await p.waitForTimeout(450);
+  await press(['Start'], 2);
+  assert.ok(!(await isOpen('controlsui')) && !(await isOpen('gamemenu')), 'Start closes the Controls screen');
+  ok('Controls screen: A opens it, d-pad to Rebind, a pad button rebinds, Start cancels a rebind, B back, Start closes');
 
   // ---- the Bag ----
   await press(['View']);

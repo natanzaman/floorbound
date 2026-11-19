@@ -26,6 +26,8 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 
 ## Controls
 
+The default keys; change any of them in Game Menu → Controls (they follow your account when signed in): hover a key or button in the keyboard / controller picture to see what it does (★ = bound), click it and Edit to give it a control, or use Rebind in the list.
+
 | Action | Desktop | Phone |
 | --- | --- | --- |
 | Move | WASD / arrows | Left side of the screen (joystick) |
@@ -49,7 +51,7 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Skill Tree (progression, talents, mastery, evolutions) | K, or the Skills button (Esc closes) | Skills button |
 | Interact (merchant, Smith, Skill Shrine, raid gate) | F | Trade / Forge / Skills / Ready button |
 | Sound on/off | Sound button | Sound button |
-| Game Menu (Resume, Settings, Controls & guide, Change character, Log out; Admin page for admins) | Esc (it first closes whatever is open; in mouse look the Esc that frees the cursor opens it). The game keeps running: only your moving and attacking stop while it's open | ☰ button |
+| Game Menu (Resume, Settings, Controls, Controls & guide, Change character, Log out; Admin page for admins) | Esc (it first closes whatever is open; in mouse look the Esc that frees the cursor opens it). The game keeps running: only your moving and attacking stop while it's open | ☰ button |
 | Performance overlay | F3, or Settings → Performance overlay | — |
 
 **Controller:** plug in a standard gamepad and the game asks once whether to switch to it (A: yes, B: not now). Left stick moves, right stick turns the camera; RT attack (hold), RB dodge, LT guard (hold), A jump, X / Y / B skills 1–3, R3 lock on / next target, D-pad ↑ ← → potion / tonic / draught, D-pad ↓ interact (hold next to a downed ally: revive), View bag, Start Game Menu. Hold LB for the second layer: LB+A cover, LB+X Team Burst, LB+Y bot wheel (point with the right stick, release Y to give the order), LB+B select what you aim at, LB+R3 clear target, LB+D-pad ↑ Skill Tree, LB+D-pad → Players. Triggers press past halfway and let go under a third; sticks have a deadzone. PlayStation and Nintendo pads show their own button names. Under Controller the keyboard keeps Esc, Enter (chat) and F3, the mouse is for menus, and the touch stick hides; unplugging the pad goes back to keyboard & mouse. Menus work with the pad too (Game Menu, Settings, Bag, Skill Tree, character select, the MVP card): the d-pad or left stick moves a yellow focus ring, A presses, B goes back (Settings opened from the Game Menu returns to it), Left / Right change sliders, and each window remembers where the ring was; Smith, Hall and Players stay mouse-only for now.
@@ -415,6 +417,8 @@ shared/controls.js  every game action, default keyboard & mouse and controller b
 public/input.js  the input layer: keys and mouse buttons -> actions by key code (on, held, axis, label, setBinding, capture; window.__fb.input), saved in localStorage fb_controls
 public/panels.js  the panel registry (open, close, top, isOpen): which windows free the cursor and close on Esc
 public/settings.js  the Settings panel; fb_settings (this browser) vs fb_controls (bindings, sensitivity, invert-Y)
+public/controlsui.js  the Controls screen (Game Menu → Controls): input device, Keyboard & Mouse | Controller tabs with an SVG keyboard + mouse / controller picture (hover tooltip, ★, click popover → Edit → filter list, live light-up), every control with Rebind (conflicts: swap / unbind), Reset to defaults; test/controlsui.mjs
+public/controlsync.js  fb_controls follows the account (accounts.settings, GET / PUT /api/settings, 8 KB): on sign-in the account copy wins, else this browser's uploads; test/controlsync.js (DB)
 test/keys.mjs    every default key and mouse action in a real browser, checked by what it sends or changes (needs Playwright for Node)
 public/focusnav.js  controller menu navigation: spatial focus over the top window marked data-nav, A / B, focus restore by key; test/focusnav.js (DOM-free parts), test/padnav.mjs (a fake pad in a real browser)
 shared/gamepad.js  pad reading (deadzones, trigger hysteresis, button edges, the LB layer, glyph families; DOM-free); test/gamepad.js, test/padsmoke.mjs (a fake pad in a real browser)

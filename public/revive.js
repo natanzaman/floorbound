@@ -11,7 +11,8 @@ import { DOWNED } from '/shared/revive.js';
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const RING = 2 * Math.PI * 16; // svg circle r=16
 
-export function initRevive({ state, players, send, project, layer, guide, sfx, fx, floatNum, isTouch }) {
+// keyLabel(action): the key a prompt names (input.label: follows the player's bindings and the active device).
+export function initRevive({ state, players, send, project, layer, guide, sfx, fx, floatNum, isTouch, keyLabel = () => 'E' }) {
   const overlay = document.createElement('div');
   overlay.id = 'downed'; overlay.className = 'hidden';
   overlay.innerHTML = `<div class="dn-box"><svg viewBox="0 0 40 40"><circle class="bg" cx="20" cy="20" r="16"/><circle class="fg" cx="20" cy="20" r="16"/></svg>
@@ -73,7 +74,7 @@ export function initRevive({ state, players, send, project, layer, guide, sfx, f
       const D = state.downed, f = Math.max(0, Math.min(1, D.left / DOWNED.secs));
       overlay.querySelector('.fg').style.strokeDashoffset = `${RING * (1 - f)}`;
       overlay.querySelector('.dn-secs').textContent = Math.ceil(D.left);
-      const sub = D.by ? `${esc(name(D.by))} is reviving you…` : 'Crawl to your party. A partymate can hold <b>E</b> next to you to revive you.';
+      const sub = D.by ? `${esc(name(D.by))} is reviving you…` : `Crawl to your party. A partymate can hold <b>${esc(keyLabel('revive'))}</b> next to you to revive you.`;
       if (sub !== lastSub) { lastSub = sub; overlay.querySelector('.dn-sub').innerHTML = sub; }
       overlay.querySelector('.dn-bar').style.visibility = D.by ? 'visible' : 'hidden';
       overlay.querySelector('.dn-bar > div').style.width = `${Math.round(D.prog * 100)}%`;
@@ -86,7 +87,7 @@ export function initRevive({ state, players, send, project, layer, guide, sfx, f
     if (held) { // (pressed again if the channel broke: a hit, a step too far)
       if (sent !== t.id || (t.downed.by !== state.myId && now - sentAt > 400)) { send({ type: 'revive', on: 1, id: t.id }); sent = t.id; sentAt = now; }
     } else if (sent) { send({ type: 'revive', on: 0 }); sent = 0; }
-    const html = t ? `<div>${t.downed.by === state.myId ? 'Reviving' : isTouch ? 'Hold here to revive' : 'Hold <b>E</b> to revive'} ${esc(name(t.id))}</div><div class="rp-bar"><div style="width:${Math.round((t.downed.by === state.myId ? t.downed.prog : 0) * 100)}%"></div></div>` : '';
+    const html = t ? `<div>${t.downed.by === state.myId ? 'Reviving' : isTouch ? 'Hold here to revive' : `Hold <b>${esc(keyLabel('revive'))}</b> to revive`} ${esc(name(t.id))}</div><div class="rp-bar"><div style="width:${Math.round((t.downed.by === state.myId ? t.downed.prog : 0) * 100)}%"></div></div>` : '';
     if (html !== lastPrompt) { lastPrompt = html; prompt.innerHTML = html; prompt.classList.toggle('hidden', !t); }
     // markers over downed partymates (all of them for spectators), through walls
     const seen = new Set();

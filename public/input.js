@@ -19,16 +19,20 @@
 // asks once whether to switch to it. A pad that goes away lets go of its holds and falls back to keyboard & mouse.
 // Bound by KeyboardEvent.code, so Shift+1 is still 1 and other layouts keep the same physical keys. Typing fields
 // (input, textarea, select, IME composition) swallow game keys; preventDefault only on keys that did something.
-import { ACTION, merged, resolve, actionsOn, bindingHeld, bindingArmed, axisFromKeys, assign, diff, bindingLabel, modOfCode, isAxisBinding, tokens } from '/shared/controls.js';
+import { ACTION, merged, loadBindings, resolve, actionsOn, bindingHeld, bindingArmed, axisFromKeys, assign, diff, bindingLabel, modOfCode, isAxisBinding, tokens } from '/shared/controls.js';
 import { readButtons, readSticks, padEdges, pressAction, lookFrom, glyphFamily, padLabel, GLYPH_FAMILIES } from '/shared/gamepad.js';
 
-// fb_controls: the bindings (and, from K3, accessibility), versioned; synced to the account later (K2).
+// fb_controls: the bindings (and, from K3, accessibility), versioned; follows the account (K2: public/controlsync.js).
+// listen(fn): fn(c) after every set / replace (the account sync uploads changes).
 const CONTROLS_KEY = 'fb_controls', CONTROLS_V = 1;
 let accessCache = null; // fb_controls.access, read once per change (the camera stick reads it every frame)
+const storeListeners = new Set();
 export const controlsStore = {
   access() { return accessCache ||= { sens: 1, invertY: false, ...(this.get().access || {}) }; },
   get() { try { const c = JSON.parse(localStorage.getItem(CONTROLS_KEY) || 'null'); return c && typeof c === 'object' ? c : { v: CONTROLS_V }; } catch { return { v: CONTROLS_V }; } },
-  set(patch) { accessCache = null; const c = { ...this.get(), ...patch, v: CONTROLS_V }; try { localStorage.setItem(CONTROLS_KEY, JSON.stringify(c)); } catch {} return c; },
+  set(patch) { return this.replace({ ...this.get(), ...patch }); },
+  replace(c) { accessCache = null; c = { ...c, v: CONTROLS_V }; try { localStorage.setItem(CONTROLS_KEY, JSON.stringify(c)); } catch {} for (const fn of storeListeners) fn(c); return c; },
+  listen(fn) { storeListeners.add(fn); return () => storeListeners.delete(fn); },
 };
 
 const KBM_ALWAYS = ['menu', 'chat', 'perfOverlay'];
@@ -38,7 +42,7 @@ export const isTyping = el => !!el && (el.isContentEditable || ['INPUT', 'TEXTAR
 // notify(text): a short message (a toast). ask(text, answer): a yes / no prompt, answer(bool); returns close().
 export function createInput({ isTouch = false, gate = () => true, settings = {}, save = () => {}, notify = () => {}, ask = null } = {}) {
   const stored = controlsStore.get();
-  const B = { kbm: merged('kbm', stored.kbm), pad: merged('pad', stored.pad) };
+  const B = { kbm: loadBindings('kbm', stored.kbm), pad: loadBindings('pad', stored.pad) };
   const held = new Set();     // key codes, 'Mouse<n>', and 'Ctrl' 'Shift' 'Alt' 'Meta' while down
   const active = new Map();   // code -> action it pressed (released with that code)
   const subs = new Map();     // action -> Set(fn)
@@ -147,6 +151,7 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     if (mod) { capMods.add(mod); return; }
     if (capKeys.length) return capDone(`${modPrefix()}${capKeys[0]}+${e.code}`); // a second key: a two-key chord
     capKeys.push(e.code);
+    if (e.metaKey) { capMods.add('Meta'); return capDone(`${modPrefix()}${e.code}`); } // (macOS sends no keyup while Cmd is held: done on the press)
   }
   function captureKeyUp(e) {
     e.preventDefault(); e.stopImmediatePropagation();
@@ -252,8 +257,13 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
       return r.result;
     },
     resetBindings(d) { B[d] = merged(d, {}); controlsStore.set({ [d]: {} }); },
+    reload() { // (K2: the account's copy replaced fb_controls) let go of every hold, then take the saved bindings
+      for (const [code] of active) release(code, null, device, false);
+      const c = controlsStore.get(); B.kbm = loadBindings('kbm', c.kbm); B.pad = loadBindings('pad', c.pad);
+    },
     setContext(name, on) { on ? ctx.add(name) : ctx.delete(name); },
     capture, readPads, peek, mouseDown, reset,
+    cancelCapture() { capturing?.(null); }, // (K2: the Controls screen closed mid-rebind)
     frames: 0,
     tick() { api.frames++; poll(); },
     get pad() { return { connected: pad.index !== -1, id: pad.id, recognised: pad.recognised, family: pad.family }; },
