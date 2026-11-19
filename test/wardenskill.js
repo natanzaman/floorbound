@@ -20,6 +20,7 @@ import { STYLE_IDS } from '../shared/styles.js';
 import { writeFileSync } from 'node:fs';
 import { MVP_TITLE } from '../shared/mvp.js';
 import { MOB_IDS } from '../shared/data.js';
+import { threatWatch, threatLine, threatSummary } from './threatwatch.js'; // J4: tank share, DPS threat at lock end (THREAT_STATS, NO_TAUNT)
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SKILL = Number(process.env.BOT_SKILL) || 5, RUNS = Number(process.env.RUNS) || 1, PORT = Number(process.env.PORT) || 3621;
@@ -47,7 +48,7 @@ async function watchLocal(roles) {
 }
 
 async function run(i) {
-  const env = { ...process.env, PORT: String(PORT), START_LEVEL: process.env.START_LEVEL || BOSS.lvl, SPAWN_AT: process.env.SPAWN_AT || BOSS.at, DATABASE_URL: '', QUAKE_STATS: '1', NAMED_ENABLED: process.env.NAMED_ENABLED || '0' }; // (the bots here join as players: keep the Named out of the run)
+  const env = { ...process.env, THREAT_STATS: '1', PORT: String(PORT), START_LEVEL: process.env.START_LEVEL || BOSS.lvl, SPAWN_AT: process.env.SPAWN_AT || BOSS.at, DATABASE_URL: '', QUAKE_STATS: '1', NAMED_ENABLED: process.env.NAMED_ENABLED || '0' }; // (the bots here join as players: keep the Named out of the run)
   const roles = process.env.ROLES ? process.env.ROLES.split(',') : ['guardian', 'swordsman', 'cleric'];
   if (LOCAL) env.TEST_TEAM = `${roles.join(',')}:${SKILL}:${SOV ? 'floor2' : 'warden'}`; // the server runs them (server/index.js)
   const srv = spawn(process.execPath, [path.join(root, 'server/index.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -56,6 +57,7 @@ async function run(i) {
   for (let k = 0; k < 150 && !/running on/.test(log); k++) await sleep(100);
   const g = LOCAL ? await watchLocal(roles) : startTeam({ url: `ws://localhost:${PORT}/ws`, WebSocket, skill: SKILL, roles, log: m => { if (process.env.LOG_TALENTS && m.startsWith('[talent]')) console.log(m); } });
   const lead = g.team[0];
+  const tw = threatWatch(g.team, BOSS.type);
   const res = { run: i + 1, result: 'timeout', secs: 0, deaths: 0, downs: 0, revives: 0, twist: (log.match(BOSS.twist) || [])[1] || '?' };
   let start = null, hit = false, done = false;
   const t0 = Date.now();
@@ -98,6 +100,7 @@ async function run(i) {
     }
     if (!res.twist || res.twist === '?') res.twist = (log.match(BOSS.twist) || [])[1] || '?'; // rolled when the boss engages
     const w = msg.w.mobs.find(m => m[1] === BOSS.type); // the boss
+    if (start) tw.snap(msg);
     if (w && w[5] < w[6] && !hit) { hit = true; start = Date.now(); }
     if (w && hit && w[5] >= w[6] && !done) { res.result = 'wipe'; res.hpLeft = 100; done = true; }
     if (done) res.secs = Math.round((Date.now() - (start || t0)) / 1000);
@@ -109,6 +112,7 @@ async function run(i) {
     res.stats = g.team.map(b => { const s = stats.get(b); return `${b.cls}/${s.style >= 0 ? STYLE_IDS[s.style] : '-'} dmg ${Math.round(s.dmg)} (${(s.dmg / secs).toFixed(1)}/s) basic ${s.presses}${s.swings ? ` styled ${s.landed}/${s.swings} landed (${Math.round((100 * s.landed) / s.swings)}%)` : ''}`; });
   }
   g.stop(); srv.kill();
+  res.threat = tw.report(log);
   const qs = k => (log.match(new RegExp(`\\[quake\\] ${k}`, 'g')) || []).length;
   res.quake = { jump: qs('evade jump'), roll: qs('evade roll'), hit: qs('hit') };
   const ws = k => (log.match(new RegExp(`\\[wave\\] ${k}`, 'g')) || []).length;
@@ -118,10 +122,10 @@ async function run(i) {
 }
 
 const out = [];
-for (let i = 0; i < RUNS; i++) { const r = await run(i); out.push(r); console.log(`[skill ${SKILL} ${skillName(SKILL)}${SOV ? ' Sovereign' : ''}] run ${r.run}: ${r.result} in ${r.secs}s, ${r.deaths} deaths, ${r.downs} downed, ${r.revives} revived (twist ${r.twist}) · ${SOV ? `Tidal Waves: ${r.wave.roll} rolled, ${r.wave.hit} hit · geyser hits ${r.wave.geyser} · deluge ticks ${r.wave.deluge}` : `Quake Rings: ${r.quake.jump} jumped, ${r.quake.roll} rolled, ${r.quake.hit} hit`}${r.causes ? ` · deaths to ${r.causes.join(', ')}` : ''}${r.mech ? ` · team mechanics: stacks ${r.mech.stack.join('/') || '-'} in, spread ${r.mech.spread[0]}/${r.mech.spread[1]} clean, tethers ${r.mech.tether[0]}/${r.mech.tether[1]} snapped` : ''}${r.traps ? ` · traps: ${Object.entries(r.traps).map(([k, v]) => `${v} ${k}`).join(', ')}` : ''}${r.team ? ` · Covers ${r.team.cover} (${r.team.covered} hits taken), Pincer tags ${r.team.pincer}` : ''} · combos ${Object.entries(r.combos || {}).map(([k, v]) => `${k} ${v}`).join(', ') || 0} · Team Bursts ${r.bursts ? `${r.bursts.length} (joiners ${r.bursts.join('/')})` : 0}`); for (const l of r.stats || []) console.log(`    ${l}`);
+for (let i = 0; i < RUNS; i++) { const r = await run(i); out.push(r); console.log(`[skill ${SKILL} ${skillName(SKILL)}${SOV ? ' Sovereign' : ''}] run ${r.run}: ${r.result} in ${r.secs}s, ${r.deaths} deaths, ${r.downs} downed, ${r.revives} revived (twist ${r.twist}) · ${SOV ? `Tidal Waves: ${r.wave.roll} rolled, ${r.wave.hit} hit · geyser hits ${r.wave.geyser} · deluge ticks ${r.wave.deluge}` : `Quake Rings: ${r.quake.jump} jumped, ${r.quake.roll} rolled, ${r.quake.hit} hit`}${r.causes ? ` · deaths to ${r.causes.join(', ')}` : ''}${r.mech ? ` · team mechanics: stacks ${r.mech.stack.join('/') || '-'} in, spread ${r.mech.spread[0]}/${r.mech.spread[1]} clean, tethers ${r.mech.tether[0]}/${r.mech.tether[1]} snapped` : ''}${r.traps ? ` · traps: ${Object.entries(r.traps).map(([k, v]) => `${v} ${k}`).join(', ')}` : ''}${r.team ? ` · Covers ${r.team.cover} (${r.team.covered} hits taken), Pincer tags ${r.team.pincer}` : ''} · combos ${Object.entries(r.combos || {}).map(([k, v]) => `${k} ${v}`).join(', ') || 0} · Team Bursts ${r.bursts ? `${r.bursts.length} (joiners ${r.bursts.join('/')})` : 0}${threatLine(r.threat)}`); for (const l of r.stats || []) console.log(`    ${l}`);
   if (process.env.MVP && r.card) for (const f of r.card.rows) console.log(`    ${f.id === r.card.mvp ? '★' : ' '} ${f.name} (${f.cls}${f.bot ? ' bot' : ''}): ${f.titles.map(k => MVP_TITLE[k].name).join(', ') || '-'} · dmg ${f.dmg} heal ${f.heal} tanked ${f.tanked} · Sw ${f.switch} Br ${f.break} combo ${f.combo} burst ${f.burst} rev ${f.revive} save ${f.save} cover ${f.cover} pincer ${f.flank} mech ${f.mechanic} LA ${f.lastAttack} · down ${f.down} death ${f.death}`);
   if (process.env.MVP_JSON && r.card) writeFileSync(process.env.MVP_JSON, JSON.stringify(r.card, null, 1)); }
 const wins = out.filter(r => r.result === 'kill');
 const qt = k => out.reduce((s, r) => s + r.quake[k], 0), qn = qt('jump') + qt('roll') + qt('hit');
-console.log(`[skill ${SKILL} ${skillName(SKILL)}${SOV ? ' Sovereign' : ''}] ${wins.length}/${out.length} kills · avg kill time ${wins.length ? Math.round(wins.reduce((s, r) => s + r.secs, 0) / wins.length) : '-'}s · avg deaths ${(out.reduce((s, r) => s + r.deaths, 0) / out.length).toFixed(1)} · avg revives ${(out.reduce((s, r) => s + r.revives, 0) / out.length).toFixed(1)} (of ${(out.reduce((s, r) => s + r.downs, 0) / out.length).toFixed(1)} downs) · ${SOV ? `Tidal Waves rolled ${out.reduce((s, r) => s + r.wave.roll, 0)}, hit ${out.reduce((s, r) => s + r.wave.hit, 0)}` : `Quake Rings cleared ${qn ? Math.round((100 * (qn - qt('hit'))) / qn) : '-'}% of ${qn}`} · combos/fight ${(out.reduce((s, r) => s + Object.values(r.combos || {}).reduce((a, v) => a + v, 0), 0) / out.length).toFixed(1)} · bursts/fight ${(out.reduce((s, r) => s + (r.bursts?.length || 0), 0) / out.length).toFixed(1)}`);
+console.log(`[skill ${SKILL} ${skillName(SKILL)}${SOV ? ' Sovereign' : ''}] ${wins.length}/${out.length} kills · avg kill time ${wins.length ? Math.round(wins.reduce((s, r) => s + r.secs, 0) / wins.length) : '-'}s · avg deaths ${(out.reduce((s, r) => s + r.deaths, 0) / out.length).toFixed(1)} · avg revives ${(out.reduce((s, r) => s + r.revives, 0) / out.length).toFixed(1)} (of ${(out.reduce((s, r) => s + r.downs, 0) / out.length).toFixed(1)} downs) · ${SOV ? `Tidal Waves rolled ${out.reduce((s, r) => s + r.wave.roll, 0)}, hit ${out.reduce((s, r) => s + r.wave.hit, 0)}` : `Quake Rings cleared ${qn ? Math.round((100 * (qn - qt('hit'))) / qn) : '-'}% of ${qn}`} · combos/fight ${(out.reduce((s, r) => s + Object.values(r.combos || {}).reduce((a, v) => a + v, 0), 0) / out.length).toFixed(1)} · bursts/fight ${(out.reduce((s, r) => s + (r.bursts?.length || 0), 0) / out.length).toFixed(1)}${threatSummary(out)}`);
 process.exit(0);

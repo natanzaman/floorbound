@@ -674,6 +674,29 @@ console.log('# review fixes');
   ok(nm.online().length === 5, `cap ${cap1} (the default for one human): both groups`);
 }
 
+// ---- review #1 (bc407b8): a partied human while the Named rest (inviteBlock read a resting Named's null party) ----
+{
+  const { g, nm, human, tick, P, set } = world({ presence: true });
+  const nat = human('Natan', 10), ron = human('Ronnie', 10);
+  nat.x = 0; nat.z = 0; ron.x = 2; ron.z = 0; // (in town: the Named rest)
+  g.invite(nat, ron.id); g.accept(ron, nat.id);
+  tick(3);
+  ok(!!nat.party && nat.party === ron.party && nm.online().length === 0, 'partied, in town: the Named rest');
+  let list = null, err = null;
+  try { list = nm.listFor(nat); } catch (e) { err = e; }
+  ok(!err && list.rows.length === 5 && list.rows.every(r => r.resting && !r.mine && r.invite), `listFor a partied human while they rest: no crash${err ? ` (${err.message})` : ''}`);
+  set(nat, 'halvard', 40);
+  err = null;
+  try { nm.handle(nat, { type: 'named', op: 'invite', id: 'halvard' }); } catch (e) { err = e; }
+  const reply = nat.sent.filter(m => m.type === 'named' && m.op === 'invite').at(-1);
+  ok(!err && /on the way/.test(reply?.msg || ''), `invite a resting Hero from a party: they wake${err ? ` (${err.message})` : ''}`);
+  err = null;
+  try { tick(2); } catch (e) { err = e; } // runPending: the invite goes out once they're in
+  ok(!err && P('halvard')?.invite?.from === nat.id, `runPending: the invite reaches Halvard${err ? ` (${err.message})` : ''}`);
+  g.accept(P('halvard'), nat.id);
+  ok(P('halvard').party === nat.party && nm.listFor(nat).rows.find(r => r.id === 'halvard').mine, 'and he joins the party (3 of you)');
+}
+
 // ---- the kill switch ----
 {
   const g = new Game();

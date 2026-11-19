@@ -87,11 +87,7 @@ export const TalentMethods = {
     }
     return best;
   },
-  topThreat(m) {
-    let id = 0, top = -1;
-    for (const [pid, v] of m.threat) if (v > top && !this.players.get(pid)?.trap) { top = v; id = pid; } // (trapped players aren't targets: J1)
-    return id;
-  },
+  topThreat(m) { return this.targetOf(m)?.id || 0; }, // who m is after (server/threat.js targetOf)
   // addPosture: posture damage talents (Pressure, Crushing Blows, ...) and Juggernaut.
   postureMul(p, m) {
     const T = p?.tal;
@@ -414,8 +410,7 @@ export const TalentMethodsNew = {
       const r = fx?.r || 4.5;
       for (const m of this.mobs.values()) {
         if (!this.targetable(m) || dist(m, p) > r + m.def.radius || !m.threat.size || this.topThreat(m) === p.id) continue;
-        let top = 0; for (const v of m.threat.values()) top = Math.max(top, v);
-        m.threat.set(p.id, top + 50);
+        this.threatToTop(m, p); // Phalanx: to the top, no lock, no cuts (server/threat.js)
       }
       this.tproc(p, 'phalanx', { r: K.r });
     }

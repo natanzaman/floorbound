@@ -28,6 +28,7 @@ import { inArena3 } from '../shared/floor3.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 3000;
 const MAX_PLAYERS = Number(process.env.MAX_PLAYERS) || 64;
+const LOCKSTEP = !!process.env.LOCKSTEP; // testing aid: the world only advances on GET /step (see below)
 
 const MOUNTS = [
   ['/vendor/addons/', path.join(root, 'node_modules/three/examples/jsm')],
@@ -229,8 +230,12 @@ function thinksSlow(p, humans) {
 function tick(dt) {
   const t0 = performance.now();
   game.update(dt);
-  const world = game.snapshot();
-  const st = Math.round(game.time * 1000); // st: the server clock (ms) this snapshot is for: clients interpolate on it (shared/netsmooth.js)
+  if (!game.players.size && !spectators.size) { game.events = []; tickMs[tickN++ % tickMs.length] = performance.now() - t0; return; } // nobody to send to: the world sleeps (game.activeFloors)
+  const world = game.snapshot(); // every floor: the server's own bots and spectators (the film view); browsers get game.snapFor(their floor)
+  // st: the server clock (ms) this snapshot is for: clients interpolate on it (shared/netsmooth.js). A monotonic wall clock
+  // stamped at tick time: game.time steps at most 0.2 s a tick, so after a longer stall it would trail wall time for good
+  // (remote entities stuttered for seconds). LOCKSTEP (frame-by-frame recording) keeps the game clock.
+  const st = Math.round(LOCKSTEP ? game.time * 1000 : performance.now());
   let shared = null; // the world part for in-process bots: parsed once a tick, shared by all of them (read-only)
   const halfRate = halfRateOn(), humans = halfRate ? [...game.players.values()].filter(p => !p.bot) : null;
   tickNo++;
@@ -242,7 +247,7 @@ function tick(dt) {
       const later = p.evLater; p.evLater = null;
       const w = later ? { ...shared, events: [].concat(...later, shared.events) } : shared;
       p.ws.deliver({ type: 'snap', st, me: game.meFor(p), w, ...(later ? { dt: (later.length + 1) / TICK_RATE } : {}) });
-    } else sendCounted(p.ws, `{"type":"snap","st":${st},"me":${JSON.stringify(game.meFor(p))},"w":${world}}`);
+    } else sendCounted(p.ws, `{"type":"snap","st":${st},"me":${JSON.stringify(game.meFor(p))},"w":${p.bot ? world : game.snapFor(floorOf(p.x))}}`); // a human: only their floor's mobs (bandwidth); a bot on a socket: the same world as in process
     if (p.invDirty) { p.invDirty = false; p.ws.send(JSON.stringify(game.invFor(p))); }
     if (p.talentsDirty) { p.talentsDirty = false; p.ws.send(JSON.stringify(game.talentsMsg(p))); } // talent tree: points, ranks
     if (p.masteryDirty && (p.masteryNow || game.time - (p.mSentT || 0) >= 1)) { // skill mastery: at most once a second, at once on a level-up/evolve
@@ -255,7 +260,7 @@ function tick(dt) {
   tickMs[tickN++ % tickMs.length] = performance.now() - t0;
 }
 
-if (process.env.LOCKSTEP) {
+if (LOCKSTEP) {
   // Testing aid for frame-by-frame recording: the world only advances on GET /step.
   server.prependListener('request', (req, res) => {
     if (!req.url.startsWith('/step')) return;
