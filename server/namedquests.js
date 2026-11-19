@@ -189,10 +189,14 @@ export class NamedQuests {
     if (r.req?.k !== 'bring') return 'Nothing to hand over.';
     if (this.have(p, r.req.mat) < r.req.n) return `You need ${r.req.n} ${MATS[r.req.mat]?.name || r.req.mat} (you have ${this.have(p, r.req.mat)}).`;
     if (talk) return '';
+    if (np && !p.dead && !np.dead && floorOf(p.x) === floorOf(np.x) && dist(p, np) <= REQ.turnInR) return '';
+    if (this.talkFromAfar(p)) return `${def.name} isn't nearby: talking hands it over from here (say "@${def.name} …" in chat).`;
     if (!np) return `${def.name} isn't around right now.`;
-    if (p.dead || np.dead || floorOf(p.x) !== floorOf(np.x) || dist(p, np) > REQ.turnInR) return `Find ${def.name} to hand it over (within ${REQ.turnInR} m).`;
-    return '';
+    return `Find ${def.name} to hand it over (within ${REQ.turnInR} m).`;
   }
+  // On Floors 2–3 the Named are rarely about (they live in Floor 1's field): talking to them (@Name, I3) hands a
+  // materials request over from anywhere there. On Floor 1 it takes talking to them nearby, or Turn in within 12 m.
+  talkFromAfar(p) { return floorOf(p.x) >= 2; }
   turnIn(p, id, opts = {}) {
     const why = this.turnInBlock(p, id, opts);
     if (why) return why;

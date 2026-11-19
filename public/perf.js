@@ -12,6 +12,7 @@ export function initPerf({ renderer, clock, settings, save, applyQuality, isJoin
   const P = { rtt: null, jitter: 0, sent: new Map(), lost: 0 };
   let ents = { interp: 0, extrap: 0, hold: 0 }, uiT = 0, last = '', lastChip = '';
   let auto = settings.quality === 'auto' ? new AutoQuality(Q.level) : null;
+  let savedQ = (() => { try { return localStorage.getItem('fb_autoq'); } catch { return null; } })();
 
   // ping: once a second while in the game
   const ctx = { send: null };
@@ -36,8 +37,9 @@ export function initPerf({ renderer, clock, settings, save, applyQuality, isJoin
     if (gapMs > 100) hitches.push(now);
     if (entStats) ents = entStats;
     if (auto) {
-      const lv = auto.frame(now, gapMs, document.hidden);
-      if (lv) { applyQuality(lv); try { localStorage.setItem('fb_autoq', lv); } catch {} }
+      const w = auto.windows, lv = auto.frame(now, gapMs, document.hidden);
+      if (lv) applyQuality(lv, auto.over()); // (shadows stay off once Auto turned them off: no shader recompiles)
+      if (auto.windows !== w && Q.level !== savedQ) { savedQ = Q.level; try { localStorage.setItem('fb_autoq', Q.level); } catch {} } // where Auto is after each window: the next load starts there (and High with MSAA)
     }
     if (now - F.t0 >= 1000) {
       F.fps = (F.n * 1000) / (now - F.t0); F.ms = F.sum / F.n; F.maxMs = F.max; F.jsMs = F.js / F.n;
@@ -53,7 +55,7 @@ export function initPerf({ renderer, clock, settings, save, applyQuality, isJoin
     const ri = renderer.info, c = clock;
     const lines = [
       `FPS ${F.fps.toFixed(0)} · ${F.ms.toFixed(1)} ms (worst ${F.maxMs.toFixed(0)}) · JS ${F.jsMs.toFixed(1)} ms`,
-      `Graphics ${Q.level}${settings.quality === 'auto' ? ' (Auto)' : ''} · pixel ratio ${renderer.getPixelRatio().toFixed(2)} · shadows ${Q.shadows ? 'on' : 'off'}`,
+      `Graphics ${Q.level}${settings.quality === 'auto' ? ' (Auto)' : ''}${renderer.getContext().getContextAttributes?.()?.antialias ? ' · MSAA' : ''} · pixel ratio ${renderer.getPixelRatio().toFixed(2)} · shadows ${Q.shadows ? 'on' : 'off'}`,
       `Draw ${ri.render.calls} calls · ${(ri.render.triangles / 1000).toFixed(0)}k tris · ${ri.programs?.length ?? '?'} shaders · ${ri.memory.geometries} geos`,
       `Hitches ${hitches.length} in the last minute (frames over 100 ms)`,
       `Ping ${P.rtt === null ? '…' : `${Math.round(P.rtt)} ms`} · jitter ${P.jitter.toFixed(0)} ms${P.lost ? ` · ${P.lost} lost` : ''}`,

@@ -2,7 +2,7 @@
 // ('*') for any class without its own plug-in. See shared/bots/registry.js for the interface.
 import { registerClassBrain } from './registry.js';
 import { standOff } from './style.js';
-import { botCover, lostAggro } from './threat.js'; // Cover, re-Taunt (shared/bots/threat.js)
+import { botCover, lostAggro, mayTaunt } from './threat.js'; // Cover, re-Taunt (shared/bots/threat.js)
 
 const faceTo = (b, m) => Math.atan2(m.x - b.x, m.z - b.z);
 
@@ -18,15 +18,16 @@ registerClassBrain('guardian', {
     const reach = tgt.def.radius + ctx.basic.reach - 1.4, d = d2(b.x, b.z, tgt.x, tgt.z), face = faceTo(b, tgt);
     if (botCover(b, ctx)) return true;                                          // Cover: take a big hit for a hurt ally
     if (!dodge) { moveToward(b, tgt.x, tgt.z, reach - 0.3); b.face = face; }
-    if (d < 7.5 && lostAggro(b, tgt, ctx) && b.t - (b.tauntT ?? -99) > 1 && useSkill(b, 1, face)) { b.tauntT = b.t; return true; } // it turned on a mate
-    if (d < 8.5 && b.engAt === null) { if (useSkill(b, 1, face)) b.tauntT = b.t; b.engAt = b.t; } // open with Taunt
-    if (ctx.peel && b.t - (b.tauntT ?? -99) > 2 && useSkill(b, 1, face)) { b.tauntT = b.t; return true; } // pull it off a teammate
+    const taunt = mayTaunt(b, tgt);                                            // never off another Guardian (no ping-pong)
+    if (taunt && d < 7.5 && lostAggro(b, tgt, ctx) && b.t - (b.tauntT ?? -99) > 1 && useSkill(b, 1, face)) { b.tauntT = b.t; return true; } // it turned on a mate
+    if (d < 8.5 && b.engAt === null) { if (taunt && useSkill(b, 1, face)) b.tauntT = b.t; b.engAt = b.t; } // open with Taunt
+    if (taunt && ctx.peel && b.t - (b.tauntT ?? -99) > 2 && useSkill(b, 1, face)) { b.tauntT = b.t; return true; } // pull it off a teammate
     if (d < reach + 1.2) {
       if (b.engAt === null) b.engAt = b.t;
       if (b.hp / b.maxHp < 0.6 || (tgt.enraged && dodge)) useSkill(b, 2, face); // Shield Wall
       if (switchOpen(b, tgt)) { useSkill(b, 0, face); return true; }           // Switch in with Bash
       if (!tgt.staggered && useSkill(b, 3, face)) return true;                  // Ground Slam: Break it for the DPS
-      if (b.t - b.engAt > 4 && useSkill(b, 1, face)) b.tauntT = b.t;            // keep threat: re-Taunt on cooldown
+      if (taunt && b.t - b.engAt > 4 && useSkill(b, 1, face)) b.tauntT = b.t;            // keep threat: re-Taunt on cooldown
       useSkill(b, 0, face);                                                     // Bash
     }
     return true;

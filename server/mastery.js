@@ -205,8 +205,7 @@ export const MasteryMethods = {
       case 'challenge': { // one enemy: it deals 30% less to everyone but you
         const m = this.pickFront(p, 10, 1.0) || this.pickFront(p, 6, Math.PI);
         if (!m) return false;
-        let top = 0; for (const v of m.threat.values()) top = Math.max(top, v);
-        m.threat.set(p.id, top + 150);
+        this.tauntMob(m, p, 'challenge'); // lock + cuts (server/threat.js)
         m.weakUntil = t + 5; m.weakBy = p.id; this.weakT = Math.max(this.weakT || 0, t + 5);
         fx({ m: m.id, x2: r2(m.x), z2: r2(m.z) });
         this.damageMob(m, p, atk * 0.8, { sk: S, heavy: true, threat: 2 });
@@ -219,8 +218,7 @@ export const MasteryMethods = {
         fx({ r: R });
         for (const m of [...this.mobs.values()]) {
           if (!this.targetable(m) || dist(m, p) > R + m.def.radius) continue;
-          let top = 0; for (const v of m.threat.values()) top = Math.max(top, v);
-          m.threat.set(p.id, top + 100);
+          this.tauntMob(m, p, 'warcry');
           this.dragToward(m, p, 2.5, 1.8);
         }
         this.hitCircle(p, p.x, p.z, R, atk * 0.4, { sk: S });

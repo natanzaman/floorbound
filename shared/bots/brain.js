@@ -35,6 +35,7 @@ import { mechSpot } from './bossteam.js'; // boss team mechanics: stack, spread,
 import './classes.js'; // built-in class plug-ins (Guardian, Swordsman, Cleric, generic)
 import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
 import { comboTurn, burstTurn } from './teamplay.js'; // combo payoffs + Team Burst (G2)
+import { easeOff } from './threat.js'; // DPS ease off near 90% threat (J4)
 
 const BOSS_LVL = { 1: 5, 2: 15, 3: 25 }; // a leader levels on its floor's field until this, then goes for the boss
 const floorFor = beh => (beh === 'floor3' ? 3 : beh === 'floor2' ? 2 : 0); // a behaviour's own floor (0: none)
@@ -468,6 +469,7 @@ function act(b, P, M) {
   }
   if (!dodge && overloadTurn(b, tgt)) return; // Floor 3: the Colossus is Overloading: Break it
   if (comboTurn(b, tgt, ctx)) return; // a partner's combo setup on the target: cash it in
+  if (easeOff(b, tgt, ctx)) b.easeT = b.t; // near 90% threat: keep position, hold attacks (skill 4+)
   if (!brain.combat || brain.combat(b, tgt, ctx) === false) brainFor('*').combat(b, tgt, ctx);
 }
 

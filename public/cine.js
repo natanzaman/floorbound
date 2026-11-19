@@ -173,7 +173,7 @@ body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-
     S.hidden = ent || null;
     if (!S.hidden) return;
     S.hidden.model.group.visible = false;
-    if (S.hidden.label) S.hidden.label.el.style.display = 'none';
+    if (S.hidden.label) { S.hidden.label.shown = false; S.hidden.label.el.style.display = 'none'; } // (main.js setShown's cache: it shows the label again once the shot ends)
   }
   // ---------- framing helpers (Ep 1 dress rehearsal fixes) ----------
   // A shot keeps a clear line to what it films: no wall, pillar or other body in between, and never the camera inside a

@@ -79,6 +79,7 @@ export function initFloor3Client(ctx) {
       case 'f3beam': beam(e); return true;
       case 'f3phase': {
         const b = mobs.get(e.id);
+        if (!b) return true; // the Colossus isn't on your floor (snapshots carry your floor's mobs): not your fight
         b?.model.anim?.shot('2H_Melee_Attack_Spin', 0.8);
         sfx.play('roar', b?.model.group.position || null, 1.3); ctx.shake(0.3);
         if (e.n === 1) ctx.banner('THE STORM WAKES', 'Phase 2: OVERLOAD (Break it, then Switch, or Team Burst) and Gale Harpies');

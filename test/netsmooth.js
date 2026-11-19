@@ -119,6 +119,40 @@ for (const [jit, reo] of [[0, 0], [60, 0.02]]) {
   console.log(`ok smooth under jitter ${jit} ms / reorder ${reo * 100}%: worst step ${worst.toFixed(3)} m vs ${step.toFixed(3)} m; delay ${Math.round(c.delay)} ms; late ${c.late}, out of order ${c.ooo}`);
 }
 
+// --- a server stall (review #2): the tick caps dt at 0.2 s, so a 1 s stall leaves game time 0.8 s behind wall time ---
+// Stamped on the game clock (the old server), every later snapshot arrives 800 ms "late": without a resync the client
+// drew past the newest one (hold) until the stale best case left the 3 s window. Stamped on a wall clock (the server
+// now), the stall is just a gap. Either way: smooth again within about a second.
+for (const wall of [false, true]) {
+  const c = new SnapClock(), t = new Track(), speed = 0.006; // 6 m/s of game time
+  const msgs = [];
+  let game = 0, w = 0;
+  for (let i = 0; i < 260; i++) {
+    const stall = i === 100 ? 1000 : 50; // one tick takes 1 s of wall time
+    w += stall; game += Math.min(stall, 200);
+    msgs.push({ st: wall ? w : game, at: 1000 + w + 40, x: game * speed });
+  }
+  const stallEnd = msgs[100].at; // (the first snapshot after the stall)
+  let mi = 0, prevX = null, worst = 0, holds = 0, rtPrev = null;
+  for (let now = 1000; now < msgs.at(-1).at; now += 1000 / 60) {
+    while (mi < msgs.length && msgs[mi].at <= now) { const m = msgs[mi++]; c.push(m.st, m.at); t.push(m.st, m.x, 0, 0, c.rt); }
+    const rt = c.renderTime(now);
+    if (rt === null) continue;
+    const x = t.sample(rt, now).x;
+    if (now > stallEnd + 1200) { // a second after the stall: every frame interpolates and moves at the steady pace
+      if (t.mode !== 'interp') holds++;
+      if (prevX !== null) worst = Math.max(worst, Math.abs(x - prevX));
+      if (rtPrev !== null) assert.ok(rt >= rtPrev, 'never backwards once settled');
+      rtPrev = rt;
+    }
+    prevX = x;
+  }
+  const step = speed * 1000 / 60;
+  assert.equal(holds, 0, `${wall ? 'wall' : 'game'}-clock stamps: no holds a second after a 1 s stall`);
+  assert.ok(worst < step * 1.6, `${wall ? 'wall' : 'game'}-clock stamps: smooth a second after the stall (worst ${worst.toFixed(3)} m vs ${step.toFixed(3)} m)`);
+  console.log(`ok a 1 s server stall (${wall ? 'wall' : 'game'}-clock stamps): smooth again within 1.2 s (worst step ${worst.toFixed(3)} m; resyncs ${c.shifts || 0})`);
+}
+
 // --- your own position: a small correction slides over ~120 ms, a big one snaps ---
 {
   const k = new Correction();
