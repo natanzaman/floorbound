@@ -2,7 +2,7 @@
 // Data and pure rules, shared by the server (server/named.js), the client (public/named.js: the Friends tab) and tests.
 //
 // One entry per character:
-//   { id, name, cls, style, group ('heroes' | 'loner'), role, look: { … I2 (public look, free-form) … },
+//   { id, name, cls, style, group ('heroes' | 'loner'), role, look: { id (a look in shared/looks.js), color },
 //     home: { floor, zone }, persona: '…' (I3 feeds it to the AI mind), blurb (one line, shown in the Friends tab),
 //     trust: { rate: { source: multiplier }, daily: [cap per tier], loss: { downed }, invite: tier id, summon: tier id } }
 //
@@ -69,11 +69,12 @@ export const GROUPS = {
   loner: { name: 'Alone', party: false },
 };
 
-// `look` is I2's (public/…): free-form keys. I1 only reads look.color (the portrait swatch), falling back to the class colour.
+// `look` is I2's: look.id names the character's look in shared/looks.js (game.setLook(p, def.look.id) puts it on, see
+// server/looks.js; lookSwatch(def.look.id) in public/looks.js draws its badge); look.color is the plain portrait colour.
 export const NAMED = [
   {
     id: 'halvard', name: 'Halvard', cls: 'guardian', style: 'shield', group: 'heroes', role: 'Tank',
-    look: { color: 0xe0a53a },
+    look: { id: 'halvard', color: 0xe0a53a },
     home: { floor: 1, zone: 'the Verdant Field' },
     blurb: 'Captain of the Hearthward. Counts heads before every pull.',
     persona: 'Halvard, captain and shield of the Hearthward. Steady, dry-humoured, plain-spoken. Counts heads before every pull and again after. Hates leaving anyone behind; forgives mistakes, not carelessness. Wants every one of his four to walk out of the tower.',
@@ -81,7 +82,7 @@ export const NAMED = [
   },
   {
     id: 'maribel', name: 'Maribel', cls: 'cleric', style: 'staff', group: 'heroes', role: 'Healer',
-    look: { color: 0x7fd6a4 },
+    look: { id: 'maribel', color: 0x7fd6a4 },
     home: { floor: 1, zone: 'the Verdant Field' },
     blurb: 'The Hearthward\'s healer. Remembers who skipped their potions.',
     persona: 'Maribel, healer of the Hearthward. Warm, bossy, quick to laugh. Scolds people who skip their potions and remembers who did. Hums when she is nervous. Believes nobody climbs alone, and says so often.',
@@ -89,7 +90,7 @@ export const NAMED = [
   },
   {
     id: 'tovin', name: 'Tovin', cls: 'ranger', style: 'longbow', group: 'heroes', role: 'Damage',
-    look: { color: 0x4fc3d9 },
+    look: { id: 'tovin', color: 0x4fc3d9 },
     home: { floor: 1, zone: 'the Verdant Field' },
     blurb: 'The Hearthward\'s archer. Keeps score of everything.',
     persona: 'Tovin, archer of the Hearthward. Cheerful show-off who keeps score of every kill and loses count on purpose when a friend is behind. Talks too much before a fight and not at all during one. Wants his name carved somewhere it will last.',
@@ -97,7 +98,7 @@ export const NAMED = [
   },
   {
     id: 'sennet', name: 'Sennet', cls: 'lancer', style: 'halberd', group: 'heroes', role: 'Damage',
-    look: { color: 0xb18cf2 },
+    look: { id: 'sennet', color: 0xb18cf2 },
     home: { floor: 1, zone: 'the Verdant Field' },
     blurb: 'The Hearthward\'s lancer. Writes every boss pattern in a notebook.',
     persona: 'Sennet, lancer of the Hearthward. Quiet, exact, a little shy. Studies every boss and writes its patterns in a notebook she lets nobody read. Speaks in short, careful sentences; warms slowly, then completely.',
@@ -105,7 +106,7 @@ export const NAMED = [
   },
   {
     id: 'cairn', name: 'Cairn', cls: 'berserker', style: 'warhammer', group: 'loner', role: 'Damage',
-    look: { color: 0x8a94a6 },
+    look: { id: 'cairn', color: 0xd8ff5a },
     home: { floor: 1, zone: 'the far side of the Verdant Field' },
     blurb: 'Hunts alone. Trusts what you do, not what you say.',
     persona: 'Cairn, a hunter who climbs alone. Says little and means all of it. Wherever someone fell he stacks a small pile of stones before moving on. Slow to trust: he respects people who fight beside him without asking for anything, and turns down every party until he calls someone a friend.',

@@ -379,6 +379,7 @@ server/combat.js posture/Break, perfect dodge, guard/parry, Horn Sweep, Quake Ri
 shared/threat.js, server/threat.js, public/threat.js  team threat: who bosses target (snapshot `th`), threat meter (`me.th`), healer threat, Guardian Cover, flank / Pincer; bots in shared/bots/threat.js; test/threat.js
 server/bossteam.js boss team mechanics: shared meteor (stack), spread markers, tether (mixed into Game; public/bossteam.js, shared/bots/bossteam.js)
 server/poses.js  kneel / sit / bow: setPose, /kneel /sit /bow /stand chat, cleared by moving or acting (public/poses.js on the client)
+shared/looks.js, server/looks.js, public/looks.js  character looks (the Named's own appearance): the look table, setLook + snapshot `looks`, the client builder (cloth, weapon, aura, nameplate, swatch); test/looks.js
 server/teamplay.js  skill combos between players, the Team Burst gauge and sync window, teamStat() per-fight counters (tables: shared/teamplay.js; client: public/teamplay.js; bots: shared/bots/teamplay.js)
 server/mvp.js  the post-fight MVP card from the per-fight team stats, downs and deaths; titles in shared/mvp.js; drawn by public/mvp.js
 server/index.js  static file server + WebSocket server (20 ticks/sec)
@@ -489,6 +490,13 @@ Teamwork comes from the party as each bot sees it, **real players included**:
 | status | status, report | answers with HP, level, potions and what it is doing |
 
 Chat channels: plain text goes to everyone, `/p text` to your party, `/s text` to players within 40 m. `/kneel`, `/sit`, `/bow` and `/stand` set a pose instead (never shown as chat).
+
+**Looks** (`shared/looks.js`, `server/looks.js`, `public/looks.js`): a look is a character's own, recognisable appearance, as data: `{ scale, hide, tint, hair, cloak, weapon, aura, plate, swatch, emblem }` (and `base`, to share a party's colours). `game.setLook(entity, id | null)` puts one on any entity with an id (a player, a bot, a Named, a mob); every snapshot lists who wears what as `w.looks = [[entityId, lookId], ...]` (left out when nobody does, so the game is unchanged until something calls it). The client builds it on the KayKit rig with procedural meshes, the way weapon styles are built: the rig's texture remapped onto the look's two-colour ramp, a hood, coat tails, a collar and a mantle or a cape with an emblem (they sway and trail when the character moves), a signature weapon in the hand (the weapon style underneath still plays), a faint ground glow with motes and a trail, the nameplate's colour, badge and title line, and a round badge for lists (`lookSwatch(lookId)`). Entities without a rig get the aura and nameplate only.
+
+- **Cairn, the loner** (`cairn`): an ash-pale hunter in a long tattered coat over soot-black, a deep hood with a long tail and a dark band over the mouth, a half-mantle bearing his mark (three stacked stones), and a hooked glaive with a caged wisp-lantern swinging from it. His pale yellow-green wisp-light is the one colour nobody else carries; he is the only colourless figure in the tower.
+- **The Hearthward** (`halvard`, `maribel`, `tovin`, `sennet`, on the `hearthward` base): an ember cape with the hearth-flame emblem, a matching nameplate, and a trim colour each. Data only.
+- **Preview:** on the admin page each bot card has a **Look** picker (`POST /api/admin/bots/:bid/look { look }`; it survives Respawn as…). With `TEST_HOOKS=1`, `{ type: 'test', look: id | null }` puts a look on yourself.
+- **Add a look:** an entry in `shared/looks.js` (`node test/looks.js` checks the table); a new part kind, weapon model or emblem goes in `public/looks.js`.
 
 **Poses** (`server/poses.js`, `public/poses.js`): `setPose(p, 'kneel' | 'sit' | 'bow' | null)` stores `p.pose` and sends `{ t: 'pose', id, k }`; every snapshot lists held poses as `w.poses = [[id, k], ...]` (left out when nobody is posed; the player rows are unchanged), so late joiners and spectators see them. Moving, a used skill or attack, a dodge, a jump, guarding, a teleport or death clears the pose. The client eases the rig into a procedural pose over 0.4 s (bone rotations layered over the plain Idle clip, `POSES` in `public/world.js`, like the Warden's wind-ups) and drops it the moment your own character moves.
 

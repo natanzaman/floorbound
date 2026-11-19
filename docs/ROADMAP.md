@@ -410,6 +410,16 @@ Build it with the KayKit rig, procedural meshes and materials, the way `public/s
 
 **Accept when:** close-up and in-world screenshots show him readable from 20 m away, and he looks like nobody else in the game.
 
+**Built (I2):**
+- **Cairn's look** (`cairn`): ash-pale tattered long coat over soot-black, a deep hood with a long tail and a dark band over the mouth, a half-mantle with his mark (three stacked stones), a hooked glaive with a caged wisp-lantern, and pale yellow-green wisp-light (motes and a short trail). He is the only colourless figure; nobody else carries that light. Nameplate: his colour, badge and "the Last Lamp".
+- **The Hearthward** (`halvard`, `maribel`, `tovin`, `sennet` on the `hearthward` base): an ember cape with the hearth-flame emblem, a matching nameplate, a trim colour each (I1's portrait colours). Data only.
+- **Where:** definitions in `shared/looks.js` (keyed by look id); `shared/named.js` points at them with `look: { id, color }`.
+- **Contract for I1 / I3:**
+  - Server: `game.setLook(p, def.look.id)` when a Named spawns (and again after any respawn). It works on any entity with an id and is listed in snapshots as `w.looks`. Nothing wears a look unless something calls it, so `NAMED_ENABLED=0` changes nothing.
+  - Client: nothing to do for the model or nameplate. For lists (the Friends tab): `import { lookSwatch } from '/looks.js'`, then `lookSwatch(def.look.id, px)` returns the badge HTML (works for offline characters too).
+- **Preview without I1:** admin page → a bot's **Look** picker; or `TEST_HOOKS=1` and `{ type: 'test', look: 'cairn' }`.
+- **Screenshots:** `/home/claude/shots/i2-lonerlook/`.
+
 ### I3. Personalities, talk, memory, nudges (`feat/namedai`) — after I1
 1. Each Named gets a persona sheet (voice, likes, dislikes, goals, secrets) in `shared/named.js`. It's fed to the AI mind with their friendship tier for the speaking player and their memories of that player.
 2. Players talk to a Named by name in chat or through a "Talk" button (Friends tab or nameplate); replies come as speech bubbles.
