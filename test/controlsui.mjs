@@ -256,6 +256,40 @@ try {
   await p.click('#controlsui [data-a=close]'); await frames(1);
   ok('controller picture: ★, tooltip with combos, popover; pad buttons light up through input.padHeld');
 
+  // ---- review fixes: chat keeps its keys while the screen is open; Swap only when it can swap; Cmd chords; the guide escapes labels ----
+  await tap('Escape'); await frames(2); await p.click('#gamemenu [data-a=bindings]'); await frames(1);
+  assert.ok(await visible('controlsui'));
+  await S(() => document.getElementById('chat-input').focus());
+  m = await mark();
+  await p.keyboard.type('hello while open'); await p.keyboard.press('Enter'); await frames(2);
+  assert.deepEqual((await sent(m, 'chat')).map(o => o.text), ['hello while open'], 'Enter in chat sends while Controls is open');
+  assert.ok(await S(() => document.activeElement?.id !== 'chat-input'), 'and leaves the chat box');
+  await rebind('skill1', 'KeyW');
+  assert.match(await S(() => document.getElementById('cu-prompt')?.textContent || ''), /W is already on Move/, 'the conflict prompt');
+  assert.ok(await S(() => !document.querySelector('#cu-prompt [data-p=swap]')), 'no Swap when Move could not take Skill 1\'s key');
+  await p.click('#cu-prompt [data-p=cancel]'); await frames(1);
+  assert.equal(await bound('move'), 'KeyW,KeyA,KeyS,KeyD');
+  await p.click('#cu-tab-kbm [data-rb="players:0"]');
+  await p.waitForFunction(() => window.__fb.input.capturing);
+  await p.keyboard.down('Meta'); await p.keyboard.down('KeyX'); await frames(2);
+  const capWhileHeld = await S(() => window.__fb.input.capturing);
+  await p.keyboard.up('KeyX'); await p.keyboard.up('Meta'); await frames(2);
+  assert.equal(capWhileHeld, false, 'Cmd+X completes on the key press (macOS sends no keyup while Cmd is held)');
+  assert.equal(await bound('players'), 'Meta+KeyX');
+  const g = await S(async () => {
+    const { Guide } = await import('/guide.js');
+    const el = document.createElement('div'), tip = document.createElement('div');
+    const gd = new Guide({ el, tipEl: tip, send() {}, keyLabel: () => '<i id="xss">X</i>' });
+    gd.render();
+    const r = { tag: !!el.querySelector('#xss'), text: el.textContent.includes('<i id="xss">X</i>') };
+    new Guide({ el: document.createElement('div'), tipEl: tip, send() {}, keyLabel: a => window.__fb.input.label(a) }); // (put the real labels back)
+    return r;
+  });
+  assert.deepEqual(g, { tag: false, text: true }, 'the guide card shows a key label as text, never as HTML');
+  await p.click('#cu-tab-kbm [data-reset=kbm]'); await p.click('#cu-tab-kbm [data-reset=kbm]'); await frames(1);
+  await p.click('#controlsui [data-a=close]'); await frames(1);
+  ok('chat Enter works with Controls open; no Swap that would cross an axis; Cmd chords capture on press; guide labels escaped');
+
   assert.deepEqual(errors, [], 'no page errors');
   console.log(`controlsui: all ${n} checks passed`);
 } catch (e) {

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
   ACTIONS, ACTION, GROUPS, DEFAULTS, resolve, check, assign, merged, diff, validate, normalize, axisFromKeys,
   bindingHeld, bindingArmed, bindingLabel, keyName, actionsOn, RESERVED,
-  cleanControls, loadBindings, syncPlan, CONTROLS_V, CONTROLS_MAX_BYTES,
+  cleanControls, loadBindings, syncPlan, CONTROLS_V, CONTROLS_MAX_BYTES, canSwap, isAxisBinding,
 } from '../shared/controls.js';
 
 let n = 0;
@@ -188,6 +188,47 @@ const H = (...k) => new Set(k);
   assert.deepEqual(syncPlan({ v: 1, kbm: { zzz: ['KeyQ', null] } }, null).upload, { v: 1, kbm: {} }, 'unknown ids are not uploaded');
   assert.deepEqual(syncPlan(null, null).upload, { v: CONTROLS_V }, 'nothing local: an empty copy uploads');
   ok('syncPlan: the account copy wins on login, else this browser uploads');
+}
+
+// ---- review fixes (K2) ----
+{
+  // swap never hands an axis binding to a button (or the other way round); the receiver is unbound instead
+  const A = assign(merged('kbm'), 'kbm', 'skill1', 0, 'KeyW', 'swap').bindings;
+  assert.equal(A.skill1[0], 'KeyW');
+  assert.ok(A.move[0] === null || isAxisBinding(A.move[0]), `move keeps an axis binding or none (${A.move[0]})`);
+  assert.deepEqual(validate(A, 'kbm'), [], 'swap A leaves a valid set');
+  assert.equal(canSwap(merged('kbm'), 'kbm', 'skill1', 0, 'KeyW'), false, 'the prompt offers no Swap here');
+  const B = assign(merged('kbm'), 'kbm', 'move', 0, 'Digit1,Digit2,Digit3,Digit4', 'swap').bindings;
+  assert.equal(B.move[0], 'Digit1,Digit2,Digit3,Digit4');
+  for (const id of ['skill1', 'skill2', 'skill3', 'item1']) assert.ok(!isAxisBinding(B[id][0]), `${id}: no axis binding (${B[id][0]})`);
+  assert.deepEqual(validate(B, 'kbm'), [], 'swap B leaves a valid set');
+  assert.equal(canSwap(merged('kbm'), 'kbm', 'move', 0, 'Digit1,Digit2,Digit3,Digit4'), false);
+  // an ordinary swap still swaps, and the prompt offers it
+  assert.equal(canSwap(merged('kbm'), 'kbm', 'jump', 0, 'KeyF'), true);
+  const S = assign(merged('kbm'), 'kbm', 'jump', 0, 'KeyF', 'swap').bindings;
+  assert.equal(S.jump[0], 'KeyF'); assert.equal(S.interact[0], 'Space');
+  ok('swap re-checks each receiver: a refused one is unbound, never given a crossed axis / button binding');
+
+  // prototype names are not action ids
+  const proto = JSON.parse('{"constructor":["KeyX",null],"toString":["KeyY",null],"__proto__":["KeyZ",null],"hasOwnProperty":["KeyH",null],"jump":["KeyB",null]}');
+  const cc = cleanControls({ v: 1, kbm: proto, pad: proto });
+  assert.deepEqual(Object.keys(cc.kbm), ['jump']); assert.deepEqual(Object.keys(cc.pad), ['jump']);
+  assert.equal(Object.getPrototypeOf(cc.kbm), Object.prototype, 'no prototype change');
+  const mm = merged('kbm', proto);
+  for (const k of ['constructor', 'toString', 'hasOwnProperty']) assert.ok(!Object.hasOwn(mm, k), `merged drops ${k}`);
+  assert.equal(Object.getPrototypeOf(mm), Object.prototype);
+  assert.deepEqual(loadBindings('kbm', proto), loadBindings('kbm', { jump: ['KeyB', null] }), 'loadBindings drops them');
+  assert.equal(check(merged('kbm'), 'kbm', 'constructor', 0, 'KeyX').error, 'unknown');
+  assert.equal(resolve({ constructor: ['KeyX', null] }, H(), { code: 'KeyX' }), null);
+  ok('prototype names (constructor, toString, __proto__) are never action ids');
+
+  // binding strings: letters, digits, '+' and ',' only, at most 64
+  const bad = { v: 1, kbm: { jump: ['<img src=x onerror=alert(1)>', 'Key B'], bag: ['KeyB"', 'KeyI'] } };
+  assert.deepEqual(cleanControls(bad).kbm, { jump: [null, null], bag: [null, 'KeyI'] }, 'odd characters dropped');
+  assert.equal(merged('kbm', bad.kbm).jump[0], null, 'merged drops them too (localStorage)');
+  assert.equal(merged('kbm', bad.kbm).bag[1], 'KeyI');
+  assert.equal(cleanControls({ v: 1, kbm: { move: ['KeyW,KeyA,KeyS,KeyD', null], selectAimed: ['Ctrl+Mouse0', null] } }).kbm.move[0], 'KeyW,KeyA,KeyS,KeyD');
+  ok('binding strings with characters outside [A-Za-z0-9+,] are dropped');
 }
 
 console.log(`controls: all ${n} checks passed`);

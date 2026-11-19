@@ -6,6 +6,7 @@ import { DEFAULTS, bindingLabel } from '/shared/controls.js';
 const touch = () => document.body.classList.contains('touch');
 // K(action): the key a tip names, from the player's bindings (new Guide({ keyLabel }): input.label); the default key until then.
 let keyLabel = null;
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); // (the card is innerHTML; key names come from saved bindings)
 const K = a => { try { const l = keyLabel?.(a); if (l && l !== 'Not bound') return l; } catch {} return bindingLabel(DEFAULTS.kbm[a]?.[0]); };
 
 export const STEPS = [ // (the Game Menu's Controls & guide lists them too)
@@ -122,7 +123,7 @@ export class Guide {
     if (this.off || !s) { this.el.classList.add('hidden'); return; }
     this.el.classList.remove('hidden');
     this.el.innerHTML = `<div class="g-head"><span>NEW ADVENTURER · ${this.step + 1}/${STEPS.length}</span><button class="g-x" title="Hide tips">✕</button></div>
-      <b>${s.title}</b><div>${s.text()}</div>${s.skip ? `<button class="g-skip">${s.skip}</button>` : ''}`;
+      <b>${s.title}</b><div>${esc(s.text())}</div>${s.skip ? `<button class="g-skip">${s.skip}</button>` : ''}`;
     this.el.querySelector('.g-x').onclick = () => { this.off = true; this.save(); this.render(); };
     const sk = this.el.querySelector('.g-skip');
     if (sk) sk.onclick = () => this.advance(this.step + 1);

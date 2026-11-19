@@ -7,7 +7,10 @@ const raw = (process.env.DATABASE_URL || '').trim();
 const url = (raw.match(/postgres(?:ql)?:\/\/[^\s'"]+/) || [raw])[0] || '';
 export let enabled = !!url;
 
-const local = url && /(@|\/\/)(localhost|127\.0\.0\.1)([:/]|$)|host=\/|sslmode=disable/.test(url); // (also postgresql://localhost/db, no user)
+// Local Postgres (no TLS): localhost / 127.0.0.1 as the URL's own host (with or without a user), a socket host, or
+// sslmode=disable. Exported for test/dburl.js.
+export const isLocalUrl = u => !!u && /^postgres(?:ql)?:\/\/(?:[^@/?#]*@)?(localhost|127\.0\.0\.1)(?:[:/?#]|$)|host=\/|sslmode=disable/.test(u);
+const local = isLocalUrl(url);
 // Let our ssl setting win over sslmode/channel_binding in the URL (Neon requires TLS either way).
 const cleanUrl = local ? url : url.replace(/([?&])(sslmode|channel_binding)=[^&]*&?/g, '$1').replace(/[?&]$/, '');
 const pool = enabled ? new pg.Pool({

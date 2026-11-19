@@ -118,7 +118,7 @@ export async function handle(req, res, url) {
       if (!a) return json(res, 401, { error: 'signed out' }), true;
       if (req.method === 'GET') return json(res, 200, { settings: await loadSettings(a.id) }), true;
       if (req.method !== 'PUT') return json(res, 405, { error: 'GET or PUT' }), true;
-      const body = await readCapped(req, CONTROLS_MAX_BYTES * 2);
+      const body = await readCapped(req, CONTROLS_MAX_BYTES + 512); // (the 8 KB object plus its { "settings": } wrapper)
       if (body.tooBig) return json(res, 413, { error: 'Settings too big.' }), true;
       const r = await storeSettings(a.id, body.settings);
       return json(res, r.code || 200, r.error ? { error: r.error } : { ok: true }), true;

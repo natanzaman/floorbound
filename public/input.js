@@ -151,6 +151,7 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     if (mod) { capMods.add(mod); return; }
     if (capKeys.length) return capDone(`${modPrefix()}${capKeys[0]}+${e.code}`); // a second key: a two-key chord
     capKeys.push(e.code);
+    if (e.metaKey) { capMods.add('Meta'); return capDone(`${modPrefix()}${e.code}`); } // (macOS sends no keyup while Cmd is held: done on the press)
   }
   function captureKeyUp(e) {
     e.preventDefault(); e.stopImmediatePropagation();

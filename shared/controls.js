@@ -48,7 +48,8 @@ export const ACTIONS = [
   { id: 'turnRight', label: 'Turn right', group: 'Keyboard & mouse', type: 'hold', kbmOnly: true },
   { id: 'zoom', label: 'Zoom', group: 'Keyboard & mouse', type: 'axis', kbmOnly: true },
 ];
-export const ACTION = Object.fromEntries(ACTIONS.map(a => [a.id, a]));
+// (no prototype: 'constructor', 'toString', '__proto__' from a save are not action ids)
+export const ACTION = Object.assign(Object.create(null), Object.fromEntries(ACTIONS.map(a => [a.id, a])));
 
 // Defaults: keyboard & mouse = the keys the game has always used; the controller per the K contract (Xbox names).
 export const DEFAULTS = {
@@ -122,6 +123,10 @@ function physical(b, device) {
   return tokens(b).flatMap(t => (device === 'kbm' && MOD_CODES[t] ? MOD_CODES[t] : [t]));
 }
 const isChord = b => !!b && !isAxisBinding(b) && b.includes('+');
+
+// A binding string as saved: letters, digits, '+' and ',' only (key codes, chords, axes), at most 64 characters.
+const MAX_BINDING = 64, BINDING_RE = /^[A-Za-z0-9+,]+$/;
+export const validBinding = b => typeof b === 'string' && b.length <= MAX_BINDING && BINDING_RE.test(b);
 
 // ---------- resolving ----------
 // Is a token held? held: a Set of codes / button names, plus 'Ctrl' 'Shift' 'Alt' 'Meta' while those are down.
@@ -214,15 +219,27 @@ export function check(bindings, device, action, slot, binding) {
 }
 
 // Put a binding in place, resolving conflicts: 'swap' gives the other action this slot's old binding, 'unbind' clears
-// it. Returns { bindings, result } (bindings unchanged when the check refuses it).
+// it. A swap re-checks each receiver with the old binding: one the rules refuse (a button can't take four keys, a
+// second receiver would clash with the first) is unbound instead. Returns { bindings, result, unbound } (bindings
+// unchanged when the check refuses it; unbound: the conflicts left without a binding).
 export function assign(bindings, device, action, slot, binding, mode = 'unbind') {
   const result = check(bindings, device, action, slot, binding);
-  if (result.error) return { bindings, result };
+  if (result.error) return { bindings, result, unbound: [] };
   const next = Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, [...(v || [null, null])]]));
   const old = next[action]?.[slot] ?? null;
-  for (const c of result.conflicts) next[c.action][c.slot] = mode === 'swap' ? old : null;
+  for (const c of result.conflicts) next[c.action][c.slot] = null;
   (next[action] ||= [null, null])[slot] = binding === null ? null : normalize(binding, device);
-  return { bindings: next, result };
+  const unbound = [];
+  for (const c of result.conflicts) {
+    if (mode === 'swap' && old !== null && check(next, device, c.action, c.slot, old).ok) next[c.action][c.slot] = old;
+    else unbound.push(c);
+  }
+  return { bindings: next, result, unbound };
+}
+// Would a swap give every conflicting action the old binding? (The conflict prompt offers Swap only then.)
+export function canSwap(bindings, device, action, slot, binding) {
+  const r = assign(bindings, device, action, slot, binding, 'swap');
+  return !r.result.error && r.result.conflicts.length > 0 && r.unbound.length === 0;
 }
 
 // The bindings in force: defaults, with the player's changes on top (unknown ids dropped; a saved null unbinds).
@@ -231,7 +248,8 @@ export function merged(device, overrides = {}) {
   for (const [id, slots] of Object.entries(overrides || {})) {
     if (!ACTION[id] || ACTION[id].fixed || !Array.isArray(slots)) continue;
     if (ACTION[id].kbmOnly && device === 'pad') continue;
-    out[id] = [slots[0] ?? null, device === 'pad' ? null : slots[1] ?? null];
+    const s = [0, 1].map(i => (validBinding(slots[i]) ? slots[i] : null));
+    out[id] = [s[0], device === 'pad' ? null : s[1]];
   }
   return out;
 }
@@ -286,7 +304,7 @@ export function bindingLabel(b) {
 // (accounts.settings), capped at CONTROLS_MAX_BYTES. Graphics, camera mode and the active device stay in fb_settings.
 export const CONTROLS_V = 1;
 export const CONTROLS_MAX_BYTES = 8192;
-const MAX_BINDING = 64, MAX_ACCESS = 32;
+const MAX_ACCESS = 32;
 
 // Keep only what fb_controls may hold: known, rebindable action ids with [main, alt] strings (or null), and short
 // plain access values. Anything else (unknown ids, other keys, odd values) is dropped. null for a non-object.
@@ -300,7 +318,7 @@ export function cleanControls(c) {
     for (const [id, slots] of Object.entries(src)) {
       const a = ACTION[id];
       if (!a || a.fixed || (a.kbmOnly && d === 'pad') || !Array.isArray(slots)) continue;
-      const s = [0, 1].map(i => (typeof slots[i] === 'string' && slots[i] && slots[i].length <= MAX_BINDING ? slots[i] : null));
+      const s = [0, 1].map(i => (validBinding(slots[i]) ? slots[i] : null));
       o[id] = [s[0], d === 'pad' ? null : s[1]];
     }
     out[d] = o;
@@ -316,7 +334,7 @@ export function cleanControls(c) {
 // action that keeps its default (one added since the save, say) loses it when a saved change has taken its key.
 export function loadBindings(device, overrides = {}) {
   const out = merged(device, overrides);
-  const changed = new Set(Object.keys(overrides || {}).filter(id => out[id] && !ACTION[id].fixed));
+  const changed = new Set(Object.keys(overrides || {}).filter(id => ACTION[id] && Object.hasOwn(out, id) && !ACTION[id].fixed));
   for (const [id, slots] of Object.entries(out)) { // defaults yield to saved changes
     if (changed.has(id) || ACTION[id]?.fixed) continue;
     slots.forEach((b, s) => {

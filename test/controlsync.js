@@ -96,6 +96,17 @@ try {
     ok('browser: on sign-in the account copy wins and takes effect; a later rebind uploads');
   } else console.log('  (browser part skipped: no Playwright)');
 
+  // ---- review fixes: prototype names and odd binding strings are never stored; the body cap is the 8 KB cap (+512) ----
+  const protoBody = '{"settings":{"v":1,"kbm":{"constructor":["KeyX",null],"toString":["KeyY",null],"__proto__":["KeyZ",null],"jump":["KeyB",null]},"pad":{"constructor":["A",null]}}}';
+  assert.equal((await call('PUT', '/api/settings', token, null, protoBody)).status, 200);
+  assert.deepEqual((await call('GET', '/api/settings', token)).body.settings, { v: 1, kbm: { jump: ['KeyB', null] }, pad: {} }, 'prototype names dropped');
+  assert.equal((await call('PUT', '/api/settings', token, { settings: { v: 1, kbm: { jump: ['<img src=x>', 'KeyJ'] } } })).status, 200);
+  assert.deepEqual((await call('GET', '/api/settings', token)).body.settings.kbm, { jump: [null, 'KeyJ'] }, "a binding with '<' is dropped");
+  const padded = JSON.stringify({ settings: { v: 1 }, pad: 'y'.repeat(CONTROLS_MAX_BYTES + 600) });
+  assert.equal((await call('PUT', '/api/settings', token, null, padded)).status, 413, 'a body over the cap + 512 is refused before parsing');
+  assert.deepEqual((await call('GET', '/api/settings', token)).body.settings.kbm, { jump: [null, 'KeyJ'] }, 'and changes nothing');
+  ok('PUT /api/settings: prototype names and bindings with odd characters are dropped; the body is capped at 8 KB + 512');
+
   await db.q('DELETE FROM accounts WHERE id = $1', [id]);
   console.log(`controlsync: all ${n} checks passed`);
 } catch (e) {
