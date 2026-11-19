@@ -223,7 +223,7 @@ export function installTeamplay(Game) {
     if (c?.crit) { crit = p.crit; p.crit = 1; }
     const ev0 = this.events.length;
     let out;
-    try { out = orig.call(this, m, p, base * (c?.mult || 1), opts); } finally { if (crit !== null) p.crit = crit; }
+    try { out = orig.call(this, m, p, base * (c?.mult ? c.mult * (1 + (p.tal?.stat.combo || 0) / 100) : 1), opts); } finally { if (crit !== null) p.crit = crit; } // stat.combo: combo damage from gear (shared/loot.js)
     const hit = this.events.slice(ev0).find(e => e.t === 'hit' && e.id === m.id && e.by === p.id);
     if (!hit) return out;
     this.teamStat(p, 'dmg', hit.a);

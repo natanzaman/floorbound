@@ -24,6 +24,7 @@ import { initStyles } from '/styles.js';
 import { initPlayerBots } from '/playerbots.js';
 import { snapPoses, poseFrame } from '/poses.js'; // kneel / sit / bow (F5)
 import { initTalents } from '/talents.js';
+import { initLoot } from '/loot.js'; // affixes, set progress, loadouts, item tooltips (H2)
 import { initBotWheel } from '/botwheel.js';
 import { initBell } from '/bell.js'; // the Tower Bell and the engraved Hall stones
 import { initCine } from '/cine.js'; // film view camera, titles, fades, letterbox, light (F4)
@@ -257,6 +258,7 @@ const styles = initStyles({ state, players, fx, sfx, shake: a => shake(a), float
 const pbots = initPlayerBots({ $, send, state, players, log: (a, b) => log(a, b), sfx, rerender: () => { lobby.html = ''; renderPlayers(); } });
 // talent trees + the Skill Tree window (K): progression track, talents, abilities (public/talents.js)
 const talents = initTalents({ state, players, fx, sfx, send, floatNum, mastery, guide, isTouch, $ });
+const loot = initLoot({ state, send, $, styleTitle: it => styles.title(it) });
 // the Tower Bell (toll, sway, banner) and the engraved Hall stones (public/bell.js)
 const bell = initBell({ scene, sfx, guide, banner: (a, b, c) => banner(a, b, c) });
 // downed + revive: your downed overlay, "Hold E to revive", markers over downed partymates (public/revive.js)
@@ -305,6 +307,7 @@ function onMessage(msg) {
     return;
   }
   if (cine.onMessage(msg)) return; // the film picture as it is now (sent on join)
+  if (msg.type === 'talents') state.talentAlloc = msg.r || {}; // (loadouts compare it)
   if (talents.onMessage(msg)) return; // talent tree (also keeps a copy of the mastery data)
   if (mastery.onMessage(msg)) return; // skill mastery
   if (pbots.onMessage(msg)) return; // player-owned bots (Players panel → Bots tab)
@@ -1195,6 +1198,7 @@ function toggleBag() {
   if (!el.classList.contains('hidden')) { state.shopOpen = nearMerchant(); renderBag(); guide.did('bag'); sfx.play('ui'); }
 }
 $('bag-btn').onclick = toggleBag;
+loot.bindTips($('bag')); // item hover cards
 $('skills-btn').onclick = () => talents.toggle(); // Skill Tree window (also K, or F at a Skill Shrine)
 
 const statsText = it => Object.entries(it.st).map(([k, v]) => statLabel(k, v)).join(' · ');
@@ -1208,7 +1212,7 @@ function renderBag() {
   const inv = state.inv, near = nearMerchant();
   const shopping = near && state.shopOpen;
   const row = (it, slotName, actions) => it?.ks ? keepsakeRow(it, slotName, actions) : it
-    ? `<div class="it" title="${esc(styles.title(it))}"><span class="slot">${slotName}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}</b><small>${statsText(it)}${styles.tag(it)}</small></span>${actions}</div>`
+    ? `<div class="it" data-tu="${it.u}"><span class="slot">${slotName}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${loot.setTag(it)}</b><small>${statsText(it)}${styles.tag(it)}${loot.lines(it)}</small></span>${actions}</div>`
     : `<div class="it empty"><span class="slot">${slotName}</span><span class="nm"><small>Empty</small></span></div>`;
   let h = `<div class="top"><span>Bag <span class="gold">${inv.gold} gold</span></span><button class="x" data-a="close">✕</button></div>`;
   if (shopping) {
@@ -1222,6 +1226,7 @@ function renderBag() {
   h += `<h4>Equipped</h4>${SLOTS.map(sl => row(inv.eq[sl], sl, inv.eq[sl] ? `<button data-a="unequip" data-s="${sl}">Remove</button>` : '')).join('')}`;
   const st = inv.stats;
   h += `<div class="stats"><span>Damage ${st.atk}</span><span>Health ${st.maxHp}</span><span>Crit ${st.crit}%</span><span>Cooldowns −${st.haste}%</span><span>Switch +${st.sw}%</span><span>Damage taken −${st.dr}%</span></div>`;
+  h += loot.setsHtml(inv) + loot.loadoutsHtml(inv); // set progress and loadouts (public/loot.js)
   h += `<h4>Consumables</h4>${CONSUMABLE_IDS.map(id => `<div class="it"><span class="slot">${CONSUMABLES[id].key}</span><span class="nm"><b>${CONSUMABLES[id].name} ×${inv.cons[id] || 0}</b><small>${CONSUMABLES[id].desc}</small></span><button data-a="use" data-id="${id}" ${inv.cons[id] ? '' : 'disabled style="opacity:.4"'}>Use</button>${inv.cons[id] ? stackBtns('cons', id) : ''}</div>`).join('')}`;
   h += `<h4>Bag (${inv.bag.length}/24)</h4>`;
   h += inv.bag.length ? inv.bag.map(it => {
@@ -1229,7 +1234,7 @@ function renderBag() {
     const cmp = it.slot !== 'charm' && cur ? (diff > 0 ? ` <span class="up">▲${diff}</span>` : diff < 0 ? ` <span class="down">▼${-diff}</span>` : '') : !cur ? ' <span class="up">new</span>' : '';
     const usable = !it.cls || it.cls === state.cls;
     if (it.ks) return keepsakeRow(it, it.slot, `<button data-a="equip" data-u="${it.u}">Wear</button>`); // keepsakes: no sell, drop or delete
-    return `<div class="it" title="${esc(styles.title(it))}"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}${styles.tag(it)}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}<button data-a="drop" data-u="${it.u}" title="Drop on the ground for anyone to pick up">Drop</button><button class="del" data-a="discard" data-u="${it.u}" title="Delete for good">Delete</button></div>`;
+    return `<div class="it" data-tu="${it.u}"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${loot.setTag(it)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}${styles.tag(it)}${loot.lines(it)}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}<button data-a="drop" data-u="${it.u}" title="Drop on the ground for anyone to pick up">Drop</button><button class="del" data-a="discard" data-u="${it.u}" title="Delete for good">Delete</button></div>`;
   }).join('') : '<div class="it empty"><span class="nm"><small>Nothing yet. Enemies drop gear; the Warden always does.</small></span></div>';
   { // materials, each with Drop / Delete
     const have = inv.mats || {}, ids = MAT_IDS.filter(k => have[k] > 0);
@@ -1253,7 +1258,9 @@ function renderTitles(life) {
 $('bag').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b || b.disabled) return;
   const a = b.dataset.a;
-  if (a === 'close') { $('bag').classList.add('hidden'); return; }
+  if (a === 'close') { $('bag').classList.add('hidden'); loot.hideTip(); return; }
+  const lo = loot.click(b); // loadout buttons (public/loot.js)
+  if (lo) { if (lo === 'render') renderBag(); sfx.play('ui'); return; }
   if (a === 'shop') { state.shopOpen = true; renderBag(); return; }
   if (a === 'buy') send({ type: 'buy', i: +b.dataset.i });
   if (a === 'sell') send({ type: 'sell', u: +b.dataset.u });
@@ -1453,6 +1460,7 @@ function updateHud(now) {
   updateGateBox();
   const near = nearMerchant();
   if (near !== state.wasNear) { state.wasNear = near; if (!near) state.shopOpen = false; renderBag(); }
+  if (loot.canSwap() !== state.wasTown) { state.wasTown = loot.canSwap(); renderBag(); } // loadout swaps: town only
   if (!state.dead && state.hp / state.maxHp < 0.35 && state.hp > 0) guide.tip('lowhp');
   if (inArena(state.x, state.z) || inArena2(state.x, state.z)) guide.did('gate');
 

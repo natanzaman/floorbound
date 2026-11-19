@@ -257,7 +257,7 @@ Same rules as F and G: set Status/Owner on `main` first, then mark it **done** w
 | Task | Branch | Status | Owner | Merge |
 |---|---|---|---|---|
 | H1 Floor 2 polish + harder Sovereign | `feat/floor2polish` | in progress | agent floor2polish-2 | |
-| H2 Loot and builds | `feat/loot` | in progress | agent loot-2 | |
+| H2 Loot and builds | `feat/loot` | in progress: first merge landed (affixes, sets, drop tables in `shared/loot.js`, loadouts); admin editor + Maxed next | agent loot-2 | 0c63276 |
 | H3 AI companions: go live | `feat/ailive` | in progress | agent ailive-2 | |
 | H4 Floor 3 | `feat/floor3` | in progress | agent floor3-2 | |
 
