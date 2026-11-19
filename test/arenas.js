@@ -217,6 +217,8 @@ const hp = (C, f) => { C.hp = Math.round(C.maxHp * f); };
   quiet(() => g.arenaForce(C));
   until(g, C, () => C.ar.stage === 0, 12);
   const [p, q] = ps;
+  const calm = () => { C.stunUntil = g.time + 999; C.ep = (C.ep || 0) + 1; C.windupAt = 0; }; // (the boss stands still: only the area's rules hurt here)
+  calm();
   // sludge: no roll, slowed
   const pool = U.pools[1];
   g.teleport(p, pool.x, pool.z);
@@ -252,6 +254,7 @@ const hp = (C, f) => { C.hp = Math.round(C.maxHp * f); };
   g.protect(q, 0); g.teleport(q, C.x - Math.sin(ang) * d, C.z - Math.cos(ang) * d); q.hp = q.maxHp; q.airUntil = 0; q.iframeUntil = 0;
   g.protect(ps[2], 0.9);
   C.ar.fire = null; // (no fire in this part)
+  calm();
   quiet(() => g.tempestBeam(C));
   const B = g.beams[0]; B.x = C.x; B.z = C.z; B.a0 = ang + 0.3 * B.dir * -1;
   const hp0 = [p.hp, q.hp];
