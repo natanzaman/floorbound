@@ -13,8 +13,8 @@ import * as admin from './admin.js';
 import { BotManager } from './botmanager.js';
 import { PlayerBots } from './playerbots.js';
 import { drain } from './shutdown.js';
-import { installAI } from './ai/index.js';
-import { makeStore as aiStore } from './ai/store.js'; // AI memories + daily spend in Postgres // AI companions (off unless AI_PROVIDER + key are set), server/ai/
+import { installAI } from './ai/index.js'; // AI companions (off unless AI_PROVIDER + key are set), server/ai/
+import { makeStore as aiStore } from './ai/store.js'; // AI memories + daily spend in Postgres
 import { Director } from './director.js'; // the scene director (filming), server/director.js
 import { installDirectorAdmin } from './director-admin.js';
 import { TICK_RATE } from '../shared/data.js';

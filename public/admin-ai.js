@@ -47,7 +47,8 @@ function render(s, err) {
   document.getElementById('ai-test-out').innerHTML = testLine(s.lastTest);
   const bits = [];
   if (!s.provider) bits.push('Set AI_PROVIDER (anthropic, openai or gemini) and the matching key in Render → Environment. See docs/research/ai-companions.md.');
-  else if (!s.keySet) bits.push(`The server reads the key from ${s.keyEnv}; it isn't set.`);
+  // which env var names were looked for and found (names only; at most the key's last 4 characters)
+  if (s.keyCheck) bits.push(`Key: ${s.keyCheck.text}${s.keySet ? '' : '. Fix it in Render → Environment, then “Save, rebuild, and deploy”.'}`);
   if (s.provider) bits.push(`Minds: ${s.minds} · tokens ${s.tokensIn.toLocaleString()} in (${s.cachedIn.toLocaleString()} cached) / ${s.tokensOut.toLocaleString()} out · $${s.spendTotal.toFixed(4)} since restart · price $${s.price.in}/$${s.price.out} per 1M${s.priceKnown ? '' : ' (guess: set AI_PRICE_IN/OUT)'}`);
   if (s.provider) bits.push(`Memories: ${s.memories}${s.saved ? ' (kept across restarts)' : ' (lost on restart: no database)'} · daily cap $${Number(s.dailyCap).toFixed(2)} (AI_DAILY_USD)`);
   if (s.paused) bits.push(`Paused ${s.paused.s} s: ${s.paused.why}`);

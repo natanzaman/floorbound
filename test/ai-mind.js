@@ -8,7 +8,7 @@
 import http from 'node:http';
 import { createBot } from '../shared/bots/brain.js';
 import { registerBotHook } from '../shared/bots/registry.js';
-import { readConfig } from '../server/ai/config.js';
+import { readConfig, apiKey, keyReport } from '../server/ai/config.js';
 import { Minds } from '../server/ai/mind.js';
 import { mockProvider } from '../server/ai/providers/mock.js';
 import { makeProvider } from '../server/ai/providers/index.js';
@@ -313,6 +313,32 @@ const INTENT = { say: 'Hi!', order: 'none', stance: 'keep', focus: '', remember:
   ok(r.intent.say === 'Hi!' && r.usage.out === 42, 'gemini: skips thought parts; thinking tokens billed as output');
   ok(geminiBody({ model: 'gemini-2.5-flash-lite', system: 's', user: 'u', schema: {}, maxTokens: 9, effort: 'minimal' }).generationConfig.thinkingConfig.thinkingBudget === 0, 'gemini 2.5 Flash-Lite: thinking budget 0');
   ok(readConfig({ AI_PROVIDER: 'gemini', GOOGLE_API_KEY: 'x' }).keyEnvs.includes('GOOGLE_API_KEY') && readConfig({ AI_PROVIDER: 'openai', AI_KEY_ENV: 'FB_OPENAI' }).keyEnvs[0] === 'FB_OPENAI', 'key env names: GEMINI_API_KEY or GOOGLE_API_KEY; AI_KEY_ENV overrides');
+}
+// ---------- forgiving env names / values, and the key report (names only, never a value) ----------
+{
+  const K = 'sk-ant-api03-FAKEFAKEFAKE-wxyz';
+  const rep = env => { const cfg = readConfig(env); return { cfg, key: apiKey(cfg, env), r: keyReport(cfg, env) }; };
+  let t = rep({ AI_PROVIDER: ' Anthropic\n', ' ANTHROPIC_API_KEY ': ` "${K}"\n` });
+  ok(t.cfg.provider === 'anthropic' && t.key === K && t.r.found === 'ANTHROPIC_API_KEY' && t.r.foundAs === '" ANTHROPIC_API_KEY "', 'env: names and values are trimmed (and lose quotes); provider is case-insensitive');
+  t = rep({ AI_PROVIDER: 'anthropic', anthropic_api_key: K });
+  ok(t.key === K && /set as "anthropic_api_key"/.test(t.r.text), 'env: a lower-case key name is accepted and reported');
+  t = rep({ AI_PROVIDER: 'anthropic', CLAUDE_API_KEY: K });
+  ok(t.key === K && t.r.found === 'CLAUDE_API_KEY', 'env: CLAUDE_API_KEY is a fallback for anthropic');
+  t = rep({ AI_PROVIDER: 'anthropic', ANTHROPIC_KEY: K });
+  ok(t.key === K && t.r.found === 'ANTHROPIC_KEY', 'env: ANTHROPIC_KEY is a fallback for anthropic');
+  t = rep({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: '', 'ANTHROPIC_API_KEY ': K });
+  ok(t.key === K, 'env: a set name wins over a blank one with the same name');
+  t = rep({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: '  ', MY_CLAUDE_TOKEN: 'abc', HOME: '/root' });
+  ok(!t.key && t.r.empty.includes('ANTHROPIC_API_KEY') && t.r.related.includes('MY_CLAUDE_TOKEN') && !t.r.related.includes('HOME') && /looked for ANTHROPIC_API_KEY, CLAUDE_API_KEY, ANTHROPIC_KEY/.test(t.r.text), 'report: lists the names looked for, blank ones and other related names');
+  t = rep({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'sk-proj-0123456789abcdef' });
+  ok(t.key && /may not be a anthropic key/.test(t.r.text), 'report: warns when the value does not look like that provider\'s key');
+  const all = [rep({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: K }), rep({ AI_PROVIDER: 'anthropic', ' CLAUDE_API_KEY': `'${K}'` })];
+  ok(all.every(x => !JSON.stringify(x.r).includes(K.slice(0, -4)) && x.r.text.includes('…wxyz')), 'report: never contains the key, only its last 4 characters');
+  const logs = []; new Minds({ cfg: readConfig({ AI_PROVIDER: 'anthropic', AI_ENABLED: '1' }), provider: makeProvider(readConfig({ AI_PROVIDER: 'anthropic' }), { env: {} }), env: {}, log: m => logs.push(m) });
+  ok(/key missing: looked for ANTHROPIC_API_KEY/.test(logs[0]) && /AI_ENABLED is set, but there is no key/.test(logs[0]), `startup log names the env vars it looked for (${logs[0]})`);
+  const logs2 = []; const envOk = { AI_PROVIDER: 'anthropic', CLAUDE_API_KEY: K };
+  const m = new Minds({ cfg: readConfig(envOk), provider: makeProvider(readConfig(envOk), { env: envOk }), env: envOk, log: x => logs2.push(x) });
+  ok(/key from CLAUDE_API_KEY …wxyz/.test(logs2[0]) && !logs2[0].includes(K.slice(0, -4)) && m.status().keyCheck.found === 'CLAUDE_API_KEY' && !JSON.stringify(m.status()).includes(K.slice(0, -4)), 'startup log and admin status say where the key came from, never the key');
 }
 {
   ok(priceOf('claude-haiku-5-5-20261007').known && priceOf('claude-haiku-5-5-20261007').in === 0.1, 'prices: dated snapshot ids match their model');

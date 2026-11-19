@@ -267,14 +267,19 @@ Never put a key in the repo, `render.yaml` or chat. It lives only in Render's en
    | `AI_DAILY_USD` | spend cap per UTC day in dollars, e.g. `1` (the default). It holds across deploys. `0` stops all calls. | optional |
 
    Leave `AI_MODEL` unset: the default is `claude-haiku-5-5`. (`AI_THINK_S`, default `30`, sets how often a bot may chime in unprompted; `0` = only when spoken to.)
-3. **Save** → **Save and deploy** (no rebuild needed). Render restarts the service with the new variables. The log shows `[ai] companions: anthropic/claude-haiku-5-5, key set, ON` (or `off` without `AI_ENABLED=1`).
-4. **Check the key.** Open `/admin.html` → **Bots** → **AI companions** → **Test call**. You should see **Test OK**, the latency in ms, a cost of about $0.0001, a short reply and `key …abcd` (the key's last 4 characters). If it fails, the error says why: `HTTP 401` means a wrong key, `no key` means the variable name is wrong.
+3. **Save** → **Save and deploy** (no rebuild needed). Render restarts the service with the new variables. The log shows `[ai] companions: anthropic/claude-haiku-5-5, key from ANTHROPIC_API_KEY …abcd, ON` (or `off` without `AI_ENABLED=1`).
+   - **If it says `key missing`:** the line lists the names it looked for (`ANTHROPIC_API_KEY`, `CLAUDE_API_KEY`, `ANTHROPIC_KEY`, `CLAUDE_KEY`), any of them set but empty, and other key-like names it saw. The admin card shows the same. Common causes:
+     - the variable was saved with **Save only**, so the running server never got it: use **Save and deploy**, or **Manual Deploy → Deploy latest commit**;
+     - it sits in an **Environment Group** that isn't linked to the floorbound service (Environment → Linked Environment Groups);
+     - it's on another service, or the value is empty.
+   - Names and values are read forgivingly: spaces around them, lower case, and quotes around the value are fine. `CLAUDE_API_KEY` and `ANTHROPIC_KEY` also work.
+4. **Check the key.** Open `/admin.html` → **Bots** → **AI companions** → **Test call**. You should see **Test OK**, the latency in ms, a cost of about $0.0001, a short reply and `key …abcd` (the key's last 4 characters). If it fails, the error says why: `HTTP 401` means a wrong key, `no key` means the server didn't find it (the card's **Key:** line says which names it looked for).
 5. **Switch it on** (only without `AI_ENABLED=1`): **Turn on** on the same card. The status line then shows calls, spend today against the cap, and latency.
 6. **Try it.** Add a bot (P → Bots) and say in party chat: "Lyra, hang back and heal me when I'm low", "Rook, what do you think of this fight?". Dots show over the bot while it thinks, then its answer comes as a speech bubble. Orders still work with `/b`.
 7. **Other providers** (later): `AI_PROVIDER=openai` with `OPENAI_API_KEY`, or `gemini` with `GEMINI_API_KEY`. Only one provider runs at a time.
 
 Other variables (rarely needed):
-- `AI_KEY_ENV`: read the key from a differently named variable.
+- `AI_KEY_ENV`: read the key from a differently named variable (tried first, then the usual names).
 - `AI_EFFORT`: the provider's speed knob (Haiku 5.5: `low`, with thinking off).
 - `AI_BOT_MIN_GAP_S`, `AI_BOT_TOKENS_HOUR`, `AI_MAX_CALLS_MIN`, `AI_MAX_CONCURRENT`, `AI_TIMEOUT_MS`, `AI_MAX_BOTS`, `AI_MAX_OUT_TOKENS`.
 - `AI_PRICE_IN` / `AI_PRICE_OUT`: the price for a model that isn't in `prices.js`.

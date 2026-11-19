@@ -17,15 +17,13 @@ import { INTENT_SCHEMA, sanitizeIntent } from './intent.js';
 import { SYSTEM, summarize, isBotId, nameOfId, partyMates } from './prompt.js';
 import { Budget } from './budget.js';
 import { priceOf, costOf } from './prices.js';
-import { hasKey, apiKey } from './config.js';
+import { hasKey, apiKey, keyHint, keyReport, envLookup, KEY_ENV } from './config.js';
 import { redact } from './providers/http.js';
 
 const STANCE_MS = 10 * 60e3;   // a stance / focus lasts 10 minutes unless changed
 const PENDING_MS = 20e3;       // an unanswered line older than this is dropped
 const UNPROMPTED_GAP_MS = 20e3; // at most one unprompted line per bot per 20 s
 const TEST_PROMPT = 'Trigger: the server admin is running a connection test (nobody is playing). Set "say" to a short in-character line confirming you can hear them (under 60 characters). Keep "order" none, "stance" keep, "focus" and "remember" empty.';
-// At most the key's last 4 characters, never the key.
-const keyHint = (cfg, env) => { const k = apiKey(cfg, env); return k.length >= 12 ? `…${k.slice(-4)}` : k ? '(set)' : ''; };
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Notes per (bot name, player name), 5 each, the 400 most recent pairs. `dirty` holds the keys changed since the last
@@ -75,8 +73,9 @@ export class Minds {
     this.state = new WeakMap();
     this.stats = { calls: 0, ok: 0, errors: 0, timeouts: 0, skipped: {}, tokIn: 0, tokOut: 0, cached: 0, ms: 0, lastError: '', lastErrorAt: 0 };
     this.recent = []; // last decisions, for the admin page
+    if (!cfg.provider && !cfg.badProvider) { const k = Object.values(KEY_ENV).flat().find(n => envLookup(env, n)?.value); if (k) log(`[ai] companions off: AI_PROVIDER isn't set (${k} is)`); }
     if (cfg.badProvider) log(`[ai] unknown AI_PROVIDER "${cfg.badProvider}": companions stay off`);
-    else if (cfg.provider) log(`[ai] companions: ${cfg.provider}/${cfg.model}, key ${hasKey(cfg, env) ? 'set' : 'missing'}, ${this.on ? 'ON' : 'off'}`);
+    else if (cfg.provider) log(`[ai] companions: ${cfg.provider}/${cfg.model}, ${keyReport(cfg, env).text}, ${this.on ? 'ON' : 'off'}${cfg.startOn && !this.on ? ' (AI_ENABLED is set, but there is no key)' : ''}`);
   }
 
   ready() { return !!this.provider && hasKey(this.cfg, this.env); }
@@ -133,7 +132,7 @@ export class Minds {
     timer.unref?.();
     this.budget.start(null);
     let res = { ok: false, test: true };
-    const base = { provider: this.cfg.provider, model: this.cfg.model, key: keyHint(this.cfg, this.env) };
+    const base = { provider: this.cfg.provider, model: this.cfg.model, key: keyHint(apiKey(this.cfg, this.env)) };
     try {
       const r = await Promise.race([
         this.provider.call({ system: SYSTEM, user: TEST_PROMPT, schema: INTENT_SCHEMA, maxTokens: this.cfg.maxOutTokens, signal: ctl.signal }),
@@ -326,7 +325,7 @@ export class Minds {
     const live = this.active() ? this.listBots().filter(b => this.companion(b)).length : 0;
     return {
       on: this.on, active: this.active(), state: this.why(), provider: this.cfg.provider || null, model: this.cfg.model || null,
-      keyEnv: this.cfg.keyEnvs.join(' or ') || null, keySet: this.ready(), priceKnown: this.price.known,
+      keyEnv: this.cfg.keyEnvs.join(' or ') || null, keySet: this.ready(), keyCheck: this.cfg.provider ? keyReport(this.cfg, this.env) : null, priceKnown: this.price.known,
       price: { in: this.price.in, out: this.price.out },
       minds: Math.min(live, this.cfg.maxBots), calls: S.calls, ok: S.ok, errors: S.errors, timeouts: S.timeouts, skipped: S.skipped,
       tokensIn: S.tokIn, tokensOut: S.tokOut, cachedIn: S.cached, avgMs: S.ok ? Math.round(S.ms / S.ok) : 0,

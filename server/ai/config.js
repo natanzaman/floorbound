@@ -4,7 +4,8 @@
 //
 //   AI_PROVIDER        anthropic | openai | gemini | mock   (unset: off, bots play exactly as before)
 //   AI_MODEL           model id (default per provider: claude-haiku-5-5, gpt-6-luna, gemini-3.1-flash-lite)
-//   AI_KEY_ENV         name of the env var holding the key (default ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY)
+//   AI_KEY_ENV         name of the env var holding the key, tried first (then ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY
+//                      and the fallbacks in KEY_ENV). Names and values are read forgivingly: see envLookup.
 //   AI_ENABLED         1: companions start ON at boot (else they start OFF and an admin turns them on in /admin.html)
 //   AI_EFFORT          the provider's speed/think knob (default anthropic "low", openai "none", gemini "minimal")
 //   AI_THINK_S         seconds between unprompted check-ins per bot while partied with a human (default 30; 0 = only when spoken to)
@@ -17,38 +18,103 @@
 //   AI_MAX_BOTS        most bots with a mind at once (default 10)
 //   AI_PRICE_IN / AI_PRICE_OUT   USD per 1M tokens, only for a model missing from server/ai/prices.js
 export const DEFAULT_MODEL = { anthropic: 'claude-haiku-5-5', openai: 'gpt-6-luna', gemini: 'gemini-3.1-flash-lite', mock: 'mock' };
-export const KEY_ENV = { anthropic: ['ANTHROPIC_API_KEY'], openai: ['OPENAI_API_KEY'], gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'], mock: [] };
+// Key env var names per provider, first one wins. The extra names are common misnamings, accepted on purpose.
+export const KEY_ENV = {
+  anthropic: ['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'ANTHROPIC_KEY', 'CLAUDE_KEY'],
+  openai: ['OPENAI_API_KEY', 'OPENAI_KEY'],
+  gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_KEY'],
+  mock: [],
+};
+// What a real key starts with (only for a warning on the admin card / in the log; a key that doesn't match is still used).
+const KEY_SHAPE = { anthropic: [/^sk-ant-/, 'sk-ant-'], openai: [/^sk-/, 'sk-'], gemini: [/^AIza/, 'AIza'] };
 export const DEFAULT_EFFORT = { anthropic: 'low', openai: 'none', gemini: 'minimal', mock: '' };
 
 const num = (v, def, lo = 0, hi = Infinity) => { const n = Number(v); return v === undefined || v === '' || !Number.isFinite(n) ? def : Math.min(hi, Math.max(lo, n)); };
 const ENV_NAME = /^[A-Z_][A-Z0-9_]{0,63}$/;
 
+// ---------- forgiving env lookup ----------
+// Dashboards make it easy to save "ANTHROPIC_API_KEY " (trailing space), "anthropic_api_key" or a value pasted with
+// quotes / a newline. A name matches exactly first, else trimmed, case-insensitive, with spaces or '-' read as '_'.
+// A value is trimmed and loses one pair of surrounding quotes.
+export const normName = n => String(n).trim().toUpperCase().replace(/[\s-]+/g, '_');
+export function cleanValue(v) {
+  let s = String(v ?? '').trim();
+  if (s.length >= 2 && /^(["'`]).*\1$/s.test(s)) s = s.slice(1, -1).trim();
+  return s;
+}
+// -> { name (as set in the environment), value (cleaned), exact } or null when no variable has that name at all.
+// A set name wins over a blank one (an exact match first).
+export function envLookup(env, name) {
+  const exact = Object.prototype.hasOwnProperty.call(env, name) ? { name, value: cleanValue(env[name]), exact: true } : null;
+  if (exact?.value) return exact;
+  const want = normName(name);
+  let blank = exact;
+  for (const k of Object.keys(env)) {
+    if (k === name || normName(k) !== want) continue;
+    const r = { name: k, value: cleanValue(env[k]), exact: false };
+    if (r.value) return r;
+    blank ||= r;
+  }
+  return blank;
+}
+const envGet = (env, name) => envLookup(env, name)?.value;
+
 export function readConfig(env = process.env) {
-  const provider = String(env.AI_PROVIDER || '').trim().toLowerCase();
+  const provider = String(envGet(env, 'AI_PROVIDER') || '').toLowerCase();
   const known = provider in DEFAULT_MODEL;
-  const keyEnvs = env.AI_KEY_ENV && ENV_NAME.test(env.AI_KEY_ENV) ? [env.AI_KEY_ENV] : KEY_ENV[provider] || [];
+  const custom = normName(envGet(env, 'AI_KEY_ENV') || '');
+  const keyEnvs = [...new Set([...(custom && ENV_NAME.test(custom) ? [custom] : []), ...(KEY_ENV[provider] || [])])];
+  const enabled = String(envGet(env, 'AI_ENABLED') || '').toLowerCase();
+  const effort = envGet(env, 'AI_EFFORT');
   return {
     provider: known ? provider : '',
     badProvider: provider && !known ? provider : '',
-    model: String(env.AI_MODEL || DEFAULT_MODEL[provider] || '').trim(),
+    model: String(envGet(env, 'AI_MODEL') || DEFAULT_MODEL[provider] || ''),
     keyEnvs,
-    startOn: env.AI_ENABLED === '1' || env.AI_ENABLED === 'true',
-    effort: env.AI_EFFORT !== undefined ? String(env.AI_EFFORT).trim() : DEFAULT_EFFORT[provider] || '',
-    thinkS: num(env.AI_THINK_S, 30, 0),
-    botMinGapS: num(env.AI_BOT_MIN_GAP_S, 4, 0.5),
-    botTokensHour: num(env.AI_BOT_TOKENS_HOUR, 150000, 1000),
-    maxCallsMin: num(env.AI_MAX_CALLS_MIN, 30, 1),
-    maxConcurrent: num(env.AI_MAX_CONCURRENT, 4, 1, 32),
-    dailyUsd: num(env.AI_DAILY_USD, 1, 0),
-    timeoutMs: num(env.AI_TIMEOUT_MS, 8000, 500, 60000),
-    maxBots: num(env.AI_MAX_BOTS, 10, 1),
-    maxOutTokens: num(env.AI_MAX_OUT_TOKENS, 300, 64, 4000),
+    startOn: enabled === '1' || enabled === 'true' || enabled === 'yes' || enabled === 'on',
+    effort: effort !== undefined ? effort : DEFAULT_EFFORT[provider] || '',
+    thinkS: num(envGet(env, 'AI_THINK_S'), 30, 0),
+    botMinGapS: num(envGet(env, 'AI_BOT_MIN_GAP_S'), 4, 0.5),
+    botTokensHour: num(envGet(env, 'AI_BOT_TOKENS_HOUR'), 150000, 1000),
+    maxCallsMin: num(envGet(env, 'AI_MAX_CALLS_MIN'), 30, 1),
+    maxConcurrent: num(envGet(env, 'AI_MAX_CONCURRENT'), 4, 1, 32),
+    dailyUsd: num(envGet(env, 'AI_DAILY_USD'), 1, 0),
+    timeoutMs: num(envGet(env, 'AI_TIMEOUT_MS'), 8000, 500, 60000),
+    maxBots: num(envGet(env, 'AI_MAX_BOTS'), 10, 1),
+    maxOutTokens: num(envGet(env, 'AI_MAX_OUT_TOKENS'), 300, 64, 4000),
   };
 }
 
 // The key, looked up when needed (never cached on an object that could be serialised).
 export function apiKey(cfg, env = process.env) {
-  for (const k of cfg.keyEnvs) if (env[k] && String(env[k]).trim()) return String(env[k]).trim();
+  for (const k of cfg.keyEnvs) { const v = envGet(env, k); if (v) return v; }
   return '';
 }
 export const hasKey = (cfg, env = process.env) => cfg.provider === 'mock' || !!apiKey(cfg, env);
+// At most the key's last 4 characters, never the key.
+export const keyHint = k => (k.length >= 12 ? `…${k.slice(-4)}` : k ? '(set)' : '');
+
+// Which env var names were looked for and what was found: names, whether set, at most the key's last 4 characters.
+// Never a value. -> { looked, found, foundAs, hint, empty, related, warn, text }
+const RELATED = /ANTHROPIC|CLAUDE|OPENAI|GEMINI|GOOGLE_API|API_?KEY/i;
+export function keyReport(cfg, env = process.env) {
+  const looked = [...cfg.keyEnvs], empty = [];
+  let found = null, foundAs = null, hint = '', warn = '';
+  for (const n of looked) {
+    const r = envLookup(env, n);
+    if (!r) continue;
+    if (!r.value) { empty.push(r.exact ? n : JSON.stringify(r.name)); continue; }
+    found = n; if (!r.exact) foundAs = JSON.stringify(r.name); hint = keyHint(r.value);
+    const shape = KEY_SHAPE[cfg.provider];
+    if (shape && !shape[0].test(r.value)) warn = `the value doesn't start with ${shape[1]}, so it may not be a ${cfg.provider} key`;
+    break;
+  }
+  const lookedN = new Set(looked.map(normName));
+  const related = Object.keys(env).filter(k => RELATED.test(k) && !lookedN.has(normName(k)) && normName(k) !== 'AI_KEY_ENV').sort().slice(0, 12);
+  let text;
+  if (cfg.provider === 'mock') text = 'mock provider: no key needed';
+  else if (!looked.length) text = 'no key names to look for (set AI_PROVIDER)';
+  else if (found) text = `key from ${found}${foundAs ? ` (set as ${foundAs})` : ''} ${hint}${warn ? `; warning: ${warn}` : ''}`;
+  else text = `key missing: looked for ${looked.join(', ')}; ${empty.length ? `set but empty: ${empty.join(', ')}` : 'none of them is set'}${related.length ? `; other related names present: ${related.join(', ')}` : ''}`;
+  return { looked, found, foundAs, hint, empty, related, warn, text };
+}
