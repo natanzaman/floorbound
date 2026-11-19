@@ -461,6 +461,7 @@ Build it with the KayKit rig, procedural meshes and materials, the way `public/s
 - **Screenshots:** `/home/claude/shots/i4-namedquests/`.
 
 ## Known issues and backlog
+- **Performance (done, c8d8fb4):** server bots on in-process sockets, 10 Hz brains far from humans, the Named rest at home until a player is in the field (invites / calls / outreach wake them). Bench CPU 0.084-0.098 → 0.040-0.057 s/s with players in town, about -11% with everyone in the field (README → Performance, `scripts/perfbench.js`, `/status` cpu + bot counts). Next if needed: don't simulate floors nobody is on (Floor 2/3 mobs cost CPU with no one there).
 - Floor 2 is untested by the owner: do a play pass before any Floor 3 work.
 - Bots ignore Floor 2 specifics? (check during C if cheap)
 - `test/bots.js` is an old standalone smoke bot (records 0 hits): retire or update.
