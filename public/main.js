@@ -38,7 +38,7 @@ import { initRevive } from '/revive.js'; // downed + revive (G1)
 import { initBossTeam } from '/bossteam.js'; // boss team mechanics: STACK, SPREAD, tether (G4)
 import { initTeamplay } from '/teamplay.js'; // combo counters, the Team Burst bar and sync window (G2)
 import { initMvp } from '/mvp.js'; // the post-fight MVP card (G5)
-import { Q, PRESETS, setLevel, startLevel } from '/quality.js'; // graphics quality: Low / Medium / High / Auto
+import { Q, PRESETS, setLevel, startLevel, startAntialias } from '/quality.js'; // graphics quality: Low / Medium / High / Auto
 import { SnapClock, Track, Correction } from '/shared/netsmooth.js'; // interpolation buffer, late snapshots, your own corrections
 import { initPerf } from '/perf.js'; // the diagnostics overlay (F3), the ping chip, Auto quality
 import { makeNetsim } from '/netsim.js'; // test-only bad network (?netsim=120,60,2)
@@ -61,11 +61,13 @@ if (isTouch) document.body.classList.add('touch');
 const settings = Object.assign({ camera: 'mouse', sens: 1, invertY: false, bubbles: true, quality: 'auto', perf: false, ping: true }, (() => { try { return JSON.parse(localStorage.getItem('fb_settings') || '{}'); } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem('fb_settings', JSON.stringify(settings)); } catch {} };
 if (QS.get('quality')) settings.quality = QS.get('quality'); // (tests: ?quality=low)
-setLevel(startLevel(settings.quality, { touch: isTouch, lastAuto: (() => { try { return localStorage.getItem('fb_autoq'); } catch { return null; } })() }));
+const lastAuto = (() => { try { return localStorage.getItem('fb_autoq'); } catch { return null; } })(); // where Auto settled last time
+setLevel(startLevel(settings.quality, { touch: isTouch, lastAuto }));
+const MSAA = startAntialias(settings.quality, { touch: isTouch, lastAuto }); // chosen before the renderer exists (it can't change after)
 
 // ---------------- renderer & scene ----------------
 const canvas = $('view');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: Q.antialias && !isTouch, powerPreference: 'high-performance' }); // (antialias: fixed until a reload)
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: MSAA, powerPreference: 'high-performance' }); // (antialias: fixed until a reload)
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -82,9 +84,9 @@ function resize() {
 }
 addEventListener('resize', resize);
 // Graphics quality (public/quality.js): pixel ratio, shadows, effect density, draw distance, far animation rate.
-function applyQuality(level) {
+function applyQuality(level, over = null) { // over: Auto's overrides (public/quality.js AutoQuality.over)
   const hadShadows = renderer.shadowMap.enabled;
-  setLevel(level);
+  setLevel(level, over);
   renderer.setPixelRatio(Math.min(devicePixelRatio, Q.pixelRatio, isTouch ? 1.5 : 2));
   resize();
   renderer.shadowMap.enabled = Q.shadows; sun.castShadow = Q.shadows;
@@ -321,6 +323,7 @@ async function leaveGame(kind) {
     if (me?.downed && !state.dead) why.push("you're downed: you won't be revived");
     if (boss && (boss.engaged || boss.hp < boss.maxHp) && (inArena(state.x, state.z) || inArena2(state.x, state.z) || inArena3(state.x, state.z))) why.push('a boss fight is on');
     if (state.party) why.push("you'll leave your party");
+    if (!state.charId) why.push("this character isn't saved (no account): it's gone once you leave");
     if (why.length && !confirm(`Leave now? ${why.join('; ')}.`)) return;
   }
   const ws = state.ws; state.ws = null; state.joined = false; // (no reconnect: ws.onclose ignores a replaced socket)
@@ -402,7 +405,7 @@ function onMessage(msg, arrival = performance.now()) {
     return;
   }
   if (msg.type === 'welcome') {
-    Object.assign(state, { myId: msg.id, x: msg.x, z: msg.z, seq: msg.seq, joined: true, aiOn: !!msg.ai }); // ai: AI companions are on (H3)
+    Object.assign(state, { myId: msg.id, x: msg.x, z: msg.z, seq: msg.seq, joined: true, aiOn: !!msg.ai, charId: msg.charId || 0 }); // ai: AI companions are on (H3); charId 0: anonymous (not saved)
     friends.on = !!msg.named; pbots.setTab(friends, friends.on); // the Friends tab only when the Named are on (NAMED_ENABLED=0: none)
     setTimeout(layoutChips, 50);
     $('login').classList.add('hidden'); $('hud').classList.remove('hidden');
@@ -979,7 +982,7 @@ function renderSettings() {
     <h4>Chat</h4>
     <label class="opt"><input type="checkbox" data-a="bub" ${settings.bubbles !== false ? 'checked' : ''}> Speech bubbles <small>chat lines over the speaker's head (the chat log keeps everything)</small></label>
     <h4>Graphics</h4>
-    ${['auto', 'low', 'medium', 'high'].map(q => `<label class="opt"><input type="radio" name="gq" value="${q}" ${settings.quality === q ? 'checked' : ''}> ${QLABEL[q]}${q === 'auto' && settings.quality === 'auto' ? ` <small>now: ${Q.level}</small>` : ''}</label>`).join('')}
+    ${['auto', 'low', 'medium', 'high'].map(q => `<label class="opt"><input type="radio" name="gq" value="${q}" ${settings.quality === q ? 'checked' : ''}> ${QLABEL[q]}${q === 'auto' && settings.quality === 'auto' ? ` <small>now: ${Q.level}${!Q.shadows && PRESETS[Q.level]?.shadows ? ', shadows off' : ''}</small>` : ''}</label>`).join('')}
     <small class="note">Lower settings draw fewer pixels, effects and shadows. Smoothing edges (High) changes after a reload.</small>
     <label class="opt"><input type="checkbox" data-a="perf" ${settings.perf ? 'checked' : ''}> Performance overlay <small>F3 · frame rate, ping, snapshots</small></label>
     <label class="opt"><input type="checkbox" data-a="ping" ${settings.ping !== false ? 'checked' : ''}> Show ping in the corner</label>`;
