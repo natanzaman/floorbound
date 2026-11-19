@@ -214,14 +214,16 @@ The LLM is a **slow mind** on top of the fast rule-based brain (`shared/bots/bra
 - **`focus`:** a party member's name.
   - A healer keeps that player topped up through `b.healFocus`.
   - Other bots anchor on that player.
-- **`remember`:** a short note about the speaker, kept per bot and player. Notes are in memory only, so they are lost on a restart.
+- **`remember`:** a short note about the speaker, kept per bot and player (5 notes each).
+  - Saved to Postgres (`ai_memories`, made in `server/db.js`) every 15 s and on shutdown, and loaded at boot, so they survive deploys. Without `DATABASE_URL` they live in memory only.
+  - Capped at the 400 most recent (bot, player) pairs; pairs untouched for 90 days are pruned (`server/ai/store.js`).
 
 **Caps and fallback** (`server/ai/budget.js`):
 - **Per bot:** a minimum gap (`AI_BOT_MIN_GAP_S`, 4 s) and a token budget per rolling hour (`AI_BOT_TOKENS_HOUR`, 150k).
 - **Global:**
   - calls per minute (`AI_MAX_CALLS_MIN`, 30);
   - calls in flight (`AI_MAX_CONCURRENT`, 4);
-  - estimated USD per UTC day (`AI_DAILY_USD`, 1.00);
+  - estimated USD per UTC day (`AI_DAILY_USD`, 1.00). The day's spend is saved in Postgres (`ai_spend`) and reloaded at boot, so a deploy doesn't reset the cap;
   - minds at once (`AI_MAX_BOTS`, 10).
 - **Timeout:** each call has `AI_TIMEOUT_MS` (8 s). After 5 errors in a row, calls pause for 2 minutes. A 429's `retry-after` is honoured.
 - **Fallback:** any "no" or any error means no intent this time, and the bot keeps playing on its brain. A line left unanswered for 20 s is dropped.
@@ -237,7 +239,14 @@ The LLM is a **slow mind** on top of the fast rule-based brain (`shared/bots/bra
 - An on/off toggle and the status line, for example:
   `AI companions: ON · anthropic/claude-haiku-5-5 · 42 calls (0 failed) · $0.0036 today of $1.00 · avg 900 ms`.
 - Token counts (with cached tokens), why calls were skipped, the last error, and the last 8 decisions.
-- API: `GET/POST /api/admin/ai`, for admins only.
+- **Test call** button: one tiny real call (the real system prompt and JSON schema, about $0.0001 on Haiku 5.5). It shows OK or the error, the latency, the cost, the model's reply, and at most the key's last 4 characters. It works while companions are off, and a success clears an error pause.
+- Memory count and whether memories are kept across restarts.
+- API: `GET/POST /api/admin/ai` and `POST /api/admin/ai/test`, for admins only.
+
+**In game** (H3):
+- While a bot's model works on a line said to it, its party (and spectators) see three pulsing dots over its head (`{ t: 'mind', id, on, party }` events, `public/bubbles.js`). Check-ins show nothing.
+- The reply is party chat, so it shows as a speech bubble (F1) and in the chat log.
+- A one-time guide tip: "Talk to bots by name in chat: 'Lyra, hang back and heal me'". It shows when a bot joins your party while companions are on, or the first time you see one thinking.
 
 **Mock provider:** `AI_PROVIDER=mock` needs no key and costs nothing.
 - It answers "(mock) Heard you, <name>." to test the plumbing locally.
@@ -245,34 +254,37 @@ The LLM is a **slow mind** on top of the fast rule-based brain (`shared/bots/bra
 
 ## 8. Turning it on (Render)
 
-Never put a key in the repo, `render.yaml` or chat. It lives only in Render's environment settings.
+Never put a key in the repo, `render.yaml` or chat. It lives only in Render's environment settings. Model and prices checked 2026-11-18 against [Models overview](https://platform.claude.com/docs/en/models/overview) and [Pricing](https://platform.claude.com/docs/en/about-claude/pricing): the default `claude-haiku-5-5` is Anthropic's cheapest and fastest current model ($0.10 in / $0.50 out per 1M tokens, cache reads $0.01).
 
-1. **Get a key** in the provider's console (Anthropic Console, OpenAI Platform or Google AI Studio). Setting a low monthly spend limit there is a good extra safety net.
-2. **Add the variables.** Render dashboard → service **floorbound** → **Environment** → **Add Environment Variable**:
+1. **Get a key** in the Anthropic Console (console.anthropic.com → API keys). A low monthly spend limit there is a good extra safety net.
+2. **Add the variables.** [Render dashboard](https://dashboard.render.com/) → service **floorbound** → **Environment** (left pane) → **+ Add Environment Variable**, one Key/Value row each ([Render docs](https://render.com/docs/configure-environment-variables)):
 
-   | Key | Value |
-   |---|---|
-   | `AI_PROVIDER` | `anthropic` (or `openai`, `gemini`) |
-   | `ANTHROPIC_API_KEY` | your key (`OPENAI_API_KEY` for OpenAI, `GEMINI_API_KEY` for Gemini) |
-   | `AI_MODEL` | optional, e.g. `claude-sonnet-5-5` to compare. Default: `claude-haiku-5-5` / `gpt-6-luna` / `gemini-3.1-flash-lite` |
-   | `AI_ENABLED` | optional: `1` makes companions start ON after every deploy. Without it they start off, and you switch them on from the admin page after each restart. |
-   | `AI_DAILY_USD` | optional spend cap per day, default `1` |
-   | `AI_THINK_S` | optional, default `30`; `0` = only talk when spoken to |
+   | Key | Value | Needed? |
+   |---|---|---|
+   | `ANTHROPIC_API_KEY` | your key (paste it only here) | yes |
+   | `AI_PROVIDER` | `anthropic` | yes |
+   | `AI_ENABLED` | `1`: companions turn on by themselves after every deploy. Leave it out to switch them on by hand in the admin page after each restart. | optional |
+   | `AI_DAILY_USD` | spend cap per UTC day in dollars, e.g. `1` (the default). It holds across deploys. `0` stops all calls. | optional |
 
-3. **Save.** Render restarts the service with the new variables.
-4. **Switch it on.** Open `/admin.html` → **Bots** → **AI companions** → **Turn on**. The status line then shows calls, spend and latency.
-5. **Try it.** Add a bot (P → Bots) and say in party chat: "Lyra, hang back and heal me when I'm low", "Rook, what do you think of this fight?". Orders still work with `/b`.
-6. **Compare providers.** Change `AI_PROVIDER` (and add that provider's key). Only one provider runs at a time. The admin card's average latency and spend per call give the comparison.
+   Leave `AI_MODEL` unset: the default is `claude-haiku-5-5`. (`AI_THINK_S`, default `30`, sets how often a bot may chime in unprompted; `0` = only when spoken to.)
+3. **Save** → **Save and deploy** (no rebuild needed). Render restarts the service with the new variables. The log shows `[ai] companions: anthropic/claude-haiku-5-5, key from ANTHROPIC_API_KEY …abcd, ON` (or `off` without `AI_ENABLED=1`).
+   - **If it says `key missing`:** the line lists the names it looked for (`ANTHROPIC_API_KEY`, `CLAUDE_API_KEY`, `ANTHROPIC_KEY`, `CLAUDE_KEY`), any of them set but empty, and other key-like names it saw. The admin card shows the same. Common causes:
+     - the variable was saved with **Save only**, so the running server never got it: use **Save and deploy**, or **Manual Deploy → Deploy latest commit**;
+     - it sits in an **Environment Group** that isn't linked to the floorbound service (Environment → Linked Environment Groups);
+     - it's on another service, or the value is empty.
+   - Names and values are read forgivingly: spaces around them, lower case, and quotes around the value are fine. `CLAUDE_API_KEY` and `ANTHROPIC_KEY` also work.
+4. **Check the key.** Open `/admin.html` → **Bots** → **AI companions** → **Test call**. You should see **Test OK**, the latency in ms, a cost of about $0.0001, a short reply and `key …abcd` (the key's last 4 characters). If it fails, the error says why: `HTTP 401` means a wrong key, `no key` means the server didn't find it (the card's **Key:** line says which names it looked for).
+5. **Switch it on** (only without `AI_ENABLED=1`): **Turn on** on the same card. The status line then shows calls, spend today against the cap, and latency.
+6. **Try it.** Add a bot (P → Bots) and say in party chat: "Lyra, hang back and heal me when I'm low", "Rook, what do you think of this fight?". Dots show over the bot while it thinks, then its answer comes as a speech bubble. Orders still work with `/b`.
+7. **Other providers** (later): `AI_PROVIDER=openai` with `OPENAI_API_KEY`, or `gemini` with `GEMINI_API_KEY`. Only one provider runs at a time.
 
 Other variables (rarely needed):
-- `AI_KEY_ENV`: read the key from a differently named variable.
-- `AI_EFFORT`: the provider's speed knob.
+- `AI_KEY_ENV`: read the key from a differently named variable (tried first, then the usual names).
+- `AI_EFFORT`: the provider's speed knob (Haiku 5.5: `low`, with thinking off).
 - `AI_BOT_MIN_GAP_S`, `AI_BOT_TOKENS_HOUR`, `AI_MAX_CALLS_MIN`, `AI_MAX_CONCURRENT`, `AI_TIMEOUT_MS`, `AI_MAX_BOTS`, `AI_MAX_OUT_TOKENS`.
 - `AI_PRICE_IN` / `AI_PRICE_OUT`: the price for a model that isn't in `prices.js`.
 
 ## 9. Caveats and next steps
-- **Not yet run against the live APIs** (no keys here). The request shapes follow the current docs and are unit-tested with fake HTTP. On the first real run, watch the admin card's "Last error".
-- **Memories are in memory only,** so they're lost on each deploy. A small `bot_memories` table would make them persist.
+- **Not yet run against the live APIs** from here (no keys in the dev box). The request shapes follow the current docs and are unit-tested with fake HTTP; the admin **Test call** is the first real check.
 - **Gemini's newest models** (3.5 Flash-Lite, 3.6/3.8 Flash, Gemini 4 Argon) have unverified prices; see section 1.
 - **Streaming** the `say` line would cut perceived latency, but it isn't needed yet.
-- **Plain chat orders.** Until the `/b`-only change (Task C) is merged, the brain's old keyword parser still reacts to plain chat such as "heal me", alongside the mind.

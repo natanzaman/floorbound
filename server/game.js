@@ -5,7 +5,7 @@ import {
   inTown, inArena, walkable, resolveCollision, rng, angleTo, wrapAngle, xpToNext, statsFor,
 } from '../shared/data.js';
 import {
-  CONSUMABLES, SHOP, MERCHANT, BAG_SIZE, SLOTS, DROPS, makeItem, lastAttackItem, rollRarity, gearStats, sellPrice, newInventory,
+  CONSUMABLES, SHOP, MERCHANT, BAG_SIZE, SLOTS, lastAttackItem, gearStats, sellPrice, newInventory,
 } from '../shared/items.js';
 import { TITLES, newStats, meetsTitle } from '../shared/titles.js';
 import { F2, crossesGate2, floorOf, inArena2 } from '../shared/floor2.js';
@@ -35,6 +35,8 @@ import { installRevive } from './revive.js'; // downed + revive (G1)
 import { installBossTeam } from './bossteam.js'; // boss team mechanics: stack, spread, tether (G4)
 import { installTeamplay } from './teamplay.js'; // skill combos + Team Burst + team stats (G2)
 import { installMvp } from './mvp.js'; // post-fight MVP card (G5)
+import { installLoot } from './loot.js';
+import { rollGear } from '../shared/loot.js'; // affixes, boss sets, loadouts, drop tables (H2)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -400,7 +402,7 @@ export class Game {
     if (s.kind === 'gear' && p.inv.bag.length >= BAG_SIZE) return this.sys('Your bag is full.', p.id);
     p.gold -= price;
     if (s.kind === 'cons') p.inv.cons[s.id] = (p.inv.cons[s.id] || 0) + 1;
-    else p.inv.bag.push(makeItem(s.slot, 1, p.cls, Math.random, undefined, s.alt ? altStyle(p.cls) : undefined)); // alt: weapon styles
+    else p.inv.bag.push(rollGear(s.slot, 1, p.cls, Math.random, undefined, s.alt ? altStyle(p.cls) : undefined)); // alt: weapon styles
     this.events.push({ t: 'coin', id: p.id });
     this.invChanged(p);
   }
@@ -427,26 +429,7 @@ export class Game {
     this.invChanged(p);
   }
 
-  // Personal loot: every eligible player rolls their own drops.
-  dropLoot(p, m) {
-    const d = DROPS[m.type];
-    if (!d || !p) return;
-    const gold = d.gold[0] + Math.floor(Math.random() * (d.gold[1] - d.gold[0] + 1));
-    p.gold += gold;
-    const items = [];
-    const n = d.item >= 1 ? d.item : Math.random() < d.item ? 1 : 0;
-    for (let i = 0; i < n; i++) {
-      const slot = SLOTS[Math.floor(Math.random() * SLOTS.length)];
-      const it = makeItem(slot, rollRarity(d.table), p.cls, Math.random, undefined, 'roll'); // weapons roll a style
-      if (this.giveItem(p, it)) items.push({ name: it.name, r: it.r });
-      if (it.r >= 2) this.track(p, 'loot', { r: it.r, slot, mob: m.type });
-    }
-    let pot = 0;
-    if (Math.random() < d.potion) { p.inv.cons.potion = (p.inv.cons.potion || 0) + 1; pot = 1; }
-    const mats = this.dropMats(p, m);
-    this.events.push({ t: 'loot', to: p.id, x: r2(m.x), z: r2(m.z), g: gold, items, pot, mats });
-    this.invChanged(p);
-  }
+  // Personal loot: dropLoot(p, m) lives in server/loot.js (data-driven tables in shared/loot.js).
 
   // ---------- party finder ----------
   toggleLfg(p) {
@@ -1403,4 +1386,5 @@ installRevive(Game); // downed + revive (server/revive.js); after staging and bo
 installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js)
 installTeamplay(Game); // skill combos between players, the Team Burst gauge, teamStat() for the post-fight card (server/teamplay.js); after the talents
 installMvp(Game); // the post-fight MVP card from the team stats, downs and deaths; in the fight's tracking row (server/mvp.js); after the team play
+installLoot(Game); // loot and builds: drops from shared/loot.js, gear in p.tal, set rules, loadouts (server/loot.js); after the talents and team play
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last

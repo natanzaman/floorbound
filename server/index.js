@@ -14,6 +14,7 @@ import { BotManager } from './botmanager.js';
 import { PlayerBots } from './playerbots.js';
 import { drain } from './shutdown.js';
 import { installAI } from './ai/index.js'; // AI companions (off unless AI_PROVIDER + key are set), server/ai/
+import { makeStore as aiStore } from './ai/store.js'; // AI memories + daily spend in Postgres
 import { Director } from './director.js'; // the scene director (filming), server/director.js
 import { installDirectorAdmin } from './director-admin.js';
 import { TICK_RATE } from '../shared/data.js';
@@ -141,7 +142,7 @@ wss.on('connection', ws => {
         joining = false;
         if (!p || ws.readyState !== 1) { if (p) game.removePlayer(p); return; }
         player = p;
-        ws.send(JSON.stringify({ type: 'welcome', id: player.id, x: player.x, z: player.z, seq: player.posSeq, lvl: player.lvl, xp: player.xp, charId: player.charId || 0 }));
+        ws.send(JSON.stringify({ type: 'welcome', id: player.id, x: player.x, z: player.z, seq: player.posSeq, lvl: player.lvl, xp: player.xp, charId: player.charId || 0, ...(game.aiOn?.() ? { ai: 1 } : {}) }));
         ws.send(JSON.stringify(game.invFor(player))); player.invDirty = false;
         ws.send(JSON.stringify(game.masteryMsg(player))); player.masteryDirty = false; player.mSentT = game.time;
         ws.send(JSON.stringify(game.talentsMsg(player))); player.talentsDirty = false; // talent tree (server/talents.js)
@@ -226,6 +227,7 @@ async function shutdown(sig) {
       save: async () => {
         if (db.enabled) await Promise.allSettled([...game.players.values()].filter(p => p.charId).map(p => accounts.saveCharacter(p)));
         await track.flush().catch(() => {});
+        await aiMinds.flush(); // AI memories + spend (server/ai/store.js)
       },
     });
   } catch (e) { console.error('shutdown', e); }
@@ -236,11 +238,12 @@ async function shutdown(sig) {
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => void shutdown(sig));
 
 admin.init({ game, bots });
-installAI({ game, bots, server });
+const aiMinds = installAI({ game, bots, server });
 installDirectorAdmin({ server, director: game.director }); // /api/admin/director (admin page: Director tab)
 server.on('error', err => { console.error('Server error', err); if (err.code === 'EADDRINUSE' || err.code === 'EACCES') process.exit(1); }); // can't listen: don't linger
 db.migrate()
   .then(() => hall.load())
   .then(() => { game.hadFirstClear = hall.hasFirst(); game.hadFirstClear2 = hall.hasFirst(2); game.hadFirstClear3 = hall.hasFirst(3); })
+  .then(() => { if (db.enabled) aiMinds.useStore(aiStore(db.q)); }) // (async, never blocks or fails startup)
   .then(() => server.listen(PORT, () => console.log(`Floorbound running on http://localhost:${PORT}${db.enabled ? ' (accounts on' + (accounts.discordOn() ? ', Discord sign-in on' : '') + ')' : ''}`)))
   .catch(err => { console.error('Startup failed', err); process.exit(1); });

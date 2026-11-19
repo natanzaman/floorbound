@@ -29,6 +29,15 @@ export function bubbleVisible(e, viewer) {
   return true;
 }
 
+// The AI "mind" thinking indicator (H3, server/ai/): { t: 'mind', id, on, party } while a bot's model works on a line
+// said to it. Shown like its reply will be (party chat): to its party, and to spectators. A "…" bubble that gives way
+// to the reply's own bubble; it never outlives THINK_MAX (a lost "off").
+export const THINK_MAX = 15; // s
+export function thinkVisible(e, viewer) {
+  if (!e || e.t !== 'mind' || !e.id) return false;
+  return !!viewer.spectator || (!!viewer.party && e.party === viewer.party);
+}
+
 // Opacity of a bubble at time `now` (s): fade in, hold, fade out; 0 once it's over.
 export function bubbleAlpha(b, now) {
   const t = now - b.start;
@@ -69,6 +78,18 @@ export function initBubbles({ state, players, project, camera, layer, enabled })
   const els = new Map(); // speaker id -> { el, n }
   const now = () => performance.now() / 1000;
   const drop = id => { els.get(id)?.el.remove(); els.delete(id); };
+  const thinking = new Map(); // bot id -> since (s): the AI mind's "…" (H3)
+  const thinkEls = new Map(); // bot id -> element
+  const dropThink = id => { thinkEls.get(id)?.remove(); thinkEls.delete(id); };
+  // where a bubble for this speaker goes on screen, or null (off screen / behind the camera)
+  const place = id => {
+    const ent = players.get(id), g = ent?.model?.group;
+    const p = g && project(g.position.x, g.position.y + (ent.model.height || 1.8) + 0.55, g.position.z);
+    const m = 40;
+    if (!p || p[0] < -m || p[0] > innerWidth + m || p[1] < -m || p[1] > innerHeight + m) return null;
+    const lbl = ent.label?.el, lh = lbl && lbl.style.display !== 'none' ? lbl.offsetHeight : 0; // sit above the nameplate
+    return `translate(${p[0]}px, ${p[1] - lh - 8}px) translate(-50%, -100%) scale(${bubbleScale(camera.position.distanceTo(g.position)).toFixed(3)})`;
+  };
 
   return {
     store, // (debugging: window.__fb.bubbles.store)
@@ -78,12 +99,30 @@ export function initBubbles({ state, players, project, camera, layer, enabled })
       store.say(e.id, e.text, now(), e.hold);
       return true;
     },
-    clear() { store.clear(); for (const id of [...els.keys()]) drop(id); },
+    // an AI mind thinking on / off (main.js `case 'mind'`); true if this viewer sees it
+    mind(e) {
+      if (!thinkVisible(e, state)) return false;
+      if (e.on) thinking.set(e.id, now()); else thinking.delete(e.id);
+      return !!e.on;
+    },
+    thinking, // (debugging / tests: window.__fb.bubbles.thinking)
+    clear() { store.clear(); for (const id of [...els.keys()]) drop(id); thinking.clear(); for (const id of [...thinkEls.keys()]) dropThink(id); },
     // position every bubble above its speaker's nameplate (call after entities are animated)
     frame() {
       const t = now(), live = enabled() ? store.active(t) : (store.clear(), []);
       const ids = new Set(live.map(b => b.id));
       for (const id of [...els.keys()]) if (!ids.has(id)) drop(id);
+      // "…" while a mind thinks, unless that bot already has a line up
+      for (const [id, since] of thinking) if (t - since > THINK_MAX) thinking.delete(id);
+      for (const id of [...thinkEls.keys()]) if (!thinking.has(id) || ids.has(id) || !enabled()) dropThink(id);
+      if (enabled()) for (const id of thinking.keys()) {
+        if (ids.has(id)) continue;
+        let el = thinkEls.get(id);
+        if (!el) { el = document.createElement('div'); el.className = 'bubble think'; el.dataset.id = id; el.innerHTML = '<i></i><i></i><i></i>'; layer.appendChild(el); thinkEls.set(id, el); }
+        const tr = place(id);
+        el.style.display = tr ? '' : 'none';
+        if (tr) el.style.transform = tr;
+      }
       for (const b of live) {
         const ent = players.get(b.id);
         let rec = els.get(b.id);

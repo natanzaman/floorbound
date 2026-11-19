@@ -2,12 +2,13 @@
 // No network, no keys, no database. Covers: off = bots behave exactly as before; chat addressed by name -> structured
 // intent -> say / order / stance / focus / memory; ignored chat (unnamed, /b, other party, bots); periodic check-ins;
 // budgets, rate limits, timeouts and the error breaker; intent sanitising; the three HTTP adapters' request shapes and
-// parsing; key redaction; the admin route and toggle.
-// Usage: node test/ai-mind.js   (PORT for the admin-route check, default 4371)
+// parsing; key redaction; the admin route and toggle; H3: memories and the day's spend surviving a restart (a fake
+// store; with DATABASE_URL also the real tables), the admin test call, and the "thinking" indicator events.
+// Usage: node test/ai-mind.js   (PORT for the admin-route check, default 4371; DATABASE_URL optional)
 import http from 'node:http';
 import { createBot } from '../shared/bots/brain.js';
 import { registerBotHook } from '../shared/bots/registry.js';
-import { readConfig } from '../server/ai/config.js';
+import { readConfig, apiKey, keyReport } from '../server/ai/config.js';
 import { Minds } from '../server/ai/mind.js';
 import { mockProvider } from '../server/ai/providers/mock.js';
 import { makeProvider } from '../server/ai/providers/index.js';
@@ -17,6 +18,8 @@ import { sanitizeIntent, INTENT_SCHEMA } from '../server/ai/intent.js';
 import { priceOf, costOf } from '../server/ai/prices.js';
 import { SYSTEM } from '../server/ai/prompt.js';
 import { installAI } from '../server/ai/index.js';
+import { makeStore } from '../server/ai/store.js';
+import { thinkVisible } from '../public/bubbles.js';
 
 let n = 0, failed = 0;
 function ok(cond, what) { n++; if (cond) console.log(`  ok ${n} - ${what}`); else { failed++; console.log(`  NOT OK ${n} - ${what}`); } }
@@ -311,6 +314,32 @@ const INTENT = { say: 'Hi!', order: 'none', stance: 'keep', focus: '', remember:
   ok(geminiBody({ model: 'gemini-2.5-flash-lite', system: 's', user: 'u', schema: {}, maxTokens: 9, effort: 'minimal' }).generationConfig.thinkingConfig.thinkingBudget === 0, 'gemini 2.5 Flash-Lite: thinking budget 0');
   ok(readConfig({ AI_PROVIDER: 'gemini', GOOGLE_API_KEY: 'x' }).keyEnvs.includes('GOOGLE_API_KEY') && readConfig({ AI_PROVIDER: 'openai', AI_KEY_ENV: 'FB_OPENAI' }).keyEnvs[0] === 'FB_OPENAI', 'key env names: GEMINI_API_KEY or GOOGLE_API_KEY; AI_KEY_ENV overrides');
 }
+// ---------- forgiving env names / values, and the key report (names only, never a value) ----------
+{
+  const K = 'sk-ant-api03-FAKEFAKEFAKE-wxyz';
+  const rep = env => { const cfg = readConfig(env); return { cfg, key: apiKey(cfg, env), r: keyReport(cfg, env) }; };
+  let t = rep({ AI_PROVIDER: ' Anthropic\n', ' ANTHROPIC_API_KEY ': ` "${K}"\n` });
+  ok(t.cfg.provider === 'anthropic' && t.key === K && t.r.found === 'ANTHROPIC_API_KEY' && t.r.foundAs === '" ANTHROPIC_API_KEY "', 'env: names and values are trimmed (and lose quotes); provider is case-insensitive');
+  t = rep({ AI_PROVIDER: 'anthropic', anthropic_api_key: K });
+  ok(t.key === K && /set as "anthropic_api_key"/.test(t.r.text), 'env: a lower-case key name is accepted and reported');
+  t = rep({ AI_PROVIDER: 'anthropic', CLAUDE_API_KEY: K });
+  ok(t.key === K && t.r.found === 'CLAUDE_API_KEY', 'env: CLAUDE_API_KEY is a fallback for anthropic');
+  t = rep({ AI_PROVIDER: 'anthropic', ANTHROPIC_KEY: K });
+  ok(t.key === K && t.r.found === 'ANTHROPIC_KEY', 'env: ANTHROPIC_KEY is a fallback for anthropic');
+  t = rep({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: '', 'ANTHROPIC_API_KEY ': K });
+  ok(t.key === K, 'env: a set name wins over a blank one with the same name');
+  t = rep({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: '  ', MY_CLAUDE_TOKEN: 'abc', CLAUDE_HOME: 'x', HOME: '/root' });
+  ok(!t.key && t.r.empty.includes('ANTHROPIC_API_KEY') && t.r.related.includes('MY_CLAUDE_TOKEN') && !t.r.related.includes('HOME') && !t.r.related.includes('CLAUDE_HOME') && /looked for ANTHROPIC_API_KEY, CLAUDE_API_KEY, ANTHROPIC_KEY/.test(t.r.text), 'report: lists the names looked for, blank ones and other related names');
+  t = rep({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'sk-proj-0123456789abcdef' });
+  ok(t.key && /may not be a anthropic key/.test(t.r.text), 'report: warns when the value does not look like that provider\'s key');
+  const all = [rep({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: K }), rep({ AI_PROVIDER: 'anthropic', ' CLAUDE_API_KEY': `'${K}'` })];
+  ok(all.every(x => !JSON.stringify(x.r).includes(K.slice(0, -4)) && x.r.text.includes('…wxyz')), 'report: never contains the key, only its last 4 characters');
+  const logs = []; new Minds({ cfg: readConfig({ AI_PROVIDER: 'anthropic', AI_ENABLED: '1' }), provider: makeProvider(readConfig({ AI_PROVIDER: 'anthropic' }), { env: {} }), env: {}, log: m => logs.push(m) });
+  ok(/key missing: looked for ANTHROPIC_API_KEY/.test(logs[0]) && /AI_ENABLED is set, but there is no key/.test(logs[0]), `startup log names the env vars it looked for (${logs[0]})`);
+  const logs2 = []; const envOk = { AI_PROVIDER: 'anthropic', CLAUDE_API_KEY: K };
+  const m = new Minds({ cfg: readConfig(envOk), provider: makeProvider(readConfig(envOk), { env: envOk }), env: envOk, log: x => logs2.push(x) });
+  ok(/key from CLAUDE_API_KEY …wxyz/.test(logs2[0]) && !logs2[0].includes(K.slice(0, -4)) && m.status().keyCheck.found === 'CLAUDE_API_KEY' && !JSON.stringify(m.status()).includes(K.slice(0, -4)), 'startup log and admin status say where the key came from, never the key');
+}
 {
   ok(priceOf('claude-haiku-5-5-20261007').known && priceOf('claude-haiku-5-5-20261007').in === 0.1, 'prices: dated snapshot ids match their model');
   ok(!priceOf('some-new-model', {}).known && priceOf('some-new-model', { AI_PRICE_IN: '0.2', AI_PRICE_OUT: '1' }).out === 1, 'prices: unknown model -> high guess, or AI_PRICE_IN/OUT');
@@ -336,6 +365,145 @@ const INTENT = { say: 'Hi!', order: 'none', stance: 'keep', focus: '', remember:
   server.close();
   current = null;
 }
+
+// ---------- 10. memories and spend survive a restart (fake store with the real store's interface) ----------
+function fakeStore() {
+  const st = { mem: new Map(), spend: new Map(), saves: 0, fail: false };
+  st.api = {
+    async loadMemories() { return [...st.mem.values()].map(r => ({ ...r, notes: [...r.notes] })); },
+    async saveMemories(rows) { if (st.fail) throw new Error(`db down ${FAKE_KEY}`); st.saves++; for (const r of rows) st.mem.set(`${r.bot}|${r.player}`, { ...r, notes: [...r.notes] }); },
+    async pruneMemories() {},
+    async loadSpend(day) { return st.spend.get(day)?.usd || 0; },
+    async addSpend(day, usd, calls) { const r = st.spend.get(day) || { usd: 0, calls: 0 }; r.usd += usd; r.calls += calls; st.spend.set(day, r); },
+  };
+  return st;
+}
+{
+  let t = Date.UTC(2026, 10, 18, 12);
+  const db = fakeStore();
+  const big = mockProvider({ reply: () => ({ say: 'Got it.', order: 'none', stance: 'keep', focus: '', remember: 'Natan hates spiders' }) });
+  const call0 = big.call; big.call = async req => ({ ...(await call0(req)), usage: { in: 100000, cacheRead: 0, cacheWrite: 0, out: 1000 } });
+  const env = { AI_MODEL: 'claude-sonnet-5-5', AI_DAILY_USD: '0.5', AI_BOT_MIN_GAP_S: '1' };
+  const a = setup({ env, provider: big, now: () => t });
+  a.m.price = priceOf('claude-sonnet-5-5');
+  ok(await a.m.useStore(db.api, { flushMs: 0 }) && a.m.status().saved, 'a mind with a provider uses the store');
+  const b = makeBot(); a.bots.push(b); snap(b);
+  snap(b, [chat(1, 'Natan', 'Lyra, I hate spiders')]); await flush(); t += 2000;
+  snap(b, [chat(1, 'Natan', 'Lyra, ready?')]); await flush(); t += 2000;
+  ok(big.calls.length === 2 && a.m.budget.daySpend > 0.4, `two calls spent $${a.m.budget.daySpend.toFixed(2)} of the $0.50 cap`);
+  db.fail = true; await a.m.flush();
+  ok(db.mem.size === 0 && a.m.memory.dirty.size === 1, 'a failed save keeps the change for the next try');
+  db.fail = false; await a.m.flush();
+  ok(db.mem.get('lyra|natan')?.notes.includes('Natan hates spiders') && a.m.memory.dirty.size === 0, 'flush saves the changed memory (bot, player, notes)');
+  const day = new Date(t).toISOString().slice(0, 10);
+  ok(Math.abs(db.spend.get(day).usd - a.m.budget.totalSpend) < 1e-9 && db.spend.get(day).calls === 2, 'flush adds the spend since the last save');
+  await a.m.flush();
+  ok(db.spend.get(day).calls === 2 && db.saves === 1, 'nothing new: nothing written twice');
+  // "restart": a fresh mind on the same store
+  const c = setup({ env, provider: big, now: () => t });
+  c.m.price = priceOf('claude-sonnet-5-5');
+  await c.m.useStore(db.api, { flushMs: 0 });
+  ok(c.m.memory.get('Lyra', 'Natan').includes('Natan hates spiders'), 'after a restart Lyra still remembers Natan');
+  ok(Math.abs(c.m.budget.daySpend - a.m.budget.totalSpend) < 1e-9, `after a restart today's spend is restored ($${c.m.budget.daySpend.toFixed(2)})`);
+  const b2 = makeBot(); c.bots.push(b2); snap(b2);
+  snap(b2, [chat(1, 'Natan', 'Lyra, one more?')]); await flush(); t += 2000;
+  snap(b2, [chat(1, 'Natan', 'Lyra, and another?')]); await flush();
+  ok(big.calls.length === 3 && c.m.stats.skipped['daily budget used'] >= 1, 'AI_DAILY_USD holds across a restart (one more call, then capped)');
+  ok(/What you remember about Natan: Natan hates spiders/.test(big.calls[2].user), 'the remembered note reaches the prompt after the restart');
+  const off = new Minds({ cfg: readConfig({}), provider: null, log: () => {} });
+  ok(!(await off.useStore(db.api, { flushMs: 0 })) && !off.status().saved, 'no AI_PROVIDER: the store is never touched');
+  const mem = new (a.m.memory.constructor)(3);
+  mem.load([{ bot: 'A', player: 'x', notes: ['1'] }, { bot: 'B', player: 'x', notes: ['2'] }, { bot: 'C', player: 'x', notes: ['3'] }, { bot: 'D', player: 'x', notes: ['4'] }]);
+  ok(mem.size === 3 && !mem.get('A', 'x').length && mem.get('D', 'x')[0] === '4' && mem.dirty.size === 0, 'loading respects the cap (keeps the newest) and marks nothing dirty');
+  current = null;
+}
+
+// ---------- 11. admin test call ----------
+{
+  const env = { AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: FAKE_KEY };
+  const cfg = readConfig(env);
+  const f = fakeFetch({ status: 200, body: { content: [{ type: 'text', text: JSON.stringify({ ...INTENT, say: 'Loud and clear!' }) }], stop_reason: 'end_turn', usage: { input_tokens: 900, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 30 } } });
+  const m = new Minds({ cfg, provider: makeProvider(cfg, { env, fetch: f }), env, log: () => {} });
+  const r = await m.testCall();
+  ok(r.ok && r.say === 'Loud and clear!' && r.ms >= 0 && Math.abs(r.cost - (900 * 0.1 + 30 * 0.5) / 1e6) < 1e-12, `test call: OK, ${r.ms} ms, $${r.cost?.toFixed(6)}, reply "${r.say}"`);
+  ok(f.reqs.length === 1 && f.reqs[0].body.model === 'claude-haiku-5-5' && f.reqs[0].body.output_config.format.type === 'json_schema' && f.reqs[0].body.thinking?.type === 'disabled', 'it is one real-shaped request (default model, JSON schema, thinking off)');
+  ok(r.key === `…${FAKE_KEY.slice(-4)}` && !JSON.stringify(m.status()).includes(FAKE_KEY.slice(0, -4)), `the key shows as its last 4 characters at most ("${r.key}")`);
+  ok(!m.on && m.status().lastTest?.ok && m.budget.daySpend === r.cost, 'works while companions are off; its cost counts toward the day');
+  ok(!(await m.testCall()).ok, 'a second test right away is refused (a few seconds apart)');
+  const bad = fakeFetch({ status: 401, body: { error: { message: `invalid x-api-key ${FAKE_KEY}` } } });
+  const m2 = new Minds({ cfg, provider: makeProvider(cfg, { env, fetch: bad }), env, log: () => {} });
+  const r2 = await m2.testCall();
+  ok(!r2.ok && /HTTP 401/.test(r2.error) && !JSON.stringify(m2.status()).includes(FAKE_KEY) && m2.budget.fails === 0, `a bad key: error shown, redacted, breaker untouched ("${r2.error}")`);
+  const cfgNo = readConfig({ AI_PROVIDER: 'anthropic' });
+  const fn = fakeFetch({ status: 200, body: {} });
+  const m3 = new Minds({ cfg: cfgNo, provider: makeProvider(cfgNo, { env: {}, fetch: fn }), env: {}, log: () => {} });
+  const r3 = await m3.testCall();
+  ok(!r3.ok && /ANTHROPIC_API_KEY/.test(r3.error) && fn.reqs.length === 0, `no key: no request, says which variable ("${r3.error}")`);
+  const m4 = new Minds({ cfg: readConfig({}), provider: null, log: () => {} });
+  ok(!(await m4.testCall()).ok, 'no provider: refused');
+  const slow = mockProvider({ delayMs: 2000 });
+  const m5 = new Minds({ cfg: readConfig({ AI_PROVIDER: 'mock', AI_TIMEOUT_MS: '500' }), provider: slow, log: () => {} });
+  const r5 = await m5.testCall();
+  ok(!r5.ok && /timed out/.test(r5.error) && !m5.testing && m5.budget.inFlight === 0, 'a hung test call times out and frees its slot');
+}
+
+// ---------- 12. the "thinking" indicator ----------
+{
+  const game = { events: [] };
+  const env = { AI_PROVIDER: 'mock', AI_ENABLED: '1', AI_THINK_S: '10' };
+  const p = mockProvider({ delayMs: 50 });
+  const bots = { bots: [] };
+  const minds = installAI({ game, bots }, { env, provider: p, tickMs: 0, log: () => {} }); // (registers its own onEvent hook)
+  current = null;
+  const b = makeBot(); bots.bots.push({ b }); snap(b);
+  ok(game.aiOn?.() === true, 'game.aiOn() tells the welcome message companions are on');
+  snap(b, [chat(1, 'Natan', 'Lyra, you there?')]);
+  await flush();
+  ok(game.events.some(e => e.t === 'mind' && e.id === 2 && e.on === 1 && e.party === 7), 'a line said to a bot: { t: "mind", on: 1 } for its party');
+  await sleep(80);
+  ok(game.events.filter(e => e.t === 'mind').at(-1)?.on === 0, '...and on: 0 when the answer is in');
+  game.events.length = 0; minds.budget.bot(b).last = -1e9; minds.st(b).lastThink = -1e9;
+  minds.tick(); await sleep(80);
+  ok(p.calls.length === 2 && !game.events.some(e => e.t === 'mind'), 'periodic check-ins show no indicator');
+  const party = { t: 'mind', id: 2, on: 1, party: 7 };
+  ok(thinkVisible(party, { party: 7 }) && !thinkVisible(party, { party: 9 }) && !thinkVisible(party, { party: 0 }) && thinkVisible(party, { spectator: true }), 'client: its party and spectators see the dots, nobody else');
+  const offGame = { events: [] };
+  const offMinds = installAI({ game: offGame, bots: { bots: [{ b }] } }, { env: {}, tickMs: 0, log: () => {} });
+  minds.setEnabled(false);
+  snap(b, [chat(1, 'Natan', 'Lyra, you there?')]); offMinds.tick(); await flush();
+  ok(offGame.events.length === 0 && offGame.aiOn() === false, 'no provider: no events, aiOn false');
+  current = null;
+}
+
+// ---------- 13. the real tables (only with DATABASE_URL) ----------
+if (process.env.DATABASE_URL) {
+  const db = await import('../server/db.js');
+  await db.migrate(); await db.migrate();
+  ok(db.enabled, 'migrations run twice without error');
+  await db.q('DELETE FROM ai_memories'); await db.q('DELETE FROM ai_spend');
+  const store = makeStore(db.q);
+  await store.saveMemories([{ bot: 'lyra', player: 'natan', notes: ['likes to tank', "it's \"quoted\""] }, { bot: 'rook', player: 'natan', notes: ['x'] }]);
+  await store.saveMemories([{ bot: 'lyra', player: 'natan', notes: ['likes to tank', 'hates spiders'] }]);
+  const rows = await store.loadMemories();
+  ok(rows.length === 2 && rows.find(r => r.bot === 'lyra')?.notes.join() === 'likes to tank,hates spiders', 'save, upsert and load memories');
+  await db.q(`UPDATE ai_memories SET updated_at = now() - interval '100 days' WHERE bot = 'rook'`);
+  for (let i = 0; i < 5; i++) await store.saveMemories([{ bot: `b${i}`, player: 'p', notes: ['n'] }]);
+  await store.pruneMemories(4, 90);
+  const left = (await store.loadMemories()).map(r => r.bot);
+  ok(!left.includes('rook') && left.length === 4, `prune drops old rows and keeps the newest N (${left.join(',')})`);
+  await store.addSpend('2026-11-18', 0.25, 3); await store.addSpend('2026-11-18', 0.5, 2);
+  ok(Math.abs((await store.loadSpend('2026-11-18')) - 0.75) < 1e-9 && (await store.loadSpend('2026-11-17')) === 0, 'spend adds up per day');
+  // a whole restart through the store
+  const cfg = readConfig({ AI_PROVIDER: 'mock' });
+  const m1 = new Minds({ cfg, provider: mockProvider(), log: () => {} });
+  await m1.useStore(store, { flushMs: 0 });
+  m1.memory.add('Wren', 'Vex', 'calls the boss Big Horns'); m1.budget.totalSpend = 0.01; m1.budget.calls = 1;
+  await m1.flush();
+  const m2 = new Minds({ cfg, provider: mockProvider(), log: () => {} });
+  await m2.useStore(store, { flushMs: 0 });
+  ok(m2.memory.get('wren', 'vex')[0] === 'calls the boss Big Horns', 'a memory written by one server is read by the next');
+  await db.q('DELETE FROM ai_memories'); await db.q('DELETE FROM ai_spend');
+} else console.log('  (skipping the database checks: no DATABASE_URL)');
 
 console.log(failed ? `${failed} of ${n} checks failed` : `all ${n} checks passed`);
 process.exit(failed ? 1 : 0);
