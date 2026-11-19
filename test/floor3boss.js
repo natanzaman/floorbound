@@ -51,6 +51,7 @@ async function run(i) {
       if (e.t === 'f3phase') res.phase = Math.max(res.phase, e.n);
       if (e.t === 'sys' && /Storm Colossus has fallen/.test(e.text)) { res.result = 'kill'; done = true; }
       if (e.t === 'mvp') res.card = e.card;
+      if (e.t === 'trapend' && start && e.why !== 'off') { const R = (res.traps ||= {}); R[e.why] = (R[e.why] || 0) + 1; } // rescue traps (server/rescue.js): how each one ended
       if (e.t === 'btend' && start && !e.off) {
         const M = (res.mech ||= { stack: [], spread: [0, 0], tether: [0, 0] });
         if (e.k === 'stack') M.stack.push(e.n);
@@ -95,7 +96,7 @@ for (let i = 0; i < RUNS; i++) {
     + ` · Overload ${r.ov}: stopped ${r.stop.sw} by Switch, ${r.stop.burst} by Team Burst, ${r.stop.brk} solo; ${r.clap} Thunderclaps`
     + ` · Tempest Beam ${r.beams}: ${r.beam.jump} jumped, ${r.beam.roll} rolled, ${r.beam.cover} in cover, ${r.beam.hit} hit`
     + ` · Undercroft: ${r.arena.falls ? 'fell' : 'no fall'}, ${r.arena.fire} fire ticks`
-    + `${r.causes ? ` · deaths to ${r.causes.join(', ')}` : ''}${r.mech ? ` · team mechanics: stacks ${r.mech.stack.join('/') || '-'} in, spread ${r.mech.spread[0]}/${r.mech.spread[1]} clean, tethers ${r.mech.tether[0]}/${r.mech.tether[1]} snapped` : ''}`
+    + `${r.causes ? ` · deaths to ${r.causes.join(', ')}` : ''}${r.mech ? ` · team mechanics: stacks ${r.mech.stack.join('/') || '-'} in, spread ${r.mech.spread[0]}/${r.mech.spread[1]} clean, tethers ${r.mech.tether[0]}/${r.mech.tether[1]} snapped` : ''}${r.traps ? ` · traps: ${Object.entries(r.traps).map(([k, v]) => `${v} ${k}`).join(', ')}` : ''}`
     + ` · combos ${Object.values(r.combos || {}).reduce((a, v) => a + v, 0)} · Team Bursts ${r.bursts?.length || 0}${threatLine(r.threat)}${r.err ? ` · SERVER ERROR: ${r.err}` : ''}`
     + (r.journey ? ` · journey: on Floor 3 after ${r.journey.f3 ?? '-'}s, all at the Storm Gate after ${r.journey.gate ?? '-'}s, ${r.journey.kills || 0} field kills on the way` : ''));
   if (process.env.MVP && r.card) for (const f of r.card.rows) console.log(`    ${f.id === r.card.mvp ? '★' : ' '} ${f.name} (${f.cls}): ${f.titles.map(k => MVP_TITLE[k].name).join(', ') || '-'} · dmg ${f.dmg} heal ${f.heal} tanked ${f.tanked} · mech ${f.mechanic} · down ${f.down} death ${f.death}`);

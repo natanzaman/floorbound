@@ -37,6 +37,7 @@ import { initBubbles } from '/bubbles.js';
 import { initThreat } from '/threat.js'; // who bosses target, threat meter, Cover, Pincer tags (G3)
 import { initRevive } from '/revive.js'; // downed + revive (G1)
 import { initBossTeam } from '/bossteam.js'; // boss team mechanics: STACK, SPREAD, tether (G4)
+import { initRescue } from '/rescue.js'; // rescue traps: vines, Drowning Pillar, storm crystal (J1)
 import { initTeamplay } from '/teamplay.js'; // combo counters, the Team Burst bar and sync window (G2)
 import { initMvp } from '/mvp.js'; // the post-fight MVP card (G5)
 import { Q, PRESETS, setLevel, startLevel, startAntialias } from '/quality.js'; // graphics quality: Low / Medium / High / Auto
@@ -377,6 +378,8 @@ const bell = initBell({ scene, sfx, guide, banner: (a, b, c) => banner(a, b, c) 
 // downed + revive: your downed overlay, "Hold E to revive", markers over downed partymates (public/revive.js)
 const revive = initRevive({ state, players, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), isTouch });
 // boss team mechanics: the gold STACK circle, SPREAD rings, tether beams, first-time prompts (public/bossteam.js)
+// rescue traps: telegraphs, the pillar's beam, your trapped banner, "Hold E to cut free", markers (public/rescue.js)
+const rescue = initRescue({ state, players, mobs, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), callout: (a, b, c) => callout(a, b, c), isTouch, revive });
 const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a) });
 // skill combos between players and the Team Burst: chain counters, setup hints, the party bar, T to sync (public/teamplay.js)
 const teamplay = initTeamplay({ state, players, mobs, fx, sfx, floatNum, project, send, guide, isTouch, callout: (a, b, c) => callout(a, b, c), shake: a => shake(a), $ });
@@ -497,6 +500,7 @@ function onSnapshot({ st, me, w }, arrival) {
   }
   for (const [id, e] of players) if (!seen.has(id)) { removeEntity(e); players.delete(id); }
   revive.snap(w.down); // downed players (public/revive.js)
+  rescue.snap(w.trap); // trapped players (public/rescue.js)
   if (snapPoses(w.poses, players).has(state.myId)) guide.tip('poses'); // held poses (public/poses.js)
 
   const seenM = new Set();
@@ -522,6 +526,7 @@ function handleEvent(e) {
   f2.onEvent(e);
   if (bell.event(e)) return; // the Tower Bell
   if (bossTeam.event(e)) return; // boss team mechanics (stack / spread / tether)
+  if (rescue.event(e)) return; // rescue traps
   if (teamplay.event(e)) return; // combos, Team Burst
   if (mvp.event(e)) return; // the post-fight MVP card
   if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
@@ -1218,7 +1223,7 @@ function lockedMob() {
 
 function jump() {
   const now = performance.now();
-  if (state.dead || revive.isDown() || !state.joined || state.spectator || state.roll || now < state.jumpReady || arenas.frozen()) return;
+  if (state.dead || revive.isDown() || rescue.encased() || !state.joined || state.spectator || state.roll || now < state.jumpReady || arenas.frozen()) return;
   state.jumpReady = now + JUMP.cd * 1000; state.jumpPress = now;
   state.air = { x: state.vel?.[0] || 0, z: state.vel?.[1] || 0 }; // take off with your running speed
   const me = players.get(state.myId);
@@ -1229,7 +1234,7 @@ function jump() {
 
 function dodge() {
   const now = performance.now();
-  if (state.dead || revive.isDown() || !state.joined || state.spectator || state.roll || now < state.dodgeReady || arenas.frozen()) return;
+  if (state.dead || revive.isDown() || rescue.rooted() || !state.joined || state.spectator || state.roll || now < state.dodgeReady || arenas.frozen()) return;
   if (arenas.noDodge()) return; // no rolling in sludge
   const dir = state.moveDir ?? state.face;
   state.roll = { left: DODGE.time, dir };
@@ -1271,7 +1276,7 @@ function nearestMob(range) {
 }
 
 function useSkill(slot) {
-  if (state.dead || revive.isDown() || !state.joined || arenas.frozen()) return;
+  if (state.dead || revive.isDown() || rescue.encased() || !state.joined || arenas.frozen()) return;
   const sk = CLASSES[state.cls].skills[slot];
   const now = performance.now();
   if (!sk || state.lvl < sk.lvl || now < state.ready[slot] || combat.guarding) return;
@@ -1368,7 +1373,7 @@ function updateHallLabel() {
   if (hd > HALL.r + 7 && !$('hall').classList.contains('hidden')) toggleHall(false);
 }
 function useItem(id) {
-  if (state.dead || revive.isDown() || !state.joined || !CONSUMABLES[id]) return;
+  if (state.dead || revive.isDown() || rescue.encased() || !state.joined || !CONSUMABLES[id]) return;
   const now = performance.now();
   if (!(state.inv?.cons?.[id] > 0)) { log(`No ${CONSUMABLES[id].name}s left. The merchant in town sells them.`, 'sys'); return; }
   if (now < (state.ccdReady[id] || 0)) return;
@@ -1627,7 +1632,7 @@ function updateHud(now) {
   const partyHtml = teamplay.partyBar() + mates.map(p => {
     const pc = (p.hp / p.maxHp) * 100, bot = state.roster.get(p.id)?.bot;
     const nm = state.roster.get(p.id)?.name || p.name;
-    return `<div class="frame ${p.dead ? 'dead' : ''} ${p.downed ? 'downed' : ''} ${bot && !state.spectator ? 'botf' : ''}" ${bot && !state.spectator ? `data-bot="${esc(nm)}" title="Click for ${esc(nm)}'s orders"` : ''}><div class="row" style="font-size:12px;margin:0"><span>${bot && !state.spectator ? '<span class="bcmd">⌘</span> ' : ''}${looks.swatch(p.id, 14)}${esc(p.name)}${bot ? ' <small class="bottag">BOT</small>' : ''}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}${p.downed ? ` <b class="dtag">${p.downed.by ? 'REVIVING' : 'DOWNED'}</b>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div>${classesA.frameBar(p)}</div>`;
+    return `<div class="frame ${p.dead ? 'dead' : ''} ${p.downed ? 'downed' : ''} ${bot && !state.spectator ? 'botf' : ''}" ${bot && !state.spectator ? `data-bot="${esc(nm)}" title="Click for ${esc(nm)}'s orders"` : ''}><div class="row" style="font-size:12px;margin:0"><span>${bot && !state.spectator ? '<span class="bcmd">⌘</span> ' : ''}${looks.swatch(p.id, 14)}${esc(p.name)}${bot ? ' <small class="bottag">BOT</small>' : ''}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}${p.downed ? ` <b class="dtag">${p.downed.by ? 'REVIVING' : 'DOWNED'}</b>` : ''}${p.trap && !p.downed ? ' <b class="dtag">TRAPPED</b>' : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div>${classesA.frameBar(p)}</div>`;
   }).join('') + (!state.spectator && mates.some(p => state.roster.get(p.id)?.bot) ? `<button id="bots-btn" class="pbtn" title="Orders for all your bots (or hold V for the wheel)">⌘ All bots <small>V</small></button>` : '');
   if (partyHtml !== hudParty) { hudParty = partyHtml; $('party').innerHTML = partyHtml; }
 
@@ -2077,7 +2082,7 @@ function frame(now) {
       if (keys.has('a') || keys.has('arrowleft')) ix -= 1;
       if (keys.has('d') || keys.has('arrowright')) ix += 1;
       if (keys.has('q')) state.yaw += dt * 2;
-      if (keys.has('e') && !revive.usesE()) state.yaw -= dt * 2; // (E revives a downed partymate in reach)
+      if (keys.has('e') && !revive.usesE() && !rescue.usesE()) state.yaw -= dt * 2; // (E revives a downed partymate in reach, or cuts one free of vines)
     }
     if (stick.active && !gmenu.isOpen()) { ix += stick.dx; iz -= stick.dy; }
     const mag = Math.min(1, Math.hypot(ix, iz));
@@ -2111,8 +2116,9 @@ function frame(now) {
       let mx = fwd[0] * iz + right[0] * ix, mz = fwd[1] * iz + right[1] * ix;
       const ml = Math.hypot(mx, mz); mx /= ml; mz /= ml;
       const sprint = performance.now() - state.lastCombat > SPRINT_AFTER * 1000 && !combat.guarding;
-      const want = revive.crawlCap((sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult() * arenas.speedMult(), mag); // (sludge: arenas.js) // half speed while guarding; talents can add move speed; downed: crawl
+      const want = rescue.moveCap(revive.crawlCap((sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult() * arenas.speedMult(), mag)); // (sludge: arenas.js; trapped: none, rescue.js) // half speed while guarding; talents can add move speed; downed: crawl
       state.speed += (want - state.speed) * Math.min(1, dt * (want > state.speed ? 3 : 10));
+      if (rescue.rooted()) state.speed = 0;
       const step = state.speed * dt;
       let nx = state.x + mx * step, nz = state.z + mz * step;
       [nx, nz] = resolveCollision(nx, nz);
@@ -2191,6 +2197,7 @@ function frame(now) {
   drawFloats(dt, vdt);
   bubbles.frame();
   revive.frame(keys); // downed overlay, revive prompt, downed markers
+  rescue.frame(keys, vdt); // trapped banner, "Hold E to cut free", trapped markers
   teamplay.frame(); // combo chain counters over targets
 
   if (state.joined) updateHud(now);

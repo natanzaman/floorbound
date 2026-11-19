@@ -34,6 +34,7 @@ import { installCine } from './cine.js'; // cinematic camera state for filming (
 import { installPoses } from './poses.js';
 import { installThreat } from './threat.js'; // visible threat, healer threat, Cover, flanking (G3)
 import { installRevive } from './revive.js'; // downed + revive (G1)
+import { installRescue } from './rescue.js'; // rescue traps: vines, Drowning Pillar, storm crystal (J1)
 import { installBossTeam } from './bossteam.js'; // boss team mechanics: stack, spread, tether (G4)
 import { installArenas } from './arenas.js'; // multi-area boss fights: the Colossus's fall to the Undercroft (J2)
 import { installTeamplay } from './teamplay.js'; // skill combos + Team Burst + team stats (G2)
@@ -951,7 +952,7 @@ export class Game {
     // keep mobs from stacking: per floor (mobs on different floors never meet), and only where they move
     const byFloor = this._sepLists ||= { 1: [], 2: [], 3: [] };
     for (const k in byFloor) byFloor[k].length = 0;
-    for (const m of this.mobs.values()) { const f = floorOf(m.x); if (!m.dead && live.has(f)) byFloor[f].push(m); }
+    for (const m of this.mobs.values()) { const f = floorOf(m.x); if (!m.dead && !m.def.prop && live.has(f)) byFloor[f].push(m); } // (trap objects stay put: J1)
     for (const k in byFloor) {
       const list = byFloor[k];
       for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
@@ -1382,7 +1383,7 @@ export class Game {
     // (snapFor); spectators, the director's film view and the server's own bots get every floor (this string).
     const parts = [[], [], [], []];
     for (let i = 0; i < mobs.length; i++) parts[fl[i]].push(JSON.stringify(mobs[i]));
-    const pre = JSON.stringify({ players, mobs: 0, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
+    const pre = JSON.stringify({ players, mobs: 0, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
     const at = pre.indexOf('"mobs":0') + 7; // (the first "mobs" key: the players array before it holds only numbers)
     const head = pre.slice(0, at), tail = pre.slice(at + 1);
     this.snapParts = { head, tail, floors: parts.map(a => a.join(',')), byFloor: [] };
@@ -1440,4 +1441,5 @@ installMvp(Game); // the post-fight MVP card from the team stats, downs and deat
 installLoot(Game); // loot and builds: drops from shared/loot.js, gear in p.tal, set rules, loadouts (server/loot.js); after the talents and team play
 installLooks(Game); // character looks: setLook(entity, id), listed in snapshots as w.looks (server/looks.js)
 installNamed(Game); // the Named: humans-first rules, friendship, invites by tier (server/named.js); a no-op without a NamedManager
+installRescue(Game); // rescue traps (server/rescue.js); after the Named: its trap-object and crystal wrappers sit outside everyone's
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last

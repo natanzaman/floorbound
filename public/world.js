@@ -9,6 +9,7 @@ import { MOBS } from '/shared/data.js';
 import { makeF2Mob, decorateSovereign } from '/floor2world.js';
 import { makeF3Mob, decorateColossus, F3_POSES, F3_WINDUPS } from '/floor3world.js';
 import { attachClassA } from '/classes-a.js';
+import { makePropModel } from '/rescue.js'; // rescue trap objects (J1)
 import { fxCount, segs } from '/quality.js'; // effect density and circle detail (graphics quality)
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
@@ -654,6 +655,7 @@ export function makePlayerModel(cls) {
 }
 
 export function makeMobModel(type) {
+  if (MOBS[type]?.prop) return makePropModel(type); // trap objects: vines, the pillar's orb, the storm crystal (public/rescue.js)
   if (MOBS[type]?.f2) return type === 'sovereign' && ASSETS ? makeSovereignRig() : makeF2Mob(type); // Floor 2 (floor2world.js)
   if (MOBS[type]?.f3) return type === 'colossus' && ASSETS ? makeColossusRig() : makeF3Mob(type); // Floor 3 (floor3world.js)
   if (type !== 'warden' || !ASSETS) return makeBlockMob(type);
