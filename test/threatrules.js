@@ -221,8 +221,8 @@ function steady(hitEvery) { // hitEvery: the boss hits the DPS this often (reset
 {
   const hit = steady(1), clean = steady(0);
   assert.ok(Math.abs(hit - 0.25) < 0.02, `gain ${hit.toFixed(3)} of L`);
-  assert.ok(clean > 0.17 && clean < 0.3, `gain ${clean.toFixed(3)} of L`);
-  ok(`a steady DPS gains ${(hit * 100).toFixed(0)}% of L per 6 s lock (${(clean * 100).toFixed(0)}% when never hit: its multiplier restarts at the taunt)`);
+  assert.ok(clean > 0.27 && clean < 0.31, `gain ${clean.toFixed(3)} of L`);
+  ok(`a steady DPS gains ${(hit * 100).toFixed(0)}% of L per 6 s lock (${(clean * 100).toFixed(0)}% when never hit: R is measured before the multiplier, which restarts at the taunt)`);
 }
 
 // ---------- bots ----------

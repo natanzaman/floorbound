@@ -9,7 +9,7 @@ export const THREAT = {
 };
 
 // Taunt locks (docs/ROADMAP.md J4). On a taunt of mob m by T:
-//   R = max(best non-taunter threat/s on m over the last `window` s, atkMul × the highest fighter's attack); L = Lmul × R
+//   R = max(best non-taunter threat/s on m over the last `window` s (before clean multipliers: the taunt resets them), atkMul × the highest fighter's attack); L = Lmul × R
 //   every entry ×= L / max(top, 1); then T = L, everyone else = min(v, cut × L); everyone's clean multiplier resets
 //   m.lock = { by: T, L, until }: the target is T and T's entry stays at L; others build normally.
 //   Lock end: T = handover × L, the target becomes the highest entry (a tie goes to T). It ends early (no handover) if T

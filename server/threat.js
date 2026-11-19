@@ -66,16 +66,17 @@ const methods = {
   },
 
   // Add threat to p's entry on m. kind 'dmg': × the clean multiplier on bosses and elites; 'heal': as is.
-  // A lock holder's entry stays frozen at L. Gains are kept for TAUNT.window s (a taunt's R).
+  // A lock holder's entry stays frozen at L. Gains (before the clean multiplier) are kept for TAUNT.window s (a taunt's
+  // R: the taunt resets everyone's multiplier, so R is the pace they rebuild from).
   addThreat(m, p, amount, kind = 'dmg') {
     if (!m || !p || !(amount > 0)) return;
-    const big = m.def.boss || m.def.elite;
+    const big = m.def.boss || m.def.elite, base = amount;
     if (kind === 'dmg' && big) amount *= this.cleanHit(p);
     if (m.lock && m.lock.by === p.id && this.time < m.lock.until) return;
     m.threat.set(p.id, (m.threat.get(p.id) || 0) + amount);
     if (!big) return;
     const log = (m.thLog ||= []), t = this.time;
-    log.push([t, p.id, amount]);
+    log.push([t, p.id, base]);
     while (log.length && t - log[0][0] > TAUNT.window) log.shift();
   },
 
@@ -96,7 +97,7 @@ const methods = {
     if (sk) secs = Math.min(secs, this.skillCd(p, sk, slot) - TAUNT.cdGap);
     return Math.max(0.5, secs);
   },
-  // R: the best non-taunter threat/s over the last TAUNT.window s, at least TAUNT.atkMul × the highest fighter's attack.
+  // R: the best non-taunter threat/s (before clean multipliers) over the last TAUNT.window s, at least TAUNT.atkMul × the highest fighter's attack.
   tauntRate(m, by) {
     const t = this.time, sum = new Map();
     for (const [at, id, a] of m.thLog || []) if (id !== by.id && t - at <= TAUNT.window) sum.set(id, (sum.get(id) || 0) + a);
