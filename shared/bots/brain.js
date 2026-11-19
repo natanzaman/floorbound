@@ -16,7 +16,8 @@
 // createBot() returns the bot object: b.configure({ behaviour, follow }), b.command({ k, by, byName, tgt }),
 // b.setSkill(level), b.stop(); b.goal / b.cmd describe what it is doing (admin page).
 import { MOBS, MOB_IDS, CLASS_IDS, PLAYER_SPEED, SPRINT_SPEED, inGateZone, inArena } from '../data.js';
-import { F2, WAYSTONES, STAIRWAY, inGateZone2, inArena2, onFloor2, floorUnlocked } from '../floor2.js';
+import { WAYSTONES, STAIRWAY, inGateZone2, inArena2, floorOf, floorUnlocked } from '../floor2.js';
+import { FLOOR_BOSS, FLOOR_X, inGateZone3, inArena3 } from '../floor3.js';
 import { MASTERY, BRANCHES, masteryLevel } from '../mastery.js';
 import { TREES, spendBlock } from '../talents.js';
 import { perceive, potionAt, setSkill, clampSkill } from '../botskill.js';
@@ -32,17 +33,18 @@ import './classes.js'; // built-in class plug-ins (Guardian, Swordsman, Cleric, 
 import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
 import { comboTurn, burstTurn } from './teamplay.js'; // combo payoffs + Team Burst (G2)
 
-const F2_BOSS_LVL = 15;
+const BOSS_LVL = { 1: 5, 2: 15, 3: 25 }; // a leader levels on its floor's field until this, then goes for the boss
+const floorFor = beh => (beh === 'floor3' ? 3 : beh === 'floor2' ? 2 : 0); // a behaviour's own floor (0: none)
 const LEASH = 24; // a follower drops its target and regroups beyond this distance from its anchor (not in boss fights)
 const byId = (a, c) => a.id - c.id;
 const pct = p => p.hp / (p.maxHp || 1);
-const inBossRoom = (x, z) => inArena(x, z) || inArena2(x, z);
+const inBossRoom = (x, z) => inArena(x, z) || inArena2(x, z) || inArena3(x, z);
 
 // peers: an optional shared Set of bot ids (bots started together that the server doesn't flag as bots, e.g. test/team.js
 // and /bots.html connect as ordinary players).
 export function createBot({ url, WebSocket: WS = globalThis.WebSocket, cls, name, join = {}, behaviour = 'field', follow = '', skill = 5, floor = 1, branch = null, log = null, logEvents = false, quiet = false, peers = null }) {
   const b = {
-    cls, name, behaviour, follow: String(follow || ''), floor: behaviour === 'floor2' ? 2 : floor, branch, log, logEvents, quiet,
+    cls, name, behaviour, follow: String(follow || ''), floor: floorFor(behaviour) || floor, branch, log, logEvents, quiet,
     id: 0, x: 0, z: 0, seq: 0, face: 0, t: 0, mobs: [], players: [], me: null, dead: false, hp: 1, maxHp: 1, party: 0,
     tele: [], cds: [0, 0, 0, 0], dodgeCd: 0, roll: null, stag: {}, waves: [], orbs: [], pools: [], life: null, cons: null,
     names: new Map(),      // player id -> roster row { name, cls, bot }
@@ -69,7 +71,7 @@ export function createBot({ url, WebSocket: WS = globalThis.WebSocket, cls, name
 }
 
 function configure(b, o = {}) {
-  if (o.behaviour) { b.behaviour = o.behaviour; b.floor = o.behaviour === 'floor2' ? 2 : 1; }
+  if (o.behaviour) { b.behaviour = o.behaviour; b.floor = floorFor(o.behaviour) || 1; }
   if (o.follow !== undefined) b.follow = String(o.follow);
   b.tgtId = null; b.home = null; b.cmd = null;
 }
@@ -114,9 +116,10 @@ function onSnap(b, msg) {
   if (b.t - (b.dodgePressed || -9) > 0.3) b.dodgeCd = msg.me.dodge || 0;
   b.mobs = msg.w.mobs.map(m => ({ id: m[0], type: MOB_IDS[m[1]], x: m[2], z: m[3], hp: m[5], maxHp: m[6], engaged: !!(m[7] & 2), enraged: !!(m[7] & 4), winding: !!(m[7] & 16), staggered: !!(m[7] & 32), marked: !!(m[7] & 256), def: MOBS[MOB_IDS[m[1]]] })).filter(m => m.def);
   const th = new Map(msg.w.th || []); for (const m of b.mobs) m.tgt = th.get(m.id) || 0; // who a boss / elite is after (server/threat.js)
-  const f2 = msg.w.f2, onF2 = onFloor2(b.x);
-  b.gateOpen = onF2 ? !!f2?.gate?.[0] : !!msg.w.gate?.[0];
-  b.gateReady = (onF2 ? f2?.gate?.[2] : msg.w.gate?.[2]) || 0;
+  const f2 = msg.w.f2, f3 = msg.w.f3, fl = floorOf(b.x), gate = fl === 3 ? f3?.gate : fl === 2 ? f2?.gate : msg.w.gate;
+  b.gateOpen = !!gate?.[0];
+  b.gateReady = gate?.[2] || 0;
+  b.ovOn = !!f3?.ov; b.air = f3?.air || []; // Floor 3: the Colossus's Overload; harpies aloft
   b.orbs = f2?.orbs || []; b.pools = f2?.pools || []; b.deluge = !!f2?.del;
   b.tb = msg.w.tb || null; // Team Burst gauges (server/teamplay.js teamSnap)
   b.players = msg.w.players.map(p => ({ id: p[0], x: p[1], z: p[2], face: p[3], hp: p[4], maxHp: p[5], lvl: p[6], cls: CLASS_IDS[p[7]], party: p[8], dead: !!p[9], style: STYLE_IDS[p[11]] || null }));
@@ -176,7 +179,7 @@ function onEvent(b, e) {
     case 'pcancel': b.sweep = null; break;
     case 'perfect': case 'parry': L?.(`[${e.t}] by ${e.id}`); break;
     case 'f2wave': b.waves.push({ x: e.x, z: e.z, start: b.t + e.d, sp: e.sp, w: e.w, max: e.max }); break;
-    case 'stair': b.stair = { x: e.x, z: e.z, until: b.t + e.d }; break;
+    case 'stair': b.stair = { x: e.x, z: e.z, until: b.t + e.d, f: e.f || 2 }; break;
     case 'sys': if (!e.to) L?.(`[sys] ${e.text}`); break;
     case 'hit': {
       let h = b.hits.get(e.id); if (!h) b.hits.set(e.id, h = new Map());

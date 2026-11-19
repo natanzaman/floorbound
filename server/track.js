@@ -23,9 +23,11 @@ setInterval(flush, 5000).unref();
 
 // Floor of a death row: the `floor` field (added with Floor 2), else guessed from the cause for older rows.
 const DEATH_FLOOR = `coalesce((data->>'floor')::int,
-  CASE WHEN data->>'cause' ~ '^(sovereign|lurker|wisp|shieldback|matron|thrall|tidal wave|mire pool|the deluge)' THEN 2 ELSE 1 END)`;
-// Boss fights: Floor 1 (the Horned Warden) is tracked as boss_start/boss_end, Floor 2 (the Drowned Sovereign) as boss2_*.
-const BOSS_KINDS = { 1: ['boss_start', 'boss_end'], 2: ['boss2_start', 'boss2_end'] };
+  CASE WHEN data->>'cause' ~ '^(colossus|ram|harpy|acolyte|sentinel|skyrender|bastion|gale push|thunderclap|tempest beam)' THEN 3
+       WHEN data->>'cause' ~ '^(sovereign|lurker|wisp|shieldback|matron|thrall|tidal wave|mire pool|the deluge)' THEN 2 ELSE 1 END)`;
+// Boss fights: Floor 1 (the Horned Warden) is tracked as boss_start/boss_end, Floor 2 (the Drowned Sovereign) as boss2_*,
+// Floor 3 (the Storm Colossus) as boss3_*.
+const BOSS_KINDS = { 1: ['boss_start', 'boss_end'], 2: ['boss2_start', 'boss2_end'], 3: ['boss3_start', 'boss3_end'] };
 
 // Aggregates for the last N days (default 7). Numbers only, no names.
 export async function stats(days = 7) {
@@ -43,13 +45,13 @@ export async function stats(days = 7) {
            count(DISTINCT sid) FILTER (WHERE kind = 'boss_start')::int AS sessions_reached_boss
          FROM play_events WHERE at > ${since}`),
     // one row per floor: kills, wipes, median kill time, sessions that reached the boss
-    db.q(`SELECT CASE WHEN kind LIKE 'boss2_%' THEN 2 ELSE 1 END AS floor,
-                count(*) FILTER (WHERE kind IN ('boss_end', 'boss2_end') AND data->>'sys' IS NULL AND data->>'result' = 'kill')::int AS kills,
-                count(*) FILTER (WHERE kind IN ('boss_end', 'boss2_end') AND data->>'sys' IS NULL AND data->>'result' = 'wipe')::int AS wipes,
+    db.q(`SELECT CASE WHEN kind LIKE 'boss3_%' THEN 3 WHEN kind LIKE 'boss2_%' THEN 2 ELSE 1 END AS floor,
+                count(*) FILTER (WHERE kind IN ('boss_end', 'boss2_end', 'boss3_end') AND data->>'sys' IS NULL AND data->>'result' = 'kill')::int AS kills,
+                count(*) FILTER (WHERE kind IN ('boss_end', 'boss2_end', 'boss3_end') AND data->>'sys' IS NULL AND data->>'result' = 'wipe')::int AS wipes,
                 percentile_cont(0.5) WITHIN GROUP (ORDER BY (data->>'secs')::float)
-                  FILTER (WHERE kind IN ('boss_end', 'boss2_end') AND data->>'sys' IS NULL AND data->>'result' = 'kill') AS kill_secs,
-                count(DISTINCT sid) FILTER (WHERE kind IN ('boss_start', 'boss2_start'))::int AS sessions_reached_boss
-         FROM play_events WHERE kind IN ('boss_start', 'boss_end', 'boss2_start', 'boss2_end') AND at > ${since} GROUP BY 1`),
+                  FILTER (WHERE kind IN ('boss_end', 'boss2_end', 'boss3_end') AND data->>'sys' IS NULL AND data->>'result' = 'kill') AS kill_secs,
+                count(DISTINCT sid) FILTER (WHERE kind IN ('boss_start', 'boss2_start', 'boss3_start'))::int AS sessions_reached_boss
+         FROM play_events WHERE kind IN ('boss_start', 'boss_end', 'boss2_start', 'boss2_end', 'boss3_start', 'boss3_end') AND at > ${since} GROUP BY 1`),
     db.q(`SELECT data->>'cause' AS cause, ${DEATH_FLOOR} AS floor, count(*)::int AS n FROM play_events
           WHERE kind = 'death' AND at > ${since} GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 12`),
     db.q(`SELECT ${DEATH_FLOOR} AS floor, count(*)::int AS n FROM play_events WHERE kind = 'death' AND at > ${since} GROUP BY 1 ORDER BY 1`),

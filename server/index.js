@@ -241,6 +241,6 @@ installDirectorAdmin({ server, director: game.director }); // /api/admin/directo
 server.on('error', err => { console.error('Server error', err); if (err.code === 'EADDRINUSE' || err.code === 'EACCES') process.exit(1); }); // can't listen: don't linger
 db.migrate()
   .then(() => hall.load())
-  .then(() => { game.hadFirstClear = hall.hasFirst(); game.hadFirstClear2 = hall.hasFirst(2); })
+  .then(() => { game.hadFirstClear = hall.hasFirst(); game.hadFirstClear2 = hall.hasFirst(2); game.hadFirstClear3 = hall.hasFirst(3); })
   .then(() => server.listen(PORT, () => console.log(`Floorbound running on http://localhost:${PORT}${db.enabled ? ' (accounts on' + (accounts.discordOn() ? ', Discord sign-in on' : '') + ')' : ''}`)))
   .catch(err => { console.error('Startup failed', err); process.exit(1); });

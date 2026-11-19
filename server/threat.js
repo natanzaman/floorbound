@@ -66,7 +66,7 @@ const methods = {
     for (const m of this.mobs.values()) {
       if (m.dead || !m.threat.size) continue;
       if (![...m.threat.keys()].some(id => grp.has(id))) continue;
-      if (!(m.def.f2 ? this.f2Valid(m, by) : this.validTarget(m, by))) continue; // out of its reach: no share
+      if (!(m.def.f3 ? this.f3Valid(m, by) : m.def.f2 ? this.f2Valid(m, by) : this.validTarget(m, by))) continue; // out of its reach: no share
       foes.push(m);
     }
     if (!foes.length) return;

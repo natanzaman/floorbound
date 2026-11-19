@@ -10,15 +10,16 @@
 import { BOSSTEAM, TEAM_MOVES } from '../shared/bossteam.js';
 import { inArena } from '../shared/data.js';
 import { inArena2 } from '../shared/floor2.js';
+import { inArena3 } from '../shared/floor3.js';
 
 const r2 = v => Math.round(v * 100) / 100;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
 const methods = {
-  btRoom(m) { return m.type === 'sovereign' ? inArena2 : inArena; },
+  btRoom(m) { return m.type === 'colossus' ? inArena3 : m.type === 'sovereign' ? inArena2 : inArena; },
   btFighters(m) { const ring = this.btRoom(m); return [...this.players.values()].filter(p => !p.dead && ring(p.x, p.z)); },
-  btFight(m) { return m.type === 'sovereign' ? this.fight2 : this.fight; },
+  btFight(m) { return m.type === 'colossus' ? this.fight3 : m.type === 'sovereign' ? this.fight2 : this.fight; },
   btLive(m, key) { return !m.dead && m.engaged && this.btFight(m) === key; }, // still the same fight
 
   // A team-mechanic hit: a fraction of the victim's max HP through the normal damage rules (shields, damage reduction,
@@ -69,7 +70,7 @@ const methods = {
   // (Quake Rings and basic swings go on: you can jump or take a swing where you stand.)
   btChannel(m, secs) {
     const until = this.time + secs + BOSSTEAM.channel;
-    for (const k of ['slamT', 'chargeT', 'spinT', 'rockT', 'sweepT', 'geyserT', 'waveT', 'volleyT']) if (typeof m[k] === 'number' && m[k] < until) m[k] = until;
+    for (const k of ['slamT', 'chargeT', 'spinT', 'rockT', 'sweepT', 'geyserT', 'waveT', 'volleyT', 'strikeT', 'gustT', 'beamT', 'ovT']) if (typeof m[k] === 'number' && m[k] < until) m[k] = until;
   },
 
   btAdd(a) { (this.btActive ||= []).push(a); return a; },
