@@ -1,8 +1,11 @@
 // Warden twists on the client: announce banner, raid-gate and boss-bar lines, cracked ground, Echo telegraphs,
 // stone Thorn Totems and the Eclipse darkness. main.js calls into this from a few one-line hooks.
+// The Drowned Sovereign's twists (shared/floor2.js SOV_TWISTS, server/sovtwists.js) use the same panel, boss line and
+// banner on Floor 2 (id2; f2 = true), and Moonless Mire darkens the Sunken Court like Eclipse.
 import * as THREE from 'three';
 import { MOBS, inArena } from '/shared/data.js';
 import { TWISTS, TOTEM, rewardText } from '/shared/twists.js';
+import { SOV_TWISTS, inArena2 } from '/shared/floor2.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const STONE = new THREE.Color(0x8a8578);
@@ -12,7 +15,7 @@ const DARK = { fog: new THREE.Color(0x14172b), bg: new THREE.Color(0x090b18), ne
 
 export class TwistClient {
   constructor({ scene, fx, banner }) {
-    Object.assign(this, { scene, fx, banner, id: null, dark: 0, light: null }); // light: 'eclipse' | 'day' | null, set by the film director (public/cine.js)
+    Object.assign(this, { scene, fx, banner, id: null, id2: null, dark: 0, light: null }); // light: 'eclipse' | 'day' | null, set by the film director (public/cine.js)
     this.hemi = scene.children.find(o => o.isHemisphereLight);
     this.sun = scene.children.find(o => o.isDirectionalLight);
     this.fill = new THREE.AmbientLight(0x9fb2ff, 0); // moonlight fill, only during Eclipse
@@ -25,29 +28,31 @@ export class TwistClient {
   }
 
   get def() { return TWISTS[this.id] || null; }
+  defOf(f2) { return f2 ? SOV_TWISTS[this.id2] || null : this.def; } // f2: the Sovereign's twist
+  rewardOf(f2) { return f2 ? rewardText(this.id2, SOV_TWISTS) : rewardText(this.id); }
 
-  // every snapshot: the current twist (also for players who join mid-fight)
-  snap(w) { if (w && 'twist' in w) this.id = w.twist || null; }
+  // every snapshot: the current twists (also for players who join mid-fight)
+  snap(w) { if (w && 'twist' in w) this.id = w.twist || null; if (w?.f2 && 'tw' in w.f2) this.id2 = w.f2.tw || null; }
 
-  // 'twist' event: a new Warden spawned with this twist
-  announce(e) {
-    this.id = e.id;
-    const T = this.def;
-    if (T) this.banner(`THE WARDEN STIRS · ${T.name.toUpperCase()}`, `${T.desc} Reward: ${rewardText(e.id)}`);
+  // 'twist' event: a new Warden spawned with this twist ('twist2' with f2: the Sovereign, shown to Floor 2 only)
+  announce(e, f2 = false, show = true) {
+    if (f2) this.id2 = e.id; else this.id = e.id;
+    const T = this.defOf(f2);
+    if (T && show) this.banner(`${f2 ? 'THE SOVEREIGN STIRS' : 'THE WARDEN STIRS'} · ${T.name.toUpperCase()}`, `${T.desc} Reward: ${this.rewardOf(f2)}`);
   }
 
   // Raid gate panel: twist name + description under the ready count.
-  gateBox(el) {
-    const T = this.def;
+  gateBox(el, f2 = false) {
+    const T = this.defOf(f2);
     if (!T) return;
     el.querySelector('.sub')?.insertAdjacentHTML('afterend',
       `<div class="twist" style="margin:-4px 0 8px;font-size:12px;line-height:1.35;max-width:300px">`
       + `<span style="color:${T.color};font-weight:800;letter-spacing:.12em">TWIST · ${esc(T.name.toUpperCase())}</span><br>`
-      + `<span style="opacity:.85">${esc(T.desc)}</span><br><span style="color:#fde047;opacity:.9">Reward: ${esc(rewardText(this.id))}</span></div>`);
+      + `<span style="opacity:.85">${esc(T.desc)}</span><br><span style="color:#fde047;opacity:.9">Reward: ${esc(this.rewardOf(f2))}</span></div>`);
   }
 
   // Boss bar: one line under the phase line.
-  bossLine(phaseEl) {
+  bossLine(phaseEl, f2 = false) {
     let el = document.getElementById('boss-twist');
     if (!el) {
       el = document.createElement('div');
@@ -55,7 +60,7 @@ export class TwistClient {
       el.style.cssText = 'margin-top:2px;letter-spacing:.08em;text-shadow:0 1px 2px #000';
       phaseEl.after(el);
     }
-    const T = this.def, txt = T ? `TWIST · ${T.name.toUpperCase()} · ${T.short}` : '';
+    const T = this.defOf(f2), txt = T ? `TWIST · ${T.name.toUpperCase()} · ${T.short}` : '';
     if (el.dataset.t !== txt) { el.dataset.t = txt; el.textContent = txt; el.title = T?.desc || ''; el.style.color = T?.color || ''; }
   }
 
@@ -117,7 +122,7 @@ export class TwistClient {
 
   // Eclipse: darken fog and lights while the camera's focus is in the chamber (or everywhere: `light` 'eclipse').
   frame(dt, x, z) {
-    const want = this.light === 'eclipse' ? 1 : this.light === 'day' ? 0 : this.id === 'eclipse' && inArena(x, z) ? 1 : 0;
+    const want = this.light === 'eclipse' ? 1 : this.light === 'day' ? 0 : (this.id === 'eclipse' && inArena(x, z)) || (this.id2 === 'moonless' && inArena2(x, z)) ? 1 : 0;
     if (want === this.dark) return;
     if (this.dark === 0) this.rebase(); // darken from whatever the sky is now (Floor 1 or the Mire)
     this.dark += (want - this.dark) * Math.min(1, dt * 1.5);

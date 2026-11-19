@@ -81,9 +81,9 @@ A misty marsh of dead trees, shallow water and glowing crystals, for levels 11�
 | Bog Lurker | 13 | Burrowed and untouchable (a ring of bubbling mud). **Erupts under anyone who stands still** for about 2 s (red circle under you), then fights on the surface for a few seconds before burrowing again. Keep moving. |
 | Mire Matron (elite) | 15 | Leads the lurkers of the Drowned Wood: lurkers near her hit 25% harder, and her **Call of the Mire** sends every lurker nearby up under her target at once. |
 | Drowned Thrall | 16 | Summoned by the Sovereign in phase 2. Stays in the court. |
-| **The Drowned Sovereign** (boss) | 18 | Three phases, each adding attacks. 100–66%: trident sweeps (red wedge) and **geysers** (red circles; roll or jump). 66–33%: + the **Tidal Wave**, a ring of water that sweeps the whole court. You can't outrun it: **dodge-roll through it** as it reaches you (very heavy damage otherwise); + Drowned Thralls and purple **mire pools** that hurt while you stand in them. Below 33%: + **the Deluge** (the outer court floods: stay inside the bright ring) and volleys of homing orbs; waves come faster. |
+| **The Drowned Sovereign** (boss) | 18 | Three phases, each adding attacks. 100–66%: trident sweeps (red wedge) and **geysers** (red circles; roll or jump). 66–33%: + the **Tidal Wave**, a ring of water that sweeps the whole court. You can't outrun it: **dodge-roll through it** as it reaches you (very heavy damage otherwise); + Drowned Thralls and purple **mire pools** that hurt while you stand in them. Below 33%: + **the Deluge**: the Sovereign raises its arms and a flood line closes in from the wall to the bright ring (about 3 s), then the outer court floods for the rest of the fight (stay inside the ring); + volleys of homing orbs; waves come faster. Every big move has a readable wind-up pose: the trident drawn back, the trident raised overhead for geysers, a crouch gathering the water before a Tidal Wave (its warning ring fills up toward the moment it breaks), arms to the sky for the Deluge. |
 
-Behind the Sunken Gate (same ready check as Floor 1's raid gate), the Sovereign's health scales with the party. Floor 2 clears go to their own section of the Hall of Clearers. The **Last Attack Bonus** is the *Sovereign's Tidecloak* (armour: +30% health, 10% less damage taken, 6% faster cooldowns); Floor 2 enemies drop from better loot tables, and the Sovereign drops two Rare/Epic items for everyone who fought. New title: **Mirebreaker** (help defeat the Drowned Sovereign).
+Behind the Sunken Gate (same ready check as Floor 1's raid gate), the Sovereign scales like the Warden: health from the party's role weight (a damage dealer counts more than a healer) and its level above 18, damage from the level and from each fighter past three (`SOVEREIGN` in `shared/floor2.js`, `scaleSovereign` in `server/floor2.js`). It's meant to be a step up from the Warden: a skill-5 bot trio takes about 2 minutes, a full party of six takes a few downs. A filmed director show keeps the scaling its episodes were rehearsed with (`SOVEREIGN.show`) and fights without a twist. Floor 2 clears go to their own section of the Hall of Clearers. The **Last Attack Bonus** is the *Sovereign's Tidecloak* (armour: +30% health, 10% less damage taken, 6% faster cooldowns); Floor 2 enemies drop from better loot tables, and the Sovereign drops two Rare/Epic items for everyone who fought. New title: **Mirebreaker** (help defeat the Drowned Sovereign).
 
 ## Floor 3 — The Gale Spires
 
@@ -138,6 +138,21 @@ Every time the Horned Warden spawns (server start, and each respawn after a kill
 | Echo | Every slam and rockfall strikes again in the same spot 1.5 s later (purple circle). | +1 loot roll |
 
 The table lives in `shared/twists.js`, server behaviour in `server/twists.js`, client visuals in `public/twists.js`. `WARDEN_TWIST=<id>` forces one (testing aid), e.g. `WARDEN_TWIST=eclipse START_LEVEL=10 SPAWN_AT=0,150 npm start`.
+
+## Sovereign twists
+
+The Drowned Sovereign rolls a twist the same way each time it rises (never the same twice in a row), shown on the Sunken Gate panel, under the boss bar and in a banner to everyone on Floor 2.
+
+| Twist | What changes | Kill bonus |
+| --- | --- | --- |
+| High Tide | Tidal Waves from phase 1, and a third more often. | +1 loot roll |
+| Riptide | Every Tidal Wave is chased by a second one 1.6 s later: roll twice. | +1 loot roll, +50% gold |
+| Drowned Host | Drowned Thralls rise from the start, three at a time, up to six. | +1 loot roll |
+| Brackish | Every geyser leaves a mire pool behind for 9 s. | +50% gold |
+| Coral Hide | Takes 40% less damage unless Broken; Broken windows last 1.6 s longer. | +1 loot roll |
+| Moonless Mire | The court goes dark and every telegraph gives 15% less warning. | +2 loot rolls, +100% gold |
+
+The table is `SOV_TWISTS` in `shared/floor2.js`, server behaviour in `server/sovtwists.js` (small hooks from `server/floor2.js`), client in `public/twists.js`. `SOVEREIGN_TWIST=<id>` forces one (testing aid). Test: `node test/sovtwists.js`.
 
 ## Rare spawns
 
@@ -378,6 +393,8 @@ test/teamplay.js  combos (each trigger, timeout, chain), Team Burst gauge fill/d
 test/mvp.js      post-fight MVP card: titles, MVP, Warden / Sovereign kill and wipe cards, downs and deaths, director shows, the tracking row
 test/feeltext.js in-process checks for who sees combat text (`to` tags on reactions) and which boss hits hit-stop their victim
 test/bossteam.js boss team mechanics: meteor split, spread overlap, tether break distance, solo unchanged, director safety, bot positioning
+test/sovtwists.js  the Sovereign's twists, scaling (role weight, level, party size, director shows), the Deluge call, twist rewards
+test/floor2pass.js  Floor 2 bot play pass: a bot party through the Mire, the Sunken Gate and the Sovereign; reports kills, deaths, stuck bots, server errors
 test/warden3.js  in-process checks for the Quake Ring (jump / roll / out of reach), Warden scaling and bot jump timing per capability
 test/aircontrol.js  jump air control: the shared air step, client prediction vs the server's movement check while airborne, bots steering mid-jump
 shared/bots/     one brain per bot: brain.js (decision loop, party teamwork, orders), motor.js (moving, dodging), registry.js (per-class plug-ins), classes.js (Guardian, Swordsman, Cleric), social.js (orders, /b chat parsing, chatter)
@@ -434,7 +451,7 @@ The page has three tabs:
     | 2 | Casual | 0.38-0.52 s | 45% | ~12% / ~60% | ~33% | 1.2-3 s | potions at 20%, rarely Switches |
     | 1 | Novice | 0.6-0.85 s | 70% | ~6% / ~31% | ~12% | 2.5-6 s | mashes the basic attack, ±3 m positioning, stands in fire |
 
-    Test runners take it too: `BOT_SKILL=3 node test/team.js`, and `BOT_SKILL=3 RUNS=2 node test/wardenskill.js` (its own server, Lv 10 party at the raid gate; prints kill/wipe, fight time, deaths, downs and revives, and Quake Rings jumped / rolled / hit per run; `ROLES=guardian,ranger,berserker,lancer,bard,cleric` for a full party).
+    Test runners take it too: `BOT_SKILL=3 node test/team.js`, and `BOT_SKILL=3 RUNS=2 node test/wardenskill.js` (its own server, Lv 10 party at the raid gate; prints kill/wipe, fight time, deaths, downs and revives, and Quake Rings jumped / rolled / hit per run; `ROLES=guardian,ranger,berserker,lancer,bard,cleric` for a full party; `BOSS=sovereign` fights the Drowned Sovereign instead (Lv 18 party at the Sunken Gate) and reports Tidal Waves rolled / hit, geyser hits and Deluge ticks).
 - **Players:** every saved character merged with the live game: class (icon and colour), level, account (Discord name or `guest #id`), online/offline, current floor and area, last seen and created. Search, filter by status, class and level range, and sort (click a column).
 - **Edit** (click a character), in sections with a jump bar and a sticky *Save changes* bar: level and XP, gold, consumables, materials, equipped and bag items (remove, equip, add any slot/rarity/class with or without rolled affixes, add the Last Attack items, add a set piece or a full set; **Affixes** on any item edits its affixes (kind, value, skill) and set, or rolls fresh ones), a **⚡ Maxed preset** (max level, Floors 2 and 3, Mastery 5 and evolutions, all talents, a full boss set for the class role with 3 top affixes per piece, the Last Attack items in the bag, 20 of each consumable), titles earned and worn, lifetime stats, skill mastery (level/points and evolution branch per skill), the Floor 2 and Floor 3 unlocks, rename, class change (offline only; a weapon for the old class goes back to the bag), delete (type the name to confirm), and an **Advanced: raw JSON** editor for the stored inventory, stats and mastery (validated; unknown stats keys are kept). If the character is online, the edit is applied to the live player straight away (they get "An admin updated your character") and saved.
 

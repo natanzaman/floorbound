@@ -115,7 +115,8 @@ export function initFloor2Client(ctx) {
         } else if (e.k === 'geyser') {
           fx.ring(e.x, e.z, e.r, 0x5eead4, 0.5); geyser(e.x, e.z, e.r);
           sfx.play('boom', at, 1.1); if (near(e.x, e.z, e.r + 3)) ctx.shake(0.3);
-        } else if (e.k === 'rise') { fx.ring(e.x, e.z, 2.6, 0x2dd4bf, 0.7); fx.sparks(e.x, 0.5, e.z, 16, 0x5eead4, 0.3, 6); sfx.play('howl', at, 0.6); }
+        } else if (e.k === 'dcall') delugeCall(e);
+        else if (e.k === 'rise') { fx.ring(e.x, e.z, 2.6, 0x2dd4bf, 0.7); fx.sparks(e.x, 0.5, e.z, 16, 0x5eead4, 0.3, 6); sfx.play('howl', at, 0.6); }
         break;
       }
       case 'blocked': { // a Shieldback's front shell soaked the hit
@@ -132,7 +133,7 @@ export function initFloor2Client(ctx) {
       case 'f2wave': wave(e); break;
       case 'f2phase': {
         const b = mobs.get(e.id);
-        b?.model.anim?.shot(e.n === 1 ? 'Spellcast_Long' : 'Cheer', 1.2 / PACE);
+        if (e.n === 1) b?.model.anim?.shot('Spellcast_Long', 1.2 / PACE); // (phase 3: the Deluge call has its own pose, 'dcall')
         sfx.play('roar', b?.model.group.position || null, 1.3);
         if (e.n === 1) ctx.banner('THE TIDE RISES', 'Phase 2: Tidal Waves (roll THROUGH them), Drowned Thralls, mire pools');
         else ctx.banner('THE DELUGE', 'Phase 3: the outer court floods. Stay near the centre and dodge the orbs');
@@ -168,21 +169,46 @@ export function initFloor2Client(ctx) {
     fx.sparks(x, 1, z, 22, 0xccfbf1, 0.3, 9);
   }
 
-  // The Tidal Wave: a warning at the Sovereign, then a wall of water sweeping out across the court.
+  // The Tidal Wave: a warning at the Sovereign (a ring that fills up toward the moment it breaks, while it crouches and
+  // gathers the water: world.js WINDUPS 'wave'), then a wall of water sweeping out across the court.
+  // e.n = 2: Riptide's second wall right behind the first (no second pose or callout).
   function wave(e) {
     const start = performance.now() / 1000 + e.d;
     const g = new THREE.Group();
     const wall = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 64, 1, true), fade(0x5eead4, 0.5));
     const foam = new THREE.Mesh(new THREE.RingGeometry(1 - e.w * 0.04, 1, 64), fade(0xe0fbff, 0.85)); foam.rotation.x = -Math.PI / 2;
     const warn = new THREE.Mesh(new THREE.RingGeometry(2.6, 3.2, 40), fade(0x67e8f9, 0.8)); warn.rotation.x = -Math.PI / 2; warn.position.y = 0.15;
-    g.add(wall, foam, warn); g.position.set(e.x, 0, e.z); wall.visible = foam.visible = false;
+    const fill = new THREE.Mesh(new THREE.CircleGeometry(3.2, 40), fade(0x22d3ee, 0.4)); fill.rotation.x = -Math.PI / 2; fill.position.y = 0.13; fill.scale.setScalar(0.01);
+    g.add(wall, foam, warn, fill); g.position.set(e.x, 0, e.z); wall.visible = foam.visible = false;
     scene.add(g);
-    waves.push({ g, wall, foam, warn, start, e });
-    mobs.get(e.by)?.model.anim?.shot('Spellcast_Raise', 0.9 / PACE);
-    sfx.play('warn', { x: e.x, z: e.z }, 1.5);
-    if (inArena2(state.x, state.z) && !state.spectator) ctx.callout('TIDAL WAVE', `Roll (${ctx.isTouch ? 'Dodge' : 'Shift'}) THROUGH it as it reaches you`, e.d + 0.6);
+    waves.push({ g, wall, foam, warn, fill, start, e });
+    if (e.n !== 2) mobs.get(e.by)?.model.anim?.windup?.('wave', e.d);
+    sfx.play('warn', { x: e.x, z: e.z }, e.n === 2 ? 1 : 1.5);
+    if (e.n === 2) { if (inArena2(state.x, state.z) && !state.spectator) ctx.callout('RIPTIDE', 'A second wave right behind: roll again', e.d + 0.4); }
+    else if (inArena2(state.x, state.z) && !state.spectator) ctx.callout('TIDAL WAVE', `Roll (${ctx.isTouch ? 'Dodge' : 'Shift'}) THROUGH it as it reaches you`, e.d + 0.6);
     else if (state.spectator && near(e.x, e.z, 60)) ctx.callout('TIDAL WAVE', 'Roll through it as it reaches you', e.d + 0.6);
     setTimeout(() => { sfx.play('boom', { x: e.x, z: e.z }, 1.4); if (inArena2(state.x, state.z)) ctx.shake(0.35); }, e.d * 1000);
+  }
+
+  // The Deluge being called: the Sovereign raises its arms (WINDUPS 'deluge') while a flood line fills in from the court's
+  // wall to the bright safe ring; when it lands, the outer court floods (world.update, f2.del).
+  function delugeCall(e) {
+    mobs.get(e.id)?.model.anim?.windup?.('deluge', e.d);
+    const g = new THREE.Group(), w = e.r2 - e.r;
+    const band = new THREE.Mesh(new THREE.RingGeometry(e.r, e.r2, 72, 1), fade(0x0e7490, 0.18));
+    const front = new THREE.Mesh(new THREE.RingGeometry(e.r2 - 0.5, e.r2, 72, 1), fade(0x67e8f9, 0.85));
+    const safe = new THREE.Mesh(new THREE.RingGeometry(e.r - 0.45, e.r, 72, 1), fade(0xccfbf1, 0.9));
+    for (const m of [band, front, safe]) m.rotation.x = -Math.PI / 2;
+    front.position.y = 0.02; safe.position.y = 0.03;
+    g.add(band, front, safe); g.position.set(e.x, 0.1, e.z);
+    fx.add(g, e.d, (mesh, k) => { // the water's edge moves in from the wall and meets the safe ring on impact
+      const ez = k * k * (3 - 2 * k), r = e.r2 - w * ez, s = r / e.r2;
+      front.scale.setScalar(s); band.material.opacity = 0.18 + 0.3 * ez;
+      safe.material.opacity = 0.55 + 0.4 * Math.sin(k * (14 + 22 * k));
+    });
+    sfx.play('warn', { x: e.x, z: e.z }, 1.6);
+    if (inArena2(state.x, state.z) && !state.spectator) ctx.callout('THE DELUGE', 'Get inside the bright ring before the water comes in', e.d + 0.4);
+    setTimeout(() => { sfx.play('boom', { x: e.x, z: e.z }, 1.2); if (inArena2(state.x, state.z)) ctx.shake(0.3); }, e.d * 1000);
   }
 
   // ---------- interaction (F) ----------
@@ -214,8 +240,12 @@ export function initFloor2Client(ctx) {
     const now = performance.now() / 1000;
     for (let i = waves.length - 1; i >= 0; i--) {
       const w = waves[i], r = (now - w.start) * w.e.sp;
-      if (r < 0) { const k = 1 + Math.sin(now * 14) * 0.12; w.warn.scale.setScalar(k); const m = mobs.get(w.e.by); if (m) w.g.position.set(m.x, 0, m.z); continue; }
-      w.warn.visible = false; w.wall.visible = w.foam.visible = true;
+      if (r < 0) { // winding up: the warning ring pulses faster and fills toward the moment the wave breaks
+        const k = Math.min(1, Math.max(0, 1 + (now - w.start) / w.e.d)), ez = k * k * (3 - 2 * k);
+        w.warn.scale.setScalar(1 + Math.sin(now * (10 + 16 * k)) * 0.12); w.fill.scale.setScalar(Math.max(0.01, ez)); w.fill.material.opacity = 0.3 + 0.35 * k;
+        const m = mobs.get(w.e.by); if (m && w.e.n !== 2) w.g.position.set(m.x, 0, m.z); continue;
+      }
+      w.warn.visible = w.fill.visible = false; w.wall.visible = w.foam.visible = true;
       w.wall.scale.set(r, 1.7, r); w.wall.position.y = 0.85; w.foam.scale.setScalar(Math.max(0.01, r + w.e.w)); w.foam.position.y = 0.12;
       w.wall.material.opacity = 0.5 * (1 - r / w.e.max);
       if (r > w.e.max) { scene.remove(w.g); w.g.traverse(m => { m.geometry?.dispose(); m.material?.dispose(); }); waves.splice(i, 1); }

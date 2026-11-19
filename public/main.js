@@ -508,7 +508,7 @@ function handleEvent(e) {
       const m = mobs.get(e.id);
       if (m) {
         m.wind = e.d;
-        if (m.def?.boss && m.model.anim?.windup) m.model.anim.windup('cleave', e.d); else m.model.anim?.shot('2H_Melee_Attack_Chop', m.def?.boss ? 1.4 / PACE : 1.4); // bosses: a readable wind-up pose (world.js WINDUPS)
+        if (m.def?.boss && m.model.anim?.windup) m.model.anim.windup(m.type === 'sovereign' ? 'trident' : 'cleave', e.d); else m.model.anim?.shot('2H_Melee_Attack_Chop', m.def?.boss ? 1.4 / PACE : 1.4); // bosses: a readable wind-up pose (world.js WINDUPS)
         if ((m.type === 'wolf' || m.type === 'alpha') && Math.random() < 0.4) sfx.play('growl', m.model.group.position, 0.7);
         if (e.r) fx.wedge(m.x, m.z, e.f, e.r, e.h, e.d);                 // bite wedge: step out of it
         if (e.ax !== undefined) fx.aimLine(m.x, m.z, e.ax, e.az, e.d);   // thorn shot: sidestep the line
@@ -532,9 +532,11 @@ function handleEvent(e) {
       if (e.k === 'rock') { if (mine) { sfx.play('warn', { x: e.x, z: e.z }, 0.6); guide.tip('rock'); } break; }
       sfx.play('warn', { x: e.x, z: e.z });
       if (mine) guide.tip('slam');
-      if (boss && e.k !== 'lurk' && e.k !== 'pool') {
-        if (boss.def.f2) bossShot(boss.id, e.follow ? '2H_Melee_Attack_Spin' : '2H_Melee_Attack_Slice', 1.2 / PACE, Math.max(0, e.d - 0.55 * PACE));
-        else boss.model.anim?.windup?.(e.follow ? 'spin' : 'slam', e.d); // the Warden rears up (slam) or winds round (spin)
+      const tb = boss && !!boss.def.f2 === onFloor2(e.x) ? boss : [...mobs.values()].find(m => m.def?.boss && !!m.def.f2 === onFloor2(e.x) && !m.dying); // the boss on the telegraph's floor
+      if (tb && e.k !== 'lurk' && e.k !== 'pool') {
+        if (tb.def.f2 && e.k === 'geyser') tb.model.anim?.windup?.('geyser', e.d); // trident raised high, then driven down (world.js WINDUPS)
+        else if (tb.def.f2) bossShot(tb.id, e.follow ? '2H_Melee_Attack_Spin' : '2H_Melee_Attack_Slice', 1.2 / PACE, Math.max(0, e.d - 0.55 * PACE));
+        else tb.model.anim?.windup?.(e.follow ? 'spin' : 'slam', e.d); // the Warden rears up (slam) or winds round (spin)
       }
       break;
     }
@@ -620,6 +622,7 @@ function handleEvent(e) {
       break;
     case 'enrage': if (boss) { bossShot(boss.id, 'Cheer', 1.2); sfx.play('roar', boss.model.group.position, 1.4); } banner('THE WARDEN IS ENRAGED', 'Phase 3: spins, falling rocks, triple Quake Rings. Keep moving'); break;
     case 'twist': twists.announce(e); updateGateBox(true); break;
+    case 'twist2': twists.announce(e, true, onFloor2(state.x) && !state.spectator); updateGateBox(true); break; // the Sovereign's (Floor 2 only)
     case 'la': {
       fx.beam(e.x, e.z, 0xfbbf24, 4.5); sfx.play('loot', { x: e.x, z: e.z }, 1.3);
       setTimeout(() => banner('LAST ATTACK BONUS', `${e.name} · Horn of the Warden`), 3400);
@@ -1308,7 +1311,7 @@ function updateGateBox(force) {
   el.innerHTML = `<b>${onFloor3(state.x) ? 'THE STORM GATE' : gate2 ? 'THE SUNKEN GATE' : 'RAID GATE'}</b><div class="sub">${onFloor3(state.x) ? f3.gateText() : f2.gateText()} · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}</div>`
     + (count > 0 ? `<div class="count">${Math.ceil(count)}</div>` : '')
     + `<button class="${state.meReady ? 'on' : ''}">${state.meReady ? 'Ready ✓' : `Ready${isTouch ? '' : ' (F)'}`}</button>`;
-  if (!gate2) twists.gateBox(el); // the Warden's twist only applies behind Floor 1's gate
+  if (!onFloor3(state.x)) twists.gateBox(el, onFloor2(state.x)); // the twist of the boss behind this gate (the Warden's, or the Sovereign's on Floor 2)
   el.querySelector('button').onclick = interact;
 }
 
@@ -1464,7 +1467,7 @@ function updateHud(now) {
     combat.bossBar(boss);
     threat.bossBar(boss); // who it's after, my threat meter
     $('boss-phase').textContent = onF3 ? f3.phaseText() : onF2 ? f2.phaseText() : ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '';
-    if (!onF2 && !onF3) twists.bossLine($('boss-phase'));
+    if (!onF3) twists.bossLine($('boss-phase'), onF2); // the Warden's twist, or the Sovereign's on Floor 2
   }
 
   // items, raid gate, merchant, guide

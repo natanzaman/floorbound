@@ -5,6 +5,7 @@ import { WORLD, WARDEN, MOBS, inArena } from '../shared/data.js';
 import { DROPS, SLOTS, rollRarity } from '../shared/items.js';
 import { rollGear } from '../shared/loot.js';
 import { TWISTS, TOTEM, rewardText, rollTwist } from '../shared/twists.js';
+import { SOV_TWISTS } from '../shared/floor2.js';
 
 const r2 = v => Math.round(v * 100) / 100;
 const TOTEM_DEF = { ...MOBS.spitter, ...TOTEM };
@@ -152,17 +153,25 @@ export const TwistMethods = {
     });
   },
 
-  // damageMob, before the damage roll: Ironhide's armour (none while Broken).
-  twistTaken(m) {
-    if (this.twist?.id !== 'ironhide' || m !== this.boss) return 1;
-    return this.time < m.staggerUntil ? 1 : TWISTS.ironhide.taken;
+  // The armour twist this boss has: the Warden's Ironhide or the Sovereign's Coral Hide (server/sovtwists.js), else null.
+  hideTwist(m) {
+    if (m === this.boss) return this.twist?.id === 'ironhide' ? TWISTS.ironhide : null;
+    if (m === this.sovereign) return this.twist2?.id === 'coralhide' ? SOV_TWISTS.coralhide : null;
+    return null;
   },
 
-  // End of damageMob: Ironhide's Broken windows last longer (works for any source of the stagger).
+  // damageMob, before the damage roll: Ironhide's / Coral Hide's armour (none while Broken).
+  twistTaken(m) {
+    const T = this.hideTwist(m);
+    if (!T) return 1;
+    return this.time < m.staggerUntil ? 1 : T.taken;
+  },
+
+  // End of damageMob: Ironhide's (Coral Hide's) Broken windows last longer (works for any source of the stagger).
   twistAfterHit(m) {
-    const t = this.time;
-    if (this.twist?.id !== 'ironhide' || m !== this.boss || t >= m.staggerUntil || m.twExt === m.staggerUntil) return;
-    m.staggerUntil += TWISTS.ironhide.breakBonus;
+    const t = this.time, T = this.hideTwist(m);
+    if (!T || t >= m.staggerUntil || m.twExt === m.staggerUntil) return;
+    m.staggerUntil += T.breakBonus;
     m.stunUntil = Math.max(m.stunUntil, m.staggerUntil);
     m.twExt = m.staggerUntil;
     const ev = this.events.findLast?.(e => e.t === 'stagger' && e.id === m.id);
