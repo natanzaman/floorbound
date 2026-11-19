@@ -49,7 +49,7 @@ while (Date.now() - t0 < SECS * 1000) {
   R.lvl0 ??= g.team.every(b => b.me) ? g.team.map(b => b.me.lvl) : null;
   for (const b of g.team) { // stuck: alive, out of camp, no target, moved < 1.5 m for STUCK s
     const s = track.get(b);
-    if (Math.hypot(b.x - s.x, b.z - s.z) > 1.5 || b.dead || b.tgtId || inCamp2(b.x, b.z) || /Waiting|gate/i.test(b.goal)) { Object.assign(s, { x: b.x, z: b.z, since: Date.now(), flagged: false }); continue; }
+    if (Math.hypot(b.x - s.x, b.z - s.z) > 1.5 || b.dead || b.tgtId || inCamp2(b.x, b.z) || /Waiting|gate/i.test(b.goal) || g.team.some(o => /to rise/.test(o.goal))) { /* (to rise: the boss is dead, waiting for its respawn) */ Object.assign(s, { x: b.x, z: b.z, since: Date.now(), flagged: false }); continue; }
     if (!s.flagged && Date.now() - s.since > STUCK * 1000) { s.flagged = true; R.stuck.push(`${b.name} at [${b.x.toFixed(0)}, ${b.z.toFixed(0)}] (${onFloor2(b.x) ? areaName2(b.x, b.z) : 'Floor 1'}) goal "${b.goal}" @${now()}s`); }
   }
 }
