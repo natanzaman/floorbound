@@ -9,6 +9,7 @@ import { RARITY, CONSUMABLES, CONSUMABLE_IDS, SHOP, MERCHANT, SLOTS, statLabel, 
 import { TITLES, TITLE_BY_ID, DEFAULT_TITLE, HALL, titleProgress } from '/shared/titles.js';
 import { Guide } from '/guide.js';
 import { createWorld, makePlayerModel, makeMobModel, Effects, loadAssets } from '/world.js';
+import { initLooks } from '/looks.js';
 import { TwistClient } from '/twists.js';
 import { Sound } from '/audio.js';
 import { createSmith } from '/smith.js';
@@ -254,6 +255,7 @@ const classesB = initClassesB({ state, players, mobs, fx, sfx, mastery, combat, 
 const classesA = initClassesA({ scene, state, players, mobs, fx, sfx, floatNum, shake: a => shake(a), log: (a, b) => log(a, b), $ });
 // weapon styles: held weapon models, styled basic attacks and their effects, bag text (public/styles.js)
 const styles = initStyles({ state, players, fx, sfx, shake: a => shake(a), floatNum, rebuildBar: () => { if (state.joined && !state.spectator) buildSkillBar(); } });
+const looks = initLooks({ players, mobs }); // character looks: the Named's own appearance, on any entity (public/looks.js)
 // Players panel tabs + player-owned bots (public/playerbots.js)
 const pbots = initPlayerBots({ $, send, state, players, log: (a, b) => log(a, b), sfx, rerender: () => { lobby.html = ''; renderPlayers(); } });
 // talent trees + the Skill Tree window (K): progression track, talents, abilities (public/talents.js)
@@ -371,6 +373,7 @@ function onSnapshot({ me, w }) {
     Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, moving: flags & 1, engaged: flags & 2, enraged: flags & 4, stunned: flags & 8, winding: flags & 16, staggered: flags & 32, frenzy: flags & 64, launched: flags & 128, posture: posture || 0 });
   }
   for (const [id, e] of mobs) if (!seenM.has(id) && !e.dying) { removeEntity(e); mobs.delete(id); if (e === boss) boss = null; }
+  looks.snap(w.looks); // who wears a look (after the entities and their weapon styles are in step)
   renderPlayersThrottled();
 }
 
@@ -1370,7 +1373,7 @@ function renderPlayers() {
       const p = players.get(id);
       const inParty = state.party && p?.party === state.party;
       const right = inParty ? '<small>Party</small>' : humanParty(p?.party) ? '<small style="opacity:.6">In a party</small>' : `<button data-inv="${id}">Invite</button>`;
-      botRows.push(`<div class="p"><span>${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small><span class="tag">BOT</span></span>${right}</div>`);
+      botRows.push(`<div class="p"><span>${looks.swatch(id)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small><span class="tag">BOT</span></span>${right}</div>`);
       continue;
     }
     online++;
@@ -1379,7 +1382,7 @@ function renderPlayers() {
     const inParty = state.party && p?.party === state.party;
     const lfgTag = (p?.buffs || 0) & 4 ? '<span class="tag">LFG</span>' : '';
     const floorTag = p && onFloor2(p.tx ?? p.x) ? '<span class="tag f2">F2</span>' : '';
-    rows.push(`<div class="p"><span>${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}</div>`);
+    rows.push(`<div class="p"><span>${looks.swatch(id)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}</div>`);
   }
   const meE = players.get(state.myId), seeking = !!((meE?.buffs || 0) & 4);
   const lfgBtn = `<button class="lfg ${seeking ? 'on' : ''}">${state.party ? (seeking ? 'Recruiting via party finder ✓' : 'Recruit with party finder') : seeking ? 'Searching for a party… (cancel)' : 'Find party'}</button>`;
@@ -1712,6 +1715,7 @@ function animateEntity(e, dt) {
     }
   }
   if (e.flash > 0) e.flash -= dt;
+  looks.frame(e, dt); // a look's cloth, lantern and aura (public/looks.js)
   if (e.flinch !== undefined) { // hit flinch: quick squash plus a small shove away from the attacker (visual only)
     e.flinch = Math.max(0, e.flinch - dt);
     const fk = e.flinch / FLINCH_T, amt = (e.flinchAmt || 0) * fk;
@@ -1735,7 +1739,7 @@ function animateEntity(e, dt) {
     e.label.el.style.display = '';
     e.label.el.style.transform = `translate(${p[0]}px, ${p[1]}px) translate(-50%, -100%)`;
     e.label.el.style.left = '0'; e.label.el.style.top = '0';
-    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${e.def.name}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}` : `<span class="lv">Lv${e.lvl}</span>${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}`;
+    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${looks.plate(e, e.def.name)}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}` : `<span class="lv">Lv${e.lvl}</span>${looks.plate(e, `${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}`)}`;
     if (txt !== e.label.text) { e.label.text = txt; e.label.nm.innerHTML = txt; }
     const pct = Math.round((e.hp / e.maxHp) * 100);
     if (pct !== e.label.pct) { e.label.pct = pct; e.label.fill.style.width = `${pct}%`; }
@@ -1956,4 +1960,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { state, players, mobs, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m) };
+window.__fb = { state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m) };
