@@ -1,7 +1,8 @@
 // Warden runs with human-like bots: starts its own server (START_LEVEL, SPAWN_AT at the raid gate), sends a role party
 // (Guardian, Swordsman, Cleric) at a capability level, and reports kill / wipe, fight time, deaths (and what killed them)
 // and Quake Rings jumped / rolled / hit, how the boss team mechanics went (people in each stack, clean spreads, snapped
-// tethers), downs / revives (G1), Covers / Pincers (G3), and team combos / Team Bursts (G2).
+// tethers), rescue traps (J1: freed / timeout / boom / down / alone), downs / revives (G1), Covers / Pincers (G3), and team
+// combos / Team Bursts (G2).
 // Usage: BOT_SKILL=3 RUNS=2 PORT=3621 node test/wardenskill.js
 //        (env: START_LEVEL=10, SPAWN_AT=0,150, LIMIT=300 s per run, WARDEN_TWIST to force a twist,
 //         ROLES=guardian,ranger,bard,cleric, START_STYLE=daggers,drum to arm each class with the first of its styles listed,
@@ -89,6 +90,7 @@ async function run(i) {
         const T = (res.team ||= { cover: 0, covered: 0, pincer: 0 });
         if (e.t === 'cover' && !e.fail) T.cover++; else if (e.t === 'covered') T.covered++; else if (e.t === 'flank' && e.k === 'pincer') T.pincer++;
       }
+      if (e.t === 'trapend' && start && e.why !== 'off') { const R = (res.traps ||= {}); R[e.why] = (R[e.why] || 0) + 1; } // rescue traps (server/rescue.js): how each one ended
       if (e.t === 'btend' && start && !e.off) { // boss team mechanics (server/bossteam.js): how each one went
         const M = (res.mech ||= { stack: [], spread: [0, 0], tether: [0, 0] });
         if (e.k === 'stack') M.stack.push(e.n);
@@ -120,7 +122,7 @@ async function run(i) {
 }
 
 const out = [];
-for (let i = 0; i < RUNS; i++) { const r = await run(i); out.push(r); console.log(`[skill ${SKILL} ${skillName(SKILL)}${SOV ? ' Sovereign' : ''}] run ${r.run}: ${r.result} in ${r.secs}s, ${r.deaths} deaths, ${r.downs} downed, ${r.revives} revived (twist ${r.twist}) · ${SOV ? `Tidal Waves: ${r.wave.roll} rolled, ${r.wave.hit} hit · geyser hits ${r.wave.geyser} · deluge ticks ${r.wave.deluge}` : `Quake Rings: ${r.quake.jump} jumped, ${r.quake.roll} rolled, ${r.quake.hit} hit`}${r.causes ? ` · deaths to ${r.causes.join(', ')}` : ''}${r.mech ? ` · team mechanics: stacks ${r.mech.stack.join('/') || '-'} in, spread ${r.mech.spread[0]}/${r.mech.spread[1]} clean, tethers ${r.mech.tether[0]}/${r.mech.tether[1]} snapped` : ''}${r.team ? ` · Covers ${r.team.cover} (${r.team.covered} hits taken), Pincer tags ${r.team.pincer}` : ''} · combos ${Object.entries(r.combos || {}).map(([k, v]) => `${k} ${v}`).join(', ') || 0} · Team Bursts ${r.bursts ? `${r.bursts.length} (joiners ${r.bursts.join('/')})` : 0}${threatLine(r.threat)}`); for (const l of r.stats || []) console.log(`    ${l}`);
+for (let i = 0; i < RUNS; i++) { const r = await run(i); out.push(r); console.log(`[skill ${SKILL} ${skillName(SKILL)}${SOV ? ' Sovereign' : ''}] run ${r.run}: ${r.result} in ${r.secs}s, ${r.deaths} deaths, ${r.downs} downed, ${r.revives} revived (twist ${r.twist}) · ${SOV ? `Tidal Waves: ${r.wave.roll} rolled, ${r.wave.hit} hit · geyser hits ${r.wave.geyser} · deluge ticks ${r.wave.deluge}` : `Quake Rings: ${r.quake.jump} jumped, ${r.quake.roll} rolled, ${r.quake.hit} hit`}${r.causes ? ` · deaths to ${r.causes.join(', ')}` : ''}${r.mech ? ` · team mechanics: stacks ${r.mech.stack.join('/') || '-'} in, spread ${r.mech.spread[0]}/${r.mech.spread[1]} clean, tethers ${r.mech.tether[0]}/${r.mech.tether[1]} snapped` : ''}${r.traps ? ` · traps: ${Object.entries(r.traps).map(([k, v]) => `${v} ${k}`).join(', ')}` : ''}${r.team ? ` · Covers ${r.team.cover} (${r.team.covered} hits taken), Pincer tags ${r.team.pincer}` : ''} · combos ${Object.entries(r.combos || {}).map(([k, v]) => `${k} ${v}`).join(', ') || 0} · Team Bursts ${r.bursts ? `${r.bursts.length} (joiners ${r.bursts.join('/')})` : 0}${threatLine(r.threat)}`); for (const l of r.stats || []) console.log(`    ${l}`);
   if (process.env.MVP && r.card) for (const f of r.card.rows) console.log(`    ${f.id === r.card.mvp ? '★' : ' '} ${f.name} (${f.cls}${f.bot ? ' bot' : ''}): ${f.titles.map(k => MVP_TITLE[k].name).join(', ') || '-'} · dmg ${f.dmg} heal ${f.heal} tanked ${f.tanked} · Sw ${f.switch} Br ${f.break} combo ${f.combo} burst ${f.burst} rev ${f.revive} save ${f.save} cover ${f.cover} pincer ${f.flank} mech ${f.mechanic} LA ${f.lastAttack} · down ${f.down} death ${f.death}`);
   if (process.env.MVP_JSON && r.card) writeFileSync(process.env.MVP_JSON, JSON.stringify(r.card, null, 1)); }
 const wins = out.filter(r => r.result === 'kill');

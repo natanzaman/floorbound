@@ -175,18 +175,21 @@ const take = (g, t, k) => { const out = g.events.filter(e => e.t === t && (!k ||
   for (let i = 0; i < 120 * 20; i++) {
     g2.time += 0.05; g2.bossTeam(W2, g2.btFighters(W2)); advance(g2, 0);
     const due = g2.scheduled.filter(s => s.at <= g2.time); g2.scheduled = g2.scheduled.filter(s => s.at > g2.time); for (const s of due) s.fn();
-    if (firstAt === null && take(g2, 'bt').length) firstAt = g2.time - 20;
+    g2.updateRescue(0.05); // rescue traps (J1) are in the rotation too
+    if (firstAt === null && (take(g2, 'bt').length || take(g2, 'trap').length)) firstAt = g2.time - 20;
     for (const p of g2.players.values()) { p.hp = p.maxHp; p.dead = false; }
   }
-  const kinds = take(g2, 'bt').map(e => e.k);
+  const kinds = g2.events.filter(e => e.t === 'bt' || e.t === 'trap').map(e => e.k);
   assert.ok(Math.abs(firstAt - BOSSTEAM.warden.first) < 0.2, `first after ${BOSSTEAM.warden.first} s (got ${firstAt})`);
-  assert.ok(kinds.length >= 4 && kinds.every(k => k === 'stack' || k === 'spread'), `phase 1: stack / spread only (${kinds.join(',')})`);
+  assert.ok(kinds.length >= 4 && kinds.every(k => k === 'stack' || k === 'spread' || k === 'vines'), `phase 1: stack / spread / vines only (${kinds.join(',')})`);
+  assert.ok(kinds.includes('vines'), "the Warden's Thornbind is in the rotation");
   ok(`duo: first team mechanic ${firstAt.toFixed(1)} s in, then every ~${BOSSTEAM.warden.every[0]} s (${kinds.join(', ')})`);
 
   W2.phase = 2; g2.events = [];
   for (let i = 0; i < 80 * 20; i++) {
     g2.time += 0.05; g2.bossTeam(W2, g2.btFighters(W2));
     const due = g2.scheduled.filter(s => s.at <= g2.time); g2.scheduled = g2.scheduled.filter(s => s.at > g2.time); for (const s of due) s.fn();
+    g2.updateRescue(0.05);
     for (const p of g2.players.values()) { p.hp = p.maxHp; p.dead = false; }
   }
   assert.ok(take(g2, 'bt', 'tether').length >= 1, 'phase 3 adds tethers');

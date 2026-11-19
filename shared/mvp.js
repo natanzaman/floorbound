@@ -16,6 +16,7 @@ export const MVP_STATS = [
   { k: 'burst', name: 'Team Bursts', one: 'Team Burst', short: 'Burst' },
   { k: 'revive', name: 'Revives', one: 'Revive', short: 'Revive' },
   { k: 'save', name: 'Saves', one: 'Save', short: 'Save' },
+  { k: 'rescue', name: 'Rescues', one: 'Rescue', short: 'Rescue' }, // freed a trapped partymate (J1, server/rescue.js)
   { k: 'cover', name: 'Covers', one: 'Cover', short: 'Cover' },
   { k: 'flank', name: 'Pincers', one: 'Pincer', short: 'Pincer' },
   { k: 'mechanic', name: 'Mechanics', one: 'Mechanic', short: 'Mech' },
@@ -35,6 +36,7 @@ const k = v => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : Strin
 export const MVP_TITLES = [
   { k: 'lastword', name: 'Last Word', exact: true, score: r => r.lastAttack, min: 1, why: () => 'landed the Last Attack' },
   { k: 'lifeline', name: 'Lifeline', score: r => 2 * r.revive + r.save, min: 1, why: r => [r.revive && pl(r.revive, 'revive'), r.save && pl(r.save, 'save')].filter(Boolean).join(', ') },
+  { k: 'rescuer', name: 'Rescuer', score: r => r.rescue, min: 1, why: r => `freed ${pl(r.rescue, 'trapped partymate')}` },
   { k: 'wall', name: 'Wall', score: r => r.tanked, min: 1, why: r => `tanked ${k(r.tanked)}` },
   { k: 'conductor', name: 'Conductor', score: r => r.combo + 0.5 * r.setup, min: 1, why: r => [r.combo && pl(r.combo, 'combo'), r.setup && pl(r.setup, 'setup')].filter(Boolean).join(', ') },
   { k: 'breaker', name: 'Breaker', score: r => r.break + 0.25 * r.switch, min: 1, why: r => [r.break && pl(r.break, 'Break'), r.switch && pl(r.switch, 'Switch', 'Switches')].filter(Boolean).join(', ') },
@@ -53,7 +55,7 @@ export const FALLBACK_TITLE = { k: 'steady', name: 'Steady Hand', why: () => 'th
 export function mvpScore(r, tot) {
   const sh = key => (tot[key] > 0 ? r[key] / tot[key] : 0);
   return sh('dmg') + 0.8 * sh('heal') + 0.7 * sh('tanked') + 0.05 * (r.combo + r.setup + r.break + r.switch + r.burst)
-    + 0.2 * r.revive + 0.12 * r.save + 0.06 * r.cover + 0.02 * r.flank + 0.05 * r.mechanic + 0.15 * r.lastAttack - 0.08 * r.death;
+    + 0.2 * r.revive + 0.12 * r.save + 0.12 * r.rescue + 0.06 * r.cover + 0.02 * r.flank + 0.05 * r.mechanic + 0.15 * r.lastAttack - 0.08 * r.death;
 }
 
 // rows: [{ id, name, cls, bot, lvl, ...stats }] -> the card: { boss, floor, result, secs, rows (best first, each with

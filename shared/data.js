@@ -1,6 +1,7 @@
 // Shared game data and helpers, imported by both the server and the browser client.
 import { F2, F2_MOB_IDS, F2_MOBS, F2_BITE, SOVEREIGN, inCamp2, walkable2, areaName2, floor2Obstacles } from './floor2.js';
 import { F3, F3_MOB_IDS, F3_MOBS, F3_BITE, F3_RARES, COLOSSUS, inCamp3, walkable3, areaName3, floor3Obstacles } from './floor3.js';
+import { RESCUE_MOB_IDS, RESCUE_MOBS } from './rescue.js';
 import { AREA_COLLIDERS } from './arenas.js'; // multi-area boss fights (J2): the active area's walls and pillars
 import { LANCER } from './classes/lancer.js';
 import { BARD } from './classes/bard.js';
@@ -210,6 +211,9 @@ Object.assign(MOBS, F2_MOBS);
 // Floor 3 enemies (shared/floor3.js), appended after Floor 2's.
 MOB_IDS.push(...F3_MOB_IDS);
 Object.assign(MOBS, F3_MOBS);
+// Trap objects (shared/rescue.js, J1): `prop` mobs, appended after Floor 3's.
+MOB_IDS.push(...RESCUE_MOB_IDS);
+Object.assign(MOBS, RESCUE_MOBS);
 
 export const xpToNext = lvl => 50 * lvl;
 

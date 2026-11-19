@@ -121,7 +121,7 @@ F2 calls the others through these names, so keep them exactly. Every server meth
 | F6 | `ringBell(floor, { auto })`; `game.bellAuto` (true by default; F2 sets false during a show) | `{ t: 'bell', floor, n }` |
 | F2 | `game.director` (server/director.js): `load(yamlText)`, `validate()`, `run({ from, force })`, `stop()`, `status()` | `emote` `{ t, id, a }` (cheer, block, cast, hit, die); otherwise uses F1/F3–F6 |
 
-- **Movement names:** `forceBossMove` takes `horn_sweep`, `slam`, `charge`, `quake`, `rockfall` (Warden) and `tidal_wave`, `geyser`, `trident`, `deluge` (Sovereign); `hammerfall`, `lightning`, `gale_push`, `overload`, `tempest_beam` (Colossus, H4); `meteor`, `spread`, `tether` (team mechanics, any boss: G4).
+- **Movement names:** `forceBossMove` takes `horn_sweep`, `slam`, `charge`, `quake`, `rockfall` (Warden) and `tidal_wave`, `geyser`, `trident`, `deluge` (Sovereign); `hammerfall`, `lightning`, `gale_push`, `overload`, `tempest_beam` (Colossus, H4); `meteor`, `spread`, `tether` (team mechanics, any boss: G4); `vines`, `pillar`, `crystal` (rescue traps, any boss: J1).
 - **Merging (several agents at once):** merge into `main` and push under a lock, so two merges never interleave:
   `flock /home/claude/floorbound/.git/fb-merge.lock -c 'cd /home/claude/floorbound && git merge --no-ff feat/<name> && <run all tests> && git -c push.negotiate=true push --force-with-lease origin main'`.
   Resolve conflicts keeping both sides. If the push gets HTTP 429 from the proxy, wait 5 s and retry once. Then remove your worktree and branch, and update the tracker row.
@@ -472,8 +472,8 @@ Same rules as F–I: flock lock, push with `--force-with-lease`.
 
 | Task | Branch | Status | Owner | Merge |
 |---|---|---|---|---|
-| J1 Rescue mechanics | `feat/rescue` | in progress | agent rescue | |
-| J2 Multi-area boss fights (Floor 3 first) | `feat/arenas` | in progress | agent arenas | |
+| J1 Rescue mechanics | `feat/rescue` | done | agent rescue | db4a5a7 |
+| J2 Multi-area boss fights (Floor 3 first) | `feat/arenas` | done | agent arenas | f0fdc9c |
 | J3 Boss timing tables + melee openings + tuning harness | `feat/openings` | todo (after J1 and J2) | | |
 | J4 Threat rules | `feat/threatrules` | done | agent threatrules | 2e52b29 |
 

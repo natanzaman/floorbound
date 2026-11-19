@@ -33,7 +33,7 @@ export const ACTIONS = [
   { id: 'selectAimed', label: 'Select what you aim at', group: 'Target', type: 'button' },
   { id: 'clearTarget', label: 'Clear target', group: 'Target', type: 'button' },
   { id: 'interact', label: 'Interact', group: 'World', type: 'button' },
-  { id: 'revive', label: 'Revive (hold, next to a downed ally)', group: 'World', type: 'hold', context: 'downedAlly' },
+  { id: 'revive', label: 'Revive / cut free (hold, next to a downed or trapped ally)', group: 'World', type: 'hold', context: 'downedAlly' }, // (context: a downed ally, or one in Thornbind vines, in reach)
   { id: 'item1', label: 'Potion', group: 'Items', type: 'button' },
   { id: 'item2', label: 'Tonic', group: 'Items', type: 'button' },
   { id: 'item3', label: 'Draught', group: 'Items', type: 'button' },
