@@ -26,6 +26,7 @@ import { installStyles } from './styles.js';
 import { altStyle } from '../shared/styles.js';
 import { installTalents } from './talents.js';
 import { installPacing } from './pacing.js';
+import { installNamed } from './named.js';
 import { installTracking } from './trackgame.js';
 import { installBell } from './bell.js';
 import { installStaging } from './staging.js';
@@ -788,7 +789,7 @@ export class Game {
     if (m.rare) return this.killRare(m, killer);
     const party = this.partyOf(killer);
     const ids = party ? party.members : [killer.id];
-    const recips = ids.map(id => this.players.get(id)).filter(p => p && !p.dead && dist(p, m) <= 30);
+    const recips = ids.map(id => this.players.get(id)).filter(p => p && !p.dead && dist(p, m) <= 30 && !p.named); // (the Named take no share: server/named.js)
     if (!recips.length) recips.push(killer);
     const share = Math.round((m.def.xp * (1 + 0.2 * (recips.length - 1))) / recips.length);
     for (const p of recips) { this.giveXp(p, share); this.dropLoot(p, m); }
@@ -1391,4 +1392,5 @@ installTeamplay(Game); // skill combos between players, the Team Burst gauge, te
 installMvp(Game); // the post-fight MVP card from the team stats, downs and deaths; in the fight's tracking row (server/mvp.js); after the team play
 installLoot(Game); // loot and builds: drops from shared/loot.js, gear in p.tal, set rules, loadouts (server/loot.js); after the talents and team play
 installLooks(Game); // character looks: setLook(entity, id), listed in snapshots as w.looks (server/looks.js)
+installNamed(Game); // the Named: humans-first rules, friendship, invites by tier (server/named.js); a no-op without a NamedManager
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last

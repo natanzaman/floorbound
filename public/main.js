@@ -25,6 +25,7 @@ import { initClassesB } from '/classes-b.js';
 import { initClassesA } from '/classes-a.js';
 import { initStyles } from '/styles.js';
 import { initPlayerBots } from '/playerbots.js';
+import { initNamed } from '/named.js'; // the Friends tab: the Named and your friendship with them
 import { snapPoses, poseFrame } from '/poses.js'; // kneel / sit / bow (F5)
 import { initTalents } from '/talents.js';
 import { initLoot } from '/loot.js'; // affixes, set progress, loadouts, item tooltips (H2)
@@ -266,6 +267,8 @@ const styles = initStyles({ state, players, fx, sfx, shake: a => shake(a), float
 const looks = initLooks({ players, mobs }); // character looks: the Named's own appearance, on any entity (public/looks.js)
 // Players panel tabs + player-owned bots (public/playerbots.js)
 const pbots = initPlayerBots({ $, send, state, players, log: (a, b) => log(a, b), sfx, rerender: () => { lobby.html = ''; renderPlayers(); } });
+const friends = initNamed({ $, send, state, log: (a, b) => log(a, b), sfx, banner: (a, b) => banner(a, b) }); // public/named.js
+pbots.addTab(friends);
 // talent trees + the Skill Tree window (K): progression track, talents, abilities (public/talents.js)
 const talents = initTalents({ state, players, fx, sfx, send, floatNum, mastery, guide, isTouch, $ });
 const loot = initLoot({ state, send, $, styleTitle: it => styles.title(it), fx, sfx, guide, players, floatNum: (...a) => floatNum(...a) });
@@ -313,6 +316,7 @@ function onMessage(msg) {
   if (msg.type === 'roster') {
     state.roster = new Map(msg.players.map(p => [p.id, p]));
     for (const [id, e] of players) { const r = state.roster.get(id); if (r) e.name = r.name; }
+    if (!state.spectator && msg.players.some(p => p.named)) guide.tip('named'); // the Named are around (Friends tab)
     renderPlayers();
     return;
   }
@@ -321,6 +325,7 @@ function onMessage(msg) {
   if (talents.onMessage(msg)) return; // talent tree (also keeps a copy of the mastery data)
   if (mastery.onMessage(msg)) return; // skill mastery
   if (pbots.onMessage(msg)) return; // player-owned bots (Players panel → Bots tab)
+  if (friends.onMessage(msg)) return; // the Named (Players panel → Friends tab)
   if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); smith.render(); return; }
   if (msg.type === 'hall') { state.hallData = msg; renderHall(); bell.hall(msg); return; }
   if (msg.type === 'snap') {
@@ -1192,6 +1197,9 @@ function renderHall() {
     h += d2.first ? `<div class="first"><b>${hallParty(d2.first)}</b><small>${fmtDate(d2.first.at)} · ${fmtSecs(d2.first.secs)} · ${hallMeta(d2.first)}</small></div>` : '<div class="empty">The Drowned Sovereign still rules the Sunken Court.</div>';
     if (d2.fastest.length) h += '<h4>Fastest Floor 2 clears</h4>' + d2.fastest.map((r, i) => `<div class="row"><span class="n">${i + 1}</span><span class="t">${fmtSecs(r.secs)}</span><span class="who">${hallParty(r)}<small>${fmtDate(r.at)} · ${hallMeta(r)}</small></span></div>`).join('');
   }
+  if (d.heroes?.length) { // clears by the Named alone: kept apart from the players' lists (server/hall.js)
+    h += "<h4>Heroes' record</h4>" + d.heroes.map(r => `<div class="row"><span class="t">${fmtSecs(r.secs)}</span><span class="who">${hallParty(r)}<small>Floor ${r.floor} · ${ago(r.at)} · ${hallMeta(r)}</small></span></div>`).join('');
+  }
   el.innerHTML = h;
 }
 $('hall').addEventListener('click', e => { if (e.target.closest('[data-a="close"]')) { toggleHall(false); sfx.play('ui'); } });
@@ -1376,13 +1384,15 @@ function sendChat(raw) {
 $('players-btn').onclick = () => { $('players').classList.toggle('hidden'); lobby.html = ''; renderPlayers(); };
 function renderPlayers() {
   if ($('players').classList.contains('hidden')) return;
-  const nBots = [...state.roster.values()].filter(r => r.bot).length, nReal = state.roster.size - nBots;
-  if (pbots.tab === 'bots') return pbots.render($('players'), nReal, nBots); // Bots tab (public/playerbots.js)
+  const nNamed = [...state.roster.values()].filter(r => r.named).length; // the Named have the Friends tab (public/named.js)
+  const nBots = [...state.roster.values()].filter(r => r.bot && !r.named).length, nReal = state.roster.size - nBots - nNamed;
+  if (pbots.tab !== 'players') return pbots.render($('players'), nReal, nBots); // Bots / Friends tab (public/playerbots.js)
   const rows = [], botRows = [];
   let online = 0;
   // A bot that's in a party with a real player declines invites, so say so instead of offering a button.
   const humanParty = pid => pid && [...state.roster].some(([i, x]) => !x.bot && players.get(i)?.party === pid);
   for (const [id, r] of state.roster) {
+    if (r.named) continue;
     if (r.bot) { // bots get their own section (managing them is on the Bots tab)
       const p = players.get(id);
       const inParty = state.party && p?.party === state.party;

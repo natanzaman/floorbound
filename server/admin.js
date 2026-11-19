@@ -18,6 +18,7 @@ import { floorOf } from '../shared/floor2.js';
 import { MASTERY, BRANCHES, newMastery, masteryLevel } from '../shared/mastery.js';
 import { newTalents, allocError, TREES, spendBlock, nodesOf, pointsAt } from '../shared/talents.js';
 import { BEHAVIOURS } from './botmanager.js';
+import { isNamedName } from '../shared/named.js';
 import * as hall from './hall.js';
 import * as track from './track.js';
 
@@ -158,6 +159,7 @@ function applyEdit(c, body, online) {
   if (body.name !== undefined) {
     const name = String(body.name).trim().replace(/\s+/g, ' ');
     if (!NAME_RE.test(name)) throw new Bad('Names are 3–16 letters or numbers (spaces, _ . - allowed inside).');
+    if (process.env.NAMED_ENABLED !== '0' && isNamedName(name)) throw new Bad('That name belongs to one of the Named.', 409);
     c.name = name;
   }
   if (body.cls !== undefined && body.cls !== c.cls) {
@@ -383,7 +385,7 @@ async function playersList() {
   });
   // Anonymous (unsaved) players who are online right now
   const anon = livePlayers().filter(p => !p.charId && !p.bot).map(p => ({ gameId: p.id, name: p.name, cls: p.cls, lvl: p.lvl, area: areaName(p.x, p.z), floor: floorOf(p.x) }));
-  const nbots = livePlayers().filter(p => p.bot).length;
+  const nbots = livePlayers().filter(p => p.bot && !p.named).length; // (the Named have their own card: server/named.js)
   return { players: out, anon, bots: nbots };
 }
 
@@ -393,7 +395,7 @@ function summary() {
   const clears = [...(h.recent || []), ...(h.floors?.[2]?.recent || [])].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 6)
     .map(r => ({ at: r.at, floor: r.floor, secs: r.secs, deaths: r.deaths, players: r.players.map(p => ({ name: p.name, cls: p.cls })), lastAttack: r.lastAttack }));
   return {
-    players: live.filter(p => !p.bot).length, accounts: live.filter(p => !p.bot && p.charId).length, bots: live.filter(p => p.bot).length, maxBots: bots.max,
+    players: live.filter(p => !p.bot).length, accounts: live.filter(p => !p.bot && p.charId).length, bots: live.filter(p => p.bot && !p.named).length, named: live.filter(p => p.named).length, maxBots: bots.max,
     uptime: Math.round(process.uptime()), floorClears: game.floorClears,
     twist: game.twist ? { id: game.twist.id, name: game.twist.name } : null, clears,
   };

@@ -402,6 +402,17 @@ Same rules as F/G/H (flock lock, push with `--force-with-lease`).
    - a run shows the Heroes clearing the Warden on their own;
    - screenshots of the Friends tab.
 
+**Built (I1):**
+- **Who:** the Hearthward (Halvard, Guardian tank; Maribel, Cleric healer; Tovin, Ranger; Sennet, Lancer) and Cairn the loner (Berserker, Warhammer). Data, rules and canned lines: `shared/named.js`.
+- **Where:** `server/named.js` (`installNamed` wrappers on Game + `NamedManager`), `server/named-admin.js`, `public/named.js` (Friends tab), `public/admin-named.js`, tables `named_chars` and `named_friendship`, `floor_clears.heroes`. README "The Named" has every number.
+- **Contract for I3 / I4:**
+  - `game.namedFriendship(player, namedId)` → `{ pts, tier, tierIndex, tierName, left }` (or `null`: no such Named, a bot, or `NAMED_ENABLED=0`).
+  - `game.addFriendship(player, namedId, amount, reason)` → `{ d, pts, tier, up }`. `reason` is a source: `chat` (already capped at +3 a day and never across a tier; negative amounts never cost a tier), `request`, or any `GAINS` key. Everything shares the one daily cap per Named.
+  - `game.named` is the manager: `chars` (id → `{ def, lvl, e (the BotManager entry), … }`), `playerOf(st)`, `say(p, text)` (a speech bubble), `hostOf(p)`, `listFor(player)`. Each `def` has `persona`, `blurb`, `trust` and `namedLine(def, key, vars)` canned lines (`refuse`, `busy`, `taken`, `join`, `called`, `home`, `raid`).
+  - The existing AI minds skip `e.named` entries (`server/ai/index.js`), so I3's talk path is the only one that speaks for them.
+  - Client: `{ type: 'named', op: 'fr', … }` already drives tier-up banners; add ops beside `list` / `invite` / `call` in `NamedManager.handle`.
+- **Left for later:** Floor 2 and 3 boss attempts by the Named are wired but only bot-tested on Floor 1; "attacking their target off-cue" and trade or gifts were cut by the review; the away line is flavour only.
+
 ### I2. The loner's look (`feat/lonerlook`)
 Give the loner a **recognisable character look**, original and not copied from any anime or game. He needs a strong silhouette at distance:
 - e.g. a long tattered coat or cloak, a hood or mask, a distinct hair colour, a signature weapon model (oversized or unusual), a colour scheme nobody else uses, and a subtle aura or trail.

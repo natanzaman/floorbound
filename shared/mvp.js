@@ -63,14 +63,18 @@ export function buildCard({ boss, floor, result, secs, rows }) {
   const tot = Object.fromEntries(MVP_KEYS.map(key => [key, rows.reduce((s, r) => s + r[key], 0)]));
   for (const r of rows) r.score = Math.round(mvpScore(r, tot) * 1000) / 1000;
   rows.sort((a, b) => b.score - a.score || b.dmg - a.dmg);
-  const card = { boss, floor, result, secs, rows, tot, mvp: rows[0]?.id ?? 0 };
+  // Humans first: with anyone else in the fight, the Named (rows with `named`, shared/named.js) take a title or the MVP only when no human (else no other fighter) earns it.
+  const mixed = rows.some(r => r.named) && rows.some(r => !r.named), humans = rows.filter(r => !r.bot && !r.named);
+  const first = !mixed ? rows : humans.length ? humans : rows.filter(r => !r.named);
+  const card = { boss, floor, result, secs, rows, tot, mvp: first[0]?.id ?? 0 };
   for (const t of MVP_TITLES) {
     if (t.each) { for (const r of rows) if (t.ok(r, card)) r.titles.push(t.k); continue; }
     let best = null, bs = 0;
-    for (const r of rows) { const s = t.score(r); if (s > bs + 1e-9) { best = r; bs = s; } } // rows are best-first: ties keep the higher MVP
+    for (const r of first) { const s = t.score(r); if (s > bs + 1e-9) { best = r; bs = s; } } // rows are best-first: ties keep the higher MVP
+    if (mixed && (!best || bs < t.min)) { best = null; bs = 0; for (const r of rows) { const s = t.score(r); if (s > bs + 1e-9) { best = r; bs = s; } } }
     if (!best || bs < t.min) continue;
     if (best.titles.length && !t.exact) { // spread: the best fighter still without a title, if close enough
-      const alt = rows.filter(r => !r.titles.length && t.score(r) >= Math.max(t.min, bs * SHARE)).sort((x, y) => t.score(y) - t.score(x))[0];
+      const alt = (best.named ? rows : first).filter(r => !r.titles.length && t.score(r) >= Math.max(t.min, bs * SHARE)).sort((x, y) => t.score(y) - t.score(x))[0];
       if (alt) best = alt;
     }
     best.titles.push(t.k);

@@ -201,7 +201,7 @@ export class PlayerBots {
   // ---------- list ----------
   list(p, admin = false) {
     const g = this.game, myParty = p.party || 0;
-    const bots = this.mgr.bots.filter(e => !e.b.closed).map(e => {
+    const bots = this.mgr.bots.filter(e => !e.b.closed && !e.named).map(e => { // (the Named have the Friends tab)
       const v = this.mgr.view(e), rec = this.owned.get(e.bid), b = this.mgr.livePlayer(e);
       const mine = this.isMine(p, rec);
       const owner = rec ? (this.ownerOf(rec)?.name || rec.ownerName) : '';

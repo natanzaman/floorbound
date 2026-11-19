@@ -12,7 +12,7 @@ import { buildCard, compactCard } from '../shared/mvp.js';
 
 export const MVP = { delay: { kill: 5, wipe: 3 }, minSecs: 5 }; // seconds before the card shows; shorter fights get none
 
-const meta = p => ({ name: p.name, cls: p.cls, bot: !!p.bot, lvl: p.lvl });
+const meta = p => ({ name: p.name, cls: p.cls, bot: !!p.bot, lvl: p.lvl, ...(p.named ? { named: 1 } : {}) });
 
 const methods = {
   // The card for fight f (built once, cached on it), or null when nobody really fought.

@@ -553,6 +553,7 @@ function assistTarget(b, P, anchor, here, leading) {
 function pickProgress(b, here, minBoss) {
   const lvl = b.me?.lvl || 1, fl = floorOf(b.x), f2 = fl > 1; // (f2: any floor above the first)
   minBoss ??= BOSS_LVL[fl];
+  if (b.noBoss) minBoss = 99; // told to keep to the field (the Named, server/named.js)
   const boss = here.find(m => m.type === FLOOR_BOSS[fl]);
   if (boss && b.z > 162 && lvl >= minBoss) return boss;
   const want = lvl >= minBoss ? null : f2 ? 'mire' : lvl < 3 ? 'boar' : 'wolf';
@@ -606,7 +607,7 @@ function idle(b, P, M) {
   const beh = M.beh, fl = floorOf(b.x), lvl = b.me?.lvl || 1;
   if (beh === 'follow') return;
   if (beh === 'field') { const [x, z] = fieldSpot(b); moveToward(b, x, z, 1); return; }
-  if (beh !== 'warden' && lvl < BOSS_LVL[fl]) { moveToward(b, FLOOR_X[fl], fl > 1 ? 70 : 60); return; } // into the field
+  if (beh !== 'warden' && (b.noBoss || lvl < BOSS_LVL[fl])) { moveToward(b, FLOOR_X[fl], fl > 1 ? 70 : 60); return; } // into the field
   travelToBoss(b);
 }
 
@@ -629,6 +630,7 @@ function goalText(b, P, M, tgt) {
   if (b.waitFrom != null && b.t - b.waitFrom < 20) return 'Waiting for the party';
   if (M.beh === 'field') return 'Farming the field';
   if (M.beh === 'follow') return `Looking for ${b.follow || 'a player'}`;
+  if (M.beh !== 'warden' && b.noBoss) return floorOf(b.x) > 1 ? 'Hunting the field' : 'Farming the field';
   if (M.beh !== 'warden' && (b.me?.lvl || 1) < BOSS_LVL[floorOf(b.x)]) return 'Levelling up';
   const boss = ({ 1: 'Warden', 2: 'Sovereign', 3: 'Colossus' })[floorOf(b.x)];
   if (inBossRoom(b.x, b.z) && !b.mobs.some(m => m.def.boss && floorOf(m.x) === floorOf(b.x))) return `Waiting for the ${boss} to rise`; // killed: it respawns here

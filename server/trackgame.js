@@ -11,7 +11,7 @@ import { inArena2, floorOf } from '../shared/floor2.js';
 import { inArena3 } from '../shared/floor3.js';
 import { defaultStyle } from '../shared/styles.js';
 
-const who = p => ({ bot: !!p.bot, cls: p.cls, key: p.charId ? `c${p.charId}` : `s${p.sid}`, lvl: p.lvl });
+const who = p => ({ bot: !!p.bot, cls: p.cls, key: p.charId ? `c${p.charId}` : `s${p.sid}`, lvl: p.lvl, ...(p.named ? { named: p.named } : {}) });
 
 const TrackMethods = {
   activeFightOf(p) {
@@ -38,13 +38,14 @@ const TrackMethods = {
   },
   trackFight(floor, f, result, m) {
     if (!f) return;
-    const w = f.who || [], hum = w.filter(x => !x.bot), bots = w.filter(x => x.bot);
+    const w = f.who || [], hum = w.filter(x => !x.bot), bots = w.filter(x => x.bot), named = bots.filter(x => x.named);
+    if (!hum.length && named.length && named.length === bots.length) return; // a fight of the Named alone isn't play data (server/named.js)
     this.mvpCard?.(floor, f, result, m); // the MVP card (server/mvp.js), cached on the fight
     const mvp = this.mvpCompact?.(f);
     this.track(null, 'fight', {
       floor, result, secs: Math.round(this.time - f.start), phase: m.phase | 0, hpLeft: result === 'wipe' ? Math.round((m.hp / m.maxHp) * 100) : 0,
       ...(floor === 1 && this.twist ? { twist: this.twist.id } : floor === 3 && this.twist3 ? { twist: this.twist3.id } : {}),
-      humans: hum.length, bots: bots.length, deaths: f.hd || 0, botDeaths: f.bd || 0,
+      humans: hum.length, bots: bots.length, ...(named.length ? { named: named.length } : {}), deaths: f.hd || 0, botDeaths: f.bd || 0,
       party: hum.map(x => x.key).sort(), cls: hum.map(x => x.cls).sort(), botCls: bots.map(x => x.cls).sort(),
       lvl: hum.length ? Math.round(hum.reduce((s, x) => s + x.lvl, 0) / hum.length) : Math.round(bots.reduce((s, x) => s + x.lvl, 0) / (bots.length || 1)),
       ...(mvp ? { mvp } : {}),

@@ -56,7 +56,10 @@ export const RULES = {
   partyIdle: 600,      // an invited Named goes home after this long with no fighting (s)
   summonCd: 600,       // a Sworn summon: first come, then this long before anyone can call them again (s)
   whisperCd: 3600,     // the loner's raid invite: at most one an hour per player (and none after a decline that session)
-  bossEvery: [900, 1500], // seconds of farming between their own boss attempts
+  bossFirst: [240, 420], // seconds of farming before their first boss attempt of a visit
+  bossEvery: [900, 1500], // …and between attempts after that
+  bossRetry: 180,      // a human was at the arena: look again after this long
+  bossGiveUp: 360,     // heading for a boss that never started: back to farming
   linger: 8,           // seconds they stay after the last human leaves
 };
 
@@ -113,6 +116,34 @@ export const NAMED = [
     trust: LONER_TRUST,
   },
 ];
+// Canned lines (I3's AI replaces them when it's on). {who}: the player, {tier}: the tier they need.
+const LINES = {
+  heroes: {
+    refuse: ["We don't know you well enough yet, {who}. Fight beside us a while.", 'Not yet, {who}. Earn it in the field first.'],
+    busy: ['Bad timing, {who}. Ask me after this.', "I'm in the middle of something, {who}."],
+    taken: ['One of us at a time, {who}. The others hold the line.'],
+    join: ['With you, {who}.', "Right. Let's go, {who}."],
+    called: ['You called, {who}. Here.', 'On my way was the easy part. What do you need, {who}?'],
+    home: ["Quiet out here. I'm heading back to the others.", 'Back to the Hearthward for me. Call if you need us.'],
+    downed: ['You were right there, {who}.'],
+  },
+  loner: {
+    refuse: ['No.', 'I hunt alone.', "Don't ask me that again."],
+    busy: ['Later.'],
+    taken: ['You already have company.'],
+    join: ['Fine. Keep up.'],
+    called: ['You called. I came.'],
+    home: ["We're done here."],
+    downed: ['Noted, {who}.'],
+    raid: ["I'm going for the boss. Come if you want, {who}. I won't ask twice."],
+  },
+};
+export function namedLine(def, key, vars = {}, rnd = Math.random) {
+  const list = def?.lines?.[key] || LINES[def?.group]?.[key] || [];
+  const t = list[Math.floor(rnd() * list.length)] || '';
+  return t.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+}
+
 export const NAMED_BY_ID = Object.fromEntries(NAMED.map(n => [n.id, n]));
 export const NAMED_IDS = NAMED.map(n => n.id);
 export const namedIn = group => NAMED.filter(n => n.group === group);
@@ -174,7 +205,7 @@ export const canSummon = (def, pts) => tierIndex(pts) >= tierAt(def.trust.summon
 // and never below what they already are.
 export function namedLevel(levels, { offset = LEVEL_OFFSET, cap = MAX_LEVEL, floor = 1 } = {}) {
   const top = [...levels].filter(l => l > 0).sort((a, b) => b - a).slice(0, LEVEL_TOP);
-  const base = top.length ? Math.round(top.reduce((s, l) => s + l, 0) / top.length) + offset : 1;
+  const base = (top.length ? Math.round(top.reduce((s, l) => s + l, 0) / top.length) : 1) + offset; // (nobody to follow yet: level 1 + the offset)
   return Math.max(1, Math.min(cap, Math.max(floor | 0, base)));
 }
 

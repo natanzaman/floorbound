@@ -76,7 +76,7 @@ function human(name, cls = 'swordsman') {
   return h;
 }
 
-const srv = spawn(process.execPath, [path.join(root, 'server/index.js')], { env: { ...process.env, PORT: String(PORT), MAX_BOTS: '10', START_LEVEL: '6', TEST_HOOKS: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+const srv = spawn(process.execPath, [path.join(root, 'server/index.js')], { env: { ...process.env, PORT: String(PORT), MAX_BOTS: '10', START_LEVEL: '6', TEST_HOOKS: '1', NAMED_ENABLED: '0' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let log = '';
 srv.stdout.on('data', d => { log += d; }); srv.stderr.on('data', d => { log += d; });
 
