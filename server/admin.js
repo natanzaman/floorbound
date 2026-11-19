@@ -11,6 +11,7 @@ import * as accounts from './accounts.js';
 import { CLASSES, MAX_LEVEL, xpToNext, areaName } from '../shared/data.js';
 import { SLOTS, BAG_SIZE, RARITY, CONSUMABLE_IDS, makeItem, lastAttackItem, lastAttackItem2, newInventory } from '../shared/items.js';
 import { STYLES } from '../shared/styles.js';
+import { SETS, AFFIX_COUNT, cleanAffixes, rollAffixes, rollGear, makeSetPiece, setSlots, fitAffixes, bestSetFor } from '../shared/loot.js';
 import { MAT_IDS } from '../shared/crafting.js';
 import { STAT_KEYS, TITLE_BY_ID, newStats } from '../shared/titles.js';
 import { floorOf } from '../shared/floor2.js';
@@ -91,7 +92,15 @@ function cleanItem(it, where) {
   if (!it.st || typeof it.st !== 'object' || Object.values(it.st).some(v => typeof v !== 'number' || !isFinite(v))) throw new Bad(`${where}: st must be an object of numbers.`);
   if (it.cls !== undefined && !CLASSES[it.cls]) throw new Bad(`${where}: unknown class ${it.cls}.`);
   if (it.style !== undefined && (STYLES[it.style]?.cls !== it.cls || it.slot !== 'weapon')) throw new Bad(`${where}: style ${it.style} isn't a ${CLASSES[it.cls]?.name || '?'} weapon style.`);
-  return clone(it);
+  const out = clone(it);
+  checkLoot(out, where);
+  return out;
+}
+// Affixes and set of an item (shared/loot.js): validated in place.
+function checkLoot(it, where) {
+  if (it.set != null && !SETS[it.set]?.pieces[it.slot]) throw new Bad(`${where}: ${it.set} has no ${it.slot} piece (sets: ${Object.keys(SETS).join(', ')}).`);
+  if (it.set == null) delete it.set;
+  try { const ax = cleanAffixes(it.ax, it.slot); if (ax?.length) it.ax = ax; else delete it.ax; } catch (e) { throw new Bad(`${where}: ${e}`); }
 }
 
 // Normalise and validate a whole inventory; gives every item a unique u.
@@ -101,6 +110,7 @@ function cleanInv(inv) {
   if (inv.bag.length > BAG_SIZE) throw new Bad(`The bag holds at most ${BAG_SIZE} items.`);
   if (!inv.eq || typeof inv.eq !== 'object') throw new Bad('inv.eq must be an object.');
   const out = { ...clone(inv), bag: inv.bag.map((it, i) => cleanItem(it, `bag[${i}]`)), eq: {}, cons: {}, mats: {} };
+  if (inv.loadouts !== undefined && (!Array.isArray(inv.loadouts) || inv.loadouts.length > 3)) throw new Bad('inv.loadouts must be a list of at most 3 (null or { n, eq, tal }).');
   for (const s of SLOTS) {
     const it = inv.eq[s];
     if (it == null) { out.eq[s] = null; continue; }
@@ -211,8 +221,9 @@ function applyEdit(c, body, online) {
 
 // "Maxed" preset: max level, Floor 2, every skill Mastery 5 (evolved), all talent points spent, best gear, a stock of consumables.
 // Talents follow the class's recommended path (TREES[cls].bot), then any points left go to the first node that accepts one.
-// Gear: an Epic weapon with top rolls (keeping the worn weapon's style), Sovereign's Tidecloak and Horn of the Warden.
-// What was worn goes to the bag while there's room.
+// Gear: a full boss set for the class role (shared/loot.js bestSetFor; the weapon keeps the worn weapon's style), top stat
+// rolls and 3 top role-fit affixes per piece. What was worn goes to the bag while there's room, then the two Last Attack
+// items if the character doesn't have them.
 function maxOut(c) {
   c.lvl = MAX_LEVEL; c.xp = 0; c.stats.floor2 = 1;
   for (const [sk, e] of Object.entries(c.mastery)) { e.pts = Math.max(e.pts | 0, MASTERY.need[MASTERY.max]); if (!e.br && BRANCHES[sk]) e.br = 'A'; }
@@ -222,12 +233,16 @@ function maxOut(c) {
   if (Object.values(t).reduce((a, r) => a + r, 0) <= total) c.talents = t;
   const worn = c.inv.eq.weapon, style = worn?.cls === c.cls ? worn.style : undefined;
   const top = () => 0.999; // the highest roll for every stat
-  const gear = { weapon: makeItem('weapon', 3, c.cls, top, undefined, style), armor: lastAttackItem2(), charm: lastAttackItem() };
+  const set = bestSetFor(c.cls), gear = {};
+  for (const s of SLOTS) gear[s] = SETS[set].pieces[s] ? makeSetPiece(set, s, c.cls, top, style) : makeItem(s, 3, s === 'weapon' ? c.cls : undefined, top, undefined, s === 'weapon' ? style : undefined);
   for (const s of SLOTS) {
+    fitAffixes(gear[s], c.cls, AFFIX_COUNT[3], 0.999);
     const old = c.inv.eq[s];
-    if (old && !(old.la && old.la === gear[s].la) && c.inv.bag.length < BAG_SIZE) c.inv.bag.push(old);
+    if (old && c.inv.bag.length < BAG_SIZE) c.inv.bag.push(old);
     gear[s].u = freeU(c.inv); c.inv.eq[s] = gear[s];
   }
+  const owns = la => [...c.inv.bag, ...SLOTS.map(s => c.inv.eq[s])].some(it => it?.la === la);
+  for (const [la, make] of [[1, lastAttackItem], [2, lastAttackItem2]]) if (!owns(la) && c.inv.bag.length < BAG_SIZE) giveToBag(c, make());
   for (const k of CONSUMABLE_IDS) c.inv.cons[k] = Math.max(c.inv.cons[k] | 0, 20);
 }
 
@@ -251,7 +266,26 @@ function applyOp(c, op) {
       const cls = op.slot === 'weapon' ? (CLASSES[op.cls] ? op.cls : c.cls) : undefined;
       const charm = ['crit', 'haste', 'sw'].includes(op.charm) ? op.charm : undefined;
       const style = cls && STYLES[op.style]?.cls === cls ? op.style : undefined; // weapon style (shared/styles.js)
-      return giveToBag(c, makeItem(op.slot, r, cls, Math.random, charm, style));
+      return giveToBag(c, op.ax === false ? makeItem(op.slot, r, cls, Math.random, charm, style) : rollGear(op.slot, r, cls || c.cls, Math.random, charm, style)); // affixes by rarity unless ax: false
+    }
+    case 'addSet': { // { set, slot: 'weapon' | 'armor' | 'charm' | 'all', style }
+      if (!SETS[op.set]) throw new Bad('Unknown set.');
+      const slots = op.slot === 'all' ? setSlots(op.set) : [op.slot];
+      if (!slots.every(s => SETS[op.set].pieces[s])) throw new Bad(`${SETS[op.set].name} has no ${op.slot} piece.`);
+      if (c.inv.bag.length + slots.length > BAG_SIZE) throw new Bad('The bag is full.');
+      const style = STYLES[op.style]?.cls === c.cls ? op.style : undefined;
+      for (const s of slots) giveToBag(c, makeSetPiece(op.set, s, c.cls, Math.random, style));
+      return;
+    }
+    case 'editItem': { // { u, ax: [{ k, v, s?, c? }] | 'roll', set: id | null }: an item's affixes and set
+      const it = [...c.inv.bag, ...SLOTS.map(s => c.inv.eq[s])].find(x => x && x.u === (op.u | 0));
+      if (!it) throw new Bad('No such item.');
+      if (it.ks) throw new Bad('Keepsakes have no affixes.');
+      if (op.ax === 'roll') { const t = rollAffixes({ ...it, la: 0 }, it.cls || c.cls); it.ax = t.ax; } // fresh affixes by rarity (Last Attack items too)
+      else if (op.ax !== undefined) it.ax = op.ax;
+      if (op.set !== undefined) it.set = op.set || null;
+      checkLoot(it, 'item');
+      return;
     }
     case 'addLastAttack': return giveToBag(c, op.which === 2 ? lastAttackItem2() : lastAttackItem());
     case 'removeItem': {

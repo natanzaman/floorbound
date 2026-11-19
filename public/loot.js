@@ -61,7 +61,7 @@ export function tipHtml(it, eq, cls, worn) {
   return h;
 }
 
-export function initLoot({ state, send, $, styleTitle = () => '' }) {
+export function initLoot({ state, send, $, styleTitle = () => '', fx, sfx, guide, players, floatNum }) {
   const style = document.createElement('style'); style.textContent = CSS; document.head.appendChild(style);
   const tip = document.createElement('div'); tip.id = 'itemtip'; tip.style.display = 'none'; document.body.appendChild(tip);
   const ui = { arm: -1, armT: 0 };
@@ -113,6 +113,7 @@ export function initLoot({ state, send, $, styleTitle = () => '' }) {
   const sameTal = (a, b) => JSON.stringify(Object.entries(a || {}).sort()) === JSON.stringify(Object.entries(b || {}).sort());
   function loadoutsHtml(inv) {
     const lo = inv.lo || [], swap = canSwap();
+    if (state.lvl >= 6) guide?.tip('loadout'); // once
     let h = `<h4>Loadouts</h4><div class="lo"><small class="lo-hint">Save your worn gear (the weapon brings its style) and talents. Swap in town or at a camp, out of combat.</small>`;
     for (let i = 0; i < LOADOUTS; i++) {
       const L = lo[i];
@@ -147,5 +148,23 @@ export function initLoot({ state, send, $, styleTitle = () => '' }) {
     return true;
   }
 
-  return { lines, setTag, setsHtml, loadoutsHtml, click, bindTips, hideTip, canSwap };
+  // A set piece in a drop: a beam in the set's colour and a tip; any gear with affixes: the affix tip.
+  function onLoot(e) {
+    const set = e.items.find(it => it.set && SETS[it.set]);
+    if (set) { fx?.beam(e.x, e.z, parseInt(SETS[set.set].color.slice(1), 16), 4.5); guide?.tip('setpiece'); }
+    else if (state.inv?.bag.some(it => it.ax?.length)) guide?.tip('affix');
+  }
+  // { t: 'loadout', id, i, x, z }: someone swapped loadouts.
+  function event(e) {
+    if (e.t !== 'loadout') return false;
+    fx?.ring(e.x, e.z, 1.6, 0x4ade80, 0.5);
+    if (e.id === state.myId) {
+      sfx?.play('evolve');
+      const p = players?.get(e.id), L = state.inv?.lo?.[e.i];
+      if (p && floatNum) floatNum(p.model.group.position, 3.1, L?.n || `Loadout ${e.i + 1}`, 'talent');
+    }
+    return true;
+  }
+
+  return { lines, setTag, setsHtml, loadoutsHtml, click, bindTips, hideTip, canSwap, onLoot, event };
 }

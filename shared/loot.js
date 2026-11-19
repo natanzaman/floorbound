@@ -17,8 +17,9 @@
 //   Materials still come from MAT_DROPS (shared/crafting.js).
 //
 // HOW TO ADD A SET
-//   SETS.<id> = { name, from (who drops it, for tooltips), color, r (rarity, default 3 = Epic), mul (base-stat multiplier,
-//     default 1), affixes (rolled affixes per piece, default 2),
+//   SETS.<id> = { name, from (who drops it, for tooltips), color, floor (the admin "Maxed" preset picks the highest floor's
+//     set that fits the class role), roles (optional: ['Tank', 'Damage', 'Healer', 'Support']), r (rarity, default 3 = Epic),
+//     mul (base-stat multiplier, default 1), affixes (rolled affixes per piece, default 2),
 //     pieces: { weapon: {}, armor: { name }, charm: { name, charm: 'crit' | 'haste' | 'sw' } }   (2 or 3 slots)
 //     bonus: { 2: [effects], 3: [effects] } }
 //   Effects use the talent shape (shared/talents.js): { stat: <STAT_TEXT key or 'combo' | 'revive'>, v } (percent),
@@ -168,7 +169,7 @@ export function cleanAffixes(ax, slot) {
 // ---------- sets ----------
 export const SETS = {
   hornbound: {
-    name: 'Hornbound', from: 'the Horned Warden', color: '#f59e0b',
+    name: 'Hornbound', from: 'the Horned Warden', color: '#f59e0b', floor: 1, roles: ['Tank', 'Damage'],
     pieces: { weapon: {}, armor: { name: 'Hornbound Plate' }, charm: { name: 'Hornbound Totem', charm: 'crit' } },
     bonus: {
       2: [{ stat: 'posture', v: 15 }, { stat: 'broken', v: 8 }],
@@ -176,7 +177,7 @@ export const SETS = {
     },
   },
   tidebound: {
-    name: 'Tidebound', from: 'the Drowned Sovereign', color: '#22d3ee',
+    name: 'Tidebound', from: 'the Drowned Sovereign', color: '#22d3ee', floor: 2, roles: ['Healer', 'Support'],
     pieces: { weapon: {}, armor: { name: 'Tidebound Mantle' }, charm: { name: 'Tidebound Pearl', charm: 'haste' } },
     bonus: {
       2: [{ stat: 'heal', v: 10 }, { stat: 'hp', v: 8 }],
@@ -192,11 +193,11 @@ export const SET_KEYS = {
 export const setSlots = id => SLOTS.filter(s => SETS[id]?.pieces[s]);
 export const setSize = id => setSlots(id).length;
 
-// A new piece of a set for slot (the weapon is made for cls and rolls a weapon style).
-export function makeSetPiece(id, slot, cls, rnd = Math.random) {
+// A new piece of a set for slot (the weapon is made for cls and rolls a weapon style unless one is given).
+export function makeSetPiece(id, slot, cls, rnd = Math.random, style) {
   const S = SETS[id], P = S?.pieces[slot];
   if (!P) return null;
-  const it = makeItem(slot, S.r ?? 3, cls, rnd, P.charm, slot === 'weapon' ? 'roll' : undefined);
+  const it = makeItem(slot, S.r ?? 3, cls, rnd, P.charm, slot === 'weapon' ? style || 'roll' : undefined);
   if (S.mul && S.mul !== 1) for (const k of Object.keys(it.st)) it.st[k] = Math.round(it.st[k] * S.mul);
   if (slot === 'weapon') it.name = it.style && STYLES[it.style] && !STYLES[it.style].def ? `${S.name} ${STYLES[it.style].noun}` : recipeName({ cls: true, name: S.name }, cls);
   else it.name = P.name;
@@ -307,15 +308,23 @@ export function gearScore(it, cls) {
 }
 // Affixes a premade bot item gets: the best fits for its role, mid rolls (deterministic).
 const BOT_AX = {
-  Tank: { weapon: ['threat', 'posture'], armor: ['hp', 'dr', 'haste'], charm: ['hp', 'haste', 'revive'] },
-  Healer: { weapon: ['heal', 'crit'], armor: ['heal', 'haste', 'hp'], charm: ['heal', 'haste', 'revive'] },
-  Support: { weapon: ['combo', 'sw'], armor: ['haste', 'hp', 'heal'], charm: ['haste', 'combo', 'sw'] },
+  Tank: { weapon: ['threat', 'posture', 'atk'], armor: ['hp', 'dr', 'haste'], charm: ['hp', 'haste', 'revive'] },
+  Healer: { weapon: ['heal', 'crit', 'combo'], armor: ['heal', 'haste', 'hp'], charm: ['heal', 'haste', 'revive'] },
+  Support: { weapon: ['combo', 'sw', 'posture'], armor: ['haste', 'hp', 'heal'], charm: ['haste', 'combo', 'sw'] },
   Damage: { weapon: ['atk', 'crit', 'posture'], armor: ['hp', 'haste', 'dr'], charm: ['atk', 'crit', 'combo'] },
 };
-export function botAffixes(it, cls) {
+// n: how many (default by rarity); q: roll quality 0..1 (0.5 = mid, 0.999 = top).
+export function fitAffixes(it, cls, n, q = 0.5) {
   const role = CLASSES[cls]?.role || 'Damage', want = (BOT_AX[role] || BOT_AX.Damage)[it.slot] || [];
-  const c = AFFIX_COUNT[rarityIdx(it.r)], n = c < 1 ? 0 : c;
-  const ax = want.filter(k => AFFIXES[k].slots.includes(it.slot)).slice(0, n).map(k => ({ k, v: rollValue(k, it.r, () => 0.5) }));
+  if (n === undefined) { const c = AFFIX_COUNT[rarityIdx(it.r)]; n = c < 1 ? 0 : c; }
+  const ax = want.filter(k => AFFIXES[k].slots.includes(it.slot)).slice(0, n).map(k => ({ k, v: rollValue(k, it.r, () => q) }));
   if (ax.length) it.ax = ax; else delete it.ax;
   return it;
+}
+export const botAffixes = (it, cls) => fitAffixes(it, cls);
+
+// The set the admin "Maxed" preset gives: the highest floor's set made for the class role (any set if none is).
+export function bestSetFor(cls) {
+  const role = CLASSES[cls]?.role || 'Damage', ids = Object.keys(SETS).sort((a, b) => (SETS[b].floor || 0) - (SETS[a].floor || 0));
+  return ids.find(id => !SETS[id].roles || SETS[id].roles.includes(role)) || ids[0];
 }
