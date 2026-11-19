@@ -901,8 +901,21 @@ function removeEntity(e) {
 // Keys and mouse buttons arrive as actions (public/input.js, bindings in shared/controls.js, by key code).
 // The gate: nothing but the overlay before you join; under the Game Menu only Esc (no moving, attacking or hotkeys;
 // the game itself keeps running).
-const input = createInput({ isTouch, settings, save: saveSettings, notify: t => log(t, 'sys'),
+const input = createInput({ isTouch, settings, save: saveSettings, notify: t => { log(t, 'sys'); padToast(t); }, ask: (t, answer) => padToast(t, answer),
   gate: a => a === 'perfOverlay' || (state.joined && (a === 'menu' || !gmenu.isOpen())) });
+// Controller toasts (input.js): a short note, or the one-time "Controller detected" question (A / B answer it too).
+function padToast(text, answer) {
+  let el = $('padtoast');
+  if (!el) { el = document.createElement('div'); el.id = 'padtoast'; el.className = 'panel hidden'; document.body.appendChild(el); }
+  el.innerHTML = `<span>${esc(text)}</span>${answer ? '<button data-a="1">Switch (A)</button><button data-a="0">Not now (B)</button>' : ''}`;
+  el.onclick = e => { const b = e.target.closest('[data-a]'); if (b) answer?.(b.dataset.a === '1'); };
+  el.classList.remove('hidden');
+  const close = () => { clearTimeout(el.timer); el.classList.add('hidden'); };
+  clearTimeout(el.timer); el.timer = setTimeout(() => { answer?.(false); close(); }, answer ? 15000 : 4000);
+  return close;
+}
+// Under Controller: no pointer lock, and the touch HUD (stick, lock button) hides while the pad drives play.
+input.onDevice(d => { document.body.classList.toggle('pad', d === 'pad'); if (d === 'pad') freeCursor(); });
 // The old key set, now a view of the input layer (revive.js and rescue.js read keys.has('e'): the revive action).
 const LEGACY_KEYS = { e: 'revive', q: 'turnLeft', j: 'attack', r: 'guard', v: 'botWheel' };
 const keys = { has: k => (LEGACY_KEYS[k] ? input.held(LEGACY_KEYS[k]) : input.key(k.length === 1 ? `Key${k.toUpperCase()}` : k)), clear: () => input.reset() };
@@ -914,8 +927,9 @@ let attackHeld = false;
 
 const onPress = (action, fn) => input.on(action, e => { if (e.down) fn(e); });
 onPress('perfOverlay', () => { perf.toggle(); settingsUi.refresh(); }); // the diagnostics overlay
-onPress('menu', () => { // Esc: close what's open, else clear the target, else the Game Menu
+onPress('menu', e => { // Esc / Start: close what's open, else clear the target, else the Game Menu
   if (gmenu.isOpen()) { if (!gmenu.justOpened()) gmenu.close(); return; }
+  if (e.source === 'pad') escBusy = cursorPanelOpen() || wheel.isOpen() || talents.isOpen() || !!document.getElementById('mvp'); // (Start: no keydown to look at)
   if (escBusy) { panels.close(); if (wheel.isOpen()) wheel.close(); return; }
   if (state.lock || state.focus) { state.lock = 0; state.focus = 0; return; }
   menuOpen();
@@ -949,7 +963,7 @@ onPress('bag', () => toggleBag());
 onPress('interact', () => interact());
 onPress('cover', e => { if (!e.repeat) threat.cover(); }); // Guardian Cover
 ['item1', 'item2', 'item3'].forEach((a, i) => onPress(a, () => useItem(CONSUMABLE_IDS[i])));
-onPress('selectAimed', e => { if (locked()) selectAim(); else selectAt(e.event?.clientX ?? mouse.x, e.event?.clientY ?? mouse.y); }); // Ctrl+click: select (mouse look: what the crosshair is aimed at)
+onPress('selectAimed', e => { if (locked() || e.source === 'pad') selectAim(); else selectAt(e.event?.clientX ?? mouse.x, e.event?.clientY ?? mouse.y); }); // Ctrl+click: select (mouse look: what the crosshair is aimed at)
 onPress('clearTarget', () => clearSelection()); // Ctrl+right-click: deselect
 // Was something open when Esc went down? (Capture phase: before the panels' own Esc handlers close them.)
 let escBusy = false;
@@ -2014,7 +2028,11 @@ function frame(now) {
   frameNo++; entStats.interp = entStats.extrap = entStats.hold = 0;
   frustum.setFromProjectionMatrix(frM4.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); // (last frame's camera)
   corr.step(dt * 1000);
-  input.tick(); input.setContext('downedAlly', !!state.joined && (revive.usesE() || rescue.usesE())); // (pads polled here from K1b; E revives / cuts free instead of turning)
+  input.tick(); input.setContext('downedAlly', !!state.joined && (revive.usesE() || rescue.usesE())); // (pads polled here; E / D-pad down revives / cuts free instead of turning)
+  if (input.device === 'pad' && state.joined && !state.spectator && !gmenu.isOpen()) { // the right stick: camera, or picks on the bot wheel
+    if (wheel.isOpen()) { const s = input.stick(input.bindings('pad').look?.[0]); wheel.point(s.x, s.y); }
+    else { const lk = input.axis('look'); state.yaw -= lk.x * dt * 2.6; state.pitch = Math.min(1.25, Math.max(0.12, state.pitch - lk.y * dt * 1.5)); }
+  }
   const lm = state.joined && !state.spectator ? lockedMob() : null;
   const la = !lm && state.joined && !state.spectator ? focusedAlly() : null;
   const sel = lm || la;

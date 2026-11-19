@@ -613,3 +613,8 @@ html.hc .panel, html.hc .frame, html.hc #log, html.hc #banner, html.hc #callout,
 html.hc .panel, html.hc .frame, html.hc #log { background: rgba(0, 0, 0, .88); border-color: rgba(255, 255, 255, .6); }
 html.hc .panel small, html.hc .frame small, html.hc #log small { opacity: 1; }
 html.hc .num { text-shadow: 0 0 3px #000, 0 0 3px #000, 0 1px 4px #000; }
+/* Controller (K1b): the touch HUD hides while a pad drives play; the bot wheel's stick pick; controller toasts */
+.pad #stick, .pad #knob, .pad #lock-btn { display: none !important; }
+#botwheel .wcmd.pick:not([disabled]) { background: rgba(34,197,94,.28); border-color: #86efac; transform: translate(-50%, -50%) scale(1.08); }
+#padtoast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; gap: 10px; align-items: center; padding: 8px 14px; font-size: 13px; }
+#padtoast.hidden { display: none; }

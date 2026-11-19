@@ -1,0 +1,130 @@
+// Controller smoke test (roadmap K1b): a fake standard pad (17 buttons, 4 axes) through navigator.getGamepads(),
+// checked by game state and sent messages. The "Controller detected" prompt, switching with A, the left stick
+// moves, the right stick turns the camera, X / LB+X / RT / R3, Start opens the Game Menu, and unplugging falls back
+// to keyboard & mouse. K4 does the full harness. Needs Playwright for Node (see test/keys.mjs).
+// Usage: PORT=371xx node test/padsmoke.mjs
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+const { chromium } = await import(process.env.PLAYWRIGHT || 'playwright');
+
+const PORT = +(process.env.PORT || 37110), base = `http://localhost:${PORT}`;
+let n = 0;
+const ok = name => console.log(`  ok ${++n} - ${name}`);
+const angDiff = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+const BTN = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, View: 8, Start: 9, L3: 10, R3: 11, Up: 12, Down: 13, Left: 14, Right: 15 };
+
+const srv = spawn(process.execPath, ['server/index.js'], {
+  env: { ...process.env, PORT: String(PORT), DATABASE_URL: '', START_LEVEL: '10', SPAWN_AT: '0,150', TEST_HOOKS: '1', NAMED_ENABLED: '0' },
+  stdio: ['ignore', 'pipe', 'inherit'],
+});
+let browser;
+try {
+  await new Promise((res, rej) => { srv.stdout.on('data', d => /listening|localhost:\d+/i.test(d) && res()); srv.on('exit', rej); setTimeout(res, 4000); });
+  browser = await chromium.launch({ headless: true, args: ['--enable-unsafe-swiftshader'] });
+  const p = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const errors = [];
+  p.on('pageerror', e => errors.push(e.message));
+  await p.addInitScript(() => {
+    window.__sent = [];
+    const ws = WebSocket.prototype.send;
+    WebSocket.prototype.send = function (d) { try { window.__sent.push(JSON.parse(d)); } catch {} return ws.call(this, d); };
+    // the fake pad: window.__pad.on plugs it in; buttons / axes are set by the test
+    const pad = { id: 'Xbox Wireless Controller (STANDARD GAMEPAD)', index: 0, connected: true, mapping: 'standard', timestamp: 0,
+      buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })), axes: [0, 0, 0, 0] };
+    window.__pad = { on: false, pad };
+    navigator.getGamepads = () => [window.__pad.on ? pad : null, null, null, null];
+  });
+  await p.goto(`${base}/?quality=low`);
+  await p.fill('#name', 'Pad');
+  await p.click('.cls[data-id=guardian]');
+  await p.click('#enter');
+  await p.waitForFunction(() => window.__fb?.state?.joined && window.__fb.state.inv, null, { timeout: 60000 });
+
+  // ---- helpers: presses are held for N polled frames (__fb.input.frames) ----
+  const S = (fn, arg) => p.evaluate(fn, arg);
+  const frames = k => S(k => new Promise(r => { const end = window.__fb.input.frames + k; const f = () => (window.__fb.input.frames >= end ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), k);
+  const mark = () => S(() => window.__sent.length);
+  const sent = (m, type) => S(([m, t]) => window.__sent.slice(m).filter(o => o.type === t), [m, type]);
+  const btn = (name, down) => S(([i, d]) => { const b = window.__pad.pad.buttons[i]; b.pressed = d; b.value = d ? 1 : 0; }, [BTN[name], down]);
+  const press = async (names, k = 3) => { for (const nm of names) await btn(nm, true); await frames(k); for (const nm of [...names].reverse()) await btn(nm, false); await frames(2); };
+  const axes = a => S(a => { window.__pad.pad.axes = a; }, a);
+  const keepAlive = () => S(() => window.__fb.send({ type: 'test', hurt: 1 }));
+  const ready = slot => p.waitForFunction(s => performance.now() > window.__fb.state.ready[s] + 50, slot, { timeout: 20000 });
+  const toast = () => S(() => { const el = document.getElementById('padtoast'); return el && !el.classList.contains('hidden') ? el.textContent : null; });
+
+  // ---- plugging it in: the one-time prompt; A switches ----
+  assert.equal(await S(() => window.__fb.input.device), 'kbm');
+  await S(() => { window.__pad.on = true; const e = new Event('gamepadconnected'); e.gamepad = window.__pad.pad; dispatchEvent(e); });
+  await frames(2);
+  assert.match(await toast() || '', /Controller detected/);
+  assert.equal(await S(() => window.__fb.input.device), 'kbm', 'not switched yet');
+  await press(['A']);
+  assert.equal(await S(() => window.__fb.input.device), 'pad', 'A on the prompt switches');
+  assert.ok(await S(() => document.body.classList.contains('pad')), 'body.pad (touch HUD hidden)');
+  assert.equal(await S(() => window.__fb.state.jumpPress > performance.now() - 300), false, 'the answering A did not jump');
+  assert.equal(await S(() => window.__fb.input.label('skill1')), 'X');
+  ok('a new pad asks once; A switches to Controller; labels follow the pad');
+
+  // ---- left stick moves, right stick turns ----
+  await S(() => { window.__fb.state.lock = 0; window.__fb.state.focus = 0; });
+  await axes([0, -1, 0, 0]); await frames(3);
+  { const { dir, yaw } = await S(() => ({ dir: window.__fb.state.moveDir, yaw: window.__fb.state.yaw })); assert.ok(dir !== null && angDiff(dir, yaw) < 0.05, `stick up: forward (${dir} vs ${yaw})`); }
+  await axes([1, 0, 0, 0]); await frames(3);
+  { const { dir, yaw } = await S(() => ({ dir: window.__fb.state.moveDir, yaw: window.__fb.state.yaw })); assert.ok(angDiff(dir, yaw - Math.PI / 2) < 0.05, 'stick right: strafe right'); }
+  await axes([0.1, 0.1, 0, 0]); await frames(2);
+  assert.equal(await S(() => window.__fb.state.moveDir), null, 'inside the deadzone: still');
+  const y0 = await S(() => window.__fb.state.yaw);
+  await axes([0, 0, 1, 0]); await frames(6); await axes([0, 0, 0, 0]); await frames(1);
+  assert.ok(await S(() => window.__fb.state.yaw) < y0 - 0.02, 'right stick right: camera turns right');
+  ok('left stick moves relative to the camera (with a deadzone); right stick turns the camera');
+
+  // ---- buttons: X skill 1, LB+X Team Burst (not skill 1), RT attacks while held, R3 locks on ----
+  await keepAlive(); await ready(1);
+  let m = await mark(); // (skill 1 is ready: LB+X would use it if the modifier layer didn't take the press)
+  await press(['LB', 'X']);
+  assert.equal((await sent(m, 'skill')).filter(o => o.slot === 1).length, 0, 'LB+X is not skill 1');
+  m = await mark();
+  await press(['X']);
+  assert.deepEqual((await sent(m, 'skill')).map(o => o.slot), [1], 'X uses skill 1');
+  await keepAlive(); await ready(0); m = await mark();
+  await S(() => { const b = window.__pad.pad.buttons[7]; b.pressed = true; b.value = 0.8; }); await frames(4);
+  assert.ok((await sent(m, 'skill')).some(o => o.slot === 0), 'RT attacks');
+  await S(() => { const b = window.__pad.pad.buttons[7]; b.value = 0.4; }); await frames(2); // (between the thresholds: still held)
+  assert.ok(await S(() => window.__fb.input.padHeld('RT')), 'trigger hysteresis keeps RT down at 0.4');
+  await S(() => { const b = window.__pad.pad.buttons[7]; b.pressed = false; b.value = 0; }); await frames(2);
+  await p.waitForFunction(() => [...window.__fb.mobs.values()].some(e => !e.dying && !e.hidden && Math.hypot(e.x - window.__fb.state.x, e.z - window.__fb.state.z) < 22), null, { timeout: 30000 });
+  await S(() => { window.__fb.state.lock = 0; });
+  await press(['R3']);
+  assert.ok(await S(() => window.__fb.state.lock) > 0, 'R3 locks on');
+  await press(['LB', 'R3']);
+  assert.equal(await S(() => window.__fb.state.lock), 0, 'LB+R3 clears the target');
+  ok('X skill 1, LB+X not skill 1, RT attacks (trigger hysteresis), R3 locks on, LB+R3 clears');
+
+  // ---- keyboard under Controller: no skills; Start opens the menu ----
+  m = await mark();
+  await p.keyboard.press('Digit2'); await frames(2);
+  assert.equal((await sent(m, 'skill')).length, 0, 'keyboard skills off under Controller');
+  await press(['Start']);
+  assert.ok(await S(() => window.__fb.panels.isOpen('gamemenu')), 'Start opens the Game Menu');
+  await p.waitForTimeout(450); await press(['Start']);
+  assert.ok(!(await S(() => window.__fb.panels.isOpen('gamemenu'))), 'Start again closes it');
+  ok('keyboard keys off under Controller; Start opens and closes the Game Menu');
+
+  // ---- unplugging: holds let go, back to keyboard & mouse with a toast ----
+  await keepAlive(); await ready(0);
+  await S(() => { const b = window.__pad.pad.buttons[7]; b.pressed = true; b.value = 1; }); await frames(3);
+  await S(() => { window.__pad.on = false; dispatchEvent(new Event('gamepaddisconnected')); }); await frames(2);
+  assert.equal(await S(() => window.__fb.input.device), 'kbm', 'back to keyboard & mouse');
+  assert.match(await toast() || '', /disconnected/);
+  await p.waitForTimeout(900); m = await mark(); await frames(3);
+  assert.equal((await sent(m, 'skill')).length, 0, 'the held RT let go');
+  m = await mark(); await ready(2); await p.keyboard.press('Digit2'); await frames(2);
+  assert.deepEqual((await sent(m, 'skill')).map(o => o.slot), [2], 'keyboard works again');
+  ok('unplugging lets go of holds and falls back to keyboard & mouse with a toast');
+
+  assert.deepEqual(errors, [], 'no page errors');
+  console.log(`padsmoke: all ${n} checks passed`);
+} finally {
+  await browser?.close();
+  srv.kill();
+}
