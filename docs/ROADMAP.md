@@ -319,6 +319,64 @@ The owner is adding `ANTHROPIC_API_KEY` in Render (provider `anthropic`, model d
 5. Update the guide, README and admin (warp, spawn Floor 3 bots), and the stats page knows Floor 3.
 6. **Accept when:** a bot party at level 30 can warp there, clear the field and kill the boss; there's a screenshot tour of the zone and every boss telegraph; tests pass.
 
+## I. The Named: AI characters who live in the tower (owner request 2026-11-18)
+Persistent NPC characters who play the game like players do, and whom players can befriend. Owner decisions: build it; **not** the story cast (original characters); **one loner** at first, who must **look like a specific, recognisable character** (his own silhouette and gear, original design, not a copy of any existing IP); one **Heroes Party**.
+
+**Principle:** systems are code; AI (the existing `server/ai/` mind layer) adds conversation, personality, memory, and *bounded* nudges. Combat stays fully coded (the bot brain at capability 5); the AI only sets intent.
+
+### Tracker
+Same rules as F/G/H (flock lock, push with `--force-with-lease`).
+
+| Task | Branch | Status | Owner | Merge |
+|---|---|---|---|---|
+| I1 Named characters + friendship (code) | `feat/named` | todo | | |
+| I2 The loner's look | `feat/lonerlook` | todo | | |
+| I3 Personalities, talk, memory, nudges (AI) | `feat/namedai` | todo (after I1) | | |
+| I4 Requests and invitations | `feat/namedquests` | todo (after I1, I3) | | |
+
+### I1. Named characters + friendship (`feat/named`)
+1. **Data:** `shared/named.js` defines each Named: id, name, class, style, look (I2), group (`heroes` or `loner`), personality numbers (how fast friendship grows from each source, what lowers it, the threshold to accept invites), home zone, and a short persona text for I3.
+   - The **Heroes Party** has 4 members (tank, healer, 2 damage). Give them original names and a party name.
+   - The **Loner** is a solo character with slow trust that grows mostly from fighting beside him and never asking for help. He refuses parties until Friend.
+2. **Living in the world:** they're server-run bots (reuse botmanager / brain at skill 5) that persist across restarts in Postgres (safe migration), log in on a schedule, farm, gear up through H2 loot, attempt bosses, and get carved in the Hall of Clearers.
+   - The Heroes travel as their party; the loner roams alone.
+3. **Level scaling:** they stay at the highest current player level (or the top-3 average) + 2, capped at the level cap. They level up as players do and never drop.
+4. **Friendship per player (0–100) with tiers:** Stranger (0) → Known (15) → Ally (35) → Friend (60) → Sworn (85). Stored per player and character in Postgres.
+   - **Gains:** fight near them, revive them, Cover/heal them, trade or gift, help in their boss fight, finish their request (I4).
+   - **Losses:** stealing their Last Attack, abandoning them downed, attacking their target off-cue (pick sensible rules).
+   - Each gain is capped per day so it can't be farmed.
+5. **Invites by tier:**
+   - **Ally:** a Hero accepts your party invite. The loner only accepts at Friend.
+   - **Sworn:** they'll come when you call (`/b` order or menu) if they're online and free.
+   - Everyone sees their normal party-full and busy rules.
+6. **UI:** a **Friends** tab in the Players panel listing the Named with portrait colour, tier, bar and status (where they are, what they're doing). Tier-up toasts.
+7. **Admin:** see and edit friendship, spawn and despawn the Named, set their level offset.
+8. **Accept when:**
+   - tests cover the tiers, daily caps, invite thresholds, level scaling and persistence;
+   - a run shows the Heroes clearing the Warden on their own;
+   - screenshots of the Friends tab.
+
+### I2. The loner's look (`feat/lonerlook`)
+Give the loner a **recognisable character look**, original and not copied from any anime or game. He needs a strong silhouette at distance:
+- e.g. a long tattered coat or cloak, a hood or mask, a distinct hair colour, a signature weapon model (oversized or unusual), a colour scheme nobody else uses, and a subtle aura or trail.
+
+Build it with the KayKit rig, procedural meshes and materials, the way `public/styles.js` builds weapon models. Make it data-driven (`look` in `shared/named.js`) so the Heroes can get distinct touches too (party colour, emblem). Show a portrait or swatch in the Friends tab and nameplate.
+
+**Accept when:** close-up and in-world screenshots show him readable from 20 m away, and he looks like nobody else in the game.
+
+### I3. Personalities, talk, memory, nudges (`feat/namedai`) — after I1
+1. Each Named gets a persona sheet (voice, likes, dislikes, goals, secrets) in `shared/named.js`. It's fed to the AI mind with their friendship tier for the speaking player and their memories of that player.
+2. Players talk to a Named by name in chat or through a "Talk" button (Friends tab or nameplate); replies come as speech bubbles.
+3. After each exchange the AI returns a structured `sentiment` (−2…+2) and a reason. The code turns it into a **bounded** friendship change (e.g. ±1–3, daily cap) — the AI can never jump tiers.
+4. Memories per Named per player (the existing `ai_memories` table) record what happened together.
+5. Without a key or with AI off, the Named still work: canned lines by tier, and no friendship from chat.
+6. **Accept when:** mock-provider tests cover tier-aware prompts, bounded nudges and fallback; there's a live check with the real key that costs cents.
+
+### I4. Requests and invitations (`feat/namedquests`) — after I1 and I3
+1. **Personal requests** from templates (kill N of a mob, bring N materials, help in a boss fight, escort or spar). The AI picks and phrases them in character; code tracks and rewards them (friendship, gold, a small unique keepsake at Sworn).
+2. **Outreach:** at Friend and above, a Named may message you (whisper / chat) to invite you to a raid or a farm when you're online. Rate-limited, and polite if declined.
+3. **Accept when:** tests cover request tracking and rewards and outreach rate limits.
+
 ## Known issues and backlog
 - Floor 2 is untested by the owner: do a play pass before any Floor 3 work.
 - Bots ignore Floor 2 specifics? (check during C if cheap)
