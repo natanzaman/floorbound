@@ -203,7 +203,7 @@ export class NamedManager {
     if (!p) return `${def.name} isn't around right now.`;
     if (h.party && p.party === h.party) return `${def.name} is already in your party.`;
     const rec = this.peek(h, def.id) || newFriendship();
-    if (!canInvite(def, rec.pts)) return `${def.name} only joins ${art(TIERS[tierAt(def.trust.invite)].name)} (you are ${art(TIERS[tierIndex(rec.pts)].name)}).`;
+    if (!canInvite(def, rec.pts)) return `${def.name} only joins ${art(TIERS[tierAt(def.trust.invite)].name)} (you: ${TIERS[tierIndex(rec.pts)].name}).`;
     return this.freeBlock(h, st, p) || (this.namedInParty(g.partyOf(h)).length ? 'One of the Named per party.' : (g.partyOf(h)?.members.length || 1) >= PARTY_MAX ? 'Your party is full.' : '');
   }
   freeBlock(h, st, p) { // busy rules, the same for an invite and a call
