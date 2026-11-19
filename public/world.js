@@ -9,6 +9,7 @@ import { MOBS } from '/shared/data.js';
 import { makeF2Mob, decorateSovereign } from '/floor2world.js';
 import { makeF3Mob, decorateColossus, F3_POSES, F3_WINDUPS } from '/floor3world.js';
 import { attachClassA } from '/classes-a.js';
+import { fxCount, segs } from '/quality.js'; // effect density and circle detail (graphics quality)
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
 
@@ -748,17 +749,21 @@ export class Effects {
   }
 
   update(dt) {
-    for (const e of this.list) {
+    const L = this.list;
+    let j = 0;
+    for (let i = 0; i < L.length; i++) { // (in place: no new arrays per frame)
+      const e = L[i];
       e.age += dt;
-      const k = Math.min(1, e.age / e.life);
-      e.update?.(e.mesh, k, dt);
+      e.update?.(e.mesh, Math.min(1, e.age / e.life), dt);
+      if (e.age >= e.life) {
+        this.scene.remove(e.mesh);
+        e.mesh.traverse(o => { if (!o.geometry?.userData.shared) o.geometry?.dispose(); o.material?.dispose(); });
+      } else L[j++] = e;
     }
-    for (const e of this.list.filter(e => e.age >= e.life)) {
-      this.scene.remove(e.mesh);
-      e.mesh.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); });
-    }
-    this.list = this.list.filter(e => e.age < e.life);
+    L.length = j;
   }
+  // One geometry per shape and detail, shared by every effect that uses it (never disposed).
+  shared(key, make) { const c = (this.geos ||= new Map()); let g = c.get(key); if (!g) { g = make(); g.userData.shared = true; c.set(key, g); } return g; }
 
   fadeMat(color, opacity = 0.8) {
     return new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false });
@@ -772,7 +777,7 @@ export class Effects {
   }
 
   ring(x, z, r, color = 0xe0f2ff, life = 0.4) {
-    const m = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 48), this.fadeMat(color, 0.9));
+    const n = segs(48), m = new THREE.Mesh(this.shared(`ring${n}`, () => new THREE.RingGeometry(0.85, 1, n)), this.fadeMat(color, 0.9));
     m.rotation.x = -Math.PI / 2; m.position.set(x, 0.3, z);
     this.add(m, life * PACE, (mesh, k) => { mesh.scale.setScalar(Math.max(0.01, r * (0.3 + 0.7 * k))); mesh.material.opacity = 0.9 * (1 - k); });
   }
@@ -786,9 +791,9 @@ export class Effects {
   }
 
   zone(x, z, r, life, color = 0x4ade80) {
-    const m = new THREE.Mesh(new THREE.CircleGeometry(r, 40), this.fadeMat(color, 0.25));
+    const m = new THREE.Mesh(new THREE.CircleGeometry(r, segs(40)), this.fadeMat(color, 0.25));
     m.rotation.x = -Math.PI / 2; m.position.set(x, 0.06, z);
-    const edge = new THREE.Mesh(new THREE.RingGeometry(r - 0.25, r, 48), this.fadeMat(color, 0.7));
+    const edge = new THREE.Mesh(new THREE.RingGeometry(r - 0.25, r, segs(48)), this.fadeMat(color, 0.7));
     m.add(edge); edge.position.z = 0.01;
     this.add(m, life, (mesh, k) => { mesh.material.opacity = 0.25 * (1 - k * 0.6); edge.rotation.z += 0.02; });
   }
@@ -796,11 +801,11 @@ export class Effects {
   // A ground telegraph: a pulsing red edge, a fill that grows to the edge as it lands (easing in, so the last moment
   // reads clearly), and a bright ring closing in from outside that meets the edge exactly on impact.
   telegraph(x, z, r, life, follow) {
-    const g = new THREE.Group();
-    const edge = new THREE.Mesh(new THREE.RingGeometry(r - 0.35, r, 56), this.fadeMat(0xff2a2a, 0.9));
-    const fill = new THREE.Mesh(new THREE.CircleGeometry(r, 56), this.fadeMat(0xff3b3b, 0.32));
-    const base = new THREE.Mesh(new THREE.CircleGeometry(r, 56), this.fadeMat(0x7f1d1d, 0.16));
-    const closer = new THREE.Mesh(new THREE.RingGeometry(0.93, 1, 56), this.fadeMat(0xffd0c0, 0.85));
+    const g = new THREE.Group(), n = segs(56);
+    const edge = new THREE.Mesh(new THREE.RingGeometry(r - 0.35, r, n), this.fadeMat(0xff2a2a, 0.9));
+    const fill = new THREE.Mesh(new THREE.CircleGeometry(r, n), this.fadeMat(0xff3b3b, 0.32));
+    const base = new THREE.Mesh(new THREE.CircleGeometry(r, n), this.fadeMat(0x7f1d1d, 0.16));
+    const closer = new THREE.Mesh(this.shared(`closer${n}`, () => new THREE.RingGeometry(0.93, 1, n)), this.fadeMat(0xffd0c0, 0.85));
     for (const o of [edge, fill, base, closer]) o.rotation.x = -Math.PI / 2;
     base.position.y = -0.01; fill.position.y = 0.005; closer.position.y = 0.012;
     g.add(base, edge, fill, closer); g.position.set(x, 0.08, z);
@@ -885,7 +890,7 @@ export class Effects {
   }
 
   shatter(x, z, big) {
-    const n = big ? 60 : 22;
+    const n = fxCount(big ? 60 : 22, 6);
     for (let i = 0; i < n; i++) {
       const s = (big ? 0.35 : 0.16) * (0.6 + Math.random());
       const m = new THREE.Mesh(new THREE.TetrahedronGeometry(s), this.fadeMat(i % 3 ? 0x9fe3ff : 0xffffff, 1));
@@ -906,6 +911,7 @@ export class Effects {
 
   // Hit sparks: one tiny Points cloud per burst (a single draw call), flung outward and fading fast.
   sparks(x, y, z, n = 8, color = 0xfff3c4, size = 0.22, speed = 7) {
+    n = fxCount(n, 2);
     const pos = new Float32Array(n * 3), vel = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z;

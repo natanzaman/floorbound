@@ -130,6 +130,7 @@ wss.on('connection', ws => {
     if (--budget < 0) return;
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
+    if (msg?.type === 'ping') return void ws.send(`{"type":"pong","t":${+msg.t || 0}}`); // round-trip time for the client's ping readout (public/perf.js)
     if (!player) {
       if (msg.type === 'spectate' && !spectators.has(ws)) {
         spectators.add(ws);
@@ -183,9 +184,10 @@ function tick(dt) {
   const t0 = performance.now();
   game.update(dt);
   const world = game.snapshot();
+  const st = Math.round(game.time * 1000); // st: the server clock (ms) this snapshot is for: clients interpolate on it (shared/netsmooth.js)
   for (const p of game.players.values()) {
     if (p.ws.readyState !== 1) continue;
-    p.ws.send(`{"type":"snap","me":${JSON.stringify(game.meFor(p))},"w":${world}}`);
+    p.ws.send(`{"type":"snap","st":${st},"me":${JSON.stringify(game.meFor(p))},"w":${world}}`);
     if (p.invDirty) { p.invDirty = false; p.ws.send(JSON.stringify(game.invFor(p))); }
     if (p.talentsDirty) { p.talentsDirty = false; p.ws.send(JSON.stringify(game.talentsMsg(p))); } // talent tree: points, ranks
     if (p.masteryDirty && (p.masteryNow || game.time - (p.mSentT || 0) >= 1)) { // skill mastery: at most once a second, at once on a level-up/evolve
@@ -194,7 +196,7 @@ function tick(dt) {
     }
   }
   if (game.rosterDirty) { game.rosterDirty = false; broadcastRoster(); } // e.g. someone changed their title
-  for (const ws of spectators) if (ws.readyState === 1) ws.send(`{"type":"snap","me":null,"w":${world}}`);
+  for (const ws of spectators) if (ws.readyState === 1) ws.send(`{"type":"snap","st":${st},"me":null,"w":${world}}`);
   tickMs[tickN++ % tickMs.length] = performance.now() - t0;
 }
 

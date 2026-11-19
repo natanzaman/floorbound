@@ -356,7 +356,8 @@ input { font: inherit; }
 /* settings + mouse-look crosshair */
 #settings-btn { right: 400px; }
 .touch #settings-btn, .spectator #settings-btn { display: none; }
-#settings { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); right: 10px; width: min(340px, 94vw); padding: 10px 14px; font-size: 13px; z-index: 4; }
+#settings { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); right: 10px; width: min(340px, 94vw); padding: 10px 14px; font-size: 13px; z-index: 4; max-height: calc(100vh - 70px); overflow-y: auto; }
+#settings .note { display: block; opacity: .55; font-size: 11px; margin: 2px 0 4px; }
 #settings .top { display: flex; justify-content: space-between; align-items: center; font-size: 15px; }
 #settings .x { padding: 2px 9px; border-radius: 6px; border: 1px solid rgba(160,200,255,.3); background: transparent; }
 #settings h4 { margin: 12px 0 6px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; opacity: .65; }
@@ -577,3 +578,26 @@ body.mlock #crosshair { display: block; }
 #nq-out .nq-out-from small { opacity: .7; }
 #nq-out .nq-out-text { font-style: italic; margin: 6px 0 10px; font-size: 13px; }
 #nq-out button { margin: 0 4px; padding: 7px 16px; border-radius: 6px; border: 1px solid rgba(160,200,255,.35); background: rgba(120,170,255,.15); font-size: 12px; }
+/* performance overlay (F3 / Settings → Graphics) and the ping chip (public/perf.js) */
+#perf { position: fixed; top: calc(max(10px, env(safe-area-inset-top)) + 48px); right: 10px; z-index: 30; pointer-events: none;
+  font: 600 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; color: #e2e8f0; background: rgba(2,6,23,.72);
+  border: 1px solid rgba(148,163,184,.3); border-radius: 8px; padding: 6px 9px; white-space: nowrap; }
+#ping-chip { position: fixed; top: calc(max(10px, env(safe-area-inset-top)) + 46px); right: 12px; z-index: 6; pointer-events: none;
+  font: 700 11px/1 system-ui, sans-serif; color: rgba(226,232,240,.75); text-shadow: 0 1px 2px #000; }
+#perf.hidden, #ping-chip.hidden { display: none; }
+.spectator #ping-chip { display: none; }
+/* the Game Menu (Esc, or ☰ on phones): public/gamemenu.js */
+#menu-btn { display: none; }
+.touch #menu-btn { display: block; z-index: 7; } /* (above the guide card on short screens) */
+#gamemenu { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(2,6,23,.45); }
+#gamemenu.hidden { display: none; }
+#gamemenu .gm-box { width: min(320px, 92vw); max-height: 86vh; display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; background: rgba(10,16,34,.92); }
+#gamemenu .gm-top { display: flex; justify-content: space-between; align-items: center; font-size: 17px; letter-spacing: .06em; }
+#gamemenu .gm-run { opacity: .65; font-size: 12px; margin-bottom: 4px; }
+#gamemenu .gm-b { display: block; width: 100%; padding: 11px; border-radius: 10px; border: 1px solid rgba(160,200,255,.3); background: rgba(255,255,255,.06); text-align: center; text-decoration: none; color: inherit; font-weight: 600; }
+#gamemenu .gm-b:hover { background: rgba(255,255,255,.12); }
+#gamemenu .gm-b.primary { border: 0; background: linear-gradient(90deg, #3b82f6, #7c3aed); }
+#gamemenu .gm-x { padding: 3px 10px; border-radius: 6px; border: 1px solid rgba(160,200,255,.3); background: transparent; font-size: 12px; }
+#gamemenu .gm-scroll { overflow-y: auto; font-size: 12.5px; line-height: 1.45; opacity: .9; }
+#gamemenu .gm-scroll h4 { margin: 10px 0 4px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; opacity: .65; }
+#gamemenu .gm-scroll p { margin: 0 0 8px; }

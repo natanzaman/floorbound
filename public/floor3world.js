@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { OBSTACLES } from '/shared/data.js';
 import { F3, GATE3, STAIRWAY3 } from '/shared/floor3.js';
+import { Q } from '/quality.js'; // graphics quality (effect density)
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0.04, flatShading: true, ...opts });
 const glow = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
@@ -208,7 +209,8 @@ export function createFloor3(scene, { occluders = [] } = {}) {
       m.position.set(rect.x0 - 20 + k * (rect.x1 - rect.x0 + 40), u.y, u.z);
       m.material.opacity = Math.sin(k * Math.PI) * 0.22;
     }
-    for (let i = 0; i < dustN; i++) {
+    const on = Math.round(dustN * Q.fx); dustGeo.setDrawRange(0, on); // less dust on lower graphics settings
+    for (let i = 0; i < on; i++) {
       const [x, z, ph, h] = seeds[i];
       dp[i * 3] = rect.x0 + (((x - rect.x0) + time * 6 + ph * 3) % (rect.x1 - rect.x0)); dp[i * 3 + 1] = h + Math.sin(time * 1.3 + ph) * 0.3; dp[i * 3 + 2] = z + Math.sin(time * 0.4 + ph) * 1.5;
     }

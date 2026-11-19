@@ -7,7 +7,7 @@ import {
 import { airStep } from '/shared/data.js'; // jump air control
 import { RARITY, CONSUMABLES, CONSUMABLE_IDS, SHOP, MERCHANT, SLOTS, statLabel, sellPrice } from '/shared/items.js';
 import { TITLES, TITLE_BY_ID, DEFAULT_TITLE, HALL, titleProgress } from '/shared/titles.js';
-import { Guide } from '/guide.js';
+import { Guide, STEPS as GUIDE_STEPS } from '/guide.js';
 import { createWorld, makePlayerModel, makeMobModel, Effects, loadAssets } from '/world.js';
 import { initLooks } from '/looks.js';
 import { TwistClient } from '/twists.js';
@@ -38,18 +38,34 @@ import { initRevive } from '/revive.js'; // downed + revive (G1)
 import { initBossTeam } from '/bossteam.js'; // boss team mechanics: STACK, SPREAD, tether (G4)
 import { initTeamplay } from '/teamplay.js'; // combo counters, the Team Burst bar and sync window (G2)
 import { initMvp } from '/mvp.js'; // the post-fight MVP card (G5)
+import { Q, PRESETS, setLevel, startLevel } from '/quality.js'; // graphics quality: Low / Medium / High / Auto
+import { SnapClock, Track, Correction } from '/shared/netsmooth.js'; // interpolation buffer, late snapshots, your own corrections
+import { initPerf } from '/perf.js'; // the diagnostics overlay (F3), the ping chip, Auto quality
+import { makeNetsim } from '/netsim.js'; // test-only bad network (?netsim=120,60,2)
+import { initGameMenu } from '/gamemenu.js'; // the Game Menu (Esc / ☰)
 
 const sfx = new Sound();
 
 const $ = id => document.getElementById(id);
-const SPECTATE = new URLSearchParams(location.search).has('spectate');
+const QS = new URLSearchParams(location.search);
+const SPECTATE = QS.has('spectate');
+const NOINTERP = QS.get('interp') === '0'; // the old smoothing (chase the newest snapshot), for comparisons
+const netsim = makeNetsim(QS.get('netsim')); // test-only: delay / jitter / reorder what the server sends
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 if (isTouch) document.body.classList.add('touch');
 
+// ---------- settings (camera, chat, graphics), saved in this browser ----------
+// camera 'mouse' (default): the camera follows the mouse (pointer lock; click the game to capture the cursor, Esc to free it).
+// camera 'classic': right-drag to look, or rest the cursor at a screen edge to turn.
+// quality: 'auto' (default) | 'low' | 'medium' | 'high' (public/quality.js) · perf: the diagnostics overlay · ping: the ping chip
+const settings = Object.assign({ camera: 'mouse', sens: 1, invertY: false, bubbles: true, quality: 'auto', perf: false, ping: true }, (() => { try { return JSON.parse(localStorage.getItem('fb_settings') || '{}'); } catch { return {}; } })());
+const saveSettings = () => { try { localStorage.setItem('fb_settings', JSON.stringify(settings)); } catch {} };
+if (QS.get('quality')) settings.quality = QS.get('quality'); // (tests: ?quality=low)
+setLevel(startLevel(settings.quality, { touch: isTouch, lastAuto: (() => { try { return localStorage.getItem('fb_autoq'); } catch { return null; } })() }));
+
 // ---------------- renderer & scene ----------------
 const canvas = $('view');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isTouch, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, isTouch ? 1.5 : 2));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: Q.antialias && !isTouch, powerPreference: 'high-performance' }); // (antialias: fixed until a reload)
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -64,7 +80,18 @@ function resize() {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
 }
-addEventListener('resize', resize); resize();
+addEventListener('resize', resize);
+// Graphics quality (public/quality.js): pixel ratio, shadows, effect density, draw distance, far animation rate.
+function applyQuality(level) {
+  const hadShadows = renderer.shadowMap.enabled;
+  setLevel(level);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, Q.pixelRatio, isTouch ? 1.5 : 2));
+  resize();
+  renderer.shadowMap.enabled = Q.shadows; sun.castShadow = Q.shadows;
+  if (sun.shadow.mapSize.x !== Q.shadowSize) { sun.shadow.mapSize.set(Q.shadowSize, Q.shadowSize); sun.shadow.map?.dispose(); sun.shadow.map = null; }
+  if (hadShadows !== Q.shadows) scene.traverse(o => { for (const m of [].concat(o.material || [])) m.needsUpdate = true; }); // shaders with / without shadows
+}
+applyQuality(Q.level);
 
 // ---------------- state ----------------
 const state = {
@@ -105,7 +132,46 @@ renderClasses();
 $('enter').disabled = true;
 const assetsReady = loadAssets(p => { $('enter').textContent = `Loading characters… ${Math.round(p * 100)}%`; })
   .catch(err => console.error('Model load failed, using block characters', err))
+  .then(() => prewarm()).catch(err => console.warn('shader warm-up', err))
   .finally(() => { $('enter').disabled = false; addMerchant(); smith.addNpc(); if (SPECTATE) join({ type: 'spectate' }); else initLogin(); });
+// Shader warm-up while the loading screen shows: compile the shaders of every effect, class and enemy type, for each
+// floor's lighting (a floor's lamps and shrines change the light count, and every shader with it). Without this the
+// first hit spark, a new enemy type or the first warp stalls a frame while shaders compile. One material of each is
+// kept alive, so three.js never throws a shader away between fights (it deletes one when its last material goes).
+const keepMats = [];
+// And from then on: when the last material using a shader is disposed (an effect fading out, the last enemy of a type
+// dying), that one material is kept instead, so the shader stays compiled for next time (a bounded set: one per shader).
+const materialDispose = THREE.Material.prototype.dispose;
+THREE.Material.prototype.dispose = function () {
+  const progs = renderer.properties.get(this).programs;
+  if (progs) for (const p of progs.values()) if (p.usedTimes <= 1) { keepMats.push(this); return; }
+  return materialDispose.call(this);
+};
+async function prewarm() {
+  const t0 = performance.now(), n0 = fx.list.length, dummy = new THREE.Object3D();
+  fx.arc(0, 0, 0, 2, 1); fx.ring(0, 0, 2); fx.line(0, 0, 1, 1, 0xffffff); fx.zone(0, 0, 2, 1); fx.telegraph(0, 0, 2, 1); fx.wedge(0, 0, 0, 2, 1, 1);
+  fx.aimLine(0, 0, 1, 1, 1); fx.lane(0, 0, 1, 1, 1, 1); fx.rock(0, 0, 1); fx.beam(0, 0, 0xffffff); fx.thorn(0, 0, 1, 1, 1); fx.heal(dummy);
+  fx.shatter(0, 0, false); fx.shield(dummy, 1); fx.sparks(0, 1, 0, 4); fx.rareBeam(0, 0);
+  const tex = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); tex.needsUpdate = true;
+  fx.add(new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })), 1); // aura motes
+  const warm = fx.list.splice(n0);
+  const models = [];
+  for (const c of CLASS_IDS) try { models.push(makePlayerModel(c)); } catch {}
+  for (const t of MOB_IDS) try { models.push(makeMobModel(t)); } catch {}
+  for (const m of models) { m.group.position.set(0, -40, 0); scene.add(m.group); }
+  const roots = [floor1, f2.world.root, f3.world.root], was = roots.map(r => r.visible);
+  try {
+    for (let i = 0; i < roots.length; i++) { // each floor's lights
+      roots.forEach((r, j) => { r.visible = i === j; });
+      await (renderer.compileAsync ? renderer.compileAsync(scene, camera) : renderer.compile(scene, camera));
+    }
+  } finally {
+    roots.forEach((r, j) => { r.visible = was[j]; });
+    for (const e of warm) { scene.remove(e.mesh); e.mesh.traverse(o => { if (o.material) keepMats.push(o.material); }); }
+    for (const m of models) { scene.remove(m.group); m.group.traverse(o => { if (o.material) keepMats.push(o.material); }); }
+  }
+  console.log(`shaders warmed in ${Math.round(performance.now() - t0)} ms (${renderer.info.programs.length} shaders)`);
+}
 let merchantNpc = null;
 function addMerchant() { // the shopkeeper stands behind the stall's counter, facing the plaza
   const m = makePlayerModel('cleric'), face = Math.atan2(-MERCHANT.x, -MERCHANT.z);
@@ -216,7 +282,8 @@ async function join(joinMsg) {
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   state.ws = ws;
   ws.onopen = () => ws.send(JSON.stringify(joinMsg));
-  ws.onmessage = e => onMessage(JSON.parse(e.data));
+  const recv = data => { const t = performance.now(), msg = JSON.parse(data); netStats.parse(performance.now() - t, data.length); onMessage(msg, t); };
+  ws.onmessage = netsim ? e => netsim.deliver(e.data, recv) : e => recv(e.data);
   ws.onclose = () => {
     if (state.ws !== ws) return; // replaced or denied
     if (state.joined) reconnect(joinMsg);
@@ -244,6 +311,30 @@ function reconnect(joinMsg) {
   setTimeout(poll, 1500);
 }
 const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
+const controlsText = () => isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion. ☰: the Game Menu.' : `WASD move (S back, A/D strafe) · mouse to look (click to capture, Esc frees it; Settings for classic) · Left click (or J) attack · 1 2 3 skills · K skill tree · Shift dodge · Space jump${state.cls === 'guardian' ? ' · R guard / parry · C cover an ally' : ''} · 4 5 6 items · B bag · F interact · P party · T Team Burst · V bot orders · Ctrl+click select · Esc menu · F3 performance`;
+// Leave the game from the Game Menu: back to character select ('char'; anonymous: the name / class screen), signed out
+// ('logout'), or out of the spectator view ('spectate'). A clean reload with no automatic rejoin; the server saves
+// your character on disconnect, as when a tab closes. Asks first when leaving would cost you something.
+async function leaveGame(kind) {
+  if (kind !== 'spectate') {
+    const me = players.get(state.myId), why = [];
+    if (me?.downed && !state.dead) why.push("you're downed: you won't be revived");
+    if (boss && (boss.engaged || boss.hp < boss.maxHp) && (inArena(state.x, state.z) || inArena2(state.x, state.z) || inArena3(state.x, state.z))) why.push('a boss fight is on');
+    if (state.party) why.push("you'll leave your party");
+    if (why.length && !confirm(`Leave now? ${why.join('; ')}.`)) return;
+  }
+  const ws = state.ws; state.ws = null; state.joined = false; // (no reconnect: ws.onclose ignores a replaced socket)
+  try { sessionStorage.removeItem('fb_rejoin'); } catch {}
+  if (kind === 'logout') { try { await api('/api/logout', { method: 'POST' }); } catch {} localStorage.removeItem('fb_session'); }
+  ws?.close();
+  location.href = location.pathname; // (drops ?spectate and friends)
+}
+const gmenu = initGameMenu({
+  state, isTouch, guide, sfx, controls: () => esc(controlsText()), steps: () => GUIDE_STEPS.map(s => ({ title: esc(s.title), text: esc(s.text()) })),
+  openSettings: () => { $('settings').classList.remove('hidden'); renderSettings(); },
+  lockCursor: () => lockCursor(), leave: k => leaveGame(k), accounts: () => !!(acct.cfg.accounts && acct.token),
+  checkAdmin: () => api('/api/admin/me').then(r => r.admin),
+});
 const wheel = initBotWheel({ send, state, players, log }); // orders for the bots in your party: hold V (public/botwheel.js)
 const bubbles = initBubbles({ state, players, project, camera, layer: $('labels'), enabled: () => settings.bubbles !== false && !cine.film }); // speech bubbles over heads (public/bubbles.js); the film view uses subtitles
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
@@ -284,7 +375,15 @@ const teamplay = initTeamplay({ state, players, mobs, fx, sfx, floatNum, project
 const mvp = initMvp({ state, guide });
 
 // ---------------- networking ----------------
-function onMessage(msg) {
+// Snapshots are drawn ~100 ms in the past, between the two around that moment (shared/netsmooth.js); the delay grows a
+// little when they arrive unevenly. netStats: how long JSON parsing takes (the biggest message in the last 10 s).
+const clock = new SnapClock();
+const corr = new Correction(); // your own drawn position after a server correction (tp)
+const netStats = { maxParse: 0, maxBytes: 0, t: 0, parse(ms, bytes) { const n = performance.now(); if (n - this.t > 10000) { this.t = n; this.maxParse = 0; this.maxBytes = 0; } this.maxParse = Math.max(this.maxParse, ms); this.maxBytes = Math.max(this.maxBytes, bytes); } };
+const perf = initPerf({ renderer, clock, settings, save: saveSettings, applyQuality, isJoined: () => state.joined && !!state.ws });
+perf.send = send;
+function onMessage(msg, arrival = performance.now()) {
+  if (msg.type === 'pong') { perf.pong(msg); return; }
   if (msg.type === 'full') { $('login-msg').textContent = 'Server is full.'; return; }
   if (msg.type === 'denied') {
     const wasIn = state.joined;
@@ -310,7 +409,8 @@ function onMessage(msg) {
     buildSkillBar();
     guide.start(msg.charId ? `c${msg.charId}` : `anon_${state.cls}`, msg.lvl);
     log('Welcome to Floorbound! Head north through the field and defeat the Horned Warden.', 'sys');
-    log(isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion.' : `WASD move (S back, A/D strafe) · mouse to look (click to capture, Esc frees it; Settings for classic) · Left click (or J) attack · 1 2 3 skills · K skill tree · Shift dodge · Space jump${state.cls === 'guardian' ? ' · R guard / parry · C cover an ally' : ''} · 4 5 6 items · B bag · F interact · P party · T Team Burst · Ctrl+click select`, 'sys');
+    log(controlsText(), 'sys');
+    setTimeout(() => guide.tip('menu'), 30000); // where the Game Menu is
     log('Fill an enemy\'s yellow posture bar (heavy hits, Break skills, perfect dodges, parries) to BREAK it, then a teammate hits it for a SWITCH: big bonus damage.', 'sys');
     return;
   }
@@ -336,11 +436,20 @@ function onMessage(msg) {
       if (e.t === 'clear' && !$('hall').classList.contains('hidden')) setTimeout(() => send({ type: 'hall' }), 400);
     }
   }
-  if (msg.type === 'snap') onSnapshot(msg);
+  if (msg.type === 'snap') onSnapshot(msg, arrival);
 }
 
-function onSnapshot({ me, w }) {
+function onSnapshot({ st, me, w }, arrival) {
   const now = performance.now();
+  const { stale } = clock.push(st ?? arrival, arrival); // (an old server without st: arrival time)
+  const rt = clock.rt; // the moment being drawn now: a change to it fades in (Track.push)
+  const sTime = st ?? arrival;
+  if (stale) { // arrived after a newer one (only with ?netsim): its events still happen; positions fill the buffer
+    for (const e of w.events) handleEvent(e);
+    for (const a of w.players) players.get(a[0])?.track.push(sTime, a[1], a[2], a[3], rt);
+    for (const a of w.mobs) mobs.get(a[0])?.track.push(sTime, a[2], a[3], a[4], rt);
+    return;
+  }
   teamplay.snap(w); // Team Burst gauges and sync windows
   if (me) {
     state.xp = me.xp; state.next = me.next;
@@ -368,6 +477,7 @@ function onSnapshot({ me, w }) {
     let e = players.get(id);
     if (!e) e = addPlayerEntity(id, CLASS_IDS[ci], x, z);
     Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, lvl, party, dead: !!dead, buffs });
+    if (id !== state.myId) e.track.push(sTime, x, z, face, rt);
     styles.snap(e, a[11], id === state.myId); // weapon style
     if (id === state.myId) {
       const wasDead = state.dead;
@@ -385,6 +495,7 @@ function onSnapshot({ me, w }) {
     seenM.add(id);
     let e = mobs.get(id);
     if (!e) e = addMobEntity(id, MOB_IDS[ti], x, z, face);
+    e.track.push(sTime, x, z, face, rt);
     Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, moving: flags & 1, engaged: flags & 2, enraged: flags & 4, stunned: flags & 8, winding: flags & 16, staggered: flags & 32, frenzy: flags & 64, launched: flags & 128, posture: posture || 0 });
   }
   for (const [id, e] of mobs) if (!seenM.has(id) && !e.dying) { removeEntity(e); mobs.delete(id); if (e === boss) boss = null; }
@@ -412,7 +523,11 @@ function handleEvent(e) {
   if (revive.event(e)) return; // downed / revive
   switch (e.t) {
     case 'tp':
-      if (e.id === me) { state.x = e.x; state.z = e.z; state.seq = e.s; }
+      if (e.id === me) { // the server moved you: the game position jumps, the drawn one slides there (or snaps if far)
+        const g = players.get(me)?.model.group.position;
+        corr.apply(g ? g.x : state.x, g ? g.z : state.z, e.x, e.z);
+        state.x = e.x; state.z = e.z; state.seq = e.s;
+      }
       break;
     case 'fx': {
       const ent = players.get(e.id) || mobs.get(e.id);
@@ -718,9 +833,12 @@ function makeLabel(cls) {
   const el = document.createElement('div');
   el.className = `lbl ${cls}`;
   el.innerHTML = `<div class="nm"></div><div class="bar"><div></div></div>`;
+  el.style.left = '0'; el.style.top = '0';
   $('labels').appendChild(el);
-  return { el, nm: el.firstChild, fill: el.lastChild.firstChild, text: '', pct: -1 };
+  return { el, nm: el.firstChild, fill: el.lastChild.firstChild, text: '', pct: -1, shown: true, tr: '', side: '' };
 }
+// Show / hide a nameplate, touching the DOM only when it changes.
+function setShown(L, on) { if (L.shown !== on) { L.shown = on; L.el.style.display = on ? '' : 'none'; } }
 
 function addPlayerEntity(id, cls, x, z) {
   const model = makePlayerModel(cls);
@@ -731,7 +849,7 @@ function addPlayerEntity(id, cls, x, z) {
     model.group.traverse(o => { if (o.isMesh && o.material.isMeshStandardMaterial) { o.material = o.material.clone(); mats.push(o.material); } });
   }
   scene.add(model.group);
-  const e = { id, kind: 'player', cls, model, mats, label: id === state.myId ? null : makeLabel('ally'), name: state.roster.get(id)?.name || '…', x, z, face: 0, tx: x, tz: z, tface: 0, walk: 0, swing: 0, flash: 0 };
+  const e = { id, kind: 'player', cls, model, mats, label: id === state.myId ? null : makeLabel('ally'), name: state.roster.get(id)?.name || '…', x, z, face: 0, tx: x, tz: z, tface: 0, walk: 0, swing: 0, flash: 0, track: new Track(), animAcc: 0 };
   players.set(id, e);
   return e;
 }
@@ -741,7 +859,7 @@ function addMobEntity(id, type, x, z, face) {
   model.group.position.set(x, 0, z);
   model.group.rotation.y = face;
   scene.add(model.group);
-  const e = { id, kind: 'mob', type, def: MOBS[type], model, mats: model.mats, label: MOBS[type]?.boss ? null : makeLabel('mob'), x, z, face, tx: x, tz: z, tface: face, walk: 0, wind: 0, flash: 0 };
+  const e = { id, kind: 'mob', type, def: MOBS[type], model, mats: model.mats, label: MOBS[type]?.boss ? null : makeLabel('mob'), x, z, face, tx: x, tz: z, tface: face, walk: 0, wind: 0, flash: 0, track: new Track(), animAcc: 0 };
   mobs.set(id, e);
   twists.decorate(e); // Thorn Totems
   if (type === 'warden') boss = e;
@@ -766,6 +884,7 @@ const stick = { active: false, id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
 let attackHeld = false;
 
 addEventListener('keydown', e => {
+  if (e.key === 'F3') { e.preventDefault(); perf.toggle(); if (!$('settings').classList.contains('hidden')) renderSettings(); return; } // the diagnostics overlay
   if (!state.joined) return;
   const chat = $('chat-input');
   if (document.activeElement === chat) {
@@ -773,8 +892,15 @@ addEventListener('keydown', e => {
     if (e.key === 'Escape') chat.blur();
     return;
   }
-  if (e.key === 'Enter') { freeCursor(); chat.focus(); e.preventDefault(); return; }
   const k = e.key.toLowerCase();
+  if (k === 'escape') { // Esc: close what's open, else clear the target, else the Game Menu
+    if (gmenu.isOpen()) { if (!gmenu.justOpened()) gmenu.close(); return; }
+    if (escBusy) { for (const id of ESC_PANELS) $(id)?.classList.add('hidden'); if (wheel.isOpen()) wheel.close(); return; }
+    if (state.lock || state.focus) { state.lock = 0; state.focus = 0; return; }
+    menuOpen(); return;
+  }
+  if (gmenu.isOpen()) return; // the menu is up: no moving, attacking or hotkeys (the game itself keeps running)
+  if (e.key === 'Enter') { freeCursor(); chat.focus(); e.preventDefault(); return; }
   keys.add(k);
   if (k === 'j') attackHeld = true;
   if (k === ' ') { e.preventDefault(); if (!e.repeat) jump(); }
@@ -783,7 +909,6 @@ addEventListener('keydown', e => {
   if (k === 'k' && !e.repeat) talents.toggle(); // Skill Tree window (public/talents.js)
   if (k === 'r' && !e.repeat) combat.guard(true);
   if (k === 'tab') { e.preventDefault(); cycleLock(); }
-  if (k === 'escape') { if (wheel.isOpen()) wheel.close(); else { state.lock = 0; state.focus = 0; } }
   if (k === 'v' && !e.repeat) wheel.keydown(e); // bot command wheel
   if (k === 't' && !e.repeat) teamplay.press(); // Team Burst: start it (full bar) or join the sync window
   if (k === 'p') $('players-btn').click();
@@ -793,6 +918,11 @@ addEventListener('keydown', e => {
   const ci = ['4', '5', '6'].indexOf(k);
   if (ci >= 0) useItem(CONSUMABLE_IDS[ci]);
 });
+// Was something open when Esc went down? (Capture phase: before the panels' own Esc handlers close them.)
+const ESC_PANELS = ['players', 'bag', 'hall', 'warp', 'smith', 'settings', 'skillsp'];
+let escBusy = false;
+addEventListener('keydown', e => { if (e.key === 'Escape') escBusy = e.cancelBubble || cursorPanelOpen() || wheel.isOpen() || talents.isOpen() || !!document.getElementById('mvp'); }, true);
+function menuOpen() { keys.clear(); attackHeld = false; mouseAttack = false; combat.guard(false); stick.active = false; stick.dx = stick.dy = 0; gmenu.open(); }
 addEventListener('keyup', e => {
   const k = e.key.toLowerCase();
   keys.delete(k);
@@ -803,16 +933,20 @@ addEventListener('keyup', e => {
 addEventListener('blur', () => { keys.clear(); attackHeld = false; combat.guard(false); });
 
 // camera drag (mouse + touch on the right/anywhere outside the stick)
-// ---------- settings: camera control ----------
-// 'mouse' (default): the camera follows the mouse (pointer lock; click the game to capture the cursor, Esc to free it).
-// 'classic': right-drag to look, or rest the cursor at a screen edge to turn.
-const settings = Object.assign({ camera: 'mouse', sens: 1, invertY: false, bubbles: true }, (() => { try { return JSON.parse(localStorage.getItem('fb_settings') || '{}'); } catch { return {}; } })());
-const saveSettings = () => { try { localStorage.setItem('fb_settings', JSON.stringify(settings)); } catch {} };
+// (settings: loaded at the top, before the renderer)
 const mouseLook = () => settings.camera === 'mouse' && !isTouch;
 const locked = () => document.pointerLockElement === canvas;
 function lockCursor() { if (mouseLook() && !locked() && state.joined && !state.spectator) try { canvas.requestPointerLock()?.catch?.(() => {}); } catch {} }
-function freeCursor() { if (locked()) document.exitPointerLock(); }
-document.addEventListener('pointerlockchange', () => document.body.classList.toggle('mlock', locked()));
+let freeing = false; // we let the cursor go ourselves (a panel, chat): not the player's Esc
+function freeCursor() { if (locked()) { freeing = true; document.exitPointerLock(); } }
+document.addEventListener('pointerlockchange', () => {
+  document.body.classList.toggle('mlock', locked());
+  if (locked()) return;
+  const ours = freeing; freeing = false;
+  // In mouse look the browser spends the first Esc on leaving pointer lock (the page may never see that keydown):
+  // treat it as Esc. (Not when a panel freed it, the window lost focus, or the connection dropped.)
+  if (!ours && state.joined && !cursorPanelOpen() && !gmenu.isOpen() && document.hasFocus() && !$('reconnect')) menuOpen();
+});
 addEventListener('mousemove', e => {
   if (!locked()) return;
   const s = 0.0024 * settings.sens;
@@ -820,12 +954,12 @@ addEventListener('mousemove', e => {
   state.pitch = Math.min(1.25, Math.max(0.12, state.pitch + e.movementY * s * (settings.invertY ? -1 : 1)));
 });
 // Panels need the cursor: free it whenever one is open.
-const CURSOR_PANELS = ['players', 'bag', 'hall', 'warp', 'smith', 'skillsp', 'settings', 'talentsp', 'botwheel', 'botmenu'];
+const CURSOR_PANELS = ['players', 'bag', 'hall', 'warp', 'smith', 'skillsp', 'settings', 'talentsp', 'botwheel', 'botmenu', 'gamemenu'];
 function cursorPanelOpen() { return CURSOR_PANELS.some(id => { const el = $(id); return el && !el.classList.contains('hidden'); }); }
 // Top-right chips: lay them out right-to-left by their real widths, so a long gold count never overlaps a neighbour.
 function layoutChips() {
   let right = 10;
-  for (const id of ['players-btn', 'chat-btn', 'sound-btn', 'bag-btn', 'skills-btn', 'settings-btn']) {
+  for (const id of ['menu-btn', 'players-btn', 'chat-btn', 'sound-btn', 'bag-btn', 'skills-btn', 'settings-btn']) {
     const el = $(id); if (!el || getComputedStyle(el).display === 'none') continue;
     el.style.right = `${right}px`; right += el.offsetWidth + 8;
   }
@@ -843,8 +977,15 @@ function renderSettings() {
     <input type="range" min="0.3" max="3" step="0.1" value="${settings.sens}" data-a="sens">
     <label class="opt"><input type="checkbox" data-a="inv" ${settings.invertY ? 'checked' : ''}> Invert vertical look</label>
     <h4>Chat</h4>
-    <label class="opt"><input type="checkbox" data-a="bub" ${settings.bubbles !== false ? 'checked' : ''}> Speech bubbles <small>chat lines over the speaker's head (the chat log keeps everything)</small></label>`;
+    <label class="opt"><input type="checkbox" data-a="bub" ${settings.bubbles !== false ? 'checked' : ''}> Speech bubbles <small>chat lines over the speaker's head (the chat log keeps everything)</small></label>
+    <h4>Graphics</h4>
+    ${['auto', 'low', 'medium', 'high'].map(q => `<label class="opt"><input type="radio" name="gq" value="${q}" ${settings.quality === q ? 'checked' : ''}> ${QLABEL[q]}${q === 'auto' && settings.quality === 'auto' ? ` <small>now: ${Q.level}</small>` : ''}</label>`).join('')}
+    <small class="note">Lower settings draw fewer pixels, effects and shadows. Smoothing edges (High) changes after a reload.</small>
+    <label class="opt"><input type="checkbox" data-a="perf" ${settings.perf ? 'checked' : ''}> Performance overlay <small>F3 · frame rate, ping, snapshots</small></label>
+    <label class="opt"><input type="checkbox" data-a="ping" ${settings.ping !== false ? 'checked' : ''}> Show ping in the corner</label>`;
 }
+const QLABEL = { auto: 'Auto <small>picks a level that keeps the game smooth</small>', low: 'Low <small>fastest: no shadows, fewer effects, shorter view</small>', medium: 'Medium', high: 'High <small>sharpest, with shadows and full effects</small>' };
+$('menu-btn').onclick = () => menuOpen(); // phones: the Game Menu
 $('settings-btn').onclick = () => { const el = $('settings'); el.classList.toggle('hidden'); if (!el.classList.contains('hidden')) renderSettings(); sfx.play('ui'); };
 $('settings').addEventListener('click', e => { if (e.target.closest('[data-a=close]')) $('settings').classList.add('hidden'); });
 $('settings').addEventListener('input', e => {
@@ -853,6 +994,9 @@ $('settings').addEventListener('input', e => {
   if (t.dataset.a === 'sens') { settings.sens = +t.value; $('sens-v').textContent = `${settings.sens.toFixed(1)}×`; }
   if (t.dataset.a === 'inv') settings.invertY = t.checked;
   if (t.dataset.a === 'bub') { settings.bubbles = t.checked; if (!t.checked) bubbles.clear(); }
+  if (t.name === 'gq') { settings.quality = t.value; perf.setMode(t.value); if (t.value !== 'auto') applyQuality(t.value); }
+  if (t.dataset.a === 'perf') settings.perf = t.checked;
+  if (t.dataset.a === 'ping') settings.ping = t.checked;
   saveSettings();
 });
 
@@ -1442,9 +1586,14 @@ function showInvite(from, name) {
 }
 
 function setBar(el, pct, wrap) {
-  el.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+  const w = `${Math.max(0, Math.min(100, pct)).toFixed(1)}%`;
+  if (el._w !== w) { el._w = w; el.style.width = w; }
   if (wrap) { wrap.classList.toggle('low', pct < 25); wrap.classList.toggle('mid', pct >= 25 && pct < 50); }
 }
+// The HUD only touches the DOM when a value changes (cached on the element).
+const setText = (el, t) => { if (el && el._t !== t) { el._t = t; el.textContent = t; } };
+const setHtml = (el, h) => { if (el && el._h !== h) { el._h = h; el.innerHTML = h; } };
+const setVar = (el, k, v) => { if (el && el['_' + k] !== v) { el['_' + k] = v; el.style.setProperty(k, v); } };
 
 let hudT = 0;
 function updateHud(now) {
@@ -1452,14 +1601,14 @@ function updateHud(now) {
   const name = state.roster.get(state.myId)?.name || '';
   const meHtml = `${esc(name)}${titleTag(state.roster.get(state.myId)?.title)}`;
   if ($('me-name').innerHTML !== meHtml) $('me-name').innerHTML = meHtml;
-  $('me-lvl').textContent = `Lv ${state.lvl} ${CLASSES[state.cls].name}`;
+  setText($('me-lvl'), `Lv ${state.lvl} ${CLASSES[state.cls].name}`);
   const pct = (state.hp / state.maxHp) * 100;
   setBar($('me-hp'), pct, $('me-hp').parentElement);
-  $('me-hp-text').textContent = `${state.hp} / ${state.maxHp}`;
+  setText($('me-hp-text'), `${state.hp} / ${state.maxHp}`);
   setBar($('me-xp'), state.lvl >= MAX_LEVEL ? 100 : (state.xp / state.next) * 100);
   const me = players.get(state.myId);
   const b = me?.buffs || 0;
-  $('me-buffs').innerHTML = `${b & 1 ? '<span>Guarded</span>' : ''}${b & 2 ? '<span>Blessed</span>' : ''}${mastery.buffTags(b)}`;
+  setHtml($('me-buffs'), `${b & 1 ? '<span>Guarded</span>' : ''}${b & 2 ? '<span>Blessed</span>' : ''}${mastery.buffTags(b)}${state.tonic > 0 ? `<span>Tonic ${Math.ceil(state.tonic)}s</span>` : ''}${state.draught > 0 ? `<span>Ironbark ${Math.ceil(state.draught)}s</span>` : ''}`);
 
   // party frames
   const mates = state.spectator ? [...players.values()] : state.party ? [...players.values()].filter(p => p.party === state.party && p.id !== state.myId) : [];
@@ -1480,13 +1629,12 @@ function updateHud(now) {
     const bn = $('boss').querySelector('.boss-name'); if (bn.textContent !== boss.def.name) bn.textContent = boss.def.name;
     combat.bossBar(boss);
     threat.bossBar(boss); // who it's after, my threat meter
-    $('boss-phase').textContent = onF3 ? f3.phaseText() : onF2 ? f2.phaseText() : ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '';
+    setText($('boss-phase'), onF3 ? f3.phaseText() : onF2 ? f2.phaseText() : ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '');
     if (!onF3) twists.bossLine($('boss-phase'), onF2); // the Warden's twist, or the Sovereign's on Floor 2
   }
 
   // items, raid gate, merchant, guide
   { const gt = `${state.gold}g`; if ($('gold-chip').textContent !== gt) { $('gold-chip').textContent = gt; layoutChips(); } }
-  $('me-buffs').innerHTML += `${state.tonic > 0 ? `<span>Tonic ${Math.ceil(state.tonic)}s</span>` : ''}${state.draught > 0 ? `<span>Ironbark ${Math.ceil(state.draught)}s</span>` : ''}`;
   updateGateBox();
   const near = nearMerchant();
   if (near !== state.wasNear) { state.wasNear = near; if (!near) state.shopOpen = false; renderBag(); }
@@ -1498,19 +1646,19 @@ function updateHud(now) {
   for (const btn of $('skills').children) {
     if (btn.dataset.item) {
       const id = btn.dataset.item, n = state.inv?.cons?.[id] || 0, left = Math.max(0, (state.ccdReady[id] || 0) - now) / 1000;
-      btn.querySelector('.cnt').textContent = `×${n}`;
+      setText(btn._cnt ||= btn.querySelector('.cnt'), `×${n}`);
       btn.classList.toggle('none', n === 0);
-      btn.querySelector('.cd').style.setProperty('--p', `${Math.min(100, (left / CONSUMABLES[id].cd) * 100)}%`);
+      setVar(btn._cd ||= btn.querySelector('.cd'), '--p', `${Math.min(100, (left / CONSUMABLES[id].cd) * 100).toFixed(1)}%`);
       continue;
     }
     if (btn.dataset.slot === 'guard') { btn.classList.toggle('on', combat.guarding); continue; }
     if (btn.dataset.slot === 'cover') { threat.coverCd(btn); continue; }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); btn.textContent = a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : state.meReady ? 'Unready' : 'Ready'; continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : state.meReady ? 'Unready' : 'Ready'); continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : { cd: mastery.cd(slot) }; // mastery/branch cooldowns
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
-    btn.querySelector('.cd').style.setProperty('--p', `${Math.min(100, (left / sk.cd) * 100)}%`);
-    btn.querySelector('.cdt').textContent = left > 0.3 && slot > 0 && !isDodge && !isJump ? left.toFixed(left < 3 ? 1 : 0) : '';
+    setVar(btn._cd ||= btn.querySelector('.cd'), '--p', `${Math.min(100, (left / sk.cd) * 100).toFixed(1)}%`);
+    setText(btn._cdt ||= btn.querySelector('.cdt'), left > 0.3 && slot > 0 && !isDodge && !isJump ? left.toFixed(left < 3 ? 1 : 0) : '');
   }
 
   const fightingBoss = boss && (boss.engaged || boss.hp < boss.maxHp) && state.z > 150;
@@ -1527,7 +1675,7 @@ function updateHud(now) {
 // for everyone, other players' damage numbers small and dim ('other'), at most FT.otherCap of them alive at once.
 const FT = { max: 32, life: 0.75, longLife: 1.05, rise: 1.3, gap: 2, side: 10, stack: 140, merge: 0.5, pop: 0.12, otherCap: 4 };
 const FT_LONG = new Set(['switch', 'perfect', 'parry', 'crit', 'loot', 'mastery', 'talent', 'counter']);
-const nums = [], floatLog = []; // floatLog: the last texts shown (window.__fb.floatLog, for tests)
+const nums = [], floatLog = [], numSize = new Map(); // floatLog: the last texts shown (window.__fb.floatLog, for tests)
 function floatNum(pos, h, text, cls = '', opacity = 1) {
   const kind = cls.split(' ')[0], numeric = /^[-+(]?\d/.test(text);
   const here = nums.filter(n => n.anchor === pos);
@@ -1542,7 +1690,11 @@ function floatNum(pos, h, text, cls = '', opacity = 1) {
   const el = document.createElement('div');
   el.className = `num ${cls}`; el.textContent = text; el.style.opacity = 0;
   $('labels').appendChild(el);
-  const ht = el.offsetHeight || 22, wd = el.offsetWidth || 30;
+  // (measuring forces a page layout: once per style and length, then cached)
+  const sk = `${cls}|${text.length}`;
+  let sz = numSize.get(sk);
+  if (!sz) { sz = [el.offsetHeight || 22, el.offsetWidth || 30]; if (numSize.size > 400) numSize.clear(); numSize.set(sk, sz); }
+  const [ht, wd] = sz;
   const low = here.length ? here[here.length - 1] : null; // the newest live text: the bottom of the stack
   if (low) {
     const push = (ht + low.ht) / 2 + FT.gap;
@@ -1652,6 +1804,12 @@ function project(x, y, z) {
   return [(v3.x * 0.5 + 0.5) * innerWidth, (-v3.y * 0.5 + 0.5) * innerHeight];
 }
 
+// Per-frame drawing state (set at the top of frame()): the snapshot moment drawn (null: not yet / ?interp=0), how far
+// visual time lags it (slow motion and hit-stop freeze characters, then they catch up), the camera frustum (off-screen
+// characters animate at a lower rate) and how many characters are moving / guessing / waiting (the overlay).
+let drawT = null, frameNo = 0;
+const SMP = {}, frustum = new THREE.Frustum(), frM4 = new THREE.Matrix4(), frSphere = new THREE.Sphere();
+const entStats = { interp: 0, extrap: 0, hold: 0 };
 function animateEntity(e, dt) {
   const g = e.model.group;
   const self = e.id === state.myId && e.kind === 'player';
@@ -1659,6 +1817,8 @@ function animateEntity(e, dt) {
   const k = Math.min(1, dt * (self ? 25 : 12));
   const px = g.position.x, pz = g.position.z;
   const tx = self ? e.x : e.tx, tz = self ? e.z : e.tz;
+  let smp = null;
+  if (!self && drawT !== null) { smp = e.track.sample(drawT, last, SMP); if (smp) { e.tface = smp.f; entStats[smp.mode]++; } }
   const jumpTime = e.jumpDur ?? JUMP.time; // Sky Lance's hop lasts its whole flight
   if (e.jumpT !== undefined && e.jumpT < jumpTime) {
     e.jumpT += dt;
@@ -1668,10 +1828,22 @@ function animateEntity(e, dt) {
   if (e.kind === 'mob') mastery.lift(e, dt); // Quake launches enemies
   if (e.punch > 0) e.punch -= dt;
   const kk = e.punch > 0 ? Math.min(1, dt * 22) : k;
-  if (Math.hypot(tx - px, tz - pz) > 15) g.position.set(tx, 0, tz);
+  if (self) { g.position.x = state.x + corr.x; g.position.z = state.z + corr.z; } // a server correction slides out (Correction)
+  else if (smp) { g.position.x = smp.x; g.position.z = smp.z; } // between the snapshots around the moment drawn (Track)
+  else if (Math.hypot(tx - px, tz - pz) > 15) g.position.set(tx, 0, tz); // (?interp=0: chase the newest snapshot)
   else if (e.punch > 0) { g.position.x += (tx - px) * kk; g.position.z += (tz - pz) * kk; }
   else if (!(e.punch > 0)) { g.position.x += (tx - px) * k; g.position.z += (tz - pz) * k; }
   if (!self) { e.x = g.position.x; e.z = g.position.z; }
+  // Far characters: past the fog they're invisible anyway, so they leave the scene (no animation, no draw); off screen
+  // or beyond Q.animNear they animate every few frames (public/quality.js).
+  const cdist = Math.hypot(g.position.x - camera.position.x, g.position.z - camera.position.z);
+  if (!self && cdist > scene.fog.far * Q.fog + 8) {
+    if (!e.culled) { e.culled = true; scene.remove(g); if (e.label) setShown(e.label, false); }
+    return;
+  }
+  if (e.culled) { e.culled = false; scene.add(g); }
+  frSphere.center.set(g.position.x, g.position.y + 1, g.position.z); frSphere.radius = Math.max(2, e.model.height || 2);
+  const onScreen = frustum.intersectsSphere(frSphere), lod = !self && (!onScreen || cdist > Q.animNear);
   const speed = Math.hypot(g.position.x - px, g.position.z - pz) / Math.max(dt, 1e-3);
   let df = e.tface - g.rotation.y; df = Math.atan2(Math.sin(df), Math.cos(df));
   g.rotation.y += df * Math.min(1, dt * 14);
@@ -1693,7 +1865,9 @@ function animateEntity(e, dt) {
     else a.base(a.posed ? 'Idle' : a.idle, 0.25); // a held pose is tuned over the plain Idle
     if (isP && e.downed && !e.dead) a.setPose('downed'); // downed: slumped on the knees (public/revive.js)
     else if (isP) poseFrame(e, a);
-    a.update(hitStop > 0 ? dt * 0.08 : dt);
+    const adt = (hitStop > 0 ? dt * 0.08 : dt) + e.animAcc;
+    if (lod && (frameNo + e.id) % (onScreen ? Q.animEvery : 6)) e.animAcc = adt; // far / off screen: skip this frame, keep the time
+    else { a.update(adt); e.animAcc = 0; }
     if (isP) m.cursor.material.color.setHex(state.party && e.party === state.party && !self ? 0xa78bfa : 0x4ade80);
     else m.cursor.rotation.y += dt * 2;
     m.cursor.visible = !(isP && e.dead);
@@ -1760,16 +1934,16 @@ function animateEntity(e, dt) {
   if (e.label) {
     const p = project(g.position.x, g.position.y + m.height + 0.55, g.position.z);
     const d = Math.hypot(g.position.x - state.x, g.position.z - state.z);
-    if (!p || d > 45 || (e.kind === 'player' && e.dead)) { e.label.el.style.display = 'none'; return; }
-    e.label.el.style.display = '';
-    e.label.el.style.transform = `translate(${p[0]}px, ${p[1]}px) translate(-50%, -100%)`;
-    e.label.el.style.left = '0'; e.label.el.style.top = '0';
+    if (!p || d > 45 || (e.kind === 'player' && e.dead)) { setShown(e.label, false); return; }
+    setShown(e.label, true);
+    const tr = `translate(${p[0].toFixed(1)}px, ${p[1].toFixed(1)}px) translate(-50%, -100%)`;
+    if (tr !== e.label.tr) { e.label.tr = tr; e.label.el.style.transform = tr; }
     const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${looks.plate(e, e.def.name)}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}` : `<span class="lv">Lv${e.lvl}</span>${looks.plate(e, `${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}`)}`;
     if (txt !== e.label.text) { e.label.text = txt; e.label.nm.innerHTML = txt; }
     const pct = Math.round((e.hp / e.maxHp) * 100);
     if (pct !== e.label.pct) { e.label.pct = pct; e.label.fill.style.width = `${pct}%`; }
     if (e.kind === 'mob') combat.label(e); // posture bar
-    if (e.kind === 'player') e.label.el.className = `lbl ${state.party && e.party === state.party ? 'party' : 'ally'}`;
+    if (e.kind === 'player') { const c = state.party && e.party === state.party ? 'party' : 'ally'; if (c !== e.label.side) { e.label.side = c; e.label.el.classList.toggle('party', c === 'party'); e.label.el.classList.toggle('ally', c === 'ally'); } }
     else if (e.def.elite && !e.label.el.classList.contains('elite')) e.label.el.classList.add('elite');
     const isSel = (e.kind === 'mob' ? state.lock : state.focus) === e.id;
     e.label.el.classList.toggle('sel', !!isSel);
@@ -1819,12 +1993,22 @@ function spectatorCamera(dt) {
 let hitStop = 0;
 let sentLock = 0; // the locked mob last reported to the server (`target`)
 const projFx = new Map(); // thorn id -> effect
+let visLag = 0; // ms the drawn characters lag the snapshot clock (slow motion / hit-stop), eased back to 0 afterwards
+const camDir = new THREE.Vector3(), camFrom = new THREE.Vector3();
 function frame(now) {
   requestAnimationFrame(frame);
+  const t0 = performance.now(), gap = now - last;
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   hitStop = Math.max(0, hitStop - dt);
   slowMo = Math.max(0, slowMo - dt);
   const vdt = hitStop > 0 ? 0 : slowMo > 0 ? dt * slowMoScale : dt; // visual dt: animation and effects only (frozen during a hit-stop)
+  // the moment drawn for everyone else: ~100 ms behind the newest snapshot (shared/netsmooth.js)
+  const rt = NOINTERP ? null : clock.renderTime(now);
+  if (vdt < dt) visLag = Math.min(600, visLag + (dt - vdt) * 1000); else visLag *= Math.exp(-dt / 0.25);
+  drawT = rt === null ? null : rt - visLag;
+  frameNo++; entStats.interp = entStats.extrap = entStats.hold = 0;
+  frustum.setFromProjectionMatrix(frM4.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); // (last frame's camera)
+  corr.step(dt * 1000);
   const lm = state.joined && !state.spectator ? lockedMob() : null;
   const la = !lm && state.joined && !state.spectator ? focusedAlly() : null;
   const sel = lm || la;
@@ -1862,7 +2046,7 @@ function frame(now) {
   if (state.joined && !state.dead && !state.spectator) {
     // movement input
     let ix = 0, iz = 0;
-    const typing = document.activeElement === $('chat-input');
+    const typing = document.activeElement === $('chat-input') || gmenu.isOpen(); // (the Game Menu blocks movement too)
     if (!typing) {
       if (keys.has('w') || keys.has('arrowup')) iz += 1;
       if (keys.has('s') || keys.has('arrowdown')) iz -= 1;
@@ -1871,7 +2055,7 @@ function frame(now) {
       if (keys.has('q')) state.yaw += dt * 2;
       if (keys.has('e') && !revive.usesE()) state.yaw -= dt * 2; // (E revives a downed partymate in reach)
     }
-    if (stick.active) { ix += stick.dx; iz -= stick.dy; }
+    if (stick.active && !gmenu.isOpen()) { ix += stick.dx; iz -= stick.dy; }
     const mag = Math.min(1, Math.hypot(ix, iz));
     state.moveDir = null;
     if (mag > 0.08) {
@@ -1917,7 +2101,7 @@ function frame(now) {
       state.x = nx; state.z = nz; state.vel = [mx * state.speed, mz * state.speed]; // (the momentum a jump carries)
       state.face = state.yaw; // keep looking where the camera looks: S walks backwards, A/D strafe (also under camera lock)
     } else { state.speed = 0; state.vel = null; }
-    if (attackHeld && !state.roll) useSkill(0);
+    if (attackHeld && !state.roll && !gmenu.isOpen()) useSkill(0);
     combat.frame(); // guarding: face the enemy, drop the guard on a roll
   }
 
@@ -1942,8 +2126,11 @@ function frame(now) {
   talents.frame(now); // Skill Tree window refresh, unspent-points badge
   if (state.joined && !state.spectator) {
     const ml = $('merchant-lbl'), mp = project(MERCHANT.x, 3.6, MERCHANT.z), md = Math.hypot(state.x - MERCHANT.x, state.z - MERCHANT.z);
-    if (mp && md < 20) { ml.style.display = ''; ml.style.left = `${mp[0]}px`; ml.style.top = `${mp[1]}px`; ml.innerHTML = `Merchant${md < MERCHANT.r + 1 ? `<br><small>${isTouch ? 'tap Trade' : 'press F to trade'}</small>` : ''}`; }
-    else ml.style.display = 'none';
+    if (mp && md < 20) {
+      ml.style.display = ''; ml.style.left = `${mp[0]}px`; ml.style.top = `${mp[1]}px`;
+      const html = `Merchant${md < MERCHANT.r + 1 ? `<br><small>${isTouch ? 'tap Trade' : 'press F to trade'}</small>` : ''}`;
+      if (ml.innerHTML !== html) ml.innerHTML = html;
+    } else if (ml.style.display !== 'none') ml.style.display = 'none';
     updateHallLabel();
   }
 
@@ -1953,8 +2140,8 @@ function frame(now) {
   if (state.spectator) [cx, cz] = spectatorCamera(dt);
   const cp = state.pitch;
   // pull the camera in when a wall or pillar is between it and the player
-  const dir = new THREE.Vector3(-Math.sin(state.yaw) * Math.cos(cp), Math.sin(cp), -Math.cos(state.yaw) * Math.cos(cp));
-  ray.set(new THREE.Vector3(cx, 1.6, cz), dir); ray.far = state.camDist;
+  const dir = camDir.set(-Math.sin(state.yaw) * Math.cos(cp), Math.sin(cp), -Math.cos(state.yaw) * Math.cos(cp));
+  ray.set(camFrom.set(cx, 1.6, cz), dir); ray.far = state.camDist;
   const hit = ray.intersectObjects(occluders, true)[0];
   const allowed = hit ? Math.max(2, hit.distance - 0.6) : state.camDist;
   camCur += (allowed - camCur) * Math.min(1, dt * (allowed < camCur ? 20 : 3));
@@ -1983,10 +2170,14 @@ function frame(now) {
   if (state.joined) updateHud(now);
   updateRareHint(now);
   bell.before(camera); // the Tower Bell's camera sway, undone after the render
+  const fogN = scene.fog.near, fogF = scene.fog.far; // draw distance (graphics quality): scaled for the render only
+  scene.fog.near *= Q.fog; scene.fog.far *= Q.fog;
   renderer.render(scene, camera);
+  scene.fog.near = fogN; scene.fog.far = fogF;
   bell.after(camera);
+  perf.frame(now, gap, performance.now() - t0, entStats);
 }
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m) };
+window.__fb = { state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality };

@@ -4,7 +4,7 @@ import { COMBOS } from '/shared/teamplay.js'; // combo tips (G2)
 
 const touch = () => document.body.classList.contains('touch');
 
-const STEPS = [
+export const STEPS = [ // (the Game Menu's Controls & guide lists them too)
   { id: 'move', title: 'Find your feet', text: () => touch() ? 'Drag on the left half of the screen to move. Drag on the right half to look around.' : 'Move with WASD (S walks backwards, A/D strafe). Click the game, then move the mouse to look around. Esc frees the cursor. Prefer right-drag? Change it in Settings.' },
   { id: 'hit', title: 'First strike', text: () => `Head north out of town and hit a Forest Boar. ${touch() ? 'Tap the big attack button' : 'Click (or press J)'} to attack; it aims at the nearest enemy.` },
   { id: 'dodge', title: 'Dodge', text: () => `A red shape on the ground means an attack is coming. ${touch() ? 'Tap Dodge' : 'Press Shift'} to roll through it: you can't be hit mid-roll.` },
@@ -62,6 +62,7 @@ const TIPS = {
   f3overload: 'OVERLOAD: the Colossus kneels and charges the storm. Its guard is open: BREAK it, then a different player hits it (a Switch), or fire a Team Burst. Stop it and it is Grounded (+30% damage); fail and Thunderclap hits everyone for over half their health.',
   f3beam: 'Tempest Beam: the Colossus plants its sword and a beam sweeps all the way round. Jump (Space) just as it reaches you, or roll through it.',
   mvp: 'That was the post-fight card: everyone in the fight sees it after a boss kill or wipe. Titles go to whoever led: Lifeline for revives, Wall for tanking, Conductor for combos, Last Word for the Last Attack...',
+  menu: () => `${touch() ? 'Tap ☰' : 'Press Esc'} for the Game Menu: Settings (graphics quality too), controls, change character, log out. The game keeps running while it's open.`,
   tbsync: () => `A partner started a TEAM BURST: ${touch() ? 'tap the prompt' : 'press T'} now to join it. More joiners, bigger burst.`,
   ...Object.fromEntries(Object.entries(COMBOS).map(([k, c]) => [`combo_${k}`, c.tip])),
 };
