@@ -92,6 +92,16 @@ all help; i-frames don't), and the Colossus is **Charged** (+25% damage) for 15 
 
 Bots: during Overload every bot may Break (tanks and DPS spend their Break skills) and joins any Team Burst.
 
+### 7.1b The fall: the Undercroft (J2, multi-area fights)
+At phase 2 the plateau cracks (3.2 s warning) and everyone in the arena falls into **the Undercroft**, the hall under the
+ruin: same footprint, another place. Landing 2 s (frozen, bleed-out paused), then the Colossus drops in (a shove around
+it, no damage). It waits for Overload / a team mechanic / a trap / a wind-up to end (and 8 s after a team mechanic),
+fires once per fight, and resets on a wipe or a respawn. Lower area: three great pillars (block the Tempest Beam), two
+smaller ones and two rubble walls (colliders), five sludge pools (speed ×0.45, no rolling), three fire patterns of 8-9
+patches (1.8 s warning, 6 s burning at 3.5% max HP per 0.2 s tick, 2 s out). Same light count (the sky, hemisphere and
+sun recoloured), emissive flames. Data: `shared/arenas.js`; server: `server/arenas.js`; client: `public/arenas.js` and
+`makeUndercroft` in `public/floor3world.js`; bots: `shared/bots/arenas.js`; tests: `node test/arenas.js`.
+
 ### 7.2 Twist pool (rolled per Colossus spawn, shown on the gate panel and boss bar)
 | Twist | Effect | Reward |
 |---|---|---|
