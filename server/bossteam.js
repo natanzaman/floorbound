@@ -4,10 +4,15 @@
 // (game.js bossSpecials, floor2.js sovereignSpecials); nothing happens with fewer than BOSSTEAM.min fighters alive in
 // the room, or while the director runs a show (only a cue's forceBossMove starts one then).
 //
+// Rescue traps (J1, server/rescue.js) are boss team moves too: 'vines', 'pillar', 'crystal' (btStart -> trapStart).
+// Only one team-scale mechanic per boss at a time (G4 moves, traps, the Colossus's Overload), at least RESCUE.gap s apart
+// (btBusy; btDone starts the gap).
+//
 // Events: { t: 'bt', k: 'stack', id, r, d, boss } · { t: 'bt', k: 'spread', ids, r, d, boss } ·
 //         { t: 'bt', k: 'tether', a, b, need, d, g, boss } (bots perceive these with their capability delays), and
 //         { t: 'btend', k, ... } when each one resolves (stack: x, z, n; spread: ids, clean; tether: a, b, ok).
 import { BOSSTEAM, TEAM_MOVES } from '../shared/bossteam.js';
+import { RESCUE, TRAP_MOVES } from '../shared/rescue.js';
 import { inArena } from '../shared/data.js';
 import { inArena2 } from '../shared/floor2.js';
 import { inArena3 } from '../shared/floor3.js';
@@ -39,14 +44,19 @@ const methods = {
     if (m.btKey !== key) { m.btKey = key; m.btT = t + C.first; m.btI = Math.floor(Math.random() * 3); } // a new fight
     if (t < m.btT) return;
     fighters ||= this.btFighters(m);
-    if (fighters.length < BOSSTEAM.min || this.director?.running || (this.btActive || []).some(a => a.m === m)) { m.btT = t + 2; return; }
+    if (fighters.length < BOSSTEAM.min || this.director?.running || this.btBusy(m)) { m.btT = t + 2; return; }
     const list = C.moves[m.phase] || C.moves[0];
     m.btT = t + C.every[m.phase];
-    this.btStart(m, list[m.btI++ % list.length], fighters, null);
+    for (let i = 0; i < list.length; i++) if (this.btStart(m, list[m.btI++ % list.length], fighters, null)) return; // (a trap that can't start: the next one)
   },
 
-  // Start one now. forced: a target player id (or null). Returns false when it can't (a tether needs two fighters).
-  btStart(m, k, fighters, targetId) {
+  // A team-scale mechanic is running on this boss (or ended less than RESCUE.gap s ago, or the Colossus is Overloading).
+  btBusy(m) { return !!m.ov || this.time < (m.btGapUntil || 0) || (this.btActive || []).some(a => a.m === m); },
+
+  // Start one now. targetId: a target player id (or null); forced: from forceBossMove. Returns false when it can't (a
+  // tether needs two fighters, a trap two free ones).
+  btStart(m, k, fighters, targetId, forced = false) {
+    if (TRAP_MOVES.includes(k)) return !!this.trapStart?.(m, k, targetId, forced);
     fighters = (fighters || this.btFighters(m)).filter(p => !p.dead);
     if (!fighters.length) return false;
     const first = targetId != null ? fighters.find(p => p.id === (targetId | 0)) : null;
@@ -74,7 +84,11 @@ const methods = {
   },
 
   btAdd(a) { (this.btActive ||= []).push(a); return a; },
-  btDone(a) { this.btActive = (this.btActive || []).filter(x => x !== a); },
+  btDone(a) {
+    if (!a) return;
+    this.btActive = (this.btActive || []).filter(x => x !== a);
+    a.m.btGapUntil = Math.max(a.m.btGapUntil || 0, this.time + RESCUE.gap);
+  },
 
   // ---------- shared meteor (stack) ----------
   btMeteor(m, v) {
@@ -144,13 +158,13 @@ const methods = {
 export function installBossTeam(Game) {
   Object.assign(Game.prototype, methods);
   // forceBossMove (server/staging.js) gains the team moves: start one now, aimed at the target (the meteor's carrier,
-  // the first spread marker, one end of the tether). Works for the Warden and the Sovereign, solo included (except a
-  // tether, which needs two fighters).
+  // the first spread marker, one end of the tether, the trapped player). Works for every boss, solo included (except a
+  // tether, which needs two fighters, and a trap, which needs two free ones).
   const base = Game.prototype.forceBossMove;
   Game.prototype.forceBossMove = function (mob, move, targetId) {
-    if (!TEAM_MOVES.includes(move)) return base.call(this, mob, move, targetId);
+    if (!TEAM_MOVES.includes(move) && !TRAP_MOVES.includes(move)) return base.call(this, mob, move, targetId);
     const m = this.mobRef(mob);
     if (!m || m.dead || !BOSSTEAM[m.type]) return false;
-    return this.btStart(m, move, null, targetId ?? null);
+    return this.btStart(m, move, null, targetId ?? null, true);
   };
 }

@@ -89,7 +89,7 @@ export const TalentMethods = {
   },
   topThreat(m) {
     let id = 0, top = -1;
-    for (const [pid, v] of m.threat) if (v > top) { top = v; id = pid; }
+    for (const [pid, v] of m.threat) if (v > top && !this.players.get(pid)?.trap) { top = v; id = pid; } // (trapped players aren't targets: J1)
     return id;
   },
   // addPosture: posture damage talents (Pressure, Crushing Blows, ...) and Juggernaut.

@@ -20,7 +20,7 @@ const shown = m => m && !m.dead && !m.hidden && (m.def.boss || m.def.elite);
 // [id, value] of the highest threat on m (living players only), or null.
 export function topThreat(g, m) {
   let id = 0, top = -1;
-  for (const [pid, v] of m.threat) { const p = g.players.get(pid); if (p && !p.dead && v > top) { top = v; id = pid; } }
+  for (const [pid, v] of m.threat) { const p = g.players.get(pid); if (p && !p.dead && !p.trap && v > top) { top = v; id = pid; } }
   return id ? [id, top] : null;
 }
 

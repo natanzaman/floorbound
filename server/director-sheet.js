@@ -59,7 +59,7 @@ export const BOSSES = { warden: 'warden', sovereign: 'sovereign' }; // name in a
 // args: name -> kind (validated below). req: required args. api: the Game method it needs (F1/F3-F6, docs/ROADMAP.md).
 const LOC = 'loc', TGT = 'tgt', MOB = 'mob', COND = 'cond', NUM = 'num', STR = 'str', BOOL = 'bool';
 const en = (...v) => ({ enum: v });
-export const MOVES = ['horn_sweep', 'slam', 'charge', 'quake', 'rockfall', 'tidal_wave', 'geyser', 'trident', 'deluge', 'meteor', 'spread', 'tether', 'hammerfall', 'lightning', 'gale_push', 'overload', 'tempest_beam']; // (meteor / spread / tether: team mechanics, server/bossteam.js; the last five: the Storm Colossus, server/floor3.js)
+export const MOVES = ['horn_sweep', 'slam', 'charge', 'quake', 'rockfall', 'tidal_wave', 'geyser', 'trident', 'deluge', 'meteor', 'spread', 'tether', 'hammerfall', 'lightning', 'gale_push', 'overload', 'tempest_beam', 'vines', 'pillar', 'crystal']; // (meteor / spread / tether: team mechanics, server/bossteam.js; hammerfall … tempest_beam: the Storm Colossus, server/floor3.js; vines / pillar / crystal: rescue traps, server/rescue.js)
 export const SHOTS = ['close_up', 'medium', 'wide', 'over_shoulder', 'follow', 'orbit', 'crane', 'pov', 'eyes', 'free']; // pov / eyes: a character's own view (F8)
 export const EMOTES = ['cheer', 'block', 'cast', 'hit', 'die'];
 export const VERBS = {
@@ -91,7 +91,7 @@ export const VERBS = {
   boss_move: { who: 'mob', req: ['move'], args: { move: en(...MOVES), target: TGT }, api: 'forceBossMove' },
   reserve_last_attack: { who: 'none', req: ['target'], args: { target: MOB, for: 'actor?' }, api: 'reserveLastAttack' },
   twists: { who: 'none', req: ['set'], args: { set: en('off', 'random', ...TWIST_IDS) }, api: 'setTwistOverride' },
-  spawn: { who: 'none', req: ['type', 'at', 'label'], args: { type: en(...Object.keys(MOBS).filter(t => !MOBS[t].boss)), at: LOC, label: STR }, api: 'spawnMob' },
+  spawn: { who: 'none', req: ['type', 'at', 'label'], args: { type: en(...Object.keys(MOBS).filter(t => !MOBS[t].boss && !MOBS[t].prop)), at: LOC, label: STR }, api: 'spawnMob' },
   give_item: { who: 'actors', req: ['name'], args: { name: STR, slot: en('weapon', 'armor', 'charm'), desc: STR }, api: 'giveKeepsake' },
   protect: { who: 'actors', args: { min: NUM }, api: 'protect' },
   // picture (F4)

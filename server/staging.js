@@ -29,7 +29,7 @@ const methods = {
     if (v?.dead) v = null;
     if (!v) { // no (living) target given: the top threat, else the nearest fighter
       let top = -1;
-      for (const [pid, n] of m.threat) { const p = this.players.get(pid); if (p && !p.dead && n > top) { top = n; v = p; } }
+      for (const [pid, n] of m.threat) { const p = this.players.get(pid); if (p && !p.dead && !p.trap && n > top) { top = n; v = p; } }
       if (!v) v = [...this.players.values()].filter(p => !p.dead && ring(p)).sort((a, b) => dist(a, m) - dist(b, m))[0] || null;
     }
     if (m.type === 'warden') {

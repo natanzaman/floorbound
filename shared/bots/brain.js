@@ -30,6 +30,7 @@ import { say } from './social.js';
 import { scriptTurn } from './script.js'; // the scene director's script layer (b.script; nothing without it)
 import { readDowned, downedTurn, reviveTurn } from './revive.js'; // downed + revive (G1)
 import { mechSpot } from './bossteam.js'; // boss team mechanics: stack, spread, tether (G4)
+import { readRescue, rescueTurn, rescueTarget } from './rescue.js'; // rescue traps: free trapped allies (J1)
 import './classes.js'; // built-in class plug-ins (Guardian, Swordsman, Cleric, generic)
 import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
 import { comboTurn, burstTurn } from './teamplay.js'; // combo payoffs + Team Burst (G2)
@@ -132,6 +133,7 @@ function onSnap(b, msg) {
     Object.assign(b, { hp: mine.hp, maxHp: mine.maxHp, dead: mine.dead, party: mine.party, style: mine.style }); // style: the equipped weapon's (shared/styles.js)
   }
   readDowned(b, msg.w.down); // downed players (p.downed, b.downed)
+  readRescue(b, msg.w.trap); // trapped players (p.trap, b.trap)
   for (const e of perceive(b, msg.w.events)) onEvent(b, e); // (reaction delays / misses below capability 5)
   if (b.t - (b.pruneT || 0) > 5) prune(b);
   think(b);
@@ -368,6 +370,14 @@ function followed(b) { // the player named by the 'follow' behaviour, as seen in
 
 // ---------------- the loop ----------------
 function think(b) {
+  if (!b.trap) return thinkFree(b);
+  // trapped (J1): rooted where we are; vines / pillar: still fight in place; encased in a crystal: nothing to do
+  const x = b.x, z = b.z;
+  if (b.trap.k !== 'crystal') thinkFree(b);
+  else b.goal = 'Encased: waiting to be broken out';
+  b.x = x; b.z = z;
+}
+function thinkFree(b) {
   if (!b.me) return;
   if (b.script && scriptTurn(b)) return; // a scripted actor (server/director.js): its scripted action this turn
   const P = partyView(b);
@@ -382,6 +392,7 @@ function think(b) {
   burstTurn(b, P); // join / start a Team Burst
   if (stepRoll(b) || perilous(b) || waveDodge(b) || beamDodge(b) || travel(b, M)) return;
   if (reviveTurn(b, P)) return; // a partymate is down and it's our job to pick them up
+  if (rescueTurn(b, P)) return; // a partymate is caught in vines and it's our job to cut them free
   act(b, P, M);
 }
 
@@ -437,7 +448,7 @@ function ctxBase(b) {
 }
 
 function act(b, P, M) {
-  let tgt = chooseTarget(b, P, M);
+  let tgt = (!b.trap && rescueTarget(b, P)) || chooseTarget(b, P, M); // a trap object to break first (J1)
   const anchor = M.anchor && !M.anchor.dead ? M.anchor : null;
   // cohesion: too far from the anchor, drop the fight and regroup (but never walk out of a boss fight)
   if (anchor && M.mode !== 'stay' && d2(anchor.x, anchor.z, b.x, b.z) > LEASH && !(tgt?.def.boss && inBossRoom(b.x, b.z)) && M.mode !== 'attack') tgt = null;
@@ -478,6 +489,7 @@ function makeCtx(b, P, M, tgt, dodge) {
   ctx.leader = M.mode === 'lead' ? null : M.anchor || null;
   ctx.anchor = tankOn || (M.anchor && !M.anchor.dead && M.anchor.id !== b.id ? M.anchor : null);
   ctx.ready = b.role === 'tank' || !tankOn || (!!hTank && b.t - hTank.first > 1.2);
+  if (tgt?.def.prop) { ctx.ready = true; ctx.anchor = null; } // a trap object (J1): straight at it
   ctx.party = { mates: P.mates, humans: P.humans, all: P.all };
   ctx.hurt = [...P.all.filter(p => p.downed?.by && d2(p.x, p.z, b.x, b.z) < 15), // a body being revived: a Heal speeds it up
     ...alive.filter(p => pct(p) < 0.78 && d2(p.x, p.z, b.x, b.z) < 15).sort((x, y) => pct(x) - pct(y))];
