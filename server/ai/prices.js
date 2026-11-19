@@ -1,4 +1,5 @@
-// List prices (USD per 1M tokens) used for the spend estimate on the admin page. Checked 2026-11-17; sources in
+// List prices (USD per 1M tokens) used for the spend estimate on the admin page. Checked 2026-11-17 (Anthropic rows
+// re-checked 2026-11-18: Haiku 5.5 is still the cheapest/fastest; its >100K-token-prompt tier never applies here); sources in
 // docs/research/ai-companions.md. in = uncached input, cr = cache read, cw = cache write (5 min), out = output (thinking
 // included). An unknown model uses AI_PRICE_IN / AI_PRICE_OUT if set, else a deliberately high guess, so the daily cap
 // errs on the safe side.

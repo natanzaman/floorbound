@@ -56,4 +56,11 @@ async function setup() {
     kind TEXT NOT NULL, data JSONB)`);
   await q(`CREATE INDEX IF NOT EXISTS play_events_kind_at ON play_events (kind, at)`);
   await q(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false`); // admin page (server/admin.js)
+  // AI companions (server/ai/store.js): each bot's notes about each player (capped, pruned), and spend per UTC day
+  await q(`CREATE TABLE IF NOT EXISTS ai_memories (
+    bot TEXT NOT NULL, player TEXT NOT NULL, notes JSONB NOT NULL DEFAULT '[]'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (bot, player))`);
+  await q(`CREATE INDEX IF NOT EXISTS ai_memories_updated ON ai_memories (updated_at)`);
+  await q(`CREATE TABLE IF NOT EXISTS ai_spend (
+    day DATE PRIMARY KEY, usd DOUBLE PRECISION NOT NULL DEFAULT 0, calls INT NOT NULL DEFAULT 0)`);
 }

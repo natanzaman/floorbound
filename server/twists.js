@@ -2,7 +2,8 @@
 // game.js only calls them from small hooks in bossSpecials, circleAttack, hornCharge, damageMob, killMob,
 // updateMob (boss engage / wipe reset / respawn) and snapshot. The twist table lives in shared/twists.js.
 import { WORLD, WARDEN, MOBS, inArena } from '../shared/data.js';
-import { DROPS, SLOTS, makeItem, rollRarity } from '../shared/items.js';
+import { DROPS, SLOTS, rollRarity } from '../shared/items.js';
+import { rollGear } from '../shared/loot.js';
 import { TWISTS, TOTEM, rewardText, rollTwist } from '../shared/twists.js';
 import { SOV_TWISTS } from '../shared/floor2.js';
 
@@ -189,7 +190,7 @@ export const TwistMethods = {
       const items = [];
       for (let i = 0; i < (R.loot || 0); i++) {
         const slot = SLOTS[Math.floor(Math.random() * SLOTS.length)];
-        const it = makeItem(slot, rollRarity(D.table), p.cls, Math.random, undefined, 'roll'); // weapons roll a style
+        const it = rollGear(slot, rollRarity(D.table), p.cls, Math.random, undefined, 'roll'); // weapons roll a style; affixes (shared/loot.js)
         if (this.giveItem(p, it)) items.push({ name: it.name, r: it.r });
         if (it.r >= 2) this.track(p, 'loot', { r: it.r, slot, mob: 'warden', twist: id });
       }

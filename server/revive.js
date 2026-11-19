@@ -125,7 +125,7 @@ const methods = {
       }
       if (D.by) {
         D.until += dt; // the bleed-out waits while someone is reviving
-        D.prog += dt;
+        D.prog += dt * (1 + (r?.tal?.stat.revive || 0) / 100); // stat.revive: gear (shared/loot.js)
         if (D.prog >= D.need) this.completeRevive(p, r);
       } else {
         D.prog = Math.max(0, D.prog - dt); // a broken channel's progress fades at the channel's own pace

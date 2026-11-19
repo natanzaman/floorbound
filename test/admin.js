@@ -8,6 +8,7 @@ import pg from 'pg';
 import { MASTERY, masterySkills } from '../shared/mastery.js';
 import { CLASS_IDS, MAX_LEVEL } from '../shared/data.js';
 import { spentOf, pointsAt, allocError } from '../shared/talents.js';
+import { SETS, setCounts, setSize, bestSetFor, AFFIXES } from '../shared/loot.js';
 
 const DB = process.env.DATABASE_URL;
 if (!DB) { console.log('skipped: set DATABASE_URL to run the admin tests'); process.exit(0); }
@@ -85,6 +86,29 @@ try {
   ok(db.lvl === 7 && db.xp === 40 && db.gold === 500 && db.inv.cons.potion === 9 && db.inv.mats.horn === 4, 'DB has the new level, XP, gold, potions, materials');
   ok(db.inv.bag.some(it => it.slot === 'weapon' && it.r === 2) && db.inv.bag.some(it => it.la === 1), 'DB has the added Rare weapon and the Horn of the Warden');
   const weapon = db.inv.bag.find(it => it.slot === 'weapon');
+  ok(weapon.ax?.length === 2, 'added items roll affixes by rarity (Rare: 2)');
+  // ---------- affixes and sets (H2) ----------
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { ops: [{ op: 'editItem', u: weapon.u, ax: [{ k: 'crit', v: 6 }, { k: 'skdmg', v: 15, s: 'whirl', c: 'swordsman' }], set: 'hornbound' }] });
+  let w2 = r.body.character.inv.bag.find(it => it.u === weapon.u);
+  ok(r.status === 200 && w2.set === 'hornbound' && w2.ax[1].s === 'whirl' && w2.ax[1].v === 15, 'editItem: affixes and set saved');
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { ops: [{ op: 'editItem', u: weapon.u, ax: [{ k: 'dr', v: 3 }] }] });
+  ok(r.status === 400 && /dr doesn't roll on a weapon/.test(r.body.error), `editItem: an affix for the wrong slot is refused (${r.body.error})`);
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { ops: [{ op: 'editItem', u: weapon.u, ax: [], set: null }] });
+  w2 = r.body.character.inv.bag.find(it => it.u === weapon.u);
+  ok(!w2.ax && !w2.set, 'editItem: clear affixes and set');
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { ops: [{ op: 'editItem', u: weapon.u, ax: 'roll' }] });
+  ok(r.body.character.inv.bag.find(it => it.u === weapon.u).ax?.length === 2, 'editItem: roll fresh affixes');
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { ops: [{ op: 'addSet', set: 'tidebound', slot: 'all' }] });
+  ok(r.status === 200 && r.body.character.inv.bag.filter(it => it.set === 'tidebound').length === setSize('tidebound'), 'addSet: a full set to the bag');
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { rawInv: { ...r.body.character.inv, bag: [{ slot: 'armor', r: 1, name: 'Bad', st: { hp: 1 }, set: 'nope' }] } });
+  ok(r.status === 400 && /has no armor piece/.test(r.body.error), 'raw JSON: an unknown set is refused');
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { ops: [{ op: 'addItem', slot: 'armor', r: 2, ax: false }] });
+  const plain = r.body.character.inv.bag.find(it => it.slot === 'armor' && !it.set);
+  ok(plain && !plain.ax, 'addItem with ax: false has no affixes');
+  [db] = await sql('SELECT inv FROM characters WHERE id = $1', [off.id]);
+  const extra = db.inv.bag.filter(x => x.set || x.u === plain.u).map(it => ({ op: 'removeItem', u: it.u })); // back to the earlier test state
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { ops: extra });
+  ok(r.body.character.inv.bag.length === 2, 'extra test items removed');
   r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { ops: [{ op: 'equip', u: weapon.u }] });
   ok(r.body.character.inv.eq.weapon?.u === weapon.u, 'equip a bag item');
   const rawInv = { ...r.body.character.inv, cons: { potion: 2, tonic: 5, draught: 1 } };
@@ -190,8 +214,11 @@ try {
     const good = r.status === 200 && c.lvl === MAX_LEVEL && c.stats.floor2 === 1
       && Object.values(c.mastery).every(e => e.pts >= MASTERY.need[MASTERY.max])
       && spentOf(c.talents) === pointsAt(MAX_LEVEL) && !allocError(cls, c.talents, MAX_LEVEL)
-      && c.inv.eq.weapon?.cls === cls && c.inv.eq.weapon.r === 3 && c.inv.eq.armor?.la === 2 && c.inv.eq.charm?.la === 1 && c.inv.cons.potion >= 20;
-    ok(good, `maxed preset: ${cls} (Lv ${c?.lvl}, ${spentOf(c?.talents)} talents, ${c?.inv?.eq?.weapon?.name})`);
+      && c.inv.eq.weapon?.cls === cls && c.inv.eq.weapon.r === 3 && c.inv.cons.potion >= 20
+      && setCounts(c.inv.eq)[bestSetFor(cls)] === setSize(bestSetFor(cls)) // a full set
+      && ['weapon', 'armor', 'charm'].every(s => c.inv.eq[s].ax?.length === 3 && c.inv.eq[s].ax.every(a => a.v >= AFFIXES[a.k].v[3])) // 3 top affixes each
+      && c.inv.bag.some(it => it.la === 1) && c.inv.bag.some(it => it.la === 2); // the Last Attack items kept in the bag
+    ok(good, `maxed preset: ${cls} (Lv ${c?.lvl}, ${spentOf(c?.talents)} talents, ${SETS[bestSetFor(cls)].name}: ${c?.inv?.eq?.weapon?.name})`);
     await call('DELETE', `/api/admin/characters/${m.id}`, adminTok, { confirm: c.name });
   }
 

@@ -17,33 +17,55 @@ import { INTENT_SCHEMA, sanitizeIntent } from './intent.js';
 import { SYSTEM, summarize, isBotId, nameOfId, partyMates } from './prompt.js';
 import { Budget } from './budget.js';
 import { priceOf, costOf } from './prices.js';
-import { hasKey } from './config.js';
+import { hasKey, apiKey, keyHint, keyReport, envLookup, KEY_ENV } from './config.js';
 import { redact } from './providers/http.js';
 
 const STANCE_MS = 10 * 60e3;   // a stance / focus lasts 10 minutes unless changed
 const PENDING_MS = 20e3;       // an unanswered line older than this is dropped
 const UNPROMPTED_GAP_MS = 20e3; // at most one unprompted line per bot per 20 s
+const TEST_PROMPT = 'Trigger: the server admin is running a connection test (nobody is playing). Set "say" to a short in-character line confirming you can hear them (under 60 characters). Keep "order" none, "stance" keep, "focus" and "remember" empty.';
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// Notes per (bot name, player name), 5 each, the 400 most recent pairs. `dirty` holds the keys changed since the last
+// save (server/ai/store.js keeps them across restarts).
 export class Memory {
-  constructor(max = 400) { this.max = max; this.m = new Map(); }
+  constructor(max = 400) { this.max = max; this.m = new Map(); this.dirty = new Set(); }
   key(bot, player) { return `${String(bot).toLowerCase()}|${String(player).toLowerCase()}`; }
   get(bot, player) { return this.m.get(this.key(bot, player))?.notes || []; }
   add(bot, player, note) {
     if (!note) return;
-    const k = this.key(bot, player), r = this.m.get(k) || { notes: [] };
+    const k = this.key(bot, player), r = this.m.get(k) || { bot: String(bot).toLowerCase(), player: String(player).toLowerCase(), notes: [] };
     if (!r.notes.some(n => n.toLowerCase() === note.toLowerCase())) r.notes.push(note);
     r.notes = r.notes.slice(-5);
     this.m.delete(k); this.m.set(k, r); // most recent last
+    this.dirty.add(k);
+    while (this.m.size > this.max) { const old = this.m.keys().next().value; this.m.delete(old); this.dirty.delete(old); }
+  }
+  // rows from the store, oldest first; doesn't mark anything dirty (and never overwrites a note made since boot)
+  load(rows) {
+    for (const r of rows || []) {
+      if (!r?.bot || !r?.player) continue;
+      const k = this.key(r.bot, r.player);
+      if (this.m.has(k)) continue;
+      this.m.set(k, { bot: String(r.bot).toLowerCase(), player: String(r.player).toLowerCase(), notes: (r.notes || []).map(n => String(n).slice(0, 100)).filter(Boolean).slice(-5) });
+    }
     while (this.m.size > this.max) this.m.delete(this.m.keys().next().value);
   }
+  // the changed rows, and forget that they changed (put them back with markDirty if the save fails)
+  takeDirty() {
+    const keys = [...this.dirty]; this.dirty.clear();
+    return { keys, rows: keys.map(k => this.m.get(k)).filter(Boolean).map(({ bot, player, notes }) => ({ bot, player, notes })) };
+  }
+  markDirty(keys) { for (const k of keys) if (this.m.has(k)) this.dirty.add(k); }
   get size() { return this.m.size; }
 }
 
 export class Minds {
   // cfg: readConfig(); provider: makeProvider(); listBots(): live bot objects; env: for the key check.
-  constructor({ cfg, provider, listBots = () => [], env = process.env, now = Date.now, log = console.log }) {
-    this.cfg = cfg; this.provider = provider; this.listBots = listBots; this.env = env; this.now = now; this.log = log;
+  // onThink(b, on): a bot started / stopped thinking about a line said to it (the "…" over its head).
+  constructor({ cfg, provider, listBots = () => [], env = process.env, now = Date.now, log = console.log, onThink = null }) {
+    this.cfg = cfg; this.provider = provider; this.listBots = listBots; this.env = env; this.now = now; this.log = log; this.onThink = onThink;
+    this.store = null; this.flushing = null; this.spendSaved = 0; this.callsSaved = 0; this.lastTest = null; this.testing = false; this.flushes = 0;
     this.on = !!(cfg.startOn && this.ready());
     this.budget = new Budget(cfg, now);
     this.memory = new Memory();
@@ -51,8 +73,9 @@ export class Minds {
     this.state = new WeakMap();
     this.stats = { calls: 0, ok: 0, errors: 0, timeouts: 0, skipped: {}, tokIn: 0, tokOut: 0, cached: 0, ms: 0, lastError: '', lastErrorAt: 0 };
     this.recent = []; // last decisions, for the admin page
+    if (!cfg.provider && !cfg.badProvider) { const k = Object.values(KEY_ENV).flat().find(n => envLookup(env, n)?.value); if (k) log(`[ai] companions off: AI_PROVIDER isn't set (${k} is)`); }
     if (cfg.badProvider) log(`[ai] unknown AI_PROVIDER "${cfg.badProvider}": companions stay off`);
-    else if (cfg.provider) log(`[ai] companions: ${cfg.provider}/${cfg.model}, key ${hasKey(cfg, env) ? 'set' : 'missing'}, ${this.on ? 'ON' : 'off'}`);
+    else if (cfg.provider) log(`[ai] companions: ${cfg.provider}/${cfg.model}, ${keyReport(cfg, env).text}, ${this.on ? 'ON' : 'off'}${cfg.startOn && !this.on ? ' (AI_ENABLED is set, but there is no key)' : ''}`);
   }
 
   ready() { return !!this.provider && hasKey(this.cfg, this.env); }
@@ -64,6 +87,69 @@ export class Minds {
     this.on = !!on;
     this.log(`[ai] companions turned ${this.on ? 'ON' : 'off'}`);
     return { ok: true };
+  }
+
+  // ---------- what survives a restart (server/ai/store.js) ----------
+  // Loads the memories and today's spend, then saves changes every flushMs (and on flush(): shutdown).
+  async useStore(store, { flushMs = 15e3 } = {}) {
+    if (!store || this.store || !this.cfg.provider) return false; // no provider: nothing to remember
+    this.store = store;
+    try {
+      this.memory.load(await store.loadMemories());
+      this.budget.rollDay();
+      const day = this.budget.day, usd = await store.loadSpend(day);
+      if (this.budget.day === day && usd > 0) { this.budget.daySpend += usd; this.budget.savedDay = day; } // (spend before this boot counts)
+      await store.pruneMemories();
+      this.log(`[ai] loaded ${this.memory.size} memories, $${usd.toFixed(4)} spent today before this start`);
+    } catch (e) { this.log('[ai] could not load memories / spend:', redact(e?.message || e)); }
+    if (flushMs) { const t = setInterval(() => this.flush(), flushMs); t.unref?.(); this.flushTimer = t; }
+    return true;
+  }
+
+  // Save changed memories and the spend since the last save. Never throws; overlapping calls share one save.
+  flush() {
+    if (!this.store) return Promise.resolve();
+    return (this.flushing ||= (async () => {
+      const { keys, rows } = this.memory.takeDirty();
+      if (rows.length) try { await this.store.saveMemories(rows); } catch (e) { this.memory.markDirty(keys); this.log('[ai] memory save failed:', redact(e?.message || e)); }
+      const B = this.budget, usd = B.totalSpend - this.spendSaved, calls = B.calls - this.callsSaved;
+      if (usd > 0 || calls > 0) {
+        try { await this.store.addSpend(B.day, usd, calls); this.spendSaved += usd; this.callsSaved += calls; } catch (e) { this.log('[ai] spend save failed:', redact(e?.message || e)); }
+      }
+      if (++this.flushes % 240 === 0) await this.store.pruneMemories().catch(() => {}); // about once an hour
+    })().finally(() => { this.flushing = null; }));
+  }
+  // ---------- admin "Test call": one tiny real call to prove the key, model and request shape work ----------
+  async testCall() {
+    const t0 = this.now();
+    const done = r => (this.lastTest = { at: Date.now(), ...r });
+    if (!this.provider) return done({ ok: false, error: `Can't test: ${this.why()}.` });
+    if (!this.ready()) return done({ ok: false, error: `Can't test: no key (${this.cfg.keyEnvs.join(' or ')} isn't set).` });
+    if (this.testing) return { ok: false, error: 'A test call is already running.' };
+    if (this.lastTest && Date.now() - this.lastTest.at < 3000) return { ok: false, error: 'Wait a few seconds between tests.' };
+    this.testing = true;
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), this.cfg.timeoutMs);
+    timer.unref?.();
+    this.budget.start(null);
+    let res = { ok: false, test: true };
+    const base = { provider: this.cfg.provider, model: this.cfg.model, key: keyHint(apiKey(this.cfg, this.env)) };
+    try {
+      const r = await Promise.race([
+        this.provider.call({ system: SYSTEM, user: TEST_PROMPT, schema: INTENT_SCHEMA, maxTokens: this.cfg.maxOutTokens, signal: ctl.signal }),
+        new Promise((_, rej) => ctl.signal.addEventListener('abort', () => rej(Object.assign(new Error('timed out'), { kind: 'timeout' })))),
+      ]);
+      const cost = costOf(r.usage, this.price);
+      res = { ok: true, test: true, usage: r.usage, cost };
+      if (this.budget.pausedUntil > this.now() && /errors in a row/.test(this.budget.pauseWhy)) this.budget.pausedUntil = 0; // fixed: stop waiting
+      return done({ ok: true, ...base, ms: this.now() - t0, cost, usage: r.usage, say: sanitizeIntent(r.intent).say });
+    } catch (e) {
+      const kind = e?.kind || 'error';
+      return done({ ok: false, ...base, ms: this.now() - t0, error: kind === 'timeout' ? `timed out after ${this.cfg.timeoutMs} ms` : redact(e?.message || String(e)) });
+    } finally {
+      clearTimeout(timer);
+      this.testing = false;
+      this.budget.end(null, res);
+    }
   }
 
   st(b) {
@@ -164,6 +250,7 @@ export class Minds {
     timer.unref?.();
     this.budget.start(b);
     this.stats.calls++; s.calls++;
+    const shown = trig.kind === 'chat' && this.think1(b, true); // only a line said to it shows the "…"
     let r = null, res = { ok: false, kind: 'error' };
     try {
       const user = summarize(b, s, trig, this.memory, this.now());
@@ -187,9 +274,12 @@ export class Minds {
       this.stats.lastError = redact(e?.message || String(e)); this.stats.lastErrorAt = Date.now();
     } finally {
       clearTimeout(timer);
+      if (shown) this.think1(b, false);
       this.budget.end(b, res);
     }
   }
+
+  think1(b, on) { try { this.onThink?.(b, on); return true; } catch { return false; } }
 
   // Put a sanitized intent into the game. Orders, stance and focus only answer a party member who spoke to us.
   apply(b, s, it, trig) {
@@ -235,13 +325,14 @@ export class Minds {
     const live = this.active() ? this.listBots().filter(b => this.companion(b)).length : 0;
     return {
       on: this.on, active: this.active(), state: this.why(), provider: this.cfg.provider || null, model: this.cfg.model || null,
-      keyEnv: this.cfg.keyEnvs.join(' or ') || null, keySet: this.ready(), priceKnown: this.price.known,
+      keyEnv: this.cfg.keyEnvs.join(' or ') || null, keySet: this.ready(), keyCheck: this.cfg.provider ? keyReport(this.cfg, this.env) : null, priceKnown: this.price.known,
       price: { in: this.price.in, out: this.price.out },
       minds: Math.min(live, this.cfg.maxBots), calls: S.calls, ok: S.ok, errors: S.errors, timeouts: S.timeouts, skipped: S.skipped,
       tokensIn: S.tokIn, tokensOut: S.tokOut, cachedIn: S.cached, avgMs: S.ok ? Math.round(S.ms / S.ok) : 0,
       spendToday: +B.daySpend.toFixed(5), spendTotal: +B.totalSpend.toFixed(5), dailyCap: this.cfg.dailyUsd,
       paused: B.pausedUntil > this.now() ? { why: B.pauseWhy, s: Math.ceil((B.pausedUntil - this.now()) / 1000) } : null,
-      lastError: S.lastError || null, lastErrorAt: S.lastErrorAt || null, memories: this.memory.size, recent: this.recent,
+      lastError: S.lastError || null, lastErrorAt: S.lastErrorAt || null, memories: this.memory.size, saved: !!this.store, recent: this.recent,
+      lastTest: this.lastTest, testing: this.testing,
       limits: { thinkS: this.cfg.thinkS, botMinGapS: this.cfg.botMinGapS, botTokensHour: this.cfg.botTokensHour, maxCallsMin: this.cfg.maxCallsMin, maxConcurrent: this.cfg.maxConcurrent, timeoutMs: this.cfg.timeoutMs, maxBots: this.cfg.maxBots },
       line: this.line(),
     };

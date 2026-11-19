@@ -9,6 +9,7 @@ import { TWISTS } from '/shared/twists.js';
 import { BOT_SKILLS, BOT_SKILL_DEFAULT } from '/shared/botskill.js';
 import { STYLES, CLASS_STYLES, styleLine } from '/shared/styles.js';
 import { TREES, pointsAt, spentOf } from '/shared/talents.js';
+import { AFFIXES, AFFIX_IDS, SETS, affixText, isTeamAffix, setSlots, bestSetFor } from '/shared/loot.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -411,6 +412,7 @@ function renderPlayers() {
 let ch = null; // the character being edited (as the server last sent it)
 async function openEditor(id) {
   try { ch = (await api(`/api/admin/characters/${id}`)).character; } catch (e) { return toast(e.message); }
+  axEdit = null;
   $('tabs').querySelector('[data-tab=edit]').disabled = false;
   show('edit');
   history.replaceState(null, '', `#edit=${id}`);
@@ -419,11 +421,31 @@ async function openEditor(id) {
 async function patch(body, okText = 'Saved.') {
   try {
     ch = (await api(`/api/admin/characters/${ch.id}`, { method: 'PATCH', body })).character;
+    axEdit = null; // (an open affix editor closes once saved; on an error it stays open)
     renderEditor();
     toast(okText + (ch.online ? ' Applied live to the online player.' : ''), true);
   } catch (e) { toast(e.message); }
 }
-const itemLine = it => `<span class="nm" style="color:${RARITY[it.r]?.color || '#fff'}">${esc(it.name)}${it.la ? ' ★' : ''}</span><span class="st">${Object.entries(it.st || {}).map(([k, v]) => statLabel(k, v)).join(', ')}${it.cls ? ` · ${esc(clsName(it.cls))}` : ''}${it.slot === 'weapon' && it.cls ? ` · ${esc(styleLine(it).split(':')[0])}` : ''}</span>`;
+const setTag = it => (it.set && SETS[it.set] ? `<span class="settag" style="color:${SETS[it.set].color}">${esc(SETS[it.set].name)}</span>` : '');
+const axLines = it => (it.ax || []).map(a => `<span class="ax${isTeamAffix(a) ? ' team' : ''}">◆ ${esc(affixText(a, ch?.cls))}</span>`).join('');
+const itemLine = it => `<span class="nm" style="color:${RARITY[it.r]?.color || '#fff'}">${esc(it.name)}${it.la ? ' ★' : ''}${setTag(it)}${axLines(it)}</span><span class="st">${Object.entries(it.st || {}).map(([k, v]) => statLabel(k, v)).join(', ')}${it.cls ? ` · ${esc(clsName(it.cls))}` : ''}${it.slot === 'weapon' && it.cls ? ` · ${esc(styleLine(it).split(':')[0])}` : ''}</span>`;
+// Affix + set editor under an item row (H2): kind, value, skill (skill affixes), set; saved with the editItem op.
+let axEdit = null; // { u, ax: [...], set }
+function axEditorHtml(it) {
+  const E = axEdit, cls = ch.cls, skills = CLASSES[cls]?.skills || [];
+  const rows = E.ax.map((a, i) => {
+    const A = AFFIXES[a.k];
+    const kinds = AFFIX_IDS.filter(k => AFFIXES[k].slots.includes(it.slot)).map(k => `<option value="${k}" ${k === a.k ? 'selected' : ''}>${k}</option>`).join('');
+    const sk = A?.skill ? `<select data-axs="${i}">${skills.map(s => `<option value="${s.id}" ${s.id === a.s ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select>` : '';
+    return `<div class="axr"><select data-axk="${i}">${kinds}</select><input type="number" step="0.5" min="0.5" data-axv="${i}" value="${a.v}" style="width:70px" />${sk}<span class="dim" style="font-size:11px">${A ? `${esc(affixText({ ...a, c: cls }, cls))} · Epic roll ~${A.v[3]}` : ''}</span><button class="small danger" data-axdel="${i}">✕</button></div>`;
+  }).join('');
+  const sets = Object.keys(SETS).filter(id => SETS[id].pieces[it.slot]);
+  return `<div class="axed">${rows || '<span class="faint">No affixes.</span>'}
+    <div class="axr"><button class="small" data-axadd>+ Affix</button><button class="small" data-axroll>Roll fresh (by rarity)</button>
+    <label class="dim" style="font-size:12px">Set <select data-axset><option value="">none</option>${sets.map(id => `<option value="${id}" ${E.set === id ? 'selected' : ''}>${esc(SETS[id].name)}</option>`).join('')}</select></label>
+    <span class="grow"></span><button class="small primary" data-axsave>Save item</button><button class="small ghost" data-axcancel>Cancel</button></div></div>`;
+}
+const itemRow = (slotLabel, it, btns) => `<div class="it"><span class="slot">${slotLabel}</span>${itemLine(it)}${it.ks ? '' : `<button class="small" data-axopen="${it.u}">Affixes</button>`}${btns}</div>${axEdit?.u === it.u ? axEditorHtml(it) : ''}`;
 
 function renderEditor() {
   const c = ch, inv = c.inv, st = c.stats;
@@ -435,7 +457,7 @@ function renderEditor() {
       ${c.online ? `<span class="pill on">online · F${c.floor} · ${esc(c.area)}</span>` : '<span class="pill">offline</span>'}
       <span>account: ${esc(c.account.label)} (#${c.account.id})${c.account.admin ? ' <span class="pill adm">ADMIN</span>' : ''}</span>
       <span class="faint">created ${date(c.created_at)} · last seen ${c.online ? 'now' : ago(c.updated_at)}</span></div></div>
-    <span class="grow"></span><button id="e-max" class="primary" title="Max level, Floor 2, Mastery 5 + evolutions, all talents, best gear, 20 of each consumable">⚡ Maxed preset</button><button id="e-reload" class="ghost">↻ Reload</button><button id="e-back">← Players</button></div>
+    <span class="grow"></span><button id="e-max" class="primary" title="Max level, Floor 2, Mastery 5 + evolutions, all talents, a full boss set with top affixes, 20 of each consumable">⚡ Maxed preset</button><button id="e-reload" class="ghost">↻ Reload</button><button id="e-back">← Players</button></div>
   <div class="secnav"><a href="#" data-go="e-sec-char">Character</a><a href="#" data-go="e-sec-cons">Consumables &amp; materials</a><a href="#" data-go="e-sec-titles">Titles &amp; stats</a><a href="#" data-go="e-sec-mastery">Skill mastery</a><a href="#" data-go="e-sec-items">Items</a><a href="#" data-go="e-sec-raw">Raw JSON</a><a href="#" data-go="e-sec-danger" style="color:#fca5a5">Delete</a></div>
   <div class="grid">
     <section class="card esec" id="e-sec-char"><h2>Character</h2>
@@ -475,9 +497,9 @@ function renderEditor() {
   </section>
   <div class="grid" id="e-sec-items">
     <section class="card items esec"><h2>Equipped</h2>
-      ${SLOTS.map(s => `<div class="it"><span class="slot">${s}</span>${inv.eq[s] ? `${itemLine(inv.eq[s])}<button class="small" data-uneq="${s}">To bag</button><button class="small danger" data-rmu="${inv.eq[s].u}">Remove</button>` : '<span class="nm faint">—</span>'}</div>`).join('')}
+      ${SLOTS.map(s => (inv.eq[s] ? itemRow(s, inv.eq[s], `<button class="small" data-uneq="${s}">To bag</button><button class="small danger" data-rmu="${inv.eq[s].u}">Remove</button>`) : `<div class="it"><span class="slot">${s}</span><span class="nm faint">—</span></div>`)).join('')}
       <h2 style="margin-top:14px">Bag (${inv.bag.length}/24)</h2>
-      ${inv.bag.map(it => `<div class="it"><span class="slot">${it.slot}</span>${itemLine(it)}<button class="small" data-eq="${it.u}">Equip</button><button class="small danger" data-rmu="${it.u}">Remove</button></div>`).join('') || '<div class="faint">Empty.</div>'}
+      ${inv.bag.map(it => itemRow(it.slot, it, `<button class="small" data-eq="${it.u}">Equip</button><button class="small danger" data-rmu="${it.u}">Remove</button>`)).join('') || '<div class="faint">Empty.</div>'}
     </section>
     <section class="card esec"><h2>Add an item</h2>
       <div class="row">
@@ -486,8 +508,16 @@ function renderEditor() {
         <label class="f" id="a-cls-w">Weapon class<select id="a-cls">${CLASS_IDS.map(k => `<option value="${k}" ${k === c.cls ? 'selected' : ''}>${esc(clsName(k))}</option>`).join('')}</select></label>
         <label class="f" id="a-style-w">Weapon style<select id="a-style"></select></label>
         <label class="f hidden" id="a-charm-w">Charm affix<select id="a-charm"><option value="">random</option><option value="crit">Keenness (crit)</option><option value="haste">Haste</option><option value="sw">the Switch</option></select></label>
+        <label class="f" style="flex-direction:row;gap:6px;align-items:center"><input type="checkbox" id="a-ax" checked /> roll affixes</label>
         <button id="a-add" style="margin-bottom:10px">Add to bag</button>
       </div>
+      <h2 style="margin-top:6px">Add a set piece</h2>
+      <div class="row">
+        <label class="f">Set<select id="s-set">${Object.keys(SETS).map(id => `<option value="${id}" ${id === bestSetFor(c.cls) ? 'selected' : ''} style="color:${SETS[id].color}">${esc(SETS[id].name)} (${esc(SETS[id].from)})</option>`).join('')}</select></label>
+        <label class="f">Piece<select id="s-slot"></select></label>
+        <button id="s-add" style="margin-bottom:10px">Add to bag</button>
+      </div>
+      <div class="dim" style="font-size:12px" id="s-bonus"></div>
       <div class="row"><button id="a-la1" style="color:${RARITY[4].color}">+ Horn of the Warden</button><button id="a-la2" style="color:${RARITY[4].color}">+ Sovereign's Tidecloak</button></div>
     </section>
   </div>
@@ -514,7 +544,7 @@ function wireEditor() {
   $('e-back').onclick = () => show('players');
   $('e-reload').onclick = () => openEditor(c.id);
   $('e-max').onclick = () => {
-    if (!confirm(`Max out ${c.name}?\n\nLevel ${MAX_LEVEL}, Floor 2 unlocked, every skill Mastery 5 with an evolution, all talent points spent (recommended path; current talents are replaced), an Epic weapon with top rolls (same style), Sovereign's Tidecloak, Horn of the Warden and 20 of each consumable. Worn gear goes to the bag if there's room.`)) return;
+    if (!confirm(`Max out ${c.name}?\n\nLevel ${MAX_LEVEL}, Floor 2 unlocked, every skill Mastery 5 with an evolution, all talent points spent (recommended path; current talents are replaced), an Epic weapon with top rolls (same style), a full ${SETS[bestSetFor(c.cls)].name} set with top rolls and 3 top affixes per piece (the weapon keeps its style), the two Last Attack items in the bag if missing, and 20 of each consumable. Worn gear goes to the bag if there's room.`)) return;
     patch({ preset: 'maxed' }, `${c.name} is maxed.`);
   };
   $('e-lvl').oninput = () => { const l = +$('e-lvl').value; $('e-xpmax').textContent = `(of ${l >= MAX_LEVEL ? 0 : xpToNext(l) || '?'})`; };
@@ -543,7 +573,44 @@ function wireEditor() {
   const styleOpts = () => { $('a-style').innerHTML = (CLASS_STYLES[$('a-cls').value] || []).map(id => `<option value="${id}">${esc(STYLES[id].name)}${STYLES[id].def ? ' (default)' : ''}</option>`).join(''); }; // weapon styles
   $('a-cls').onchange = styleOpts; styleOpts();
   $('a-slot').onchange = slotVis; slotVis();
-  $('a-add').onclick = () => patch({ ops: [{ op: 'addItem', slot: $('a-slot').value, r: +$('a-r').value, cls: $('a-cls').value, style: $('a-style').value, charm: $('a-charm').value }] }, 'Item added.');
+  $('a-add').onclick = () => patch({ ops: [{ op: 'addItem', slot: $('a-slot').value, r: +$('a-r').value, cls: $('a-cls').value, style: $('a-style').value, charm: $('a-charm').value, ax: $('a-ax').checked }] }, 'Item added.');
+  // set pieces
+  const setOpts = () => {
+    const id = $('s-set').value, S = SETS[id];
+    $('s-slot').innerHTML = `<option value="all">Full set (${setSlots(id).length})</option>` + setSlots(id).map(s => `<option value="${s}">${esc(S.pieces[s].name || `${S.name} weapon`)}</option>`).join('');
+    $('s-bonus').innerHTML = Object.entries(S.bonus).map(([n, fx]) => `<b>${n} pieces:</b> ${fx.map(e => esc(e.desc || (e.stat ? affixText({ k: e.stat, v: e.v }, c.cls) : `${e.sk} +${e.dmg}% damage`))).join('; ')}`).join('<br>');
+  };
+  $('s-set').onchange = setOpts; setOpts();
+  $('s-add').onclick = () => patch({ ops: [{ op: 'addSet', set: $('s-set').value, slot: $('s-slot').value }] }, 'Set piece added.');
+  // affix editor
+  const findIt = u => [...c.inv.bag, ...SLOTS.map(s => c.inv.eq[s])].find(it => it?.u === u);
+  for (const b of document.querySelectorAll('[data-axopen]')) b.onclick = () => {
+    const it = findIt(+b.dataset.axopen);
+    axEdit = axEdit?.u === it.u ? null : { u: it.u, ax: (it.ax || []).map(a => ({ ...a })), set: it.set || '' };
+    renderEditor();
+  };
+  if (axEdit) {
+    const it = findIt(axEdit.u), E = axEdit, rr = () => { const y = scrollY; renderEditor(); scrollTo(0, y); };
+    if (!it) axEdit = null;
+    else {
+      const skillsOf = k => (AFFIXES[k]?.skill ? CLASSES[c.cls]?.skills || [] : []);
+      for (const el of document.querySelectorAll('[data-axk]')) el.onchange = () => { const a = E.ax[+el.dataset.axk]; a.k = el.value; a.v = AFFIXES[a.k].v[Math.min(3, it.r)]; if (AFFIXES[a.k].skill) { a.c = c.cls; a.s = skillsOf(a.k)[0]?.id; } else { delete a.s; delete a.c; } rr(); };
+      for (const el of document.querySelectorAll('[data-axv]')) el.oninput = () => { E.ax[+el.dataset.axv].v = +el.value; };
+      for (const el of document.querySelectorAll('[data-axs]')) el.onchange = () => { E.ax[+el.dataset.axs].s = el.value; E.ax[+el.dataset.axs].c = c.cls; rr(); };
+      for (const el of document.querySelectorAll('[data-axdel]')) el.onclick = () => { E.ax.splice(+el.dataset.axdel, 1); rr(); };
+      document.querySelector('[data-axadd]').onclick = () => {
+        if (E.ax.length >= 4) return toast('At most 4 affixes.');
+        const k = AFFIX_IDS.find(x => AFFIXES[x].slots.includes(it.slot) && !E.ax.some(a => a.k === x));
+        const a = { k, v: AFFIXES[k].v[Math.min(3, it.r)] };
+        if (AFFIXES[k].skill) { a.c = c.cls; a.s = skillsOf(k)[0]?.id; }
+        E.ax.push(a); rr();
+      };
+      document.querySelector('[data-axset]').onchange = e => { E.set = e.target.value; };
+      document.querySelector('[data-axroll]').onclick = () => { patch({ ops: [{ op: 'editItem', u: E.u, ax: 'roll' }] }, 'Affixes rolled.'); };
+      document.querySelector('[data-axsave]').onclick = () => { patch({ ops: [{ op: 'editItem', u: E.u, ax: E.ax, set: E.set || null }] }, 'Item saved.'); };
+      document.querySelector('[data-axcancel]').onclick = () => { axEdit = null; rr(); };
+    }
+  }
   $('a-la1').onclick = () => patch({ ops: [{ op: 'addLastAttack', which: 1 }] }, 'Item added.');
   $('a-la2').onclick = () => patch({ ops: [{ op: 'addLastAttack', which: 2 }] }, 'Item added.');
   $('r-apply').onclick = () => {
