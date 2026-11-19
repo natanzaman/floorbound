@@ -555,13 +555,19 @@ export const F3Methods = {
       }
       if (rw.gold) { p.gold += Math.round(470 * rw.gold); p.dirty = true; }
     }
+    const quiet = this.quietClear?.(ids, 'the Storm Colossus'); // the Named alone: one quiet line (server/named.js)
     if (this.giveItem(killer, lastAttackItem3())) this.invChanged(killer);
-    this.events.push({ t: 'la3', id: killer.id, name: killer.name, x: r2(m.x), z: r2(m.z) });
-    this.sys(`LAST ATTACK BONUS: ${killer.name} landed the final blow and earned the Stormheart!`);
+    if (!quiet) {
+      this.events.push({ t: 'la3', id: killer.id, name: killer.name, x: r2(m.x), z: r2(m.z) });
+      this.sys(`LAST ATTACK BONUS: ${killer.name} landed the final blow and earned the Stormheart!`);
+    }
     this.clearF3Fight();
-    this.floorClears3++;
-    this.events.push({ t: 'clear3', names, n: this.floorClears3 });
-    this.sys(`The Storm Colossus has fallen! Floor 3 cleared by ${names.join(', ')}.`);
+    if (quiet) this.sys(quiet);
+    else {
+      this.floorClears3++;
+      this.events.push({ t: 'clear3', names, n: this.floorClears3 });
+      this.sys(`The Storm Colossus has fallen! Floor 3 cleared by ${names.join(', ')}.`);
+    }
     this.recordClear3(m, killer, ids);
     this.endFight3('kill', m);
     m.engaged = false; m.ov = null;

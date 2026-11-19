@@ -102,9 +102,9 @@ function world({ store = null } = {}) {
   const mgr = new BotManager(g, { url: 'ws://127.0.0.1:9/ws' });
   clearInterval(mgr.timer);
   mgr.start = function (roles, names, { lvl, behaviour, join }) {
-    this.joining = true;
+    this.joining = true; this.joiningNamed = !!join?.named; // (as addBotPlayer)
     let p;
-    try { p = g.addPlayer({ readyState: 1, send() {} }, names[0], roles[0]); } finally { this.joining = false; }
+    try { p = g.addPlayer({ readyState: 1, send() {} }, names[0], roles[0]); } finally { this.joining = false; this.joiningNamed = false; }
     p.bot = true; p.lvl = lvl;
     g.recompute(p); p.hp = p.maxHp;
     if (join?.named) this.namedJoin?.(p, join.named);
@@ -278,7 +278,10 @@ function world({ store = null } = {}) {
   ok(nm.peek(nat, 'halvard').pts === GAINS.boss && nm.peek(ann, 'halvard').pts === 0 && nm.peek(nat, 'cairn').pts === 0, 'real help in their boss fight (15% of the damage): +8; a 5% passenger and absent Named: nothing');
   f.team.set(ann.id, { dmg: 0, heal: 300 });
   nm.onFightEnd(f, 'wipe');
-  ok(nm.peek(ann, 'halvard').pts === GAINS.bossTry, 'healing counts too; a wipe: +3');
+  ok(nm.peek(ann, 'halvard').pts === 0, 'review #6: healing only herself is not real help');
+  f.team.set(ann.id, { dmg: 0, heal: 300, healOther: 300 });
+  nm.onFightEnd(f, 'wipe');
+  ok(nm.peek(ann, 'halvard').pts === GAINS.bossTry, 'healing others counts; a wipe: +3');
 
   // ---- humans first on a boss ----
   const W = g.boss, A = WORLD.arena;
@@ -303,6 +306,8 @@ function world({ store = null } = {}) {
     w2.g.damageMob(B, t, 9999);
     const rec = w2.cleared[0];
     ok(B.dead && rec?.heroes === true && rec.first === false && !w2.g.hadFirstClear && !w2.g.events.some(e => e.t === 'bell') && !t.stats.floorClearsFirst, 'a clear by the Named alone: never "first", no bell');
+    const said = w2.g.events.filter(e => e.t === 'sys' && !e.to).map(e => e.text);
+    ok(w2.g.floorClears === 0 && !w2.g.events.some(e => e.t === 'clear' || e.t === 'la') && !said.some(x => /LAST ATTACK|cleared by/.test(x)) && said.includes('The Hearthward felled the Horned Warden.'), 'review #3: no floor counter, Last Attack shout, "Floor 1 cleared" line or clear banner; one quiet line');
     hall.add(rec);
     const msg = hall.message();
     ok(msg.heroes?.length === 1 && msg.heroes[0].players.length === 2 && !msg.first && !msg.recent.length && !msg.fastest.length && !hall.hasFirst(1), 'it goes on the Hall\'s "Heroes\' record", not in first / fastest / recent');
@@ -402,6 +407,133 @@ function world({ store = null } = {}) {
   ok(!isNamedName(fake.name), 'an anonymous player can\'t take one of their names');
 }
 
+// ---- review fixes (2026-11-18): one Named per party, quiet clears, names, boss help, humans first, plans ----
+console.log('# review fixes');
+{
+  const { g, mgr, nm, clock, human, tick, P, sys, set } = world();
+  const nat = human('Natan', 10); tick(3);
+  const at = (p, x, z) => { p.x = x; p.z = z; };
+  const near = (p, q) => at(p, q.x + 2, q.z);
+  const hp = P('halvard'), mb = P('maribel'), tv = P('tovin'), cairn = P('cairn');
+  // #2: two invites out before either accepts
+  set(nat, 'halvard', 40); set(nat, 'maribel', 40); near(nat, hp);
+  g.invite(nat, hp.id); g.invite(nat, mb.id);
+  ok(hp.invite?.from === nat.id && mb.invite?.from === nat.id, 'two invites out at once');
+  g.accept(hp, nat.id); g.events = [];
+  g.accept(mb, nat.id);
+  ok(hp.party === nat.party && mb.party !== nat.party && !mb.invite && /One of the Named per party/.test(sys(nat).join()) && g.events.some(e => e.t === 'chat' && e.id === mb.id), 'review #2: the second to accept is turned away (invite cleared, the "taken" line)');
+  g.leaveParty(nat); tick(1);
+  // an invite out, then a Sworn call
+  set(nat, 'tovin', 90); g.invite(nat, mb.id);
+  ok(/One of the Named per party/.test(nm.call(nat, 'tovin')) && (!nat.party || tv.party !== nat.party), 'review #2: a Sworn call while another Named has your invite: refused');
+  mb.invite = null;
+  // a call, then an old invite accepted
+  g.invite(nat, mb.id); mb.invite.from = nat.id; const pend = { ...mb.invite }; mb.invite = null;
+  ok(nm.call(nat, 'tovin') === '' && tv.party === nat.party, 'the call goes through once nothing is pending');
+  mb.invite = pend; g.accept(mb, nat.id);
+  ok(mb.party !== nat.party && !mb.invite, 'review #2: an invite accepted after a call: turned away');
+  g.leaveParty(nat); tick(1);
+  // nice-to-have: a failed call doesn't spend the cooldown
+  clock.t += RULES.summonCd * 1000 + 1000;
+  const join = mgr.joinParty; mgr.joinParty = () => {};
+  ok(nm.call(nat, 'tovin') === 'failed', 'a call that fails to join…');
+  mgr.joinParty = join;
+  ok(nm.call(nat, 'tovin') === '' && tv.party === nat.party, '…spends no cooldown: the next call works');
+  g.leaveParty(nat); tick(1);
+
+  // #6 through the live path: self-healing isn't "healing done"
+  const W = g.boss, A = WORLD.arena;
+  const ann = human('Ann', 10, 'cleric');
+  for (const p of [nat, ann]) at(p, A.x, A.z - 3);
+  g.fight = { start: g.time, ids: new Set([nat.id, ann.id]), deaths: 0, hp: W.maxHp, team: new Map() };
+  ann.hp = 10; g.healPlayer(ann, 200, ann, null);
+  nat.hp = 10; g.healPlayer(nat, 50, ann, null);
+  const row = g.fight.team.get(ann.id) || {};
+  ok(row.heal > row.healOther && row.healOther > 0 && row.healOther <= 50, `review #6: healing counted apart for others (heal ${row.heal}, healOther ${row.healOther})`);
+  g.fight = null;
+
+  // nice-to-have: the held killing blow lets go after 20 s without a human hit
+  W.dead = false; W.hp = W.maxHp; W.contributors.clear();
+  at(tv, A.x + 1, A.z - 3);
+  g.damageMob(W, nat, 5); W.hp = 10;
+  g.damageMob(W, tv, 9999);
+  ok(!W.dead, 'a human hit it just now: the blow is held');
+  g.time += RULES.holdIdle + 1;
+  g.damageMob(W, tv, 9999);
+  ok(W.dead, 'nice-to-have: no human hit for 20 s: the Named may finish it');
+  W.dead = false; W.hp = W.maxHp; W.contributors.clear(); g.fight = null;
+  at(nat, 0, 30); at(ann, 0, 30);
+
+  // nice-to-have: tag and leave
+  const wolf = () => { const m = [...g.mobs.values()].find(x => x.type === 'wolf' && !x.dead); m.hp = m.maxHp; m.contributors.clear(); return m; };
+  let m = wolf(); at(nat, m.x + 2, m.z); at(cairn, m.x - 1, m.z); nat.xp = 0;
+  g.damageMob(m, nat, 1); at(nat, m.x + RULES.tagR + 5, m.z); m.hp = 2; g.damageMob(m, cairn, 500);
+  ok(m.dead && nat.xp === 0, 'nice-to-have: tagged and ran 60 m+ away: no XP from a Named\'s kill');
+  m = wolf(); at(nat, m.x + 2, m.z); nat.xp = 0;
+  g.damageMob(m, nat, 1); at(nat, m.x + 40, m.z); m.hp = 2; g.damageMob(m, cairn, 500);
+  ok(m.dead && nat.xp === m.def.xp, 'within 60 m: full XP');
+
+  // nice-to-have: a hosted Named doesn't go home in the middle of a boss fight, wherever he stands
+  set(nat, 'halvard', 40); at(nat, 0, 30); g.invite(nat, hp.id); g.accept(hp, nat.id); tick(1);
+  g.fight = { start: g.time, ids: new Set([nat.id]), deaths: 0, hp: W.maxHp, team: new Map() };
+  at(hp, 0, 30); g.time += RULES.partyIdle + 5; tick(1);
+  ok(!!nat.party && hp.party === nat.party, 'nice-to-have: an active boss fight keeps him (not only standing in the room)');
+  g.fight = null; g.time += 1; tick(1);
+  ok(!nat.party && /heads home/.test(sys(nat).join()), 'it ends: he heads home');
+  tick(1);
+
+  // nice-to-have: never short-handed
+  const plan = nm.plans.heroes;
+  for (const id of ['halvard', 'maribel', 'tovin', 'sennet']) { const p = P(id); p.dead = false; p.hp = p.maxHp; at(p, 5, 60); }
+  at(nat, 0, 30); at(ann, 0, 30); W.dead = true;
+  plan.mode = 'boss'; plan.since = clock.t; plan.fought = false; plan.homeAt = 0;
+  set(nat, 'sennet', 40); g.invite(nat, P('sennet').id); g.accept(P('sennet'), nat.id); tick(1);
+  ok(P('sennet').party === nat.party && plan.mode === 'farm', 'nice-to-have: one of them goes off with a human: the march on the boss is called off');
+  g.leaveParty(nat); tick(2);
+
+  // nice-to-have: the gate check is immediate
+  plan.mode = 'boss'; plan.fought = false;
+  at(hp, 0, GATE.zone.z0 + 4); at(nat, 0, GATE.zone.z0 + 5);
+  g.toggleReady(hp);
+  ok(!g.gate.ready.has(hp.id) && plan.mode === 'farm' && nm.chars.get('halvard').e.b.noBoss, 'nice-to-have: a human at the gate: a Named can\'t ready, and they turn back at once');
+  at(nat, 0, 30); plan.mode = 'boss';
+  g.toggleReady(hp);
+  ok(g.gate.ready.has(hp.id), 'no human there: he readies as before');
+  g.gate.ready.clear(); at(hp, 5, 60);
+
+  // #3: Floors 2 and 3, Named alone
+  for (const [boss, key, clr, la, N2] of [[g.sovereign, 'floorClears2', 'clear2', 'la2', 'the Drowned Sovereign'], [g.colossus, 'floorClears3', 'clear3', 'la3', 'the Storm Colossus']]) {
+    boss.contributors.clear(); boss.contributors.add(cairn.id); boss.hp = 1; boss.dead = false;
+    g.events = []; const n0 = g[key];
+    g.killMob(boss, cairn);
+    const said = g.events.filter(e => e.t === 'sys' && !e.to).map(e => e.text);
+    ok(boss.dead && g[key] === n0 && !g.events.some(e => e.t === clr || e.t === la) && !said.some(x => /LAST ATTACK|cleared by/.test(x)) && said.includes(`Cairn felled ${N2}.`), `review #3: ${N2} felled by a Named alone: a quiet line, no counter or banner`);
+  }
+  // bots alone (no Named) are announced as always
+  const bot = human('Rook', 12); bot.bot = true;
+  W.dead = false; W.hp = 1; W.contributors.clear(); W.contributors.add(bot.id); at(bot, A.x, A.z - 3); g.events = [];
+  const c0 = g.floorClears;
+  g.killMob(W, bot);
+  ok(g.floorClears === c0 + 1 && g.events.some(e => e.t === 'clear'), 'player bots alone still clear with the banner (only the Named are quiet)');
+
+  // #5: their names, for bots too
+  let threw = '';
+  try { mgr.add({ cls: 'ranger', name: 'Cairn', lvl: 5 }); } catch (e) { threw = e.message; }
+  ok(/one of the Named/.test(threw), 'review #5: an admin bot can\'t be named after one of the Named');
+  ok(mgr.uniqueName('Halvard') !== 'Halvard', 'nor get one as a picked name');
+  const rook = mgr.add({ cls: 'ranger', name: 'Rook', lvl: 5, behaviour: 'field' });
+  const rp = mgr.livePlayer(mgr.bots.find(e => e.bid === rook.bid)), rn = rp.name;
+  threw = '';
+  try { mgr.edit(rook.bid, { name: 'Sennet' }); } catch (e) { threw = e.message; }
+  ok(/one of the Named/.test(threw) && rp.name === rn, 'review #5: nor renamed to one on the admin page');
+  mgr.remove(rook.bid);
+  mgr.joining = true; mgr.joiningNamed = false;
+  let sneak;
+  try { sneak = g.addPlayer({ readyState: 1, send() {} }, 'Maribel', 'cleric'); } finally { mgr.joining = false; }
+  ok(sneak.name !== 'Maribel', 'review #5: a bot joining with one of their names (not the Named\'s own join) gets another');
+  g.removePlayer(sneak);
+}
+
 // ---- persistence through a store (in memory here; Postgres below) ----
 {
   const db = { chars: new Map(), fr: new Map(), writes: 0, levels: [9, 7, 5, 2] };
@@ -441,6 +573,55 @@ function world({ store = null } = {}) {
   ok(w.nm.peek(w.human('Guest', 5), 'cairn') === null, 'the anonymous one starts over');
 }
 
+// ---- review #1: a failed or slow friendship load never overwrites what's stored; #7: flush waits for its writes ----
+{
+  const db = new Map([['42:cairn', { pts: 60, day: 0, got: 0, chat: 0 }], ['42:halvard', { pts: 30, day: 0, got: 0, chat: 0 }]]);
+  let fail = 1, gate = null, writes = 0;
+  const store = {
+    loadChars: async () => [],
+    saveChar: async () => {},
+    loadFriends: async charId => {
+      if (fail-- > 0) throw new Error('connection reset');
+      if (gate) await gate.p;
+      return [...db.entries()].filter(([k]) => k.startsWith(`${charId}:`)).map(([k, v]) => ({ named_id: k.split(':')[1], ...v }));
+    },
+    saveFriend: (charId, id, rec) => new Promise(r => setTimeout(() => { writes++; db.set(`${charId}:${id}`, { ...rec }); r(); }, 30)),
+    listFriends: async () => [], charExists: async () => true, topLevels: async () => [],
+  };
+  const w = world({ store });
+  await w.nm.useStore(store);
+  const kai = w.human('Kai', 5, 'swordsman', { charId: 42, accountId: 9, lvl: 5, xp: 0, gold: 0 });
+  w.tick(2); await sleep(20);
+  ok(w.nm.friends.get(42)?.loaded === false, 'the first load fails: the cache is marked not loaded');
+  w.g.addFriendship(kai, 'cairn', 1, 'fight');
+  w.clock.t += 4000; w.tick(1); await sleep(60);
+  ok(db.get('42:cairn').pts === 60 && writes === 0, 'review #1: a gain after a failed load is not saved over the stored row (60 stays 60)');
+  w.clock.t += RULES.loadRetry * 1000; w.tick(1); await sleep(20);
+  ok(w.nm.friends.get(42).loaded && w.nm.peek(kai, 'cairn').pts === 61 && w.nm.peek(kai, 'halvard').pts === 30, 'review #1: the load is tried again from tick; the earlier gain is merged on top (61), the rest as stored');
+  w.clock.t += 4000; w.tick(1); await sleep(60);
+  ok(db.get('42:cairn').pts === 61 && db.get('42:halvard').pts === 30, 'review #1: the merged record is marked dirty and saved');
+  // a slow load: a gain flushed before it returns
+  w.g.removePlayer(kai); await sleep(60);
+  let open; gate = { p: new Promise(r => { open = r; }) };
+  const kai2 = w.human('Kai', 5, 'swordsman', { charId: 42, accountId: 9, lvl: 5, xp: 0, gold: 0 });
+  w.tick(1);
+  w.g.addFriendship(kai2, 'halvard', 2, 'fight');
+  w.clock.t += 4000; w.tick(1); await sleep(60);
+  ok(db.get('42:halvard').pts === 30, 'review #1: a slow load: nothing is saved before it returns');
+  open(); await sleep(20);
+  w.clock.t += 4000; w.tick(1); await sleep(60);
+  ok(w.nm.peek(kai2, 'halvard').pts === 32 && db.get('42:halvard').pts === 32 && db.get('42:cairn').pts === 61, 'review #1: when it returns the gain is merged (30 + 2) and saved; the rest untouched');
+  // #7: flush() resolves only once the writes are done
+  gate = null;
+  w.g.addFriendship(kai2, 'halvard', 1, 'fight');
+  w.nm.chars.get('cairn').dirty = true;
+  const before = writes;
+  const done = w.nm.flush();
+  ok(writes === before && typeof done?.then === 'function', 'review #7: flush() starts the writes and returns a promise');
+  await done;
+  ok(writes === before + 1 && db.get('42:halvard').pts === 33, 'review #7: and resolves after they land (shutdown waits for it)');
+}
+
 // ---- the kill switch ----
 {
   const g = new Game();
@@ -475,7 +656,7 @@ function client(name, cls = 'swordsman', join = {}) {
   c.ws.on('open', () => c.ws.send(JSON.stringify({ type: 'join', name, cls, ...join })));
   c.ws.on('message', raw => {
     const m = JSON.parse(raw.toString());
-    if (m.type === 'welcome') Object.assign(c, { id: m.id, x: m.x, z: m.z, seq: m.seq });
+    if (m.type === 'welcome') Object.assign(c, { id: m.id, x: m.x, z: m.z, seq: m.seq, welcome: m });
     else if (m.type === 'roster') c.roster = m.players;
     else if (m.type === 'snap') {
       c.pl = new Map(m.w.players.map(p => [p[0], { x: p[1], z: p[2], lvl: p[6], party: p[8] }]));
@@ -507,6 +688,9 @@ function client(name, cls = 'swordsman', join = {}) {
   ok(true, 'the Hearthward share a party; with one level-1 player around they are level 3');
   const bots = await a.ask({ type: 'pbot', op: 'list' });
   ok(bots.list.bots.length === 0 && bots.list.total === 0, 'they are not in the Bots tab, and not counted as bots there');
+  ok(a.welcome?.named === true, 'review #4: welcome says the Named are on (the client adds the Friends tab)');
+  const pb = await a.ask({ type: 'pbot', op: 'add', cls: 'ranger', name: 'Cairn', skill: 3 });
+  ok(!pb.ok && /one of the Named/.test(pb.error), 'review #5: a player-added bot can\'t be named after one of the Named');
   const list = (await a.ask({ type: 'named', op: 'list' })).list;
   ok(list.rows.length === 5 && list.rows.every(r => r.online && r.tierName === 'Stranger' && !r.invite.ok && !r.call.ok), 'the Friends list over the wire: five Strangers');
   const hal = a.named().find(r => r.named === 'halvard');
@@ -561,6 +745,15 @@ function client(name, cls = 'swordsman', join = {}) {
   a.close(); b.close();
   await until(async () => (await api('/api/admin/named')).chars.every(c => !c.online), 20000, 'the Named to leave');
   ok(true, 'everyone leaves: the Named go too');
+  await srv.stop();
+}
+{ // NAMED_ENABLED=0: no Friends tab
+  const srv = startServer({ NAMED_ENABLED: '0' });
+  await srv.ready;
+  const a = client('Natan');
+  await until(() => a.id, 5000, 'join');
+  ok(a.welcome && !('named' in a.welcome), 'review #4: NAMED_ENABLED=0: welcome has no named flag (no Friends tab, no polling)');
+  a.close();
   await srv.stop();
 }
 
@@ -637,7 +830,7 @@ if (process.env.WARDEN) {
   ws.on('message', raw => {
     const m = JSON.parse(raw.toString());
     if (m.type === 'hall') spec.hall = m;
-    if (m.type === 'snap') for (const e of m.w.events) { if (e.t === 'clear') { spec.clears++; spec.names = e.names; } if (e.t === 'la') spec.la = e.name; if (e.t === 'bell') spec.bell = true; }
+    if (m.type === 'snap') for (const e of m.w.events) { if (e.t === 'clear') spec.banner = true; if (e.t === 'sys' && /^The Hearthward felled the Horned Warden/.test(e.text)) spec.clears++; if (e.t === 'la') spec.la = e.name; if (e.t === 'bell') spec.bell = true; }
   });
   const t0 = Date.now();
   await until(() => spec.clears > 0, 420000, 'the clear');
@@ -646,7 +839,7 @@ if (process.env.WARDEN) {
   await until(() => spec.hall?.heroes?.length, 5000, 'the Hall');
   const rec = spec.hall.heroes[0];
   console.log(`  The Hearthward cleared the Warden in ${rec.secs} s with ${rec.deaths} deaths (${rec.players.map(p => `${p.name} Lv${p.lvl}`).join(', ')}; Last Attack: ${rec.lastAttack}); ${Math.round((Date.now() - t0) / 1000)} s after the server started`);
-  ok(rec.players.length === 4 && rec.players.every(p => NAMED_BY_ID[p.name.toLowerCase()]?.group === 'heroes') && !spec.hall.first && !spec.bell, 'the four Heroes cleared the Warden alone: on the Heroes\' record, no first clear, no bell');
+  ok(rec.players.length === 4 && rec.players.every(p => NAMED_BY_ID[p.name.toLowerCase()]?.group === 'heroes') && !spec.hall.first && !spec.bell && !spec.banner && !spec.la, 'the four Heroes cleared the Warden alone: on the Heroes\' record, no first clear, no bell, no banner (a quiet line)');
   ws.close();
   await srv.stop();
 }

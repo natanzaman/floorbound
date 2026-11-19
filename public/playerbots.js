@@ -167,7 +167,15 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender }) 
         rerender();
       };
     },
-    addTab(t) { extra.push(t); },
+    addTab(t) { if (!extra.includes(t)) extra.push(t); },
+    setTab(t, on) { // add or take away an added tab (the Friends tab follows the server's switch)
+      if (on) return this.addTab(t);
+      const i = extra.indexOf(t);
+      if (i < 0) return;
+      extra.splice(i, 1);
+      if (ui.tab === t.id) ui.tab = 'players';
+      t.root.remove();
+    },
     // The Bots tab, or an added tab (each keeps its DOM between calls).
     render(panel, nPlayers, nBots) {
       panel.classList.add('wide');

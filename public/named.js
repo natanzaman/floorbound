@@ -18,7 +18,7 @@ export function initNamed({ $, send, state, log, sfx, banner }) {
   const visible = () => root.isConnected && !$('players').classList.contains('hidden');
 
   function poll(force) {
-    if (!state.joined || state.spectator) return;
+    if (!api.on || !state.joined || state.spectator) return; // (api.on: the server runs the Named; set on welcome)
     if (!force && Date.now() - ui.at < 1900) return;
     ui.at = Date.now();
     send({ type: 'named', op: 'list' });
@@ -84,7 +84,8 @@ export function initNamed({ $, send, state, log, sfx, banner }) {
     if (visible()) poll(true);
   }
 
-  return {
+  const api = {
+    on: false,
     id: 'friends',
     label: () => 'Friends',
     root,
@@ -99,4 +100,5 @@ export function initNamed({ $, send, state, log, sfx, banner }) {
       return true;
     },
   };
+  return api;
 }

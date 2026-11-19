@@ -113,6 +113,7 @@ export class PlayerBots {
     if (!Number.isInteger(skill) || skill < 1 || skill > 5) fail('Skill level must be 1-5.');
     const name = cleanBotName(msg.name);
     if (msg.name && String(msg.name).trim() && name.length < 2) fail('Bot names are 2-16 letters, numbers, spaces, _ . -');
+    if (this.mgr.nameReserved?.(name)) fail(`${name} is one of the Named: pick another name.`);
     if (p.dead) fail('Wait until you are back on your feet.');
     const mine = this.mine(p);
     if (mine.length >= this.max) fail(`You already have ${this.max} bots (the most you can have). Dismiss one first.`);
@@ -155,6 +156,7 @@ export class PlayerBots {
     if (msg.name !== undefined) {
       name = cleanBotName(msg.name);
       if (name.length < 2) fail('Bot names are 2-16 letters, numbers, spaces, _ . -');
+      if (this.mgr.nameReserved?.(name)) fail(`${name} is one of the Named: pick another name.`);
     }
     if (!this.mgr.livePlayer(e)) fail('That bot is still joining.');
     const said = [], was = e.b.name;

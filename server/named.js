@@ -6,7 +6,8 @@
 //                    (lastAttackHeld); a field mob a human damaged gives that human full XP and loot when a Named
 //                    kills it; the Named take no XP, loot or share (game.js killMob leaves them out of the split)
 //    clears          a clear with no human contributor is never "first", rings no bell and goes on the Hall's
-//                    "Heroes' record" (rec.heroes, server/hall.js)
+//                    "Heroes' record" (rec.heroes, server/hall.js); with a Named in it, it's quiet too (quietClear: no
+//                    floor counter, banner or Last Attack shout, one line)
 //    friendship      game.namedFriendship(player, namedId) -> { pts, tier, tierName, left } | null
 //                    game.addFriendship(player, namedId, amount, reason) -> { d, pts, tier, up } | null
 //                    (reason: a GAINS key of shared/named.js, or 'downed'; I3 / I4 call these)
@@ -90,6 +91,7 @@ export class NamedManager {
     this.away = {};             // group -> the "while you were away" line of this visit
     this.emptyAt = 0; this.flushAt = 0; this.parked = false;
     game.named = this;
+    mgr.nameReserved = isNamedName; // admin and player-added bots can't take their names (server/botmanager.js, playerbots.js, botedit.js)
     mgr.namedJoin = (p, id) => { const st = this.chars.get(id); if (st) { p.named = id; this.outfit(st, p); } }; // in their own gear and look from the first snapshot
     const roster = game.roster.bind(game); // roster rows of the Named carry their id (nameplates, the Friends tab)
     game.roster = () => roster().map(r => { const id = game.players.get(r.id)?.named; return id ? { ...r, named: id } : r; });
@@ -127,29 +129,41 @@ export class NamedManager {
     return party ? party.members.map(id => this.game.players.get(id)).find(isHuman) || null : null;
   }
   namedInParty(party) { return party ? party.members.map(id => this.game.players.get(id)).filter(o => o?.named) : []; }
+  // another Named with h's invite still open (it could accept at any moment)
+  namedInvited(h, st) { return this.online().some(o => o !== st && this.playerOf(o)?.invite?.from === h.id); }
   humanIn(ids) { for (const id of ids) if (isHuman(this.game.players.get(id))) return true; return false; }
   say(p, text) { if (p && text) this.game.events.push({ t: 'chat', id: p.id, from: p.name, text, ch: 's', x: r2(p.x), z: r2(p.z) }); }
   send(h, o) { if (h?.ws?.readyState === 1) h.ws.send(JSON.stringify({ type: 'named', ...o })); }
 
   // ---------- friendship ----------
   keyOf(p) { return p.charId || `s${p.id}`; } // anonymous players: this session only
+  // m.loaded: the stored rows are in (until then nothing of this player's is saved, so a failed or slow load can't
+  // overwrite what's stored); a failed load is tried again from tick.
   friendsOf(p) {
     const key = this.keyOf(p);
     let m = this.friends.get(key);
-    if (m) return m;
-    this.friends.set(key, m = new Map());
-    if (p.charId && this.store) {
-      this.store.loadFriends(p.charId).then(rows => {
-        if (this.friends.get(key) !== m) return;
-        for (const r of rows) {
-          if (!this.chars.has(r.named_id)) continue;
-          const had = m.get(r.named_id), rec = { pts: +r.pts || 0, day: r.day | 0, got: +r.got || 0, chat: +r.chat || 0 };
-          if (had) { rec.pts = Math.min(100, rec.pts + had.pts); if (rec.day === had.day) rec.got += had.got; else if (had.day > rec.day) { rec.day = had.day; rec.got = had.got; rec.chat = had.chat; } } // (earned before the load finished)
-          m.set(r.named_id, rec);
-        }
-      }).catch(e => console.error('[named] friendship load failed:', e.message));
-    }
+    if (!m) { this.friends.set(key, m = new Map()); m.loaded = !(p.charId && this.store); }
+    if (!m.loaded && !m.loading && this.now() - (m.failAt || -1e15) >= RULES.loadRetry * 1000) this.loadFriends(p.charId, key, m);
     return m;
+  }
+  loadFriends(charId, key, m) {
+    m.loading = true;
+    return Promise.resolve().then(() => this.store.loadFriends(charId)).then(rows => {
+      m.loading = false;
+      if (this.friends.get(key) !== m) return;
+      for (const r of rows) {
+        if (!this.chars.has(r.named_id)) continue;
+        const had = m.get(r.named_id), rec = { pts: +r.pts || 0, day: r.day | 0, got: +r.got || 0, chat: +r.chat || 0 };
+        if (had?.abs) continue; // (set outright meanwhile: the admin page, a test)
+        if (had) { // earned before the load finished: added on top of what's stored, and saved
+          rec.pts = Math.min(100, rec.pts + had.pts);
+          if (rec.day === had.day) { rec.got += had.got; rec.chat += had.chat; } else if (had.day > rec.day) { rec.day = had.day; rec.got = had.got; rec.chat = had.chat; }
+          this.dirtyFr.add(`${charId}:${r.named_id}`);
+        }
+        m.set(r.named_id, rec);
+      }
+      m.loaded = true;
+    }, e => { m.loading = false; m.failAt = this.now(); console.error('[named] friendship load failed:', e.message); });
   }
   recOf(p, id) { const m = this.friendsOf(p); let rec = m.get(id); if (!rec) m.set(id, rec = newFriendship()); return rec; }
   peek(p, id) { return this.friends.get(this.keyOf(p))?.get(id) || null; }
@@ -176,25 +190,32 @@ export class NamedManager {
     this.friends.delete(this.keyOf(p));
     this.whisperAt.delete(`s${p.id}`);
   }
+  // Both return a promise of the writes they started (shutdown waits for them).
   flushFriends(only = 0) {
-    if (!this.store) { this.dirtyFr.clear(); return; }
+    if (!this.store) { this.dirtyFr.clear(); return Promise.resolve(); }
+    const writes = [];
     for (const key of [...this.dirtyFr]) {
       const [cid, id] = key.split(':'), charId = +cid;
       if (only && charId !== only) continue;
+      const m = this.friends.get(charId);
+      if (m && !m.loaded) continue; // not until the stored rows are in (merged, then saved)
       this.dirtyFr.delete(key);
-      const rec = this.friends.get(charId)?.get(id);
-      if (rec) this.store.saveFriend(charId, id, rec).catch(e => console.error('[named] friendship save failed:', e.message));
+      const rec = m?.get(id);
+      if (rec) writes.push(this.store.saveFriend(charId, id, { ...rec }).catch(e => { this.dirtyFr.add(key); console.error('[named] friendship save failed:', e.message); }));
     }
+    return Promise.all(writes);
   }
   flushChars() {
-    if (!this.store) return;
+    if (!this.store) return Promise.resolve();
+    const writes = [];
     for (const st of this.chars.values()) {
       if (!st.dirty) continue;
       st.dirty = false; st.seenSaved = st.seenAt;
-      this.store.saveChar({ id: st.def.id, lvl: st.lvl, off: st.off, enabled: st.enabled, seenAt: st.seenAt }).catch(e => { st.dirty = true; console.error('[named] save failed:', e.message); });
+      writes.push(this.store.saveChar({ id: st.def.id, lvl: st.lvl, off: st.off, enabled: st.enabled, seenAt: st.seenAt }).catch(e => { st.dirty = true; console.error('[named] save failed:', e.message); }));
     }
+    return Promise.all(writes);
   }
-  async flush() { this.flushFriends(); this.flushChars(); } // (shutdown: only what's still waiting)
+  async flush() { await Promise.allSettled([this.flushFriends(), this.flushChars()]); } // (shutdown: only what's still waiting)
 
   // ---------- invites and calls ----------
   // Why this human can't invite this Named right now ('' = they can).
@@ -223,7 +244,7 @@ export class NamedManager {
     const left = st.summonAt + RULES.summonCd * 1000 - now;
     if (left > 0) return `${def.name} was called away a moment ago. Try again in ${Math.ceil(left / 60000)} min.`;
     if (h.dead || h.downed) return 'Wait until you are back on your feet.';
-    return this.freeBlock(h, st, p) || (this.namedInParty(g.partyOf(h)).length ? 'One of the Named per party.' : (g.partyOf(h)?.members.length || 1) >= PARTY_MAX ? 'Your party is full.' : '');
+    return this.freeBlock(h, st, p) || (this.namedInParty(g.partyOf(h)).length || this.namedInvited(h, st) ? 'One of the Named per party.' : (g.partyOf(h)?.members.length || 1) >= PARTY_MAX ? 'Your party is full.' : '');
   }
   // game.invite(h, a Named): true = let the invite through (the bot accepts it).
   onInvite(h, t) {
@@ -244,9 +265,9 @@ export class NamedManager {
     const why = this.callBlock(h, st);
     if (why) { g.sys(why, h.id); return why; }
     const p = this.playerOf(st);
-    st.summonAt = this.now();
     this.mgr.joinParty(p, h);
     if (p.party !== h.party || !h.party) { g.sys(`${st.def.name} couldn't join your party.`, h.id); return 'failed'; }
+    st.summonAt = this.now(); // (spent only on a call that worked)
     this.mgr.catchUp(p, h);
     this.say(p, namedLine(st.def, 'called', { who: h.name }));
     g.sys(`${st.def.name} answers your call.`, h.id);
@@ -395,7 +416,7 @@ export class NamedManager {
     pts = Math.max(0, Math.min(100, r2(+pts || 0)));
     const live = this.humans().find(p => p.charId === charId);
     let rec;
-    if (live) { rec = this.recOf(live, id); rec.pts = pts; this.send(live, { op: 'fr', id, name: st.def.name, d: 0, pts, tier: TIERS[tierIndex(pts)].id, tierName: TIERS[tierIndex(pts)].name, up: false, why: 'admin' }); }
+    if (live) { rec = this.recOf(live, id); rec.pts = pts; rec.abs = true; this.send(live, { op: 'fr', id, name: st.def.name, d: 0, pts, tier: TIERS[tierIndex(pts)].id, tierName: TIERS[tierIndex(pts)].name, up: false, why: 'admin' }); }
     else rec = { ...newFriendship(), pts };
     if (this.store) await this.store.saveFriend(charId, id, rec);
     return { charId, id, pts, tier: TIERS[tierIndex(pts)].name };
@@ -477,7 +498,7 @@ export class NamedManager {
     const party = g.partyOf(p);
     let last = st.hostT;
     for (const id of party.members) { const o = g.players.get(id); if (o) last = Math.max(last, o.lastCombat ?? -1e9, o.lastHurt ?? -1e9); }
-    if (g.time - last < RULES.partyIdle || inBossRoom(p)) return;
+    if (g.time - last < RULES.partyIdle || party.members.some(id => { const o = g.players.get(id); return o && !o.dead && g.activeFightOf?.(o); })) return; // (never in the middle of a boss fight)
     this.say(p, namedLine(st.def, 'home', { who: host.name }));
     for (const id of party.members) if (isHuman(g.players.get(id))) g.sys(`${st.def.name} heads home after a quiet while.`, id);
     g.leaveParty(p);
@@ -505,10 +526,31 @@ export class NamedManager {
       if (group === 'loner') this.raidWhispers(free[0][0], free[0][1], humans, now);
       return;
     }
+    if (!ours && !plan.fought && free.length < members.filter(st => st.enabled).length) return farm(RULES.bossRetry); // one of them went off with a human: never short-handed
     if (ours || inside) { plan.fought = plan.fought || ours; if (!ours && plan.fought) { farm(between(RULES.bossEvery)); plan.homeAt = now + 12000; } return; }
     if (plan.fought) { farm(between(RULES.bossEvery)); plan.homeAt = now + 12000; return; } // it's over (a kill, or a wipe sent them to town)
-    if (nearHuman || fight) return farm(RULES.bossRetry); // a human's fight, or a human at the gate: not theirs to join
+    if (nearHuman || fight) return this.turnBack(group, RULES.bossRetry); // a human's fight, or a human at the gate: not theirs to join
     if (now - plan.since > RULES.bossGiveUp * 1000) farm(between(RULES.bossEvery));
+  }
+
+  // A Named at the raid gate (installNamed's toggleReady): a human at that boss's gate or in its room, and this one
+  // isn't with them: turn the whole group back now, not at the next plan.
+  gateBlocked(p) {
+    const st = this.stOf(p), floor = floorOf(p.x), F = FLOORS[floor];
+    if (!st || !F || this.hostOf(p)) return false;
+    if (!this.humans().some(h => floorOf(h.x) === floor && F.near(h.x, h.z))) return false;
+    this.turnBack(st.def.group, RULES.bossRetry);
+    return true;
+  }
+  turnBack(group, wait) {
+    const plan = this.plans[group], g = this.game;
+    if (plan.mode === 'boss') Object.assign(plan, { mode: 'farm', nextAt: this.now() + wait * 1000, fought: false });
+    for (const st of this.chars.values()) {
+      const p = this.playerOf(st);
+      if (st.def.group !== group || !p || this.hostOf(p)) continue;
+      for (const gate of [g.gate, g.gate2, g.gate3]) gate?.ready.delete(p.id);
+      st.e.b.noBoss = true;
+    }
   }
 
   // 5b: the loner heads for a boss and tells his friends, once an hour at most, never after a "no" this session.
@@ -549,11 +591,12 @@ export class NamedManager {
     if (!killer?.named || m.rare) return; // (a rare already pays every contributor in full)
     const party = g.partyOf(killer);
     for (const h of humans) {
-      if (h.dead || (party?.members.includes(h.id) && dist(h, m) <= 30)) continue; // (already paid, undiluted)
+      if (h.dead || dist(h, m) > RULES.tagR || (party?.members.includes(h.id) && dist(h, m) <= 30)) continue; // (already paid, undiluted; or long gone)
       g.giveXp(h, m.def.xp); g.dropLoot(h, m);
     }
   }
-  // A boss fight ended: real help (at least RULES.bossShare of the damage or healing) in a fight the Named were in.
+  // A boss fight ended: real help (at least RULES.bossShare of the damage, or of the healing done to others: healOther,
+  // counted by installNamed's healPlayer wrap) in a fight the Named were in.
   onFightEnd(f, result) {
     const g = this.game;
     if (!f?.team || (result !== 'kill' && result !== 'wipe')) return;
@@ -561,13 +604,13 @@ export class NamedManager {
     let dmg = 0, heal = 0;
     for (const [id, row] of f.team) {
       const p = g.players.get(id);
-      dmg += row.dmg || 0; heal += row.heal || 0;
+      dmg += row.dmg || 0; heal += row.healOther || 0;
       if (p?.named) named.push(p); else if (isHuman(p)) rows.push([p, row]);
     }
     for (const p of named) { const b = this.stOf(p)?.e?.b; if (b?.cmd?.nm) b.cmd = null; } // the loner's raid is over
     if (!named.length) return;
     for (const [h, row] of rows) {
-      if (!((dmg > 0 && (row.dmg || 0) / dmg >= RULES.bossShare) || (heal > 0 && (row.heal || 0) / heal >= RULES.bossShare))) continue;
+      if (!((dmg > 0 && (row.dmg || 0) / dmg >= RULES.bossShare) || (heal > 0 && (row.healOther || 0) / heal >= RULES.bossShare))) continue;
       for (const p of named) this.add(h, p.named, result === 'kill' ? GAINS.boss : GAINS.bossTry, result === 'kill' ? 'boss' : 'bossTry');
     }
   }
@@ -608,7 +651,8 @@ export function installNamed(Game) {
 
   // Their names are theirs: an anonymous player who types one gets a default name instead.
   wrap('addPlayer', function (orig, ws, name, cls, saved = null) {
-    if (this.named && !saved && !this.named.mgr.joining && isNamedName(name)) name = '';
+    const mgr = this.named?.mgr;
+    if (this.named && !saved && !(mgr.joining && mgr.joiningNamed) && isNamedName(name)) name = ''; // (a bot too, unless it's the Named's own join)
     return orig.call(this, ws, name, cls, saved);
   });
   wrap('removePlayer', function (orig, p, ...a) {
@@ -625,9 +669,14 @@ export function installNamed(Game) {
   wrap('lastAttackHeld', function (orig, m, p) {
     if (orig.call(this, m, p)) return true;
     if (!this.named || !p?.named || !m?.def?.boss) return false;
+    if (!(this.time - (m.nmHumanHit ?? -1e9) <= RULES.holdIdle)) return false; // no human has hit it for a while: theirs to finish
     const room = m.def.f3boss ? inArena3 : m.def.f2boss ? inArena2 : inArena;
     for (const id of m.contributors) { const h = this.players.get(id); if (isHuman(h) && !h.dead && room(h.x, h.z)) return true; }
     return false;
+  });
+  wrap('damageMob', function (orig, m, p, ...a) {
+    if (this.named && m?.def?.boss && isHuman(p)) m.nmHumanHit = this.time; // (lastAttackHeld above)
+    return orig.call(this, m, p, ...a);
   });
   wrap('killMob', function (orig, m, killer) {
     const out = orig.call(this, m, killer);
@@ -635,6 +684,18 @@ export function installNamed(Game) {
     return out;
   });
 
+  // A boss felled by the Named with no human in it: no floor counter, no LAST ATTACK BONUS or "Floor N cleared"
+  // announcement, no clear banner; one quiet line instead (game.js killMob, floor2.js killSovereign, floor3.js
+  // killColossus call this). Returns that line, or '' for a clear announced as always (bots alone included).
+  P.quietClear = function (ids, boss) {
+    const N = this.named;
+    if (!N || N.humanIn(ids)) return '';
+    const named = [...ids].map(id => this.players.get(id)).filter(o => o?.named);
+    if (!named.length) return '';
+    const groups = new Set(named.map(o => N.stOf(o)?.def.group));
+    const who = groups.size === 1 && groups.has('heroes') && GROUPS.heroes.party ? GROUPS.heroes.name : named.map(o => o.name).join(' and ');
+    return `${who} felled ${boss}.`;
+  };
   // A clear with no human in it is the Heroes' own record: never first, no bell.
   const heroesClear = (name, flag, idsOf) => wrap(name, function (orig, m, killer, ...a) {
     if (!this.named || this.named.humanIn(idsOf(m, a))) return orig.call(this, m, killer, ...a);
@@ -662,6 +723,7 @@ export function installNamed(Game) {
   });
   wrap('healPlayer', function (orig, tg, amount, by, sk) {
     const got = orig.call(this, tg, amount, by, sk);
+    if (this.named && got > 0 && by?.id && tg && tg !== by) this.teamStat?.(by, 'healOther', got); // (boss help counts this, not self-healing)
     if (this.named && tg?.named && by && got > 0) this.named.onHealed(tg, by, got);
     return got;
   });
@@ -687,6 +749,7 @@ export function installNamed(Game) {
   });
   wrap('accept', function (orig, p, fromId) {
     const N = this.named, from = N && this.players.get(fromId);
+    if (p?.named && isHuman(from) && p.invite?.from === fromId && !N.onInvite(from, p)) { p.invite = null; return; } // (things changed since the invite: one Named per party)
     const out = orig.call(this, p, fromId);
     if (from?.named && isHuman(p) && p.party && p.party === from.party) N.onAccept(p, from);
     return out;
@@ -697,13 +760,20 @@ export function installNamed(Game) {
       if (msg.type === 'named') return N.handle(p, msg);
       if (msg.type === 'test' && process.env.TEST_HOOKS && msg.friend && N.chars.has(msg.friend.id) && !p.bot) { // testing aid: { friend: { id, pts } } sets your friendship
         if (msg.friend.add) return void N.add(p, msg.friend.id, +msg.friend.add, String(msg.friend.why || 'fight')); // …or { id, add, why }: a gain through the rules
-        N.recOf(p, msg.friend.id).pts = Math.max(0, Math.min(100, +msg.friend.pts || 0));
+        Object.assign(N.recOf(p, msg.friend.id), { pts: Math.max(0, Math.min(100, +msg.friend.pts || 0)), abs: true });
         if (p.charId) N.dirtyFr.add(`${p.charId}:${msg.friend.id}`);
         return;
       }
       if (msg.type === 'decline' && p.invite) { const from = this.players.get(p.invite.from); if (from?.named) N.onDecline(p, from); }
     }
     return orig.call(this, p, msg);
+  });
+  // The raid gate: a Named not with a human never readies while a human is at that boss's gate or in its room (the
+  // plan's once-a-second check could be a second late); the group turns back at once.
+  wrap('toggleReady', function (orig, p, ...a) {
+    const gate = p?.x > F3.split ? this.gate3 : p?.x > F2.split ? this.gate2 : this.gate;
+    if (this.named && p?.named && !gate?.ready.has(p.id) && this.named.gateBlocked(p)) return;
+    return orig.call(this, p, ...a);
   });
   // "/b <name>: come" (or follow) to a Named who isn't in your party: a Sworn friend's call.
   wrap('botCommand', function (orig, p, msg) {

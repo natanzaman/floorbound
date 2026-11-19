@@ -50,9 +50,9 @@ export class BotManager {
 
   addBotPlayer(ws, msg) {
     const g = this.game;
-    this.joining = true;
+    this.joining = true; this.joiningNamed = !!msg.named; // (only the Named's own join keeps one of their names: server/named.js)
     let p;
-    try { p = g.addPlayer(ws, msg.name, msg.cls); } finally { this.joining = false; }
+    try { p = g.addPlayer(ws, msg.name, msg.cls); } finally { this.joining = false; this.joiningNamed = false; }
     p.bot = true;
     const lvl = Math.min(MAX_LEVEL, Math.max(1, msg.lvl | 0 || 1));
     p.lvl = lvl; p.xp = 0; p.lvlStart = lvl;
@@ -72,7 +72,7 @@ export class BotManager {
   uniqueName(base) {
     const taken = new Set([...this.game.players.values()].map(p => p.name.toLowerCase()));
     for (const e of this.bots) if (!e.b.closed) taken.add(e.b.name.toLowerCase());
-    if (base && !taken.has(base.toLowerCase())) return base;
+    if (base && !taken.has(base.toLowerCase()) && !this.nameReserved?.(base)) return base; // (nameReserved: the Named's names, server/named.js)
     if (base) { for (let i = 2; i < 100; i++) if (!taken.has(`${base} ${i}`.toLowerCase())) return `${base} ${i}`; }
     const free = NAMES.filter(n => !taken.has(n.toLowerCase()));
     if (free.length) return free[Math.floor(Math.random() * free.length)];
@@ -86,6 +86,7 @@ export class BotManager {
     if (behaviour === 'follow' && !this.realPlayers().some(p => p.name.toLowerCase() === String(follow).toLowerCase())) throw new Error('Pick an online player to follow.');
     if (this.count() + 1 > this.max) throw new Error(`Bot limit reached (${this.max}).`);
     name = String(name || '').replace(/[^\w \-.]/g, '').trim().slice(0, 16);
+    if (this.nameReserved?.(name)) throw new Error(`${name} is one of the Named: pick another name.`);
     return this.start([cls], [this.uniqueName(name)], { lvl, behaviour, follow: String(follow || ''), skill })[0];
   }
 
