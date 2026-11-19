@@ -49,7 +49,7 @@ console.log('# in process');
   const bot = human(g, 'Bot', F2.camp.x, F2.camp.z); bot.bot = true;
   run(g, 1);
   ok(!g.activeFloors().has(2), 'a server bot resting in Mirelight Camp: Floor 2 sleeps');
-  bot.x = F2.camp.x; bot.z = F2.camp.z + 60;
+  bot.x = F2.camp.x; bot.z = F2.camp.z + 60; bot.maxHp = bot.hp = 1e9; // (a level-1 bot in the Mire wouldn't last the 20 s)
   before = posOf(g); run(g, 20); mv = movedOn(g, before);
   ok(g.activeFloors().has(2) && mv[2] > 3 && mv[3] === 0, `a server bot out in the Mire: Floor 2 wakes (${JSON.stringify(mv)})`);
   g.removePlayer(bot);
