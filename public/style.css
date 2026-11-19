@@ -603,3 +603,13 @@ body.mlock #crosshair { display: block; }
 #gamemenu .gm-scroll { overflow-y: auto; font-size: 12.5px; line-height: 1.45; opacity: .9; }
 #gamemenu .gm-scroll h4 { margin: 10px 0 4px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; opacity: .65; }
 #gamemenu .gm-scroll p { margin: 0 0 8px; }
+
+/* ---------- accessibility (Settings → Accessibility; public/access.js, public/settings.js applyAccess) ---------- */
+/* --ui-scale is set on <html> (0.8 to 1.5): panels, unit frames and the chat log grow with it. The Bot-order menu is placed
+   in screen pixels from a party frame, so it is left out. A "hc" class on <html> turns on the high-contrast HUD text. */
+:root { --ui-scale: 1; }
+.panel:not(#botmenu), .frame, #log { zoom: var(--ui-scale); }
+html.hc .panel, html.hc .frame, html.hc #log, html.hc #banner, html.hc #callout, html.hc #tip { color: #fff; text-shadow: 0 0 2px #000, 0 1px 3px #000; }
+html.hc .panel, html.hc .frame, html.hc #log { background: rgba(0, 0, 0, .88); border-color: rgba(255, 255, 255, .6); }
+html.hc .panel small, html.hc .frame small, html.hc #log small { opacity: 1; }
+html.hc .num { text-shadow: 0 0 3px #000, 0 0 3px #000, 0 1px 4px #000; }
