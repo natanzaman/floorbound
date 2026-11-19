@@ -331,7 +331,7 @@ Same rules as F/G/H (flock lock, push with `--force-with-lease`).
 |---|---|---|---|---|
 | I1 Named characters + friendship (code) | `feat/named` | done | agent named | 0058550, 8e70c2d, 3a0d087 |
 | I2 The loner's look | `feat/lonerlook` | done: looks in `shared/looks.js` (Cairn + the Hearthward), `game.setLook`, snapshot `looks`, admin Look picker; I1 calls `setLook(p, def.look.id)` | agent lonerlook | f6686dc |
-| I3 Personalities, talk, memory, nudges (AI) | `feat/namedai` | in progress | agent namedai | |
+| I3 Personalities, talk, memory, nudges (AI) | `feat/namedai` | done: talk by name / @Name / Talk button, sheets, bounded nudges, memories, own budget slice; live check pending (no key locally: admin **Test Named talk**) | agent namedai | 49d3a31 |
 | I4 Requests and invitations | `feat/namedquests` | in progress | agent namedquests | |
 
 - **I1 review fixes merged (274b300):** friendship load can't overwrite stored rows, one Named per party re-checked on accept and calls, Named-only clears are quiet on all floors, Friends tab only with `NAMED_ENABLED` on, bot names reserved, boss help counts healing done to others, shutdown awaits the Named's writes, plus the nice-to-haves.
@@ -441,6 +441,11 @@ Build it with the KayKit rig, procedural meshes and materials, the way `public/s
 4. Memories per Named per player (the existing `ai_memories` table) record what happened together.
 5. Without a key or with AI off, the Named still work: canned lines by tier, and no friendship from chat.
 6. **Accept when:** mock-provider tests cover tier-aware prompts, bounded nudges and fallback; there's a live check with the real key that costs cents.
+
+**Built (I3):**
+- **Where:** `server/ai/namedtalk.js` (talk path, schema `{ say, sentiment, reason, remember }`, prompt, limits, notes; wired by `installAI` when `game.named` exists), `server/ai/namedsheets.js` (server-only sheets: voice, likes, dislikes, goals, secret, canned lines by tier), budget slices in `server/ai/budget.js` (kind `named`), `ai_memories.kind` and `ai_spend.named_usd` migrations, Talk buttons in `public/named.js` and on a selected Named's nameplate (`public/main.js`), admin line + **Test Named talk** in `public/admin-ai.js`. README "The Named → Talking to them" has every number.
+- **Hooks for I4:** `game.namedTalk` (null without the Named): `talk(p, st, text)` runs one exchange; `cannedLine(def, tier, who)`, `systemFor(def)`, `talkPrompt(ctx)`, `TALK_SCHEMA` and `sanitizeTalk` are exported to phrase a request in character; `budget.allow(null, 'named')` / `start` / `end(..., 'named')` keep it on the Named slice.
+- **Left:** the live check against the real key (press **Test Named talk** on the admin page after deploy: about $0.0002); per-player daily talk counts live in memory (a restart resets them; the $ cap still holds).
 
 ### I4. Requests and invitations (`feat/namedquests`) — after I1 and I3
 1. **Personal requests** from templates (kill N of a mob, bring N materials, help in a boss fight, escort or spar). The AI picks and phrases them in character; code tracks and rewards them (friendship, gold, a small unique keepsake at Sworn).
