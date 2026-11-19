@@ -4,6 +4,7 @@
 // so z-based heuristics (gate, boss bar, music) work on both floors.
 // This module must not import shared/data.js (data.js imports it). Floor 3 (x > 900) is shared/floor3.js.
 import { F3, WAYSTONE3, unlocked3 } from './floor3.js';
+import { TIMED, movesOf } from './bosstiming.js'; // boss timing tables (J3)
 
 export const F2 = {
   x: 600, split: 300,
@@ -95,7 +96,7 @@ export const F2_MOBS = {
   lurker: { name: 'Bog Lurker', hp: 440, atk: 22, speed: 5.0, aggro: 15, range: 2.2, atkCd: 1.5, xp: 100, radius: 1.0, level: 13, f2: true, ai: 'f2Lurker' },
   matron: { name: 'Mire Matron', hp: 2000, atk: 30, speed: 4.2, aggro: 14, range: 3.0, atkCd: 1.9, xp: 480, radius: 1.7, level: 15, f2: true, ai: 'f2Matron', elite: true },
   thrall: { name: 'Drowned Thrall', hp: 320, atk: 24, speed: 5.4, aggro: 30, range: 2.0, atkCd: 1.4, xp: 25, radius: 0.8, level: 16, f2: true, ai: 'f2Brute' },
-  sovereign: { name: 'The Drowned Sovereign', hp: 9000, atk: 72, speed: 3.9, aggro: 20, range: 4.8, atkCd: 2.4, xp: 1800, radius: 2.4, level: 18, f2: true, ai: 'f2Sovereign', boss: true, f2boss: true },
+  sovereign: { name: 'The Drowned Sovereign', hp: 9000, atk: 72, speed: 3.9, aggro: 20, range: 4.8, atkCd: TIMED.sovereign.abilities.sweep.cd, xp: 1800, radius: 2.4, level: 18, f2: true, ai: 'f2Sovereign', boss: true, f2boss: true },
 };
 export const F2_BITE = { shieldback: [3.2, 0.75], lurker: [2.8, 0.7], matron: [3.8, 0.9], thrall: [2.8, 0.6], sovereign: [6.0, 1.0] };
 
@@ -114,20 +115,15 @@ export const MATRON = { callEvery: 13, callR: 24, aura: 0.25, auraR: 14 };      
 
 // The Drowned Sovereign: each phase ADDS attacks. 100-66%: trident sweep + geysers. 66-33%: + Tidal Wave (must-dodge),
 // Drowned Thralls, mire pools. Below 33%: + the Deluge (outer ring floods) and homing orb volleys; waves come faster.
-export const SOVEREIGN = { // sweep / geyser / wave / deluge wind-ups and repeats are paced by shared/data.js (paceMoves)
+export const SOVEREIGN = { // its moves' wind-ups and repeats are paced in shared/bosstiming.js
   // Scaled like the Warden (server/floor2.js scaleSovereign): party weight = the sum of each fighter's role weight;
   // health = (hpBase + hpPer * weight^hpExp) * (1 + hpLvl * levels above 18); damage = atk * (1 + atkLvl * levels above 18)
   // * (1 + atkPer * fighters above 3). A filmed director show keeps the old linear scaling (show).
   phases: [0.66, 0.33], hpBase: 4500, hpPer: 2450, hpExp: 2.05, hpLvl: 0.12, atkLvl: 0.06, atkPer: 0.2,
   hpRole: { Tank: 0.6, Healer: 0.5, Support: 0.8, Damage: 1.2 },
   show: { hpBase: 4600, hpPer: 2000, hpExp: 1, hpRole: null, hpLvl: 0, atkLvl: 0, atkPer: 0, atk: 40 },
-  sweep: { wind: 1.1, mult: 1.15 },
-  geyser: { every: [7, 6, 5], r: 3.0, wind: 1.65, mult: 2.0, extra: [1, 2, 3] },
-  wave: { every: [0, 15, 11], first: 3.5, wind: 2.3, speed: 11, width: 1.4, mult: 3.6 },
-  thralls: { every: 24, n: 2, max: 4 },
-  pools: { every: 10, n: 2, r: 3.8, arm: 1.2, life: 16, tick: 0.5, mult: 0.3, max: 6 },
-  deluge: { r: 16.5, tick: 0.5, mult: 0.25, wind: 2.4 }, // wind: the Sovereign calls it (pose + a flood line filling inward), then the outer court floods
-  volley: { every: 9, n: 5 },
+  // Its moves (sweep, geyser, wave, thralls, pools, deluge, volley), paced and knobbed: shared/bosstiming.js.
+  ...movesOf(TIMED.sovereign),
 };
 // Sovereign twists: a random fight modifier rolled each time the Drowned Sovereign rises (server/sovtwists.js), shown like
 // the Warden's (gate panel, boss bar, banner). reward: { loot: extra Rare+ rolls per player, gold: extra fraction of its gold }.

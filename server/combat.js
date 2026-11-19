@@ -145,7 +145,7 @@ const methods = {
     if (this.quakes?.some(q => q.m === b && q.r < SWEEP.r + 1)) return; // never a Horn Sweep on top of a Quake Ring still near it
     const near = [...this.players.values()].some(p => !p.dead && inArena(p.x, p.z) && dist(p, b) <= SWEEP.r + 4);
     if (!near) { b.sweepT = t + 2; return; }
-    b.sweepT = t + SWEEP.every[b.phase] * (0.85 + Math.random() * 0.3);
+    b.sweepT = t + SWEEP.every[b.phase] * (SWEEP.jitter[0] + Math.random() * SWEEP.jitter[1]);
     this.hornSweep(b);
   },
 
@@ -153,7 +153,7 @@ const methods = {
   hornSweep(m) {
     const t = this.time, tok = (m.perilTok = (m.perilTok || 0) + 1);
     m.windupAt = 0; m.sweepPending = true;
-    m.busyUntil = Math.max(m.busyUntil || 0, t + SWEEP.wind + 0.35);
+    m.busyUntil = Math.max(m.busyUntil || 0, t + SWEEP.wind + SWEEP.after.pause);
     this.events.push({ t: 'tele', k: 'sweep', x: r2(m.x), z: r2(m.z), r: SWEEP.r, d: SWEEP.wind, follow: m.id, id: m.id });
     this.schedule(SWEEP.wind, () => {
       if (m.dead || m.perilTok !== tok) return;
@@ -176,7 +176,7 @@ Object.assign(methods, {
     const Q = (this.twistW || WARDEN).quake, t = this.time;
     n = Math.max(1, n ?? Q.rings[m.phase] ?? 1);
     m.windupAt = 0;
-    m.busyUntil = Math.max(m.busyUntil || 0, t + Q.wind + Q.gap * (n - 1) + 0.35);
+    m.busyUntil = Math.max(m.busyUntil || 0, t + Q.wind + Q.gap * (n - 1) + Q.after.pause);
     const x = m.x, z = m.z, atk = m.def.atk * Q.mult;
     for (let i = 0; i < n; i++) {
       const q = { id: this.id(), x, z, start: t + Q.wind + i * Q.gap, r: 0, sp: Q.speed, w: Q.w, max: Q.max, atk, hit: new Set(), ev: new Set(), m };

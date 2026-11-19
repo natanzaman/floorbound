@@ -93,7 +93,7 @@ const methods = {
     m.windupAt = 0; m.busyUntil = t + T.crack + T.fall + T.land + T.enter;
     if (this.beams) this.beams = this.beams.filter(b => b.m !== m); // the Tempest Beam
     const resume = m.busyUntil;
-    for (const k of TIMERS) if (typeof m[k] === 'number' && m[k] < resume + 2) m[k] = resume + 2 + Math.random() * 2;
+    for (const k of TIMERS) if (typeof m[k] === 'number' && m[k] < resume + T.resume) m[k] = resume + T.resume + Math.random() * T.resumeJitter;
     for (const k of TEAM_TIMERS) if (typeof m[k] === 'number' && m[k] < resume + T.gap) m[k] = resume + T.gap;
     R.fire = null;
     this.events.push({ t: 'arena', k: key, s: 'crack', id: m.id, a: to, d: T.crack, x: r2(m.x), z: r2(m.z) });

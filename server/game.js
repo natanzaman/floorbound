@@ -1036,7 +1036,7 @@ export class Game {
     if (def.boss && !m.engaged) { // scale the boss to the group that walks in
       m.engaged = true;
       this.scaleWarden(m);
-      m.phase = 0; m.slamT = t + 5; m.busyUntil = 0; m.houndT = m.chargeT = m.spinT = m.rockT = Infinity;
+      m.phase = 0; m.slamT = t + WARDEN.slam.first; m.busyUntil = 0; m.houndT = m.chargeT = m.spinT = m.rockT = Infinity;
       m.quakeT = t + (this.twistW || WARDEN).quake.first[0]; this.clearQuakes();
       this.twistEngage(m); // Warden twist setup (before startFight records the fight's health)
       this.startFight(m);
@@ -1073,7 +1073,7 @@ export class Game {
     } else if (t >= m.atkT) {
       const wind = def.boss ? (this.twistW || WARDEN).cleave.wind : def.ranged ? THORN.wind : 0.45;
       m.windupAt = t + wind;
-      m.atkT = t + def.atkCd * (enraged ? 0.7 : 1) * (frenzy ? 0.7 : 1) + (def.boss ? wind - wind / PACE : 0); // the paced wind-up doesn't eat the rest
+      m.atkT = t + def.atkCd * (enraged ? WARDEN.cleave.rage : 1) * (frenzy ? 0.7 : 1) + (def.boss ? wind - wind / PACE : 0); // the paced wind-up doesn't eat the rest
       const ev = { t: 'wind', id: m.id, d: wind, f: r2(m.face) };
       if (def.ranged) { m.aimX = target.x; m.aimZ = target.z; ev.ax = r2(target.x); ev.az = r2(target.z); }
       else if (BITE[m.type]) { ev.r = BITE[m.type][0]; ev.h = BITE[m.type][1]; }
@@ -1085,6 +1085,7 @@ export class Game {
   bite(m) {
     const [reach, half] = BITE[m.type] || [m.def.range + 1, 0.6];
     let atk = m.def.atk;
+    if (m.type === 'warden') atk *= (this.twistW || WARDEN).cleave.mult; // its axe swing (shared/bosstiming.js)
     if (m.type === 'wolf' && this.alphaNear(m)) atk *= 1 + PACK.auraAtk; // the pack hits harder with its Alpha around
     let nx = m.x + Math.sin(m.face) * 1.0, nz = m.z + Math.cos(m.face) * 1.0;
     [nx, nz] = resolveCollision(nx, nz, m.def.radius * 0.8);
@@ -1227,11 +1228,11 @@ export class Game {
       this.events.push({ t: 'phase', id: m.id, n: m.phase });
       if (m.phase === 1) {
         this.sys('The Horned Warden howls for its hounds!');
-        m.houndT = t + 1.5; m.chargeT = t + 5;
+        m.houndT = t + WARDEN.hounds.first; m.chargeT = t + WARDEN.charge.first; // (shared/bosstiming.js)
       } else {
         this.events.push({ t: 'enrage', id: m.id });
         this.sys('The Horned Warden is enraged! The ceiling is coming down.');
-        m.spinT = t + 3; m.rockT = t + 6;
+        m.spinT = t + WARDEN.spin.first; m.rockT = t + WARDEN.rock.first;
       }
       m.quakeT = Math.min(m.quakeT ?? Infinity, t + W.quake.first[m.phase]); // more rings, sooner
     }
@@ -1323,11 +1324,11 @@ export class Game {
     const ex = x2 - WORLD.arena.x, ez = z2 - WORLD.arena.z, ed = Math.hypot(ex, ez), maxR = WORLD.arena.r - 3;
     if (ed > maxR) { x2 = WORLD.arena.x + (ex / ed) * maxR; z2 = WORLD.arena.z + (ez / ed) * maxR; }
     const x0 = m.x, z0 = m.z;
-    m.face = a; m.busyUntil = this.time + W.wind + 0.45;
+    m.face = a; m.busyUntil = this.time + W.wind + W.after.pause;
     this.events.push({ t: 'tele', k: 'line', x: r2(x0), z: r2(z0), x2: r2(x2), z2: r2(z2), w: W.width, d: W.wind, id: m.id });
-    const steps = 3;
+    const steps = W.steps;
     for (let i = 1; i <= steps; i++) {
-      this.schedule(W.wind + i * paced(0.1), () => {
+      this.schedule(W.wind + i * paced(W.step), () => {
         if (m.dead) return;
         m.x = x0 + (x2 - x0) * (i / steps); m.z = z0 + (z2 - z0) * (i / steps); m.moving = true;
         if (i < steps) return;

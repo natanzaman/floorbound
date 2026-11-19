@@ -124,7 +124,7 @@ export const F3Methods = {
       const d = dist(m, p);
       if (d > reach + 0.4) continue;
       if (d > m.def.radius + 0.6 && Math.abs(wrapAngle(angleTo(m.x, m.z, p.x, p.z) - m.face)) > half) continue;
-      this.damagePlayer(p, this.f3Atk(m), { src: m.def.boss ? 'colossus hammerfall' : `${m.type} strike`, mob: m });
+      this.damagePlayer(p, this.f3Atk(m) * (m.type === 'colossus' ? COLOSSUS.cleave.mult : 1), { src: m.def.boss ? 'colossus hammerfall' : `${m.type} strike`, mob: m });
     }
   },
 
@@ -368,7 +368,7 @@ export const F3Methods = {
     if (d > def.range + 0.4) this.f3Move(m, target.x, target.z, def.speed * (m.phase === 2 ? 1.15 : 1), dt, def.range);
     else if (t >= m.atkT) {
       const [r, h] = BITE.colossus;
-      m.windupAt = t + C.cleave.wind; m.atkT = t + def.atkCd * (m.phase === 2 ? 0.85 : 1) + C.cleave.wind * (1 - 1 / PACE);
+      m.windupAt = t + C.cleave.wind; m.atkT = t + def.atkCd * (m.phase === 2 ? C.cleave.rage : 1) + C.cleave.wind * (1 - 1 / PACE);
       this.events.push({ t: 'wind', id: m.id, d: C.cleave.wind, f: r2(m.face), r, h });
     }
   },
@@ -384,7 +384,7 @@ export const F3Methods = {
     m.def = { ...MOBS.colossus, atk: Math.round(MOBS.colossus.atk * (1 + C.atkPer * Math.max(0, ps.length - 3)) * 10) / 10 };
     m.phase = 0; m.busyUntil = 0; m.ov = null; m.groundedUntil = 0; m.chargedUntil = 0;
     m.strikeT = t + C.strike.first; m.gustT = t + C.gust.first - (tw.gustSooner || 0);
-    m.ovT = tw.from === 0 ? t + 14 : Infinity; m.harpyT = m.beamT = Infinity;
+    m.ovT = tw.from === 0 ? t + C.overload.firstStatic : Infinity; m.harpyT = m.beamT = Infinity;
     this.startFight3(m);
   },
 
@@ -400,7 +400,7 @@ export const F3Methods = {
         m.ovT = Math.min(m.ovT, t + C.overload.first); m.harpyT = t + C.harpies.first;
       } else {
         this.sys('The Tempest Beam! Jump over the lightning as it sweeps past you.');
-        m.beamT = t + C.beam.first; m.ovT = Math.min(m.ovT, t + C.overload.every[2] * 0.6);
+        m.beamT = t + C.beam.first; m.ovT = Math.min(m.ovT, t + C.overload.every[2] * C.overload.phase3);
       }
     }
     const fighters = [...this.players.values()].filter(p => !p.dead && inArena3(p.x, p.z));
@@ -452,7 +452,7 @@ export const F3Methods = {
 
   galePush(m, target) {
     const G = COLOSSUS.gust, t = this.time, tw = this.twist3Def();
-    m.face = angleTo(m.x, m.z, target.x, target.z); m.busyUntil = t + G.wind + 0.45; m.windupAt = 0;
+    m.face = angleTo(m.x, m.z, target.x, target.z); m.busyUntil = t + G.wind + G.after.pause; m.windupAt = 0;
     const face = m.face, ep = m.ep;
     this.events.push({ t: 'f3fx', k: 'gust', id: m.id, x: r2(m.x), z: r2(m.z), f: r2(face), r: G.r, h: G.half, d: G.wind });
     this.schedule(G.wind, () => {
@@ -499,7 +499,7 @@ export const F3Methods = {
       return;
     }
     if (t < ov.until) return;
-    m.ov = null; m.busyUntil = t + 0.6; m.chargedUntil = t + O.charged;
+    m.ov = null; m.busyUntil = t + O.after.pause; m.chargedUntil = t + O.charged;
     this.events.push({ t: 'f3ov', s: 'clap', id: m.id, x: r2(m.x), z: r2(m.z) });
     if (F3STATS) console.log(`[ov] clap (broke ${ov.broke ? 1 : 0})`);
     this.sys('THUNDERCLAP! The Colossus is Charged: it hits harder for a while.');
@@ -513,7 +513,7 @@ export const F3Methods = {
   // Tempest Beam: the sword planted, a beam of lightning sweeps a full turn around it. Jump it or roll through it.
   tempestBeam(m) {
     const B = COLOSSUS.beam, t = this.time, dir = Math.random() < 0.5 ? 1 : -1;
-    m.busyUntil = t + B.wind + B.turn + 0.4; m.windupAt = 0;
+    m.busyUntil = t + B.wind + B.turn + B.after.pause; m.windupAt = 0;
     const b = { id: this.id(), m, x: m.x, z: m.z, a0: m.face, dir, start: t + B.wind, turn: B.turn, prev: m.face, hit: new Set(), atk: this.f3Atk(m) * B.mult };
     this.beams.push(b);
     this.events.push({ t: 'f3beam', id: b.id, by: m.id, x: r2(b.x), z: r2(b.z), a0: r2(b.a0), dir, d: B.wind, turn: B.turn, len: B.len, w: B.w, from: B.from });

@@ -107,7 +107,7 @@ export const F2Methods = {
   // A melee hit on the wedge in front of the mob (shown as a red wedge during the wind-up).
   f2Bite(m) {
     const [reach, half] = BITE[m.type] || [m.def.range + 1, 0.6];
-    const atk = m.def.atk * (m.type === 'lurker' && this.matronNear(m) ? 1 + MATRON.aura : 1);
+    const atk = m.def.atk * (m.type === 'lurker' && this.matronNear(m) ? 1 + MATRON.aura : 1) * (m.type === 'sovereign' ? (this.sovS || SOVEREIGN).sweep.mult : 1);
     if (!m.def.boss) {
       let nx = m.x + Math.sin(m.face) * 0.7, nz = m.z + Math.cos(m.face) * 0.7;
       [nx, nz] = resolveCollision(nx, nz, m.def.radius * 0.8);
@@ -275,7 +275,7 @@ export const F2Methods = {
     }
     if (!m.engaged) { // scale to the group that walks in
       m.engaged = true;
-      m.phase = 0; m.busyUntil = 0; m.geyserT = t + 4; m.waveT = m.thrallT = m.poolT = m.volleyT = Infinity;
+      m.phase = 0; m.busyUntil = 0; m.geyserT = t + SOVEREIGN.geyser.first; m.waveT = m.thrallT = m.poolT = m.volleyT = Infinity; // (first-use delays: shared/bosstiming.js)
       this.twistEngage2(m); // Sovereign twist timers (server/sovtwists.js)
       this.scaleSovereign(m);
       this.startFight2(m);
@@ -288,7 +288,7 @@ export const F2Methods = {
     if (d > def.range + 0.4) this.f2Move(m, target.x, target.z, def.speed * (m.phase === 2 ? 1.15 : 1), dt, def.range);
     else if (t >= m.atkT) {
       const [r, h] = BITE.sovereign;
-      m.windupAt = t + S.sweep.wind; m.atkT = t + def.atkCd * (m.phase === 2 ? 0.8 : 1) + S.sweep.wind * (1 - 1 / PACE); // + the paced extra wind-up
+      m.windupAt = t + S.sweep.wind; m.atkT = t + def.atkCd * (m.phase === 2 ? SOVEREIGN.sweep.rage : 1) + S.sweep.wind * (1 - 1 / PACE); // + the paced extra wind-up
       this.events.push({ t: 'wind', id: m.id, d: S.sweep.wind, f: r2(m.face), r, h });
     }
   },
@@ -313,10 +313,10 @@ export const F2Methods = {
       this.events.push({ t: 'f2phase', id: m.id, n: m.phase });
       if (m.phase === 1) {
         this.sys('The Drowned Sovereign calls the tide! Roll THROUGH the Tidal Wave.');
-        m.waveT = Math.min(m.waveT, t + S.wave.first); m.thrallT = Math.min(m.thrallT, t + 2); m.poolT = t + 6;
+        m.waveT = Math.min(m.waveT, t + S.wave.first); m.thrallT = Math.min(m.thrallT, t + SOVEREIGN.thralls.first); m.poolT = t + SOVEREIGN.pools.first;
       } else {
         this.sys('The Deluge! The outer court floods. Stay near the centre.');
-        this.callDeluge(m); m.volleyT = t + 4 + S.deluge.wind; m.waveT = Math.min(m.waveT, t + 7 + S.deluge.wind);
+        this.callDeluge(m); m.volleyT = t + SOVEREIGN.volley.first + S.deluge.wind; m.waveT = Math.min(m.waveT, t + SOVEREIGN.wave.firstAfterDeluge + S.deluge.wind);
       }
     }
     const fighters = [...this.players.values()].filter(p => !p.dead && inArena2(p.x, p.z));
@@ -365,7 +365,7 @@ export const F2Methods = {
       m.volleyT = t + V.every;
       for (let i = 0; i < V.n; i++) {
         const v = fighters.length ? fighters[i % fighters.length] : target;
-        this.spawnOrb(m, v, (i - (V.n - 1) / 2) * 0.45, 0.8);
+        this.spawnOrb(m, v, (i - (V.n - 1) / 2) * V.fan, V.mult);
       }
     }
   },
@@ -383,7 +383,7 @@ export const F2Methods = {
   // The must-dodge: a ring of water that sweeps out across the whole court. Only a dodge roll's i-frames get you through it.
   tidalWave(m) {
     const W = (this.sovS || SOVEREIGN).wave, t = this.time;
-    m.busyUntil = t + W.wind + 0.5; m.windupAt = 0;
+    m.busyUntil = t + W.wind + W.after.pause; m.windupAt = 0;
     const w = { id: this.id(), x: m.x, z: m.z, start: t + W.wind, r: 0, hit: new Set(), ev: new Set(), atk: m.def.atk * W.mult, max: F2.arena.r * 2 + 2, m };
     this.waves.push(w);
     this.events.push({ t: 'f2wave', id: w.id, by: m.id, x: r2(w.x), z: r2(w.z), d: W.wind, sp: W.speed, w: W.width, max: w.max });

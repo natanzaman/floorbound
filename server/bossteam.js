@@ -44,7 +44,7 @@ const methods = {
     if (m.btKey !== key) { m.btKey = key; m.btT = t + C.first; m.btI = Math.floor(Math.random() * 3); } // a new fight
     if (t < m.btT) return;
     fighters ||= this.btFighters(m);
-    if (fighters.length < BOSSTEAM.min || this.director?.running || this.btBusy(m)) { m.btT = t + 2; return; }
+    if (fighters.length < BOSSTEAM.min || this.director?.running || this.btBusy(m)) { m.btT = t + BOSSTEAM.retry; return; }
     const list = C.moves[m.phase] || C.moves[0];
     m.btT = t + C.every[m.phase];
     for (let i = 0; i < list.length; i++) if (this.btStart(m, list[m.btI++ % list.length], fighters, null)) return; // (a trap that can't start: the next one)
