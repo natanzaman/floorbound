@@ -59,7 +59,7 @@ export const BOSSES = { warden: 'warden', sovereign: 'sovereign' }; // name in a
 // args: name -> kind (validated below). req: required args. api: the Game method it needs (F1/F3-F6, docs/ROADMAP.md).
 const LOC = 'loc', TGT = 'tgt', MOB = 'mob', COND = 'cond', NUM = 'num', STR = 'str', BOOL = 'bool';
 const en = (...v) => ({ enum: v });
-export const MOVES = ['horn_sweep', 'slam', 'charge', 'quake', 'rockfall', 'tidal_wave', 'geyser', 'trident', 'deluge', 'meteor', 'spread', 'tether']; // (the last three: team mechanics, server/bossteam.js)
+export const MOVES = ['horn_sweep', 'slam', 'charge', 'quake', 'rockfall', 'tidal_wave', 'geyser', 'trident', 'deluge', 'meteor', 'spread', 'tether', 'hammerfall', 'lightning', 'gale_push', 'overload', 'tempest_beam']; // (meteor / spread / tether: team mechanics, server/bossteam.js; the last five: the Storm Colossus, server/floor3.js)
 export const SHOTS = ['close_up', 'medium', 'wide', 'over_shoulder', 'follow', 'orbit', 'crane', 'pov', 'eyes', 'free']; // pov / eyes: a character's own view (F8)
 export const EMOTES = ['cheer', 'block', 'cast', 'hit', 'die'];
 export const VERBS = {

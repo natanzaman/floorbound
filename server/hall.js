@@ -6,7 +6,7 @@ const RECENT = 20, FASTEST = 5;
 const caches = new Map(); // floor -> { first, fastest, recent }
 const cacheFor = f => { if (!caches.has(f)) caches.set(f, { first: null, fastest: [], recent: [] }); return caches.get(f); };
 const cache = cacheFor(1);
-export const FLOORS = [1, 2];
+export const FLOORS = [1, 2, 3];
 
 const fromRow = r => ({ at: new Date(r.at).toISOString(), floor: r.floor, secs: r.secs, players: r.players || [], lastAttack: r.last_attack, deaths: r.deaths });
 

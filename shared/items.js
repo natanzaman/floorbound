@@ -93,6 +93,11 @@ export function lastAttackItem2() {
   return { u: ++uid, slot: 'armor', r: 4, name: "Sovereign's Tidecloak", st: { hp: 30, dr: 10, haste: 6 }, la: 2 };
 }
 
+// The Floor 3 Last Attack Bonus: only whoever lands the killing blow on the Storm Colossus gets this.
+export function lastAttackItem3() {
+  return { u: ++uid, slot: 'charm', r: 4, name: 'Stormheart', st: { atk: 12, crit: 8, haste: 8 }, la: 3 };
+}
+
 // A keepsake (server/staging.js giveKeepsake): a named memento with a line of text and no stats. It can be worn, but
 // it can't be sold, salvaged, refined, reforged, dropped or deleted.
 export function keepsakeItem(name, slot = 'charm', desc = '') {
@@ -108,6 +113,7 @@ const TABLES = {
   rare: [0, 20, 55, 25],
 };
 Object.assign(TABLES, { mire: [40, 40, 17, 3], mireElite: [0, 30, 48, 22], boss2: [0, 0, 45, 55] }); // Floor 2
+Object.assign(TABLES, { spire: [25, 45, 25, 5], spireRare: [0, 10, 50, 40], boss3: [0, 0, 30, 70] }); // Floor 3 (its drops: LOOT in shared/loot.js)
 export function rollRarity(table, rnd = Math.random) {
   const w = TABLES[table];
   let x = rnd() * w.reduce((a, b) => a + b, 0);
@@ -136,6 +142,7 @@ Object.assign(DROPS, { // Floor 2
   matron: { gold: [50, 80], item: 1, potion: 0.6, table: 'mireElite' },
   sovereign: { gold: [260, 340], item: 2, potion: 2, table: 'boss2' },
 });
+
 
 export const RANDOM_SLOT = rnd => SLOTS[Math.floor(rnd() * SLOTS.length)];
 

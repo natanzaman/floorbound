@@ -28,6 +28,7 @@
   table.floors tr:last-child td { border-bottom: 0; }
   .fl { font-size: 10px; padding: 1px 5px; border-radius: 4px; background: rgba(96,165,250,.25); margin-right: 6px; }
   .fl.f2 { background: rgba(45,212,191,.28); }
+  .fl.f3 { background: rgba(125,211,252,.3); }
   select { background: #1b2340; color: #fff; border: 1px solid #334; border-radius: 6px; padding: 4px 8px; }
   /* admin part (public/stats-admin.js) */
   .recent .nw { white-space: nowrap; }
@@ -97,7 +98,7 @@
 <div id="tip"></div>
 <script>
 const GUIDE = ['Moved', 'First hit', 'Dodged', 'First kill', 'Opened bag / potion', 'Joined a party', 'First Switch', 'Reached the Warden', 'Beat the Warden'];
-const FLOORS = { 1: ['Floor 1', 'The Horned Warden'], 2: ['Floor 2', 'The Drowned Sovereign'] };
+const FLOORS = { 1: ['Floor 1', 'The Horned Warden'], 2: ['Floor 2', 'The Drowned Sovereign'], 3: ['Floor 3', 'The Storm Colossus'] };
 const RAR = ['Common', 'Uncommon', 'Rare', 'Epic', 'Last Attack'];
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0) + '%';
 const mins = s => (s == null ? '–' : s < 90 ? `${Math.round(s)} s` : `${(s / 60).toFixed(1)} min`);
@@ -118,7 +119,7 @@ async function load() {
     ${row('Median kill time', x => mins(x.kill_secs))}
     ${row('Player deaths on the floor', x => x.deaths ?? '–')}
   </tbody></table>`;
-  const floorTag = n => `<span class="fl ${n === 2 ? 'f2' : ''}">F${n || 1}</span>`;
+  const floorTag = n => `<span class="fl ${n > 1 ? `f${n}` : ''}">F${n || 1}</span>`;
   out.innerHTML = `<div class="grid">
     ${card(s.sessions, 'sessions')}${card(s.characters, 'characters played')}
     ${card(mins(l.median_secs), 'median session length')}${card(mins(f.first_kill_secs), 'median time to first kill')}

@@ -4,9 +4,9 @@
 // The Hall of Clearers: a stone board in the Town of Beginnings (mirrors the merchant at x:9).
 export const HALL = { x: -9, z: 3, r: 3.5 };
 // Engraved stones (ROADMAP F6): each shows the names of its floor's latest clear. Floor 2's stands by Mirelight Camp's Skill Shrine.
-export const HALL_STONES = [{ floor: 1, ...HALL }, { floor: 2, x: 593.5, z: 7.5 }];
+export const HALL_STONES = [{ floor: 1, ...HALL }, { floor: 2, x: 593.5, z: 7.5 }, { floor: 3, x: 1206.5, z: 7.5 }]; // Floor 3: Windbreak Camp
 
-export const STAT_KEYS = ['kills', 'boarKills', 'wolfKills', 'switches', 'deaths', 'wardenKills', 'lastAttacks', 'floorClearsFirst', 'flawlessWarden', 'maxLvl', 'floor2', 'sovereignKills'];
+export const STAT_KEYS = ['kills', 'boarKills', 'wolfKills', 'switches', 'deaths', 'wardenKills', 'lastAttacks', 'floorClearsFirst', 'flawlessWarden', 'maxLvl', 'floor2', 'sovereignKills', 'floor3', 'colossusKills'];
 
 export function newStats(raw) {
   const s = {};
@@ -26,6 +26,7 @@ export const TITLES = [
   { id: 'boarbane', name: 'Boarbane', color: '#fdba74', need: ['boarKills', 100], req: 'Slay 100 Forest Boars' },
   { id: 'wolfsbane', name: 'Wolfsbane', color: '#cbd5e1', need: ['wolfKills', 100], req: 'Slay 100 Dire Wolves' },
   { id: 'mirebreaker', name: 'Mirebreaker', color: '#5eead4', need: ['sovereignKills', 1], req: 'Help defeat the Drowned Sovereign (Floor 2)' },
+  { id: 'stormbreaker', name: 'Stormbreaker', color: '#7dd3fc', need: ['colossusKills', 1], req: 'Help defeat the Storm Colossus (Floor 3)' },
   { id: 'frontliner', name: 'Frontliner', color: '#fde047', need: ['floorClearsFirst', 1], req: "Be part of the server's first-ever Floor 1 clear" },
 ];
 export const TITLE_BY_ID = Object.fromEntries(TITLES.map(t => [t.id, t]));

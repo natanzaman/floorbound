@@ -40,6 +40,7 @@ export const LOADOUT = [
   [10, 2, 3],
   [15, 3, 3],
   [18, 3, 4],
+  [25, 3, 5], // Floor 3 (level cap 30)
 ];
 const RARITY_NAMES = ['Common', 'Uncommon', 'Rare', 'Epic'];
 export function loadoutFor(lvl) {

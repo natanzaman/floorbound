@@ -86,20 +86,23 @@ function drawMotto(base) {
 const canvasTex = c => { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; };
 const plane = (w, h, tex) => new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, metalness: 0.05, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.12 }));
 
-// Floor 2's stone: a smaller tablet by the camp shrine, in the mire's colours.
+// A camp's stone (Floors 2 and 3): a smaller tablet by the camp shrine, in the floor's colours.
+const CAMP_LOOK = { 2: { stone: 0x55666a, dark: 0x34413f, crest: 0x5eead4, cx: 600, base: '#4b5a5e', backBase: '#55666a' }, 3: { stone: 0xb9ad98, dark: 0x7a6f5e, crest: 0x7dd3fc, cx: 1200, base: '#8a7f6c', backBase: '#9c9078' } };
 function buildCampStone(scene, s) {
-  const g = new THREE.Group(); g.name = 'hall_of_clearers_2';
+  if (!s) return null;
+  const L = CAMP_LOOK[s.floor] || CAMP_LOOK[2];
+  const g = new THREE.Group(); g.name = `hall_of_clearers_${s.floor}`;
   const mat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...o });
-  const stone = mat(0x55666a), dark = mat(0x34413f);
+  const stone = mat(L.stone), dark = mat(L.dark);
   const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; g.add(o); return o; };
   add(new THREE.BoxGeometry(2.6, 0.25, 1.4), dark, 0, 0.12, 0);
   add(new THREE.BoxGeometry(2.1, 0.4, 0.9), stone, 0, 0.45, 0);
   add(new THREE.BoxGeometry(1.9, 2.1, 0.34), stone, 0, 1.7, 0);
   add(new THREE.BoxGeometry(2.1, 0.16, 0.5), dark, 0, 2.82, 0);
-  const crest = add(new THREE.OctahedronGeometry(0.22), new THREE.MeshBasicMaterial({ color: 0x5eead4 }), 0, 3.15, 0);
+  const crest = add(new THREE.OctahedronGeometry(0.22), new THREE.MeshBasicMaterial({ color: L.crest }), 0, 3.15, 0);
   g.position.set(s.x, 0, s.z);
-  g.rotation.y = Math.atan2(600 - s.x, 0 - s.z); // faces the campfire
-  g.userData = { crest, faceW: 1.55, faceY: 1.7, faceZ: 0.175, backW: 1.6, backY: 1.85, backZ: -0.175, base: '#4b5a5e', backBase: '#55666a' };
+  g.rotation.y = Math.atan2(L.cx - s.x, 0 - s.z); // faces the campfire
+  g.userData = { crest, faceW: 1.55, faceY: 1.7, faceZ: 0.175, backW: 1.6, backY: 1.85, backZ: -0.175, base: L.base, backBase: L.backBase };
   scene.add(g);
   return g;
 }
@@ -108,8 +111,8 @@ export function initBell({ scene, sfx, banner, guide }) {
   const stones = new Map(); // floor -> { group, tex, key }
   const town = scene.getObjectByName('hall_of_clearers');
   if (town) Object.assign(town.userData, { faceW: 1.96, faceY: 2.15, faceZ: 0.256, backW: 2.2, backY: 2.3, backZ: -0.206, base: '#3f3c48', backBase: '#8d8a96' });
-  const camp = buildCampStone(scene, HALL_STONES.find(s => s.floor === 2));
-  for (const [floor, group] of [[1, town], [2, camp]]) {
+  const camp = buildCampStone(scene, HALL_STONES.find(s => s.floor === 2)), camp3 = buildCampStone(scene, HALL_STONES.find(s => s.floor === 3));
+  for (const [floor, group] of [[1, town], [2, camp], [3, camp3]]) {
     if (!group) continue;
     const u = group.userData;
     const tex = canvasTex(document.createElement('canvas'));

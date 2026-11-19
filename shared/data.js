@@ -1,5 +1,6 @@
 // Shared game data and helpers, imported by both the server and the browser client.
 import { F2, F2_MOB_IDS, F2_MOBS, F2_BITE, SOVEREIGN, inCamp2, walkable2, areaName2, floor2Obstacles } from './floor2.js';
+import { F3, F3_MOB_IDS, F3_MOBS, F3_BITE, F3_RARES, COLOSSUS, inCamp3, walkable3, areaName3, floor3Obstacles } from './floor3.js';
 import { LANCER } from './classes/lancer.js';
 import { BARD } from './classes/bard.js';
 import { RANGER } from './classes/ranger.js';
@@ -33,7 +34,7 @@ export const PLAYER_SPEED = 7;
 export const SPRINT_SPEED = 10; // automatic when out of combat for a few seconds
 export const SPRINT_AFTER = 3;   // seconds without dealing or taking damage
 export const PLAYER_RADIUS = 0.5;
-export const MAX_LEVEL = 20;
+export const MAX_LEVEL = 30; // Floor 3 (docs/floor3.md) raised it from 20
 export const PARTY_MAX = 6;
 
 // Dodge roll: a short burst of movement with invulnerability frames.
@@ -62,7 +63,7 @@ export const WORLD = {
   town: { x: 0, z: 0, r: 26 },
 };
 
-export const inTown = (x, z) => Math.hypot(x - WORLD.town.x, z - WORLD.town.z) < WORLD.town.r || inCamp2(x, z); // Floor 2's camp is a safe zone too
+export const inTown = (x, z) => Math.hypot(x - WORLD.town.x, z - WORLD.town.z) < WORLD.town.r || inCamp2(x, z) || inCamp3(x, z); // the Floor 2 and 3 camps are safe zones too
 export const inArena = (x, z) => Math.hypot(x - WORLD.arena.x, z - WORLD.arena.z) < WORLD.arena.r;
 
 // Raid gate: a portcullis across the corridor to the Warden's chamber. It opens after a ready check.
@@ -73,6 +74,7 @@ const gateBlocks = (x, z) => Math.abs(x) < GATE.half && z > GATE.band[0] && z < 
 export const crossesGate = (x0, z0, x1, z1) => (z0 < GATE.z) !== (z1 < GATE.z) && Math.abs((x0 + x1) / 2) < GATE.half + 1;
 
 export function walkable(x, z, gateClosed = false) {
+  if (x > F3.split) return walkable3(x, z, gateClosed); // Floor 3 (shared/floor3.js): gateClosed means its Storm Gate
   if (x > F2.split) return walkable2(x, z, gateClosed); // Floor 2: gateClosed means Floor 2's gate there
   if (gateClosed && gateBlocks(x, z)) return false;
   const { rect, corridor } = WORLD;
@@ -82,6 +84,7 @@ export function walkable(x, z, gateClosed = false) {
 }
 
 export function areaName(x, z) {
+  if (x > F3.split) return areaName3(x, z);
   if (x > F2.split) return areaName2(x, z);
   if (inTown(x, z)) return 'Town of Beginnings';
   if (inArena(x, z)) return "Warden's Chamber";
@@ -118,6 +121,7 @@ export const OBSTACLES = (() => {
     out.push({ kind: 'pillar', x: WORLD.arena.x + Math.cos(a) * 21, z: WORLD.arena.z + Math.sin(a) * 21, r: 1.6 });
   }
   out.push(...floor2Obstacles()); // waystones + Floor 2 (see shared/floor2.js)
+  out.push(...floor3Obstacles()); // Floor 3 (see shared/floor3.js)
   return out;
 })();
 
@@ -196,12 +200,15 @@ export const MOBS = {
 // Floor 2 enemies (shared/floor2.js), appended so existing type indices never move.
 MOB_IDS.push(...F2_MOB_IDS);
 Object.assign(MOBS, F2_MOBS);
+// Floor 3 enemies (shared/floor3.js), appended after Floor 2's.
+MOB_IDS.push(...F3_MOB_IDS);
+Object.assign(MOBS, F3_MOBS);
 
 export const xpToNext = lvl => 50 * lvl;
 
 // Melee bites hit a wedge in front of the attacker (shown as a red wedge during the wind-up).
 export const BITE = { boar: [2.6, 0.7], wolf: [2.8, 0.6], alpha: [3.4, 0.85], hound: [2.8, 0.6], oldtusk: [3.6, 0.8], ghostfang: [3.4, 0.85] }; // [reach, half-angle]
-Object.assign(BITE, F2_BITE);
+Object.assign(BITE, F2_BITE, F3_BITE);
 export const PACK = { auraRange: 12, auraAtk: 0.25, howlEvery: 12, howlRange: 16, frenzy: 6 };
 // The Warden's three phases: 100-66% (cleave + slams), 66-33% (+ hounds, horn charge), <33% (+ spin, rockfall).
 // Quake Rings and the Horn Sweep come in every phase (more rings / more often later).
@@ -228,6 +235,7 @@ export const WARDEN = {
 };
 paceMoves(WARDEN, ['slam', 'charge', 'cleave', 'spin', 'rock', 'quake']); // slower, readable wind-ups (PACE above)
 paceMoves(SOVEREIGN, ['sweep', 'geyser', 'wave']); // shared/floor2.js can't import this file, so it is paced here
+paceMoves(COLOSSUS, ['cleave', 'strike', 'gust', 'beam']); // Floor 3's boss (shared/floor3.js), likewise
 export const THORN = { speed: 16, radius: 0.6, wind: 0.75 };
 // Rare named spawns: at most one alive; first after `first` s, then `every` s after the last one is gone.
 export const RARE = {
@@ -236,6 +244,7 @@ export const RARE = {
     oldtusk: { x: [-60, 60], z: [38, 93], where: 'the Verdant Field' },
     ghostfang: { x: [-60, 60], z: [100, 145], where: 'the Wolf Woods' },
     thornmother: { x: [-60, 60], z: [55, 140], where: 'the Verdant Field' },
+    ...F3_RARES, // Floor 3: Skyrender, the Old Bastion (shared/floor3.js)
   },
   spreadAngle: 0.28, // radians between Thornmother's thorns
 };

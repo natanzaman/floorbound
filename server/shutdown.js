@@ -4,17 +4,18 @@
 // character and exit. Clients reconnect on their own (public/main.js), to the new instance.
 import { inArena } from '../shared/data.js';
 import { inArena2 } from '../shared/floor2.js';
+import { inArena3 } from '../shared/floor3.js';
 
 export const UPDATE_MSG = "Update incoming: you'll reconnect in a moment.";
 // How long a boss fight may hold a shutdown: 4 minutes on Render (RENDER=true there), none elsewhere (local servers
 // and test harnesses stop at once after saving); SHUTDOWN_HOLD_MS overrides either.
 export const HOLD_MS = process.env.SHUTDOWN_HOLD_MS !== undefined && process.env.SHUTDOWN_HOLD_MS !== '' ? Number(process.env.SHUTDOWN_HOLD_MS) || 0 : process.env.RENDER ? 240000 : 0;
 
-// A boss fight with real players in it: the Warden or the Sovereign engaged (or its gate open) with a player in the arena.
+// A boss fight with real players in it: the Warden, the Sovereign or the Colossus engaged (or its gate open) with a player in the arena.
 export function bossFightLive(game) {
   const humans = [...game.players.values()].filter(p => !p.bot && !p.dead);
   const fight = (boss, gate, inRoom) => !!boss && !boss.dead && (boss.threat?.size > 0 || gate?.open) && humans.some(p => inRoom(p.x, p.z));
-  return fight(game.boss, game.gate, inArena) || fight(game.sovereign, game.gate2, inArena2);
+  return fight(game.boss, game.gate, inArena) || fight(game.sovereign, game.gate2, inArena2) || fight(game.colossus, game.gate3, inArena3);
 }
 
 // Drains, then resolves (the caller exits). notify(text) tells everyone; save() saves every character.
