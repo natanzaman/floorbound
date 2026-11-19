@@ -1,8 +1,8 @@
 // Controller menu navigation (public/focusnav.js, roadmap K1b) in a real browser with a fake standard pad.
 // Character select by pad (d-pad to a class, A picks it, A on Enter joins), the Game Menu (Start opens it, the d-pad
 // moves, A opens Settings, Right moves the slider, B backs out to the menu with the focus back on Settings, Start
-// closes it), the Bag and the Skill Tree (navigable, B closes, Start closes the Skill Tree), the MVP card (A / B
-// close it), and the keyboard & mouse device leaves the menus alone. Needs Playwright for Node (see test/keys.mjs).
+// closes it; Settings reopened another way: B only closes it; the right stick leaves the camera alone), the Bag and
+// the Skill Tree (navigable, B closes, Start closes the Skill Tree), the MVP card (A / B close it), and the keyboard & mouse device leaves the menus alone. Needs Playwright for Node (see test/keys.mjs).
 // Usage: PORT=371xx node test/padnav.mjs
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -105,6 +105,25 @@ try {
   await press(['B']);
   assert.ok(!(await isOpen('gamemenu')), 'B on the Game Menu closes it');
   ok('Game Menu: Start, d-pad / stick move (no walking), A opens Settings, slider, B back with focus restored, Start closes');
+
+  // ---- Settings from the Game Menu, closed by Start, reopened elsewhere: B just closes it; the right stick stays put ----
+  await p.waitForTimeout(450);
+  await press(['Start'], 2);
+  await goTo('BUTTON?a=settings');
+  await press(['A']);
+  assert.ok(await isOpen('settings'), 'A opens Settings');
+  { const yaw0 = await S(() => window.__fb.state.yaw);
+    await S(() => { window.__pad.pad.axes = [0, 0, 1, 0]; }); await frames(6); await S(() => { window.__pad.pad.axes = [0, 0, 0, 0]; }); await frames(1);
+    assert.equal(await S(() => window.__fb.state.yaw), yaw0, 'the right stick does not turn the camera under a navigated window'); }
+  await p.waitForTimeout(450);
+  await press(['Start'], 2);
+  assert.ok(!(await isOpen('settings')) && !(await isOpen('gamemenu')), 'Start closes Settings');
+  await S(() => document.getElementById('settings-btn').click()); await frames(2);
+  assert.equal((await cur()).layer, 'settings', 'Settings opened from the corner button');
+  await press(['B']);
+  assert.ok(!(await isOpen('settings')), 'B closes Settings');
+  assert.ok(!(await isOpen('gamemenu')), 'and does not open the Game Menu (it was not opened from it this time)');
+  ok('B goes back only to the window that opened this one this time; the right stick stays off the camera in menus');
 
   // ---- the Bag ----
   await press(['View']);

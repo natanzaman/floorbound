@@ -2038,7 +2038,7 @@ function frame(now) {
   frustum.setFromProjectionMatrix(frM4.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); // (last frame's camera)
   corr.step(dt * 1000);
   input.tick(); nav.tick(now); input.setContext('downedAlly', !!state.joined && (revive.usesE() || rescue.usesE())); // (pads polled here; E / D-pad down revives / cuts free instead of turning)
-  if (input.device === 'pad' && state.joined && !state.spectator && !gmenu.isOpen()) { // the right stick: camera, or picks on the bot wheel
+  if (input.device === 'pad' && state.joined && !state.spectator && !gmenu.isOpen() && !nav.active()) { // the right stick: camera, or picks on the bot wheel (not while a window is navigated)
     if (wheel.isOpen()) { const s = input.stick(input.bindings('pad').look?.[0]); wheel.point(s.x, s.y); }
     else { const lk = input.axis('look'); state.yaw -= lk.x * dt * 2.6; state.pitch = Math.min(1.25, Math.max(0.12, state.pitch - lk.y * dt * 1.5)); }
   }

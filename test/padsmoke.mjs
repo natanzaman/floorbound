@@ -1,7 +1,8 @@
 // Controller smoke test (roadmap K1b): a fake standard pad (17 buttons, 4 axes) through navigator.getGamepads(),
 // checked by game state and sent messages. The "Controller detected" prompt, switching with A, the left stick
 // moves, the right stick turns the camera, X / LB+X / RT / R3, Start opens the Game Menu, and unplugging falls back
-// to keyboard & mouse. K4 does the full harness. Needs Playwright for Node (see test/keys.mjs).
+// to keyboard & mouse; the press that wakes a pad doesn't answer the prompt, a second pad taking over and a blur let
+// go of pad holds. K4 does the full harness. Needs Playwright for Node (see test/keys.mjs).
 // Usage: PORT=371xx node test/padsmoke.mjs
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -32,8 +33,34 @@ try {
     const pad = { id: 'Xbox Wireless Controller (STANDARD GAMEPAD)', index: 0, connected: true, mapping: 'standard', timestamp: 0,
       buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })), axes: [0, 0, 0, 0] };
     window.__pad = { on: false, pad };
-    navigator.getGamepads = () => [window.__pad.on ? pad : null, null, null, null];
+    // a second pad (index 1) for the active-pad-leaves check
+    const pad2 = { ...pad, id: 'DualSense Wireless Controller (STANDARD GAMEPAD)', index: 1, buttons: pad.buttons.map(b => ({ ...b })), axes: [0, 0, 0, 0] };
+    window.__pad2 = { on: false, pad: pad2 };
+    navigator.getGamepads = () => [window.__pad.on ? pad : null, window.__pad2.on ? pad2 : null, null, null];
   });
+
+  // ---- waking the pad with A: that press does not answer the prompt (a fresh page; the pad is there with A down) ----
+  {
+    const q = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    q.on('pageerror', e => errors.push(e.message));
+    await q.addInitScript(() => {
+      const pad = { id: 'Xbox Wireless Controller (STANDARD GAMEPAD)', index: 0, connected: true, mapping: 'standard', timestamp: 0,
+        buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: i === 0, touched: false, value: i === 0 ? 1 : 0 })), axes: [0, 0, 0, 0] };
+      window.__pad = { pad };
+      navigator.getGamepads = () => [pad, null, null, null];
+    });
+    await q.goto(`${base}/?quality=low`);
+    await q.waitForFunction(() => window.__fb?.input?.pad.connected && window.__fb.input.frames > 3, null, { timeout: 60000 });
+    assert.equal(await q.evaluate(() => window.__fb.input.device), 'kbm', 'the waking A did not switch');
+    assert.match(await q.evaluate(() => document.getElementById('padtoast')?.textContent || ''), /Controller detected/, 'the prompt is still up');
+    await q.evaluate(() => { const b = window.__pad.pad.buttons[0]; b.pressed = false; b.value = 0; });
+    await q.waitForFunction(() => !window.__fb.input.padHeld('A'));
+    await q.evaluate(() => { const b = window.__pad.pad.buttons[0]; b.pressed = true; b.value = 1; });
+    await q.waitForFunction(() => window.__fb.input.device === 'pad', null, { timeout: 5000 });
+    await q.close();
+    ok('the button press that wakes the pad does not answer "Controller detected"; a fresh A does');
+  }
+
   await p.goto(`${base}/?quality=low`);
   await p.fill('#name', 'Pad');
   await p.click('.cls[data-id=guardian]');
@@ -121,6 +148,33 @@ try {
   m = await mark(); await ready(2); await p.keyboard.press('Digit2'); await frames(2);
   assert.deepEqual((await sent(m, 'skill')).map(o => o.slot), [2], 'keyboard works again');
   ok('unplugging lets go of holds and falls back to keyboard & mouse with a toast');
+
+  // ---- two pads: the active one leaves while RT is held; the other takes over and the attack lets go ----
+  await S(() => { const b = window.__pad.pad.buttons[7]; b.pressed = false; b.value = 0; }); // (still down from the unplug check)
+  await S(() => { window.__pad.on = true; window.__pad2.on = true; dispatchEvent(new Event('gamepadconnected')); }); await frames(2);
+  await S(() => window.__fb.input.setDevice('pad')); await frames(1);
+  assert.equal(await S(() => window.__fb.input.pad.id), await S(() => window.__pad.pad.id), 'pad 1 is the active one');
+  await keepAlive(); await ready(0); m = await mark();
+  await S(() => { const b = window.__pad.pad.buttons[7]; b.pressed = true; b.value = 1; }); await frames(4);
+  assert.ok((await sent(m, 'skill')).some(o => o.slot === 0), 'RT on pad 1 attacks');
+  await S(() => { window.__pad.on = false; const b = window.__pad.pad.buttons[7]; b.pressed = false; b.value = 0; dispatchEvent(new Event('gamepaddisconnected')); }); await frames(2);
+  assert.equal(await S(() => window.__fb.input.pad.id), await S(() => window.__pad2.pad.id), 'pad 2 takes over');
+  assert.equal(await S(() => window.__fb.input.device), 'pad', 'still on Controller');
+  await keepAlive(); await frames(2); m = await mark(); await p.waitForTimeout(1500); // (longer than the attack's cooldown)
+  assert.equal((await sent(m, 'skill')).length, 0, 'the RT held on pad 1 let go');
+  ok('the active pad leaving with another connected lets go of its holds');
+
+  // ---- the bot wheel by pad (LB+Y), the window loses focus, Y let go: the wheel closes ----
+  const wheelOpen = () => S(() => !document.getElementById('botwheel').classList.contains('hidden'));
+  for (const i of [4, 3]) await S(i => { const b = window.__pad2.pad.buttons[i]; b.pressed = true; b.value = 1; }, i);
+  await frames(3);
+  assert.ok(await wheelOpen(), 'LB+Y opens the wheel');
+  await p.waitForTimeout(450); // (held past a tap)
+  await S(() => dispatchEvent(new Event('blur')));
+  for (const i of [3, 4]) await S(i => { const b = window.__pad2.pad.buttons[i]; b.pressed = false; b.value = 0; }, i);
+  await frames(3);
+  assert.ok(!(await wheelOpen()), 'the wheel is not left open after a blur');
+  ok('a blur lets go of pad holds: the bot wheel closes');
 
   assert.deepEqual(errors, [], 'no page errors');
   console.log(`padsmoke: all ${n} checks passed`);

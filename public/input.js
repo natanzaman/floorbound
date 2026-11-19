@@ -95,7 +95,9 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     if (active.has(code)) release(code, e, 'kbm', false);
   });
   addEventListener('blur', () => reset());
-  function reset() { held.clear(); active.clear(); pad.active.clear(); } // (quietly: callers clear their own holds; pad buttons still down stay down)
+  // Keys and mouse let go quietly (callers clear their own holds); pad holds fire their up (the bot wheel closes) and
+  // the pad buttons still down stay down (no new press when they come back up).
+  function reset() { held.clear(); active.clear(); releasePad(); }
 
   // Mouse buttons on the game view: main.js asks what a click would do (peek), then lets it happen (mouseDown).
   const mouseCode = e => `Mouse${e.button}`;
@@ -188,8 +190,9 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     return true;
   }
   function padFound(gp) {
+    if (pad.index !== -1) releasePad(); // (the active pad left and another took over: let go of its holds)
     pad.index = gp.index; pad.id = gp.id; pad.recognised = gp.mapping === 'standard'; pad.family = glyphFamily(gp.id);
-    pad.held = new Set(); pad.active.clear();
+    pad.held = readButtons(gp); // (buttons already down, the press that woke it: no edge, so it can't answer the prompt below)
     if (!pad.recognised) notify('Controller not recognised: its buttons are read by position. Rebind them in Controls if they feel wrong.');
     if (device === 'pad' || settings.padAsked) return;
     settings.padAsked = true; save(); // (asked once; the Controls screen switches later)

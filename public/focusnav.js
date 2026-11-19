@@ -104,6 +104,7 @@ export function createFocusNav({ input, panels, order = ['*'], hooks = {} }) {
   }
   function clear() { el?.classList.remove('nav-focus'); el = null; layer = null; }
   function sync() { // the right window, and a live element in it (restored by key after a re-render or reopening)
+    for (const id of parent.keys()) if (!rootOf(id)) parent.delete(id); // (a window gone by Start or the mouse: B no longer goes back from it)
     const t = input.device === 'pad' ? top() : null;
     if (!t) { if (layer || el) clear(); return null; }
     if (!layer || layer.id !== t.id || layer.root !== t.root) {
