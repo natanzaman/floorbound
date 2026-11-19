@@ -70,7 +70,7 @@ input { font: inherit; }
 
 .chip { position: absolute; top: max(10px, env(safe-area-inset-top)); right: 10px; padding: 8px 14px; border-radius: 999px;
   background: rgba(10,16,34,.72); border: 1px solid rgba(160,200,255,.3); }
-#players { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); right: 10px; width: 240px; max-height: 50vh; overflow: auto; padding: 8px; }
+#players { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); right: 10px; width: 240px; max-height: calc(50vh / var(--ui-scale)); overflow: auto; padding: 8px; }
 #players .p { display: flex; align-items: center; justify-content: space-between; padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,.07); font-size: 13px; }
 #players button, #invite button { padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(160,200,255,.35); background: rgba(120,170,255,.15); font-size: 12px; }
 #players .leave { width: 100%; margin-top: 8px; padding: 8px; }
@@ -228,7 +228,7 @@ input { font: inherit; }
 .touch #skills-btn { right: 388px; }
 .spectator #skills-btn { display: none !important; }
 #gold-chip { color: #fcd34d; font-weight: 700; margin-left: 4px; }
-#bag { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); right: 10px; width: min(380px, 94vw); max-height: calc(100vh - 140px); overflow: auto; padding: 10px 12px; font-size: 13px; z-index: 3; }
+#bag { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); right: 10px; width: min(380px, calc(94vw / var(--ui-scale))); max-height: calc(100vh / var(--ui-scale) - 140px); overflow: auto; padding: 10px 12px; font-size: 13px; z-index: 3; }
 #bag h4 { margin: 10px 0 6px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; opacity: .6; }
 #bag h4:first-child { margin-top: 0; }
 #bag .top { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 15px; }
@@ -300,7 +300,7 @@ input { font: inherit; }
 
 /* Hall of Clearers */
 .lbl.npc.hall { color: #fcd34d; }
-#hall { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); left: 50%; transform: translateX(-50%); width: min(460px, 94vw); max-height: calc(100vh - 140px); overflow: auto; padding: 12px 14px; font-size: 13px; z-index: 3; border-color: rgba(252,211,77,.45); }
+#hall { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); left: 50%; transform: translateX(-50%); width: min(460px, calc(94vw / var(--ui-scale))); max-height: calc(100vh / var(--ui-scale) - 140px); overflow: auto; padding: 12px 14px; font-size: 13px; z-index: 3; border-color: rgba(252,211,77,.45); }
 #hall .top { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 16px; letter-spacing: .1em; color: #fde68a; }
 #hall .x { padding: 2px 9px; border-radius: 6px; border: 1px solid rgba(160,200,255,.3); background: transparent; }
 #hall h4 { margin: 12px 0 6px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; opacity: .6; }
@@ -316,7 +316,7 @@ input { font: inherit; }
 /* Town Smith (public/smith.js) */
 .lbl.npc.smith { color: #fdba74; }
 #log .mat { color: #fdba74; }
-#smith { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); left: 50%; transform: translateX(-50%); width: min(480px, 94vw); max-height: calc(100vh - 140px); display: flex; flex-direction: column; padding: 12px 14px; font-size: 13px; z-index: 3; border-color: rgba(251,146,60,.5); }
+#smith { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); left: 50%; transform: translateX(-50%); width: min(480px, calc(94vw / var(--ui-scale))); max-height: calc(100vh / var(--ui-scale) - 140px); display: flex; flex-direction: column; padding: 12px 14px; font-size: 13px; z-index: 3; border-color: rgba(251,146,60,.5); }
 #smith.hidden { display: none; }
 #smith .top { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 16px; letter-spacing: .1em; color: #fdba74; }
 #smith .top .gold { color: #fcd34d; font-size: 13px; letter-spacing: 0; margin-left: 6px; }
@@ -356,7 +356,7 @@ input { font: inherit; }
 /* settings + mouse-look crosshair */
 #settings-btn { right: 400px; }
 .touch #settings-btn, .spectator #settings-btn { display: none; }
-#settings { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); right: 10px; width: min(340px, 94vw); padding: 10px 14px; font-size: 13px; z-index: 4; max-height: calc(100vh - 70px); overflow-y: auto; }
+#settings { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); right: 10px; width: min(340px, calc(94vw / var(--ui-scale))); padding: 10px 14px; font-size: 13px; z-index: 4; max-height: calc(100vh / var(--ui-scale) - 70px); overflow-y: auto; }
 #settings .note { display: block; opacity: .55; font-size: 11px; margin: 2px 0 4px; }
 #settings .top { display: flex; justify-content: space-between; align-items: center; font-size: 15px; }
 #settings .x { padding: 2px 9px; border-radius: 6px; border: 1px solid rgba(160,200,255,.3); background: transparent; }
@@ -382,7 +382,7 @@ body.mlock #crosshair { display: block; }
 
 /* ---------- Players panel tabs + Bots tab (public/playerbots.js) ---------- */
 #players { z-index: 3; } /* above the guide card, like the bag */
-#players.wide { width: min(312px, 94vw); max-height: calc(100vh - 140px); }
+#players.wide { width: min(312px, calc(94vw / var(--ui-scale))); max-height: calc(100vh / var(--ui-scale) - 140px); }
 #players .pb-tabs { display: flex; gap: 4px; margin-bottom: 6px; border-bottom: 1px solid rgba(160,200,255,.18); }
 #players .pb-tabs button { flex: 1; border: 0; border-bottom: 2px solid transparent; border-radius: 6px 6px 0 0; background: transparent; padding: 6px 4px; font-size: 13px; font-weight: 700; opacity: .65; }
 #players .pb-tabs button.on { opacity: 1; border-bottom-color: #60a5fa; background: rgba(96,165,250,.12); }
@@ -593,7 +593,7 @@ body.mlock #crosshair { display: block; }
 .touch #menu-btn { display: block; z-index: 7; } /* (above the guide card on short screens) */
 #gamemenu { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(2,6,23,.45); }
 #gamemenu.hidden { display: none; }
-#gamemenu .gm-box { width: min(320px, 92vw); max-height: 86vh; display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; background: rgba(10,16,34,.92); }
+#gamemenu .gm-box { width: min(320px, calc(92vw / var(--ui-scale))); max-height: calc(86vh / var(--ui-scale)); display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; background: rgba(10,16,34,.92); }
 #gamemenu .gm-top { display: flex; justify-content: space-between; align-items: center; font-size: 17px; letter-spacing: .06em; }
 #gamemenu .gm-run { opacity: .65; font-size: 12px; margin-bottom: 4px; }
 #gamemenu .gm-b { display: block; width: 100%; padding: 11px; border-radius: 10px; border: 1px solid rgba(160,200,255,.3); background: rgba(255,255,255,.06); text-align: center; text-decoration: none; color: inherit; font-weight: 600; }

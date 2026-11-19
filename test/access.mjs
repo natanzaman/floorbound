@@ -121,6 +121,31 @@ try {
   await setOpt('telegraphSound', false);
   ok('telegraphSound: off by default, a distinct cue when on');
 
+  // Echo (and cracked-ground) telegraphs play the cue too, exactly once
+  await setOpt('telegraphSound', true);
+  const echoSound = k => S(k => {
+    const f = window.__fb, played = [], orig = f.sfx.play;
+    f.sfx.play = (n, ...r) => { played.push(n); return orig.call(f.sfx, n, ...r); };
+    f.handleEvent({ t: 'tele', k, x: 500, z: 500, r: 3, d: 1 });
+    f.sfx.play = orig;
+    return played.filter(n => n === 'cue').length;
+  }, k);
+  assert.equal(await echoSound('echo'), 1, 'echo telegraph plays the cue once');
+  assert.equal(await echoSound('crack'), 1, 'crack telegraph plays the cue once');
+  assert.equal(await echoSound('slam'), 1, 'slam still plays it once');
+  await setOpt('telegraphSound', false);
+  assert.equal(await echoSound('echo'), 0, 'no cue when off');
+  ok('telegraphSound: Echo and crack telegraphs cue once');
+
+  // Toggle guard: a device switch drops a raised guard
+  await setOpt('guardToggle', true);
+  await tap('KeyR');
+  assert.equal(await S(() => window.__fb.combat.guarding), true, 'guard up');
+  await S(() => window.__fb.input.setDevice('touch')); await frames(3);
+  assert.equal(await S(() => window.__fb.combat.guarding), false, 'device switch drops the toggled guard');
+  await S(() => window.__fb.input.setDevice('kbm'));
+  ok('guardToggle: device switch drops the guard');
+
   // text/UI scale and high contrast, as computed styles
   await setOpt('uiScale', 1.5);
   assert.equal(await S(() => getComputedStyle(document.documentElement).getPropertyValue('--ui-scale').trim()), '1.5');
@@ -129,6 +154,42 @@ try {
   assert.equal(await S(() => document.documentElement.classList.contains('hc')), true);
   assert.equal(await S(() => getComputedStyle(document.getElementById('settings')).color), 'rgb(255, 255, 255)');
   ok('uiScale zooms panels; highContrast sets the class and brighter text');
+
+  // panels with viewport-unit caps stay on screen at scale 1.5 (zoom also scales vh), and their scroll reaches the last control
+  await S(() => { const f = window.__fb; f.state.lvl = Math.max(f.state.lvl, 10); });
+  const btnOf = { settings: 'settings-btn', bag: 'bag-btn', talentsp: 'skills-btn', players: 'players-btn', gamemenu: 'menu-btn' };
+  const openers = btnOf;
+  const fits = id => S(async ([id, btn]) => {
+    const f = window.__fb; for (const o of ['settings', 'bag', 'talentsp', 'players', 'gamemenu']) if (f.panels.isOpen(o)) f.panels.close(o);
+    if (!f.panels.isOpen(id)) document.getElementById(btn).click();
+    await new Promise(r => setTimeout(r, 150));
+    const el = document.getElementById(id), r = el.getBoundingClientRect();
+    const sc = [el, ...el.querySelectorAll('*')].filter(x => x.scrollHeight > x.clientHeight + 1 && ['auto', 'scroll'].includes(getComputedStyle(x).overflowY));
+    const last = [...el.querySelectorAll('button, input, select, label')].filter(x => x.offsetParent).pop();
+    let reach = true;
+    if (last) { for (const x of sc) x.scrollTop = 1e6; reach = last.getBoundingClientRect().bottom <= innerHeight + 1; }
+    return { id, bottom: Math.round(r.bottom), vh: innerHeight, reach, shown: r.height > 0 };
+  }, [id, btnOf[id]]);
+  for (const id of Object.keys(openers)) {
+    const r = await fits(id);
+    if (!r.shown) { console.log(`  (skip ${id}: not openable here)`); continue; }
+    assert.ok(r.bottom <= r.vh + 1, `${id} fits at 1.5: ${JSON.stringify(r)}`);
+    assert.ok(r.reach, `${id} scroll reaches the last control at 1.5: ${JSON.stringify(r)}`);
+  }
+  ok('uiScale 1.5: panels stay within the viewport and scroll to the end');
+
+  // Skill Tree tooltip follows the pointer at scale 1.5 (its left/top are in zoomed units)
+  await S(() => { const f = window.__fb; for (const o of ['settings', 'bag', 'talentsp', 'players', 'gamemenu']) if (f.panels.isOpen(o)) f.panels.close(o); document.getElementById('skills-btn').click(); });
+  await sleep(200);
+  const nodeBox = await S(() => { const r = document.querySelector('#talentsp .tn').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await p.mouse.move(nodeBox.x - 2, nodeBox.y); await p.mouse.move(nodeBox.x, nodeBox.y); await sleep(100);
+  const tt = await S(() => { const z = +getComputedStyle(document.getElementById('talentsp')).zoom, r = document.querySelector('#talentsp .tt').getBoundingClientRect(), b = document.getElementById('talentsp').getBoundingClientRect(); return { z, l: r.left, t: r.top, r: r.right, b: r.bottom, bl: b.left, bt: b.top, br: b.right, bb: b.bottom }; });
+  const flipped = tt.r <= nodeBox.x + 1; // placed left of the pointer when it would run off the right edge
+  if (!flipped) assert.ok(Math.abs(tt.l - (nodeBox.x + 18 * tt.z)) < 4, `tooltip ${JSON.stringify(tt)} should be 18*zoom right of the pointer ${nodeBox.x}`);
+  assert.ok(Math.abs(tt.t - (nodeBox.y + 14 * tt.z)) < 4 || tt.b >= tt.bb - 12, `tooltip top ${tt.t} is under the pointer ${nodeBox.y} (or pinned to the bottom)`);
+  assert.ok(tt.r <= tt.br + 1 && tt.b <= tt.bb + 1, `tooltip inside the panel: ${JSON.stringify(tt)}`);
+  await S(() => window.__fb.panels.close('talentsp'));
+  ok('uiScale 1.5: Skill Tree tooltip follows the pointer');
 
   // stick sensitivity is stored for the pad code; everything is saved under fb_controls.access
   await setOpt('padSens', 2.2);

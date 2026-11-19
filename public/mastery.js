@@ -11,8 +11,8 @@ const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const CSS = `
-#skillsp { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); left: 50%; transform: translateX(-50%); width: min(620px, 96vw);
-  max-height: calc(100vh - 150px); overflow: auto; padding: 12px 14px; font-size: 13px; z-index: 4; }
+#skillsp { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); left: 50%; transform: translateX(-50%); width: min(620px, calc(96vw / var(--ui-scale, 1)));
+  max-height: calc(100vh / var(--ui-scale, 1) - 150px); overflow: auto; padding: 12px 14px; font-size: 13px; z-index: 4; }
 #skillsp .top { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 15px; letter-spacing: .1em; }
 #skillsp .top small { font-weight: 600; letter-spacing: 0; opacity: .7; font-size: 12px; margin-left: 8px; }
 #skillsp .x { padding: 2px 9px; border-radius: 6px; border: 1px solid rgba(160,200,255,.3); background: transparent; color: inherit; }

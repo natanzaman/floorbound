@@ -661,9 +661,9 @@ function handleEvent(e) {
       break;
     }
     case 'tele': {
+      cue(sfx, { x: e.x, z: e.z }, 1.2); // (Settings → Sound cue for attacks; once per telegraph, twists included)
       if (twists.tele(e)) break; // Warden twists: cracked ground, Echo strikes
       const mine = Math.hypot(e.x - state.x, e.z - state.z) < e.r + 2;
-      cue(sfx, { x: e.x, z: e.z }, 1.2); // (Settings → Sound cue for attacks)
       if (e.k === 'line') {
         fx.lane(e.x, e.z, e.x2, e.z2, e.w, e.d);
         sfx.play('warn', { x: e.x, z: e.z }, 1.3);
@@ -933,6 +933,7 @@ onPress('skill2', () => useSkill(2));
 onPress('skill3', () => useSkill(3));
 onPress('dodge', () => dodge());
 onPress('skillTree', e => { if (!e.repeat) talents.toggle(); }); // Skill Tree window (public/talents.js)
+input.onDevice?.(() => combat.guard(false)); // a device switch lets go of every hold: a toggled guard would stay up
 input.on('guard', e => { // hold to guard; with Settings → Toggle guard, each press flips it
   if (settings.guardToggle) { if (e.down && !e.repeat) combat.guard(!combat.guarding); }
   else if (!e.down) combat.guard(false); else if (!e.repeat) combat.guard(true);
