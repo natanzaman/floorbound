@@ -26,7 +26,7 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 
 ## Controls
 
-The default keys; change any of them in Game Menu → Controls (they follow your account when signed in).
+The default keys; change any of them in Game Menu → Controls (they follow your account when signed in): hover a key or button in the keyboard / controller picture to see what it does (★ = bound), click it and Edit to give it a control, or use Rebind in the list.
 
 | Action | Desktop | Phone |
 | --- | --- | --- |
@@ -417,7 +417,7 @@ shared/controls.js  every game action, default keyboard & mouse and controller b
 public/input.js  the input layer: keys and mouse buttons -> actions by key code (on, held, axis, label, setBinding, capture; window.__fb.input), saved in localStorage fb_controls
 public/panels.js  the panel registry (open, close, top, isOpen): which windows free the cursor and close on Esc
 public/settings.js  the Settings panel; fb_settings (this browser) vs fb_controls (bindings, sensitivity, invert-Y)
-public/controlsui.js  the Controls screen (Game Menu → Controls): input device, Keyboard & Mouse | Controller tabs, every control with Rebind (conflicts: swap / unbind), Reset to defaults; test/controlsui.mjs
+public/controlsui.js  the Controls screen (Game Menu → Controls): input device, Keyboard & Mouse | Controller tabs with an SVG keyboard + mouse / controller picture (hover tooltip, ★, click popover → Edit → filter list, live light-up), every control with Rebind (conflicts: swap / unbind), Reset to defaults; test/controlsui.mjs
 public/controlsync.js  fb_controls follows the account (accounts.settings, GET / PUT /api/settings, 8 KB): on sign-in the account copy wins, else this browser's uploads; test/controlsync.js (DB)
 test/keys.mjs    every default key and mouse action in a real browser, checked by what it sends or changes (needs Playwright for Node)
 public/focusnav.js  controller menu navigation: spatial focus over the top window marked data-nav, A / B, focus restore by key; test/focusnav.js (DOM-free parts), test/padnav.mjs (a fake pad in a real browser)

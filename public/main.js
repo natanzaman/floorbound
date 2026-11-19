@@ -325,7 +325,7 @@ function reconnect(joinMsg) {
   };
   setTimeout(poll, 1500);
 }
-const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
+const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send, keyLabel: a => input.label(a) }); // (tips name the player's keys)
 // (key names follow the bindings and the active device: input.label)
 const keyLabel = a => input.label(a);
 const controlsText = () => {
@@ -391,7 +391,7 @@ const bell = initBell({ scene, sfx, guide, banner: (a, b, c) => banner(a, b, c) 
 const revive = initRevive({ state, players, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), isTouch, keyLabel });
 // boss team mechanics: the gold STACK circle, SPREAD rings, tether beams, first-time prompts (public/bossteam.js)
 // rescue traps: telegraphs, the pillar's beam, your trapped banner, "Hold E to cut free", markers (public/rescue.js)
-const rescue = initRescue({ state, players, mobs, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), callout: (a, b, c) => callout(a, b, c), isTouch, revive });
+const rescue = initRescue({ state, players, mobs, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), callout: (a, b, c) => callout(a, b, c), isTouch, revive, keyLabel });
 const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a) });
 // skill combos between players and the Team Burst: chain counters, setup hints, the party bar, T to sync (public/teamplay.js)
 const teamplay = initTeamplay({ state, players, mobs, fx, sfx, floatNum, project, send, guide, isTouch, callout: (a, b, c) => callout(a, b, c), shake: a => shake(a), $ });

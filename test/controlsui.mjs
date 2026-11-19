@@ -1,6 +1,8 @@
 // The Controls screen (roadmap K2, public/controlsui.js) in a real browser: open it from the Game Menu, the device
 // choice (Controller only with a pad), rebind a key, a refused combo, the conflict prompt (swap), the new key works in
-// game and after a reload, the HUD labels follow, Reset to defaults, Esc closes it. Anonymous mode (no DB).
+// game and after a reload, the HUD labels follow, Reset to defaults, Esc closes it; the device pictures (hover press
+// and tooltip, ★ on bound keys, click popover → Edit → filter → bind, live light-up, keys don't reach the game while
+// it's open, a fake pad.padHeld lights pad buttons), the guide names the new key. Anonymous mode (no DB).
 // Needs Playwright for Node (as test/keys.mjs). Screenshots: SHOTS=<dir> (not committed).
 // Usage: PORT=372xx node test/controlsui.mjs
 import assert from 'node:assert/strict';
@@ -53,6 +55,7 @@ try {
   const rebind = async (action, ...codes) => {
     await p.click(`#cu-tab-kbm [data-rb="${action}:0"]`);
     await p.waitForFunction(() => window.__fb.input.capturing);
+    if (!rebind.shot) { rebind.shot = 1; await shot('03b-rebind-listening'); }
     for (const c of codes) await p.keyboard.down(c);
     for (const c of [...codes].reverse()) await p.keyboard.up(c);
     await frames(2);
@@ -172,6 +175,86 @@ try {
   m = await mark(); await tap('Space');
   assert.equal((await sent(m, 'jump')).length, 1, 'Space jumps again');
   ok('Reset to defaults (asks once), saved, the HUD follows; ✕ closes');
+
+  // ---- the pictures: hover, ★, live light-up ----
+  const hasCls = (sel, c) => S(([s, c]) => document.querySelector(s)?.classList.contains(c), [sel, c]);
+  const K = (k, d = 'kbm') => `#cu-pic-${d} [data-k="${k}"]`;
+  const tipText = d => S(d => { const t = document.getElementById(`cu-tip-${d}`); return t.classList.contains('hidden') ? null : t.textContent; }, d);
+  await tap('Escape'); await frames(2); await p.click('#gamemenu [data-a=bindings]'); await frames(1);
+  assert.ok(await S(() => document.querySelectorAll('#cu-pic-kbm svg [data-k]').length > 100), 'a full keyboard');
+  assert.ok(await S(() => ['Mouse0', 'Mouse1', 'Mouse2', 'Wheel', 'Mouse', 'Numpad5', 'F12', 'ArrowUp'].every(k => document.querySelector(`#cu-pic-kbm [data-k="${k}"]`))), 'mouse buttons, wheel, numpad, F keys, arrows');
+  assert.ok(await S(() => ['LS', 'RS', 'L3', 'R3', 'Up', 'Down', 'Left', 'Right', 'A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Start'].every(k => document.querySelector(`#cu-pic-pad [data-k="${k}"]`))), 'the whole controller');
+  await p.hover(K('KeyW')); await frames(4);
+  assert.match(await tipText('kbm') || '', /^W.*Move \(up\)/, 'hover: the tooltip names the control');
+  assert.notEqual(await S(s => getComputedStyle(document.querySelector(s + ' .cu-kin')).transform, K('KeyW')), 'none', 'hover: the key presses down');
+  await shot('07-hover');
+  await p.hover(K('ControlLeft')); await frames(2);
+  assert.match(await tipText('kbm'), /Select what you aim at · combo Ctrl\+Click/, 'chords are noted');
+  await p.hover(K('KeyZ')); await frames(2);
+  assert.match(await tipText('kbm'), /Not bound/);
+  const star = (k, d) => S(s => !!document.querySelector(s + ' .cu-star'), K(k, d));
+  assert.ok(await star('KeyW') && await star('Mouse0') && await star('Space') && await star('Mouse') && !(await star('KeyZ')), '★ on bound keys only');
+  ok('picture: hover presses the key and shows its control(s), combos noted; ★ on bound keys');
+
+  m = await mark();
+  await p.keyboard.down('Space'); await frames(3);
+  assert.ok(await hasCls(K('Space'), 'lit'), 'a held key lights up');
+  await p.keyboard.up('Space'); await frames(2);
+  assert.ok(!(await hasCls(K('Space'), 'lit')), 'and goes out');
+  assert.equal((await sent(m, 'jump')).length, 0, 'the game ignores keys while the screen is open');
+  await p.keyboard.down('KeyD'); await frames(2); await shot('08-live-key'); await p.keyboard.up('KeyD');
+  ok('live feedback: a real key press lights its key; play ignores it while the screen is open');
+
+  // ---- click: popover → Edit → filter → bind Z to Jump; it works in game ----
+  await p.click(K('KeyZ')); await frames(1);
+  assert.match(await S(() => document.getElementById('cu-pop').textContent), /Z.*Not bound.*Edit/s, 'the popover');
+  await shot('09-popover');
+  await p.click(K('KeyZ')); await frames(1);
+  assert.ok(await S(() => document.activeElement?.id === 'cu-filter'), 'a second click opens the list with the filter box focused');
+  await p.keyboard.type('jum'); await frames(1);
+  assert.deepEqual(await S(() => [...document.querySelectorAll('#cu-picks [data-pick]')].map(b => b.dataset.pick)), ['jump'], 'the filter narrows the list');
+  await shot('10-filter');
+  await p.click('#cu-picks [data-pick=jump]'); await frames(1);
+  assert.equal(await bound('jump'), 'KeyZ'); assert.equal(await cell('jump'), 'Z');
+  assert.ok(!(await S(() => document.getElementById('cu-pop'))), 'the popover closes');
+  assert.ok(await star('KeyZ') && !(await star('Space')), 'the ★ moves');
+  assert.match(await S(() => import('/guide.js').then(g => g.STEPS.find(s => s.id === 'boss').text())), /jump \(Z\)/, 'the guide names the new key');
+  ok('click → popover → Edit list with filter → Jump on Z (★ and guide follow)');
+
+  await p.click(K('KeyF')); await frames(1);
+  assert.match(await S(() => document.getElementById('cu-pop').textContent), /Interact/);
+  await p.click('#cu-pop [data-pop=edit]'); await frames(1);
+  await p.keyboard.type('dodge'); await p.keyboard.press('Enter'); await frames(1);
+  assert.match(await S(() => document.getElementById('cu-prompt')?.textContent || ''), /F is already on Interact/, 'the same conflict prompt as Rebind');
+  assert.equal(await bound('dodge'), 'ShiftLeft', 'nothing changes until you choose');
+  await shot('11-picture-conflict');
+  await p.click('#cu-prompt [data-p=cancel]'); await frames(1);
+  assert.equal(await bound('interact'), 'KeyF');
+  await p.click(K('KeyQ')); await frames(1);
+  await tap('Escape'); await frames(1);
+  assert.ok(await visible('controlsui') && !(await S(() => document.getElementById('cu-pop'))), 'Esc closes the popover first');
+  await tap('Escape'); await frames(2);
+  assert.ok(!(await visible('controlsui')));
+  m = await mark(); await tap('KeyZ');
+  assert.equal((await sent(m, 'jump')).length, 1, 'Z jumps in game');
+  ok('Edit + Enter on a taken key asks Swap / Unbind / Cancel; Esc closes the popover, then the screen; Z jumps');
+
+  // ---- the controller picture ----
+  await tap('Escape'); await frames(2); await p.click('#gamemenu [data-a=bindings]'); await frames(1);
+  await p.click('.cu-tabs [data-tab=pad]'); await frames(1);
+  assert.ok(await star('A', 'pad') && await star('LS', 'pad') && !(await star('Home', 'pad')));
+  await p.hover(K('LB', 'pad')); await frames(2);
+  assert.match(await tipText('pad'), /Cover an ally \(Guardian\) · combo LB\+A/);
+  await shot('12-pad-hover');
+  await S(() => { window.__fb.input.padHeld = n => n === 'X'; }); await frames(3);
+  assert.ok(await hasCls(K('X', 'pad'), 'lit') && !(await hasCls(K('A', 'pad'), 'lit')), 'a held pad button lights up (input.padHeld)');
+  await S(() => { delete window.__fb.input.padHeld; });
+  await frames(3); assert.ok(!(await hasCls(K('X', 'pad'), 'lit')), 'and goes out when the reading stops');
+  await p.click(K('Y', 'pad')); await frames(1);
+  assert.match(await S(() => document.getElementById('cu-pop').textContent), /Skill 2/);
+  await shot('13-pad-popover');
+  await p.click('#controlsui [data-a=close]'); await frames(1);
+  ok('controller picture: ★, tooltip with combos, popover; pad buttons light up through input.padHeld');
 
   assert.deepEqual(errors, [], 'no page errors');
   console.log(`controlsui: all ${n} checks passed`);
