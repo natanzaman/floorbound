@@ -59,6 +59,7 @@ const TIPS = {
   cover: () => `Cover (${K('cover')}): dash to an ally (the one you selected, else whoever needs it) and take their next hit, braced like a guard. Perilous hits still need a dodge or parry.`,
   pincer: 'Pincer! You and a partymate are on opposite sides of the enemy: both of you deal +15% damage and more posture.',
   flank: 'Flank: hitting an enemy from behind deals +8% damage and more posture. Get a partymate on its other side for a Pincer.',
+  opening: 'OPENING! After a combo the boss stops: exposed, stunned or planted (a glowing weak point, a tag over it). Melee hits on it deal +25% damage and posture (on top of a flank). Get in, hit hard, and step out before it ends: its next move comes right after.',
   downed: () => `Downed! You have 15 s before you bleed out. Crawl toward your party: a partymate holds ${K('revive')} next to you to revive you.`,
   revive: () => `A partymate is down! Stand next to them and hold ${K('revive')} to revive them (a Cleric's Heal speeds it up). Moving away or a heavy hit breaks it.`,
   combo: 'COMBO! One player sets up (launch, stun, Mark, Discord, Sanctuary), a partner pays it off within 2.5 s. Combos chain on a target and fill the Team Burst bar.',

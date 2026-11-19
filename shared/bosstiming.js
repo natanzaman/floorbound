@@ -27,9 +27,15 @@
 //                after    { state, pause }: what the boss does for `pause` s after the hit (busy, no new attack):
 //                         'idle' 'walk' 'planted' 'stunned' 'exposed'
 //              Entries with `table` live outside the boss's move table (SWEEP, the RESCUE trap).
-//   phases     per phase: `seqs`, sequences { steps, gaps (s between steps), pause (s after), w (weight) }. Today
-//              every ability runs on its own timer (`every`), checked each tick in `order`; the sequences are one step
-//              each with weight 1 and are not read yet (J3 part 2 runs them).
+//   phases     per phase: `order` (the abilities on their own timers, checked each tick in this order), `seqs`,
+//              sequences { steps, gaps (s between steps), pause (s after), state (the after state, default 'exposed'),
+//              w (weight) }. A one-step sequence is an ability on its own timer (`every`). Sequences with more steps are
+//              combos (server/openings.js): `every` s apart (`first` s into the phase), one picked by weight; each step
+//              starts `gap` s after the previous one ended, and after the last the boss holds its `state` for `pause` s
+//              (the main melee opening). None run during a director show.
+//   close      no point-blank chaining: { gap, moves, hold }: a close-range / all-around move (`moves`, the basic swing
+//              included) never starts within `gap` s of the last one landing; hold: the basic swing waits while the
+//              boss's own telegraphed area move is winding up (it favours those over instant swings). Off in a show.
 //   team       the G4 team mechanics / J1 trap rotation (shared/bossteam.js): every (per phase), first, moves per phase.
 //   transition the J2 fall to the next area (shared/arenas.js), Colossus only.
 import { paceMoves } from './pace.js';
@@ -46,6 +52,8 @@ const ALL = ['roll', 'jump', 'block', 'parry', 'outrange']; // a ground hit: any
 const HIT = ['roll', 'block', 'parry', 'outrange'];         // not a ground hit: jumping doesn't help
 // Today's selection: every ability on its own timer, one-step sequences of weight 1 (J3 part 2 replaces them).
 const solo = order => ({ order, seqs: order.map(k => ({ steps: [k], gaps: [], pause: 0, w: 1 })) });
+// A phase: today's timer rotation plus combos ({ steps, gaps, pause, state, w }), one every `every` s, first after `first`.
+const phase = (order, every, first, ...combos) => { const P = solo(order); P.seqs.push(...combos.map(c => ({ state: 'exposed', w: 1, ...c }))); return combos.length ? { ...P, every, first } : P; };
 
 export const BOSS_TIMING = {
   // The Horned Warden (Floor 1): server/game.js bossSpecials, server/combat.js (Horn Sweep, Quake Ring), server/twists.js.
@@ -68,7 +76,13 @@ export const BOSS_TIMING = {
       // J1 trap (shared/rescue.js RESCUE.vines): root + dot x max HP every tick, up to `max` s
       vines: { table: 'RESCUE', name: 'Thornbind', wind: 1.4, hits: 3, max: 14, tick: 0.5, dot: 0.018, hold: 1.5, reach: 2.6, leash: 3.6, shape: 'trap', avoid: AVOID(['none']), posture: 0, after: idle() },
     },
-    phases: [solo(['cleave', 'slam', 'quake', 'sweep']), solo(['cleave', 'slam', 'quake', 'sweep', 'hounds', 'charge']), solo(['cleave', 'slam', 'quake', 'sweep', 'hounds', 'charge', 'spin', 'rock'])],
+    // combos: a slam and a Quake Ring, then it stands exposed; later a charge or the spin leads in
+    phases: [
+      phase(['cleave', 'slam', 'quake', 'sweep'], 16, 11, { steps: ['slam', 'quake'], gaps: [0.4], pause: 2.5 }),
+      phase(['cleave', 'slam', 'quake', 'sweep', 'hounds', 'charge'], 15, 7, { steps: ['slam', 'quake'], gaps: [0.4], pause: 2.5 }, { steps: ['charge', 'slam'], gaps: [0.3], pause: 2.5 }),
+      phase(['cleave', 'slam', 'quake', 'sweep', 'hounds', 'charge', 'spin', 'rock'], 13, 6, { steps: ['spin', 'slam', 'quake'], gaps: [0.3, 0.4], pause: 3 }, { steps: ['charge', 'spin'], gaps: [0.3], pause: 2.5 }),
+    ],
+    close: { gap: 1, moves: ['cleave', 'spin', 'sweep'], hold: true },
     team: { every: [26, 22, 18], first: 16, moves: [['meteor', 'vines', 'spread'], ['meteor', 'vines', 'spread', 'tether'], ['meteor', 'vines', 'spread', 'tether']] },
   },
   // The Drowned Sovereign (Floor 2): server/floor2.js f2Sovereign / sovereignSpecials, server/sovtwists.js.
@@ -90,7 +104,13 @@ export const BOSS_TIMING = {
       // J1 trap (RESCUE.pillar): pinned in a column fed by an orb `src` m away
       pillar: { table: 'RESCUE', name: 'Drowning Pillar', wind: 1.6, hits: 3.5, max: 12, tick: 0.5, dot: 0.026, src: [12, 17], block: 1.6, lane: 1.4, shape: 'trap', avoid: AVOID(['none']), posture: 0, after: idle() },
     },
-    phases: [solo(['sweep', 'geyser']), solo(['sweep', 'geyser', 'wave', 'thralls', 'pools']), solo(['sweep', 'geyser', 'wave', 'thralls', 'pools', 'deluge', 'volley'])],
+    // combos: geysers (then a Tidal Wave), then the trident planted
+    phases: [
+      phase(['sweep', 'geyser'], 16, 10, { steps: ['geyser', 'geyser'], gaps: [0.6], pause: 2.5, state: 'planted' }),
+      phase(['sweep', 'geyser', 'wave', 'thralls', 'pools'], 15, 8, { steps: ['geyser', 'geyser'], gaps: [0.6], pause: 2.5, state: 'planted' }, { steps: ['geyser', 'wave'], gaps: [0.5], pause: 3, state: 'planted' }),
+      phase(['sweep', 'geyser', 'wave', 'thralls', 'pools', 'deluge', 'volley'], 14, 9, { steps: ['wave', 'volley'], gaps: [0.5], pause: 2.5, state: 'planted' }, { steps: ['geyser', 'wave'], gaps: [0.5], pause: 3, state: 'planted' }),
+    ],
+    close: { gap: 1, moves: ['sweep'], hold: true },
     team: { every: [26, 22, 18], first: 14, moves: [['meteor', 'pillar', 'spread'], ['meteor', 'pillar', 'spread', 'tether'], ['meteor', 'pillar', 'spread', 'tether']] },
   },
   // The Storm Colossus (Floor 3): server/floor3.js colossusSpecials, server/arenas.js (the fall).
@@ -111,7 +131,13 @@ export const BOSS_TIMING = {
       // J1 trap (RESCUE.crystal): encased; break it within `fuse` s or it bursts for `boom` x max HP on everyone
       crystal: { table: 'RESCUE', name: 'Storm Crystal', wind: 1.3, hits: 4, fuse: 8, boom: 0.32, shape: 'trap', avoid: AVOID(['none']), posture: 0, after: idle() },
     },
-    phases: [solo(['cleave', 'gust', 'strike']), solo(['cleave', 'overload', 'gust', 'strike', 'harpies']), solo(['cleave', 'overload', 'beam', 'gust', 'strike', 'harpies'])],
+    // combos: strikes into a Gale Push (or the beam), then it stands exposed / its sword planted
+    phases: [
+      phase(['cleave', 'gust', 'strike'], 16, 10, { steps: ['strike', 'gust'], gaps: [0.4], pause: 2.5 }),
+      phase(['cleave', 'overload', 'gust', 'strike', 'harpies'], 15, 8, { steps: ['strike', 'gust'], gaps: [0.4], pause: 2.5 }, { steps: ['gust', 'strike'], gaps: [0.5], pause: 2.5 }),
+      phase(['cleave', 'overload', 'beam', 'gust', 'strike', 'harpies'], 14, 8, { steps: ['strike', 'gust'], gaps: [0.4], pause: 2.5 }, { steps: ['strike', 'beam'], gaps: [0.4], pause: 3, state: 'planted' }),
+    ],
+    close: { gap: 1, moves: ['cleave', 'gust'], hold: true },
     team: { every: [28, 26, 22], first: 18, moves: [['meteor', 'crystal', 'spread'], ['meteor', 'crystal', 'spread', 'tether'], ['spread', 'crystal', 'tether']] },
     // The fall (J2): crack (warning), fall (inputs frozen), land (frozen, bleed-out paused), enter (the boss drops in,
     // its impact `impact` s later: a shove, no damage); gap: s since the last team-scale mechanic before a fall may start,
@@ -121,6 +147,14 @@ export const BOSS_TIMING = {
   },
 };
 export const BOSS_KEYS = Object.keys(BOSS_TIMING);
+
+// Openings (J3): while a boss holds one of these `after` states, a weak point glows, an OPENING tag shows over it, and
+// melee hits (inFlankReach: shared/threat.js) get +dmg damage, added to the flank bonus (not multiplied). Posture is
+// fed by the damage, so it rises by the same +25%; `posture` is extra on top (added to the flank posture bonus). Not
+// while it is Grounded or Broken (a Switch), and never in a director show (server/openings.js).
+export const OPENING = { states: ['exposed', 'stunned', 'planted'], dmg: 0.25, posture: 0 };
+export const AFTER_STATES = ['idle', 'walk', 'planted', 'stunned', 'exposed'];
+export const isOpening = state => OPENING.states.includes(state);
 
 // Shared team-scale timings (not per boss: no knobs). team: G4 (shared/bossteam.js): `min` alive fighters, `channel`:
 // the boss's telegraphed attacks wait this long after a meteor/spread lands, `retry`: s before a blocked rotation tries
@@ -150,7 +184,8 @@ const scale = (v, k) => (Array.isArray(v) ? v.map(e => (typeof e === 'number' ? 
 /** Apply knobs in place to one built boss timing ({ abilities, phases, team }). A knob of 1 touches nothing.
  *  damageMul: mult frac clap dot boom · windupMul: wind channel (a repeat's `every` grows by the extra wind-up, like
  *  PACE, so the rest after the hit stays the same) · cooldownMul: every cd, the team rotation's every ·
- *  pauseMul: after.pause, each sequence's pause · gapMul: each sequence's gaps. `first` timers are unchanged. */
+ *  pauseMul: after.pause, each sequence's pause · gapMul: each sequence's gaps, the close-move gap · cooldownMul also
+ *  the combos' `every`. `first` timers are unchanged. */
 export function applyKnobs(T, K) {
   for (const mv of Object.values(T.abilities)) {
     if (K.damageMul !== 1) for (const k of DAMAGE_KEYS) if (k in mv) mv[k] = scale(mv[k], K.damageMul);
@@ -162,19 +197,23 @@ export function applyKnobs(T, K) {
     if (K.cooldownMul !== 1) for (const k of COOLDOWN_KEYS) if (k in mv) mv[k] = scale(mv[k], K.cooldownMul);
     if (K.pauseMul !== 1 && mv.after) mv.after.pause = scale(mv.after.pause, K.pauseMul);
   }
-  for (const ph of T.phases || []) for (const s of ph.seqs) {
-    if (K.gapMul !== 1) s.gaps = scale(s.gaps, K.gapMul);
-    if (K.pauseMul !== 1) s.pause = scale(s.pause, K.pauseMul);
+  for (const ph of T.phases || []) {
+    if (K.cooldownMul !== 1 && ph.every) ph.every = scale(ph.every, K.cooldownMul);
+    for (const s of ph.seqs) {
+      if (K.gapMul !== 1) s.gaps = scale(s.gaps, K.gapMul);
+      if (K.pauseMul !== 1) s.pause = scale(s.pause, K.pauseMul);
+    }
   }
+  if (T.close && K.gapMul !== 1) T.close.gap = scale(T.close.gap, K.gapMul);
   if (T.team && K.cooldownMul !== 1) T.team.every = scale(T.team.every, K.cooldownMul);
   return T;
 }
 
 /** Build a boss's live timing: a deep copy of its table, paced (PACE), then knobbed for party size `n`.
- *  knobs: extra overrides on top (the tuning harness). Returns { abilities, phases, team, transition, knobs }. */
+ *  knobs: extra overrides on top (the tuning harness). Returns { abilities, phases, team, transition, close, knobs }. */
 export function buildTiming(boss, n, knobs = null, table = BOSS_TIMING) {
   const src = table[boss], K = { ...knobsFor(boss, n, table), ...(knobs || {}) };
-  const T = { abilities: structuredClone(src.abilities), phases: structuredClone(src.phases || []), team: src.team ? structuredClone(src.team) : null, transition: src.transition ? { ...src.transition } : null, knobs: K };
+  const T = { abilities: structuredClone(src.abilities), phases: structuredClone(src.phases || []), team: src.team ? structuredClone(src.team) : null, transition: src.transition ? { ...src.transition } : null, close: src.close ? structuredClone(src.close) : null, knobs: K };
   paceMoves(T.abilities, src.pace || []);
   return applyKnobs(T, K);
 }
@@ -194,3 +233,26 @@ export function safeWindow(mv, d = 0) {
 
 // The default timings every table is built from (base knobs, no party size).
 export const TIMED = Object.fromEntries(BOSS_KEYS.map(k => [k, buildTiming(k)]));
+
+/** One fight's table (m.tm, built at the engage once the party size `n` is known): the boss's move table `base` (its
+ *  twist copy, e.g. game.twistW, or WARDEN / SOVEREIGN / COLOSSUS), plus `seqs` (its phases' sequences), `close`,
+ *  `team` and `knobs`. When the party size (or `knobs`, the tuning harness) changes no knob, the moves are `base`'s own
+ *  objects; otherwise copies with the change applied on top (relative to the base knobs `base` was built with). */
+export function fightTable(boss, base, n, knobs = null, table = BOSS_TIMING) {
+  const T = TIMED[boss], K0 = knobsFor(boss, undefined, table), K = { ...knobsFor(boss, n, table), ...(knobs || {}) };
+  const rel = Object.fromEntries(KNOB_KEYS.map(k => [k, r3((K[k] ?? 1) / (K0[k] || 1))]));
+  const out = { ...base, seqs: T.phases, close: T.close, team: T.team, knobs: K };
+  if (base.sweep === undefined && T.abilities.sweep?.table === 'SWEEP') out.sweep = T.abilities.sweep; // the Horn Sweep
+  if (KNOB_KEYS.every(k => rel[k] === 1)) return out;
+  const moves = Object.fromEntries(Object.keys(T.abilities).filter(k => out[k]).map(k => [k, structuredClone(out[k])]));
+  const P = applyKnobs({ abilities: moves, phases: structuredClone(T.phases), team: structuredClone(T.team), close: structuredClone(T.close) }, rel);
+  return Object.assign(out, moves, { seqs: P.phases, close: P.close, team: P.team });
+}
+
+/** Pick a combo for phase `ph` of a fight table (the sequences with more than one step), by weight; null if none. */
+export function pickCombo(tm, ph, rnd = Math.random) {
+  const list = (tm.seqs?.[ph]?.seqs || []).filter(s => s.steps.length > 1 && s.w > 0);
+  let r = rnd() * list.reduce((a, s) => a + s.w, 0);
+  for (const s of list) if ((r -= s.w) < 0) return s;
+  return list[list.length - 1] || null;
+}

@@ -39,6 +39,7 @@ import { initRevive } from '/revive.js'; // downed + revive (G1)
 import { initControlsUi } from '/controlsui.js'; // the Controls screen: device, bindings, rebind (K2)
 import { createControlSync } from '/controlsync.js'; // fb_controls follows the account (K2)
 import { initBossTeam } from '/bossteam.js'; // boss team mechanics: STACK, SPREAD, tether (G4)
+import { initOpenings } from '/openings.js'; // boss openings: weak point, OPENING tag (J3)
 import { initRescue } from '/rescue.js'; // rescue traps: vines, Drowning Pillar, storm crystal (J1)
 import { initTeamplay } from '/teamplay.js'; // combo counters, the Team Burst bar and sync window (G2)
 import { initMvp } from '/mvp.js'; // the post-fight MVP card (G5)
@@ -391,6 +392,7 @@ const bell = initBell({ scene, sfx, guide, banner: (a, b, c) => banner(a, b, c) 
 const revive = initRevive({ state, players, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), isTouch, keyLabel });
 // boss team mechanics: the gold STACK circle, SPREAD rings, tether beams, first-time prompts (public/bossteam.js)
 // rescue traps: telegraphs, the pillar's beam, your trapped banner, "Hold E to cut free", markers (public/rescue.js)
+const openings = initOpenings({ state, mobs, guide, callout: (a, b, c) => callout(a, b, c) });
 const rescue = initRescue({ state, players, mobs, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), callout: (a, b, c) => callout(a, b, c), isTouch, revive, keyLabel });
 const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a) });
 // skill combos between players and the Team Burst: chain counters, setup hints, the party bar, T to sync (public/teamplay.js)
@@ -525,6 +527,7 @@ function onSnapshot({ st, me, w }, arrival) {
     Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, moving: flags & 1, engaged: flags & 2, enraged: flags & 4, stunned: flags & 8, winding: flags & 16, staggered: flags & 32, frenzy: flags & 64, launched: flags & 128, posture: posture || 0 });
   }
   for (const [id, e] of mobs) if (!seenM.has(id) && !e.dying) { removeEntity(e); mobs.delete(id); if (e === boss) boss = null; }
+  openings.snap(w.op); // bosses' openings (public/openings.js)
   looks.snap(w.looks); // who wears a look (after the entities and their weapon styles are in step)
   renderPlayersThrottled();
 }
@@ -1667,6 +1670,7 @@ function updateHud(now) {
     const bn = $('boss').querySelector('.boss-name'); if (bn.textContent !== boss.def.name) bn.textContent = boss.def.name;
     combat.bossBar(boss);
     threat.bossBar(boss); // who it's after, my threat meter
+    openings.bossBar(boss); // OPENING · EXPOSED · 2 s
     setText($('boss-phase'), onF3 ? f3.phaseText() : onF2 ? f2.phaseText() : ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '');
     if (!onF3) twists.bossLine($('boss-phase'), onF2); // the Warden's twist, or the Sovereign's on Floor 2
   }
@@ -1989,7 +1993,7 @@ function animateEntity(e, dt) {
     setShown(e.label, true);
     const tr = `translate(${p[0].toFixed(1)}px, ${p[1].toFixed(1)}px) translate(-50%, -100%)`;
     if (tr !== e.label.tr) { e.label.tr = tr; e.label.el.style.transform = tr; }
-    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${looks.plate(e, e.def.name)}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}` : `<span class="lv">Lv${e.lvl}</span>${looks.plate(e, `${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}`)}`;
+    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${looks.plate(e, e.def.name)}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}${openings.tag(e)}` : `<span class="lv">Lv${e.lvl}</span>${looks.plate(e, `${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}`)}`;
     if (txt !== e.label.text) { e.label.text = txt; e.label.nm.innerHTML = txt; }
     const pct = Math.round((e.hp / e.maxHp) * 100);
     if (pct !== e.label.pct) { e.label.pct = pct; e.label.fill.style.width = `${pct}%`; }
@@ -2222,6 +2226,7 @@ function frame(now) {
   bubbles.frame();
   revive.frame(keys); // downed overlay, revive prompt, downed markers
   rescue.frame(keys, vdt); // trapped banner, "Hold E to cut free", trapped markers
+  openings.frame(); // weak points pulse while a boss is open
   teamplay.frame(); // combo chain counters over targets
 
   if (state.joined) updateHud(now);

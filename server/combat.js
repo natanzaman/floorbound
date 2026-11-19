@@ -4,7 +4,7 @@
 //  - Guardian guard (hold R): frontal hits take much less damage; pressing just before a hit PARRIES it.
 //  - The Warden's perilous Horn Sweep: dodge through it or parry it; shields don't help.
 //  - The Warden's Quake Ring: shockwave rings rolling out along the floor; jump over the wavefront or roll through it.
-import { DODGE, SWITCH, POSTURE, PERFECT, GUARD, SWEEP, WARDEN, postureMax, angleTo, wrapAngle, inArena } from '../shared/data.js';
+import { DODGE, SWITCH, POSTURE, PERFECT, GUARD, SWEEP as SWEEP0, WARDEN, postureMax, angleTo, wrapAngle, inArena } from '../shared/data.js';
 import { MASTERY } from '../shared/mastery.js';
 
 const QSTATS = !!process.env.QUAKE_STATS; // test/wardenskill.js: count Quake Ring hits / evades
@@ -140,20 +140,22 @@ const methods = {
     this.updateQuakes();
     const b = this.boss;
     if (!b || b.dead || !b.engaged || !b.threat.size) return;
-    if (b.sweepFight !== this.fight) { b.sweepFight = this.fight; b.sweepT = t + SWEEP.first; } // a new attempt
-    if (t < b.sweepT || t < b.stunUntil || t < (b.busyUntil || 0) || b.windupAt) return;
-    if (this.quakes?.some(q => q.m === b && q.r < SWEEP.r + 1)) return; // never a Horn Sweep on top of a Quake Ring still near it
-    const near = [...this.players.values()].some(p => !p.dead && inArena(p.x, p.z) && dist(p, b) <= SWEEP.r + 4);
+    const SW = b.tm?.sweep || SWEEP0; // the fight's table (server/openings.js)
+    if (b.sweepFight !== this.fight) { b.sweepFight = this.fight; b.sweepT = t + SW.first; } // a new attempt
+    if (t < b.sweepT || t < b.stunUntil || t < (b.busyUntil || 0) || b.windupAt || !this.closeReady(b, 'sweep')) return;
+    if (this.quakes?.some(q => q.m === b && q.r < SW.r + 1)) return; // never a Horn Sweep on top of a Quake Ring still near it
+    const near = [...this.players.values()].some(p => !p.dead && inArena(p.x, p.z) && dist(p, b) <= SW.r + 4);
     if (!near) { b.sweepT = t + 2; return; }
-    b.sweepT = t + SWEEP.every[b.phase] * (SWEEP.jitter[0] + Math.random() * SWEEP.jitter[1]);
+    b.sweepT = t + SW.every[b.phase] * (SW.jitter[0] + Math.random() * SW.jitter[1]);
     this.hornSweep(b);
   },
 
   // Horn Sweep: a gold "!" telegraph, then a full circle around the Warden. ~80% max HP to anyone not i-framing or parrying.
   hornSweep(m) {
-    const t = this.time, tok = (m.perilTok = (m.perilTok || 0) + 1);
+    const t = this.time, tok = (m.perilTok = (m.perilTok || 0) + 1), SWEEP = m.tm?.sweep || SWEEP0;
     m.windupAt = 0; m.sweepPending = true;
-    m.busyUntil = Math.max(m.busyUntil || 0, t + SWEEP.wind + SWEEP.after.pause);
+    const end = this.bossAfter(m, SWEEP, t + SWEEP.wind); // + its after pause (shared/bosstiming.js)
+    this.closeLanded(m, 'sweep', t + SWEEP.wind);
     this.events.push({ t: 'tele', k: 'sweep', x: r2(m.x), z: r2(m.z), r: SWEEP.r, d: SWEEP.wind, follow: m.id, id: m.id });
     this.schedule(SWEEP.wind, () => {
       if (m.dead || m.perilTok !== tok) return;
@@ -163,6 +165,7 @@ const methods = {
         if (!p.dead && dist(p, m) <= SWEEP.r + 0.4) this.damagePlayer(p, p.maxHp * SWEEP.frac, { peril: true, src: 'warden sweep', mob: m });
       }
     });
+    return end;
   },
 };
 
@@ -173,10 +176,10 @@ const methods = {
 // `max` m it never reaches you. Each ring hits a player at most once.
 Object.assign(methods, {
   quakeRing(m, n) {
-    const Q = (this.twistW || WARDEN).quake, t = this.time;
+    const Q = (m.tm || this.twistW || WARDEN).quake, t = this.time;
     n = Math.max(1, n ?? Q.rings[m.phase] ?? 1);
     m.windupAt = 0;
-    m.busyUntil = Math.max(m.busyUntil || 0, t + Q.wind + Q.gap * (n - 1) + Q.after.pause);
+    const end = this.bossAfter(m, Q, t + Q.wind + Q.gap * (n - 1)); // + its after pause (shared/bosstiming.js)
     const x = m.x, z = m.z, atk = m.def.atk * Q.mult;
     for (let i = 0; i < n; i++) {
       const q = { id: this.id(), x, z, start: t + Q.wind + i * Q.gap, r: 0, sp: Q.speed, w: Q.w, max: Q.max, atk, hit: new Set(), ev: new Set(), m };
@@ -184,6 +187,7 @@ Object.assign(methods, {
       // d: seconds until this ring starts rolling; i/n: its place in the volley (the client winds up on ring 0)
       this.events.push({ t: 'quake', id: q.id, by: m.id, x: r2(x), z: r2(z), d: r2(q.start - t), sp: q.sp, w: q.w, max: q.max, g: Q.gap, i, n });
     }
+    return end;
   },
 
   updateQuakes() {

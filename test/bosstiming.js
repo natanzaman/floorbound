@@ -7,11 +7,14 @@ import assert from 'node:assert/strict';
 import { Game } from '../server/game.js';
 import { WARDEN, SWEEP, MOBS, PACE, paceMoves } from '../shared/data.js';
 import { SOVEREIGN, F2 } from '../shared/floor2.js';
-import { COLOSSUS } from '../shared/floor3.js';
+import { COLOSSUS, F3 } from '../shared/floor3.js';
 import { BOSSTEAM } from '../shared/bossteam.js';
 import { RESCUE } from '../shared/rescue.js';
 import { ARENAS } from '../shared/arenas.js';
-import { BOSS_TIMING, TIMED, KNOB_KEYS, knobsFor, buildTiming, applyKnobs, safeWindow, movesOf } from '../shared/bosstiming.js';
+import { runHooks } from '../shared/bots/registry.js';
+import { stepRoll } from '../shared/bots/motor.js';
+import { gustDodge, readOpenings, openingOn, openingTurn } from '../shared/bots/openings.js';
+import { BOSS_TIMING, TIMED, KNOB_KEYS, OPENING, knobsFor, buildTiming, applyKnobs, safeWindow, movesOf, isOpening, fightTable, pickCombo } from '../shared/bosstiming.js';
 
 let n = 0;
 const ok = name => console.log(`  ok ${++n} - ${name}`);
@@ -141,7 +144,19 @@ const OLD = {
       assert.ok(STATES.includes(mv.after?.state) && typeof mv.after.pause === 'number', `${b}.${k}: after`);
     }
     assert.equal(B.phases.length, 3, `${b}: three phases`);
-    for (const ph of B.phases) for (const s of ph.seqs) { assert.ok(B.abilities[s.steps[0]], `${b}: ${s.steps[0]}`); assert.deepEqual([s.steps.length, s.gaps, s.pause, s.w], [1, [], 0, 1]); }
+    B.phases.forEach((ph, i) => {
+      // one-step sequences: today's timer rotation; combos (J3 part 2): steps in this phase, gaps between them, an opening after
+      assert.deepEqual(ph.seqs.filter(s => s.steps.length === 1).map(s => s.steps[0]), ph.order, `${b} phase ${i + 1}: the timers`);
+      for (const s of ph.seqs.filter(s => s.steps.length === 1)) assert.deepEqual([s.gaps, s.pause, s.w], [[], 0, 1]);
+      const combos = ph.seqs.filter(s => s.steps.length > 1);
+      assert.ok(combos.length >= 1 && ph.every > 0 && ph.first > 0, `${b} phase ${i + 1}: at least one combo, every / first`);
+      for (const s of combos) {
+        assert.ok(s.steps.every(k => ph.order.includes(k) && B.abilities[k]), `${b}: ${s.steps} are this phase's moves`);
+        assert.equal(s.gaps.length, s.steps.length - 1, `${b}: a gap between each two steps`);
+        assert.ok(s.pause > 0 && isOpening(s.state) && s.w > 0, `${b}: ${s.steps} ends in an opening`);
+      }
+    });
+    assert.ok(B.close.gap > 0 && B.close.moves.every(k => B.abilities[k]), `${b}: close moves`);
   }
   assert.ok(BOSS_TIMING.warden.phases[0].order.every(k => !['hounds', 'charge', 'spin', 'rock'].includes(k)), 'phase 1: no hounds, charge, spin, rock');
   assert.ok(BOSS_TIMING.colossus.phases[2].order.includes('beam') && !BOSS_TIMING.colossus.phases[1].order.includes('beam'), 'the beam: phase 3 only');
@@ -150,7 +165,7 @@ const OLD = {
   assert.deepEqual(safeWindow(WARDEN.slam), [2.08, 2.08]);
   const [a, z] = safeWindow(WARDEN.quake, 5); near(a, 2.6 + 4.45 / 9, 'front in'); near(z, 2.6 + 5.55 / 9, 'front out');
   assert.equal(safeWindow(SOVEREIGN.pools), null, 'a zone has no timing window');
-  ok('every ability has shape, avoidability, posture and an after state; phases list today\'s rotation as one-step sequences; safeWindow');
+  ok('every ability has shape, avoidability, posture and an after state; phases: the timer rotation as one-step sequences plus combos that end in an opening; safeWindow');
 }
 
 // ---- 7. The server reads the tables (change a table value, see the server follow) ----
@@ -191,6 +206,194 @@ const OLD = {
   assert.deepEqual([c.strikeT, c.gustT, c.ovT, c.harpyT, c.beamT], [30 + COLOSSUS.strike.first, 30 + COLOSSUS.gust.first, Infinity, Infinity, Infinity]);
   delete process.env.F3_TWIST;
   ok('engage timers: the Sovereign and the Colossus arm their first moves from the tables, later-phase moves wait');
+}
+
+// ---- 9. The fight's table (m.tm): built at the engage from the twist copy, with the party-size knobs ----
+{
+  const quiet = fn => { const l = console.log; console.log = () => {}; try { return fn(); } finally { console.log = l; } };
+  const g = quiet(() => new Game());
+  g.twist = null; g.twistW = { ...WARDEN }; g.time = 40;
+  const b = g.boss, p = quiet(() => g.addPlayer(null, 'Kael', 'guardian'));
+  p.x = b.x; p.z = b.z - 3; b.threat.set(p.id, 1);
+  quiet(() => g.updateMob(b, 0.05));
+  assert.ok(b.engaged && b.tm, 'the Warden engaged and built its fight table');
+  assert.equal(b.tm.slam, g.twistW.slam, 'no party override: the twist copy\'s own moves');
+  assert.equal(b.tm.sweep, SWEEP, 'the Horn Sweep comes with it');
+  assert.equal(b.tm.seqs, TIMED.warden.phases); assert.equal(b.tm.close, TIMED.warden.close);
+  const K = BOSS_TIMING.colossus.knobs, keep = K.party;
+  try {
+    K.party = { 1: { damageMul: 2, gapMul: 0.5, cooldownMul: 2 } };
+    process.env.F3_TWIST = 'calm'; quiet(() => g.newTwist3());
+    const c = g.colossus, q = quiet(() => g.addPlayer(null, 'Ria', 'ranger'));
+    q.x = F3.arena.x; q.z = F3.arena.z - 4;
+    quiet(() => g.engageColossus(c));
+    assert.deepEqual([c.tm.strike.mult, c.tm.gust.mult, c.tm.close.gap, c.tm.seqs[0].every, c.tm.team.every[0]], [4.4, 4.4, 0.5, 32, 56], 'one fighter: the party override applies');
+    assert.deepEqual([COLOSSUS.strike.mult, TIMED.colossus.close.gap, TIMED.colossus.phases[0].every], [2.2, 1, 16], 'the shared tables are untouched');
+    assert.ok(c.tm.seqs[0].seqs.find(x => x.steps.length > 1).gaps[0] === 0.2, 'combo gaps x gapMul');
+  } finally { K.party = keep; delete process.env.F3_TWIST; }
+  ok('m.tm: built at the engage; the twist copy\'s moves as they are, or copies with the party-size knobs applied');
+}
+
+// A fresh game with an engaged Warden and one guardian next to it (no twist)
+function wardenFight() {
+  const quiet = fn => { const l = console.log; console.log = () => {}; try { return fn(); } finally { console.log = l; } };
+  const g = quiet(() => new Game());
+  g.twist = null; g.twistW = { ...WARDEN }; g.time = 40;
+  const b = g.boss, p = quiet(() => g.addPlayer(null, 'Kael', 'guardian'));
+  p.x = b.x; p.z = b.z - 3; b.threat.set(p.id, 1);
+  quiet(() => g.updateMob(b, 0.05));
+  return { g, b, p, quiet };
+}
+
+// ---- 10. Combos: steps in order, each `gap` s after the previous one ended, then the after state for `pause` s ----
+{
+  const { g, b } = wardenFight();
+  b.tm = { ...b.tm, seqs: [{ order: [], every: 20, first: 1, seqs: [{ steps: ['slam', 'quake', 'slam'], gaps: [0.4, 0.6], pause: 2.5, state: 'exposed', w: 1 }] }] };
+  b.comboPh = -1; b.busyUntil = 0; b.slamT = b.quakeT = 0; b.windupAt = 0; b.stunUntil = 0;
+  const ran = [], dur = { slam: 2, quake: 3 };
+  const run = k => { ran.push([k, Math.round((g.time - 40) * 100) / 100]); return g.time + dur[k]; };
+  const timers = { slam: 'slamT', quake: 'quakeT' };
+  const step = (until) => { const out = []; for (; g.time < until - 1e-9; g.time = Math.round((g.time + 0.05) * 100) / 100) out.push(g.bossCombo(b, run, timers)); return out; };
+  g.time = 40; step(40.95);
+  assert.equal(ran.length, 0, 'the first combo waits `first` s');
+  step(41.05); assert.deepEqual(ran, [['slam', 1]], 'step 1 at first');
+  assert.ok(b.slamT >= 41 + WARDEN.slam.every[0] - 1e-9, 'a combo step pushes back its own timer');
+  step(44); assert.deepEqual(ran.map(r => r[0]), ['slam', 'quake'], 'step 2 ...'); assert.equal(ran[1][1], 1 + 2 + 0.4, '... gap s after step 1 ended');
+  step(48); assert.equal(ran[2][1], 3.4 + 3 + 0.6, 'step 3 after the second gap');
+  assert.equal(ran.length, 3);
+  const end = 40 + 7 + 2;
+  near(b.busyUntil, end + 2.5, 'busy for the pause after the last step');
+  assert.deepEqual([b.after.state, b.after.from, b.after.until], ['exposed', end, end + 2.5], 'the after state');
+  g.time = end + 1; assert.ok(g.openingOf(b), 'an opening while exposed');
+  assert.equal(g.bossCombo(b, run, timers), true, 'the after state holds the boss: its own timers wait');
+  g.time = end + 2.6; assert.equal(g.openingOf(b), null, 'the opening ends'); assert.equal(g.bossCombo(b, run, timers), false);
+  // weights: the pick follows them
+  const tm = { seqs: [{ seqs: [{ steps: ['a'], w: 1 }, { steps: ['a', 'b'], w: 1, gaps: [0] }, { steps: ['b', 'a'], w: 3, gaps: [0] }] }] };
+  assert.deepEqual([pickCombo(tm, 0, () => 0.1).steps, pickCombo(tm, 0, () => 0.3).steps, pickCombo(tm, 0, () => 0.99).steps], [['a', 'b'], ['b', 'a'], ['b', 'a']], 'by weight (one-step entries are timers, not combos)');
+  // a Break interrupts a combo
+  b.tm.seqs[0].first = 0; b.comboPh = -1; b.after = null; b.busyUntil = 0; g.time = 60; ran.length = 0;
+  g.bossCombo(b, run, timers); assert.equal(ran.length, 1); b.staggerUntil = 61;
+  g.time = 63; g.bossCombo(b, run, timers); assert.equal(b.seq, null, 'broken: the combo is dropped'); assert.equal(ran.length, 1);
+  // the real thing: the Warden's specials run a slam, then a Quake Ring 0.4 s after the slam lands
+  const w = wardenFight();
+  w.b.tm = { ...w.b.tm, seqs: [{ ...TIMED.warden.phases[0], first: 0.5 }] };
+  w.b.comboPh = -1; w.b.slamT = w.b.quakeT = Infinity; w.b.busyUntil = 0; w.b.windupAt = 0; w.g.time = 50; w.g.events = [];
+  const kinds = [];
+  for (let i = 0; i < 200; i++) { w.g.time = Math.round((w.g.time + 0.05) * 100) / 100; w.quiet(() => w.g.bossSpecials(w.b, w.p)); for (const e of w.g.events) if ((e.t === 'tele' && e.r === WARDEN.slam.r) || (e.t === 'quake' && e.i === 0)) kinds.push([e.t, w.g.time]); w.g.events = []; }
+  assert.deepEqual(kinds.map(k => k[0]), ['tele', 'quake'], 'slam, then the Quake Ring');
+  assert.ok(Math.abs(kinds[1][1] - kinds[0][1] - (WARDEN.slam.wind + 0.4)) <= 0.05 + 1e-9, 'the ring starts gap s after the slam lands (to the tick)');
+  ok('combos: steps in order, gap s after each ends, own timers pushed back, then the after state (an opening) for the pause; weights; a Break drops one');
+}
+
+// ---- 11. After states of single moves: exposed is an opening; walk lets it move but not attack ----
+{
+  const { g, b, p } = wardenFight();
+  b.busyUntil = 0; g.time = 50;
+  b.tm = { ...b.tm, charge: { ...b.tm.charge, after: { state: 'exposed', pause: 2 } } };
+  const end = g.hornCharge(b, p), land = 50 + b.tm.charge.wind;
+  near(end, land + 2, 'hornCharge returns its end'); near(b.busyUntil, land + 2, 'busy for the pause');
+  g.time = land - 0.1; assert.equal(g.openingOf(b), null, 'not before it lands');
+  g.time = land + 1; assert.equal(g.openingOf(b)?.state, 'exposed', 'exposed after the charge');
+  g.time = 70; b.busyUntil = 0; b.after = null; b.holdUntil = 0; b.closeAt = -99;
+  g.bossAfter(b, { after: { state: 'walk', pause: 1.5 } }, 70);
+  assert.ok(b.busyUntil <= 70 && b.holdUntil === 71.5, 'walk: not busy, but held');
+  assert.equal(g.swingReady(b), false, 'no swing while walking it off'); assert.equal(g.openingOf(b), null, 'walking is no opening');
+  g.time = 71.6; assert.equal(g.swingReady(b), true);
+  g.bossAfter(b, { after: { state: 'idle', pause: 0.5 } }, 72); assert.equal(g.afterOf(b), null, 'idle: just busy'); near(b.busyUntil, 72.5, 'idle pause');
+  ok('after states: a single move\'s exposed pause is an opening; walk: free to move, no attacks; idle: only busy');
+}
+
+// ---- 12. The opening bonus: + to the flank multiplier (not x), posture too; not Broken, not Grounded, melee only, no show ----
+{
+  const { g, b, p } = wardenFight();
+  g.time = 80; b.after = { state: 'exposed', from: 79, until: 82, hits: new Map() }; b.staggerUntil = 0; b.groundedUntil = 0;
+  b.face = 0; p.x = b.x; p.z = b.z + 3; // in front of it
+  near(g.flankMult(b, p), 1 + OPENING.dmg, 'front: 1 + 0.25'); assert.equal(p._flankPost || 0, 0, 'no extra posture factor (OPENING.posture 0)'); p._flankPost = 0;
+  p.z = b.z - 3; // behind it
+  near(g.flankMult(b, p), 1.08 + OPENING.dmg, 'behind: 1.08 + 0.25 (added, not 1.08 x 1.25)'); near(p._flankPost, 1.12, 'the flank posture bonus as before'); p._flankPost = 0;
+  const q = g.addPlayer(null, 'Ria', 'ranger'); g.parties.set(99, { id: 99, members: [p.id, q.id] }); p.party = q.party = 99;
+  q.x = b.x; q.z = b.z + 3; // a Pincer
+  near(g.flankMult(b, p), 1.15 + OPENING.dmg, 'Pincer: 1.15 + 0.25'); p._flankPost = 0; p.party = q.party = 0; g.parties.delete(99);
+  assert.equal(OPENING.posture, 0);
+  b.staggerUntil = 81; near(g.flankMult(b, p), 1.08, 'Broken (Switch window): no opening bonus'); b.staggerUntil = 0; p._flankPost = 0;
+  b.groundedUntil = 81; near(g.flankMult(b, p), 1.08, 'Grounded: no opening bonus'); b.groundedUntil = 0; p._flankPost = 0;
+  p.z = b.z - (b.def.radius + 7); near(g.flankMult(b, p), 1, 'out of flank reach (ranged): no bonus'); p.z = b.z - 3;
+  g.director = { running: true }; near(g.flankMult(b, p), 1.08, 'a director show: no openings'); p._flankPost = 0;
+  assert.equal(g.bossCombo(b, () => 0), false, 'no combos in a show');
+  g.setAfter(b, 'exposed', 80, 90); assert.equal(b.after.until, 82, 'no new opening in a show');
+  g.director = null;
+  // end to end: damageMob deals 25% more (and 25% more posture) in the opening, front-on
+  p.z = b.z + 3; b.hp = b.maxHp = 1e6; const rnd = Math.random; Math.random = () => 0.5;
+  try {
+    const hit = () => { const hp = b.hp, ps = b.posture = 0; g.damageMob(b, p, 100); return [hp - b.hp, b.posture - ps]; };
+    const [d1, s1] = hit(); b.after = null; const [d0, s0] = hit();
+    near(d1 / d0, 1.25, `damage x1.25 (${d1} vs ${d0})`); near(s1 / s0, 1.25, 'posture x1.25 (it follows the damage)');
+  } finally { Math.random = rnd; }
+  ok('opening bonus: +0.25 added to the flank multiplier (front 1.25, back 1.33, Pincer 1.40), posture +25% with it; none while Broken or Grounded, at range, or in a show');
+}
+
+// ---- 13. No point-blank chaining; the snapshot carries the opening ----
+{
+  const { g, b } = wardenFight();
+  g.time = 90; b.closeAt = -99; b.holdUntil = 0; b.after = null;
+  const wind = WARDEN.cleave.wind, gap = TIMED.warden.close.gap;
+  g.swingStart(b, wind);
+  g.time = 90 + wind + gap - 0.05; assert.equal(g.closeReady(b, 'spin'), false, 'no spin right after the swing lands'); assert.equal(g.closeReady(b, 'slam'), true, 'a slam is not a close move');
+  g.time = 90 + wind + gap + 0.01; assert.equal(g.closeReady(b, 'spin'), true);
+  g.areaHold(b, g.time + 2); assert.equal(g.swingReady(b), false, 'the swing waits out its own area telegraph');
+  g.director = { running: true }; assert.equal(g.swingReady(b), true, 'not in a show'); g.director = null;
+  g.time = 100; b.after = { state: 'planted', from: 99, until: 102.5, hits: new Map() }; b.staggerUntil = 0; b.groundedUntil = 0;
+  const op = JSON.parse(g.snapshot()).op;
+  assert.deepEqual(op, [[b.id, 2, 2.5, 3.5]], 'w.op: [boss id, state index (planted), s left, s total]');
+  b.after = null; assert.equal(JSON.parse(g.snapshot()).op, undefined, 'no opening: no op key');
+  // the Sovereign's and the Colossus's swings still arm their cooldowns (and mark the close gap)
+  const quiet = fn => { const l = console.log; console.log = () => {}; try { return fn(); } finally { console.log = l; } };
+  quiet(() => g.setTwist2(null)); process.env.F3_TWIST = 'calm'; quiet(() => g.newTwist3()); delete process.env.F3_TWIST;
+  const p = [...g.players.values()][0];
+  for (const [m, ai, A] of [[g.sovereign, 'f2Sovereign', F2.arena], [g.colossus, 'f3Colossus', F3.arena]]) {
+    g.time = 200; p.x = A.x; p.z = A.z - 3; m.x = A.x; m.z = A.z; m.threat.clear(); m.threat.set(p.id, 1);
+    quiet(() => g[ai](m, 0.05));
+    m.busyUntil = 0; m.windupAt = 0; m.atkT = 0; m.closeAt = -99; m.holdUntil = 0; m.after = null; m.seq = null; m.comboT = Infinity;
+    m.geyserT = m.strikeT = m.gustT = m.waveT = m.ovT = Infinity; m.btT = Infinity;
+    g.time = 201; quiet(() => g[ai](m, 0.05));
+    assert.ok(m.windupAt > 201 && m.atkT > 201 + 1, `${m.type}: swung, cooldown armed (${m.atkT})`);
+    assert.ok(m.closeAt > 201, `${m.type}: the swing marks the close gap`);
+  }
+  ok('close moves keep their gap; the swing waits out area telegraphs (not in a show); swings arm their cooldowns; the snapshot carries the opening');
+}
+
+// ---- 14. Bots read the tables: they get out of a Gale Push, and melee goes in for an opening and out before it closes ----
+{
+  const mk = (x, z, skill = 5) => ({ t: 0, x, z, face: 0, skill, mobs: [], tele: [], waves: [], dodgeCd: 0, roll: null, gateOpen: true, sent: [], send(o) { this.sent.push(o); } });
+  const A = F3.arena, G = COLOSSUS.gust, f = 0; // the cone faces +z
+  const run = (b, secs) => { for (let i = 0; i < secs / 0.05; i++) { b.t = Math.round((b.t + 0.05) * 100) / 100; b.dodgeCd = Math.max(0, b.dodgeCd - 0.05); if (!stepRoll(b)) gustDodge(b); } };
+  const inCone = b => { const d = Math.hypot(b.x - A.x, b.z - A.z); return d <= G.r + 0.5 && (d <= 2.6 + 0.8 || Math.abs(Math.atan2(b.x - A.x, b.z - A.z) - f) <= G.half); };
+  for (const [dz, dx] of [[5, 0.3], [9, -1], [3.5, 0]]) {
+    const b = mk(A.x + dx, A.z + dz);
+    assert.ok(inCone(b), 'starts in the cone');
+    runHooks('onEvent', b, { t: 'f3fx', k: 'gust', id: 1, x: A.x, z: A.z, f, r: G.r, h: G.half, d: G.wind });
+    run(b, G.wind);
+    assert.ok(!inCone(b), `out of the cone (or rolling through it) by the time it lands, from ${dz} m: ${b.x - A.x}, ${b.z - A.z}`);
+  }
+  const back = mk(A.x, A.z - 5); runHooks('onEvent', back, { t: 'f3fx', k: 'gust', id: 1, x: A.x, z: A.z, f, r: G.r, h: G.half, d: G.wind });
+  back.t = 0.05; assert.equal(gustDodge(back), false, 'behind it: nothing to do');
+  const rnd = Math.random; Math.random = () => 0.99; // a skill-3 bot: a slower glance
+  try {
+    const slow = mk(A.x, A.z + 5, 3); runHooks('onEvent', slow, { t: 'f3fx', k: 'gust', id: 1, x: A.x, z: A.z, f, r: G.r, h: G.half, d: G.wind });
+    slow.t = 0.1; assert.equal(gustDodge(slow), false, 'not seen yet'); slow.t = 0.5; assert.equal(gustDodge(slow), true, 'seen after its reaction time');
+  } finally { Math.random = rnd; }
+  // openings
+  const W = { id: 7, x: 0, z: 150, def: { boss: true, radius: 2.2 } }, ctx = { basic: { kind: 'melee', reach: 3 }, dodge: null, ready: false };
+  const b = mk(0, 140); b.role = 'dps';
+  readOpenings(b, [[7, 4, 3, 3]]);
+  assert.equal(openingOn(b, W)?.state, 'exposed');
+  assert.equal(openingTurn(b, W, ctx), true, 'out of reach: in for the opening'); assert.ok(b.z > 140 && ctx.ready, 'moving in, ready');
+  b.z = 147; assert.equal(openingTurn(b, W, ctx), false, 'in reach: the class brain hits it');
+  b.t = 2.7; assert.equal(openingTurn(b, W, ctx), true, 'just before it closes: step out'); assert.ok(b.z < 147, 'backing off');
+  const tank = mk(0, 140); tank.role = 'tank'; readOpenings(tank, [[7, 4, 3, 3]]); assert.equal(openingTurn(tank, W, ctx), false, 'the tank stays on it');
+  const archer = mk(0, 140); archer.role = 'dps'; readOpenings(archer, [[7, 4, 3, 3]]); assert.equal(openingTurn(archer, W, { ...ctx, basic: { kind: 'ranged', reach: 14 } }), false, 'ranged: steady as before');
+  readOpenings(b, undefined); assert.equal(openingOn(b, W), null, 'gone from the snapshot: over');
+  ok('bots: out of the Gale Push cone in time (walk, or roll), skill-scaled; melee in for an opening and out before it closes; tank and ranged unchanged');
 }
 
 console.log(`bosstiming: ${n} checks passed`);

@@ -38,7 +38,7 @@ const methods = {
 
   // ---------- the rotation (called every tick while the boss is fighting) ----------
   bossTeam(m, fighters) {
-    const C = BOSSTEAM[m.type];
+    const C = BOSSTEAM[m.type] && (m.tm?.team || BOSSTEAM[m.type]); // the fight's table (party-size knobs: server/openings.js)
     if (!C) return;
     const t = this.time, key = this.btFight(m);
     if (m.btKey !== key) { m.btKey = key; m.btT = t + C.first; m.btI = Math.floor(Math.random() * 3); } // a new fight
