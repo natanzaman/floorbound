@@ -83,7 +83,7 @@ const f2 = initFloor2Client({
 });
 // Floor 3 — The Gale Spires (floor3client.js): world, the Storm Gate, the Stairway from the Sunken Court, the Colossus's mechanics.
 const f3 = initFloor3Client({
-  scene, occluders, fx, sfx, state, mobs, players, isTouch,
+  scene, occluders, fx, sfx, state, mobs, players, isTouch, tip: id => guide.tip(id),
   send: o => send(o), banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a),
   log: (a, b) => log(a, b), shake: a => shake(a), project: (x, y, z) => project(x, y, z), hallOpen: () => !$('hall').classList.contains('hidden'),
 });

@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { F3, GATE3, STAIRWAY3, PHASE_TEXT3, F3_TWISTS, inArena3, inGateZone3, onFloor3, unlocked3 } from '/shared/floor3.js';
 import { createFloor3, makeBolt } from '/floor3world.js';
 
-// ctx: { scene, occluders, fx, sfx, state, mobs, players, send, banner, callout, floatNum, log, shake, project, isTouch, hallOpen }
+// ctx: { scene, occluders, fx, sfx, state, mobs, players, send, banner, callout, floatNum, log, shake, project, isTouch, hallOpen, tip }
 export function initFloor3Client(ctx) {
   const { scene, fx, sfx, state, mobs } = ctx;
   const world = createFloor3(scene, { occluders: ctx.occluders });
@@ -69,7 +69,7 @@ export function initFloor3Client(ctx) {
         fx.telegraph(e.x, e.z, e.r, e.d, e.follow ? () => mobs.get(e.follow)?.model.group.position : null);
         const mine = near(e.x, e.z, e.r + 1.5);
         sfx.play('warn', { x: e.x, z: e.z }, e.k === 'strike' ? 0.7 : 1);
-        if (e.k === 'stomp') { const m = mobs.get(e.id); if (m && !m.model.anim) m.stomp = e.d; if (mine && !state.f3StompTip) { state.f3StompTip = 1; ctx.log('Spire Sentinel stomp: jump it or roll out of the circle.', 'sys'); } }
+        if (e.k === 'stomp') { const m = mobs.get(e.id); if (m && !m.model.anim) m.stomp = e.d; if (mine) ctx.tip('f3armor'); }
         if (e.k === 'strike' && mine && fighting()) ctx.callout('LIGHTNING', 'Step out of the circle', e.d);
         return true;
       }
@@ -115,11 +115,11 @@ export function initFloor3Client(ctx) {
     const at = { x: e.x, z: e.z }, m = mobs.get(e.id), mine = (e.to ?? e.by) === state.myId;
     switch (e.k) {
       case 'shove': if (e.id === state.myId) ctx.shake(0.25); fx.ring(e.x, e.z, 1.4, 0xfef3c7, 0.35); break;
-      case 'aloft': if (mine && m) { tag(m, 'ALOFT', 300); if (!state.f3AirTip) { state.f3AirTip = 1; ctx.log('Harpies aloft take little from melee: hit them from range, or when they land after a dive.', 'sys'); } } break;
-      case 'armor': if (mine && m) { tag(m, 'ARMOURED', 400); if (!state.f3ArmorTip) { state.f3ArmorTip = 1; ctx.log("The Sentinel's armour soaks most damage: BREAK it (posture) to crack its shell.", 'sys'); } } break;
+      case 'aloft': if (mine && m) { tag(m, 'ALOFT', 300); ctx.tip('f3air'); } break;
+      case 'armor': if (mine && m) { tag(m, 'ARMOURED', 400); ctx.tip('f3armor'); } break;
       case 'warded': if (mine && m) tag(m, 'WARDED', 400); break;
       case 'wardbreak': fx.shatter(e.x, e.z, false); sfx.play('shield', at, 0.7); break;
-      case 'charge': sfx.play('swingHeavy', at, 1); fx.sparks(e.x, 0.3, e.z, 10, 0xd6c9ae, 0.3, 6); break;
+      case 'charge': if (near(e.x, e.z, 16)) ctx.tip('f3ram'); sfx.play('swingHeavy', at, 1); fx.sparks(e.x, 0.3, e.z, 10, 0xd6c9ae, 0.3, 6); break;
       case 'braced': fx.ring(e.x, e.z, 2.2, 0x60a5fa, 0.5); sfx.play('shield', at, 1.2); if (m) ctx.floatNum(m.model.group.position, m.model.height + 0.4, 'STOPPED!', 'crit'); break;
       case 'dive': sfx.play('swing', at, 1); break;
       case 'land': fx.ring(e.x, e.z, 1.8, 0xfef3c7, 0.4); fx.sparks(e.x, 0.3, e.z, 8, 0xe7c79a, 0.25, 5); if (m) ctx.floatNum(m.model.group.position, 1.6, 'GROUNDED', 'evade'); break;
@@ -128,7 +128,7 @@ export function initFloor3Client(ctx) {
         fx.telegraph(e.x, e.z, e.r, e.d, () => mobs.get(e.id)?.model.group.position);
         sfx.play('spell', at, 0.8);
         if (m) ctx.floatNum(m.model.group.position, m.model.height + 0.4, 'WIND WARD', 'crit');
-        if (near(e.x, e.z, 22) && !state.f3WardTip) { state.f3WardTip = 1; ctx.log('Storm Acolyte channelling a Wind Ward: interrupt it (a stun, a Break, Smite, or 3 quick hits).', 'sys'); }
+        if (near(e.x, e.z, 22)) ctx.tip('f3ward');
         break;
       case 'interrupt': fx.ring(e.x, e.z, 1.6, 0xfde047, 0.4); if (m) ctx.floatNum(m.model.group.position, m.model.height + 0.4, 'INTERRUPTED', 'switch'); sfx.play('shield', at, 0.6); break;
       case 'ward': fx.ring(e.x, e.z, e.r, 0xbae6fd, 0.8); fx.ring(e.x, e.z, e.r * 0.6, 0xe0f2fe, 0.6); sfx.play('spell', at, 1.1); break;
@@ -142,7 +142,7 @@ export function initFloor3Client(ctx) {
         anim(e.id)?.windup?.('gust', e.d);
         fx.wedge(e.x, e.z, e.f, e.r, e.h, e.d, 0x7dd3fc);
         sfx.play('warn', at, 1.3);
-        if (fighting()) ctx.callout('GALE PUSH', `Get behind or beside it, or roll (${dodgeKey()}) through`, e.d);
+        if (fighting()) { ctx.callout('GALE PUSH', `Get behind or beside it, or roll (${dodgeKey()}) through`, e.d); ctx.tip('f3gust'); }
         break;
       }
       case 'gusthit': {
@@ -178,7 +178,7 @@ export function initFloor3Client(ctx) {
       sfx.play('roar', m?.model.group.position || null, 1.4);
       fx.ring(A.x, A.z, A.r - 1, 0xfde047, 0.8);
       if (fighting() || (state.spectator && near(A.x, A.z, 60))) ctx.callout('OVERLOAD', e.solo ? 'BREAK it before the bar fills' : 'BREAK it, then SWITCH (or Team Burst) before the bar fills', Math.min(4, e.d));
-      if (fighting() && !state.f3OvTip) { state.f3OvTip = 1; ctx.log('OVERLOAD: its guard is open (posture half full). Break it, then a DIFFERENT player hits it (a Switch), or fire a Team Burst. Fail = Thunderclap on everyone.', 'sys'); }
+      if (fighting()) ctx.tip('f3overload');
     } else if (e.s === 'stop') {
       m?.model.anim?.cancelWindup?.();
       m?.model.anim?.shot('Hit_B', 0.6);
@@ -209,6 +209,7 @@ export function initFloor3Client(ctx) {
     beams.push({ g, rim, core, halo, warn, start, e });
     sfx.play('warn', { x: e.x, z: e.z }, 1.5);
     if (fighting() || (state.spectator && near(e.x, e.z, 60))) ctx.callout('TEMPEST BEAM', `JUMP (${jumpKey()}) as the beam reaches you, or roll through it`, e.d + 1.2);
+    if (fighting()) ctx.tip('f3beam');
   }
 
   // ---------- interaction (F) ----------

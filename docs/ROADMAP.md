@@ -121,7 +121,7 @@ F2 calls the others through these names, so keep them exactly. Every server meth
 | F6 | `ringBell(floor, { auto })`; `game.bellAuto` (true by default; F2 sets false during a show) | `{ t: 'bell', floor, n }` |
 | F2 | `game.director` (server/director.js): `load(yamlText)`, `validate()`, `run({ from, force })`, `stop()`, `status()` | `emote` `{ t, id, a }` (cheer, block, cast, hit, die); otherwise uses F1/F3–F6 |
 
-- **Movement names:** `forceBossMove` takes `horn_sweep`, `slam`, `charge`, `quake`, `rockfall` (Warden) and `tidal_wave`, `geyser`, `trident`, `deluge` (Sovereign); `meteor`, `spread`, `tether` (team mechanics, either boss: G4).
+- **Movement names:** `forceBossMove` takes `horn_sweep`, `slam`, `charge`, `quake`, `rockfall` (Warden) and `tidal_wave`, `geyser`, `trident`, `deluge` (Sovereign); `hammerfall`, `lightning`, `gale_push`, `overload`, `tempest_beam` (Colossus, H4); `meteor`, `spread`, `tether` (team mechanics, any boss: G4).
 - **Merging (several agents at once):** merge into `main` and push under a lock, so two merges never interleave:
   `flock /home/claude/floorbound/.git/fb-merge.lock -c 'cd /home/claude/floorbound && git merge --no-ff feat/<name> && <run all tests> && git -c push.negotiate=true push --force-with-lease origin main'`.
   Resolve conflicts keeping both sides. If the push gets HTTP 429 from the proxy, wait 5 s and retry once. Then remove your worktree and branch, and update the tracker row.
