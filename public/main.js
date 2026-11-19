@@ -43,6 +43,9 @@ import { SnapClock, Track, Correction } from '/shared/netsmooth.js'; // interpol
 import { initPerf } from '/perf.js'; // the diagnostics overlay (F3), the ping chip, Auto quality
 import { makeNetsim } from '/netsim.js'; // test-only bad network (?netsim=120,60,2)
 import { initGameMenu } from '/gamemenu.js'; // the Game Menu (Esc / ☰)
+import { createInput } from '/input.js'; // keys, mouse buttons (and pads, K1b) -> actions, by the bindings in shared/controls.js
+import { createPanels } from '/panels.js'; // the panels that free the cursor / close on Esc
+import { loadSettings, saveSettings as storeSettings, initSettingsPanel } from '/settings.js'; // fb_settings + fb_controls, the Settings panel
 
 const sfx = new Sound();
 
@@ -54,12 +57,9 @@ const netsim = makeNetsim(QS.get('netsim')); // test-only: delay / jitter / reor
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 if (isTouch) document.body.classList.add('touch');
 
-// ---------- settings (camera, chat, graphics), saved in this browser ----------
-// camera 'mouse' (default): the camera follows the mouse (pointer lock; click the game to capture the cursor, Esc to free it).
-// camera 'classic': right-drag to look, or rest the cursor at a screen edge to turn.
-// quality: 'auto' (default) | 'low' | 'medium' | 'high' (public/quality.js) · perf: the diagnostics overlay · ping: the ping chip
-const settings = Object.assign({ camera: 'mouse', sens: 1, invertY: false, bubbles: true, quality: 'auto', perf: false, ping: true }, (() => { try { return JSON.parse(localStorage.getItem('fb_settings') || '{}'); } catch { return {}; } })());
-const saveSettings = () => { try { localStorage.setItem('fb_settings', JSON.stringify(settings)); } catch {} };
+// ---------- settings (camera, chat, graphics; public/settings.js) ----------
+const settings = loadSettings();
+const saveSettings = () => storeSettings(settings);
 if (QS.get('quality')) settings.quality = QS.get('quality'); // (tests: ?quality=low)
 setLevel(startLevel(settings.quality, { touch: isTouch, lastAuto: (() => { try { return localStorage.getItem('fb_autoq'); } catch { return null; } })() }));
 
@@ -331,7 +331,7 @@ async function leaveGame(kind) {
 }
 const gmenu = initGameMenu({
   state, isTouch, guide, sfx, controls: () => esc(controlsText()), steps: () => GUIDE_STEPS.map(s => ({ title: esc(s.title), text: esc(s.text()) })),
-  openSettings: () => { $('settings').classList.remove('hidden'); renderSettings(); },
+  openSettings: () => settingsUi.open(),
   lockCursor: () => lockCursor(), leave: k => leaveGame(k), accounts: () => !!(acct.cfg.accounts && acct.token),
   checkAdmin: () => api('/api/admin/me').then(r => r.admin),
 });
@@ -879,64 +879,63 @@ function removeEntity(e) {
 }
 
 // ---------------- input ----------------
-const keys = new Set();
+// Keys and mouse buttons arrive as actions (public/input.js, bindings in shared/controls.js, by key code).
+// The gate: nothing but the overlay before you join; under the Game Menu only Esc (no moving, attacking or hotkeys;
+// the game itself keeps running).
+const input = createInput({ isTouch, settings, save: saveSettings, notify: t => log(t, 'sys'),
+  gate: a => a === 'perfOverlay' || (state.joined && (a === 'menu' || !gmenu.isOpen())) });
+// The old key set, now a view of the input layer (revive.js reads keys.has('e'): the revive action).
+const LEGACY_KEYS = { e: 'revive', q: 'turnLeft', j: 'attack', r: 'guard', v: 'botWheel' };
+const keys = { has: k => (LEGACY_KEYS[k] ? input.held(LEGACY_KEYS[k]) : input.key(k.length === 1 ? `Key${k.toUpperCase()}` : k)), clear: () => input.reset() };
+const panels = createPanels(); // Esc closes the first group; all of them free the cursor while open
+for (const id of ['players', 'bag', 'hall', 'warp', 'smith', 'settings', 'skillsp']) panels.register(id, { esc: true });
+for (const id of ['talentsp', 'botwheel', 'botmenu', 'gamemenu']) panels.register(id); // (they close themselves on Esc)
 const stick = { active: false, id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
 let attackHeld = false;
 
-addEventListener('keydown', e => {
-  if (e.key === 'F3') { e.preventDefault(); perf.toggle(); if (!$('settings').classList.contains('hidden')) renderSettings(); return; } // the diagnostics overlay
-  if (!state.joined) return;
-  const chat = $('chat-input');
-  if (document.activeElement === chat) {
-    if (e.key === 'Enter') { sendChat(chat.value); chat.value = ''; chat.blur(); }
-    if (e.key === 'Escape') chat.blur();
-    return;
-  }
-  const k = e.key.toLowerCase();
-  if (k === 'escape') { // Esc: close what's open, else clear the target, else the Game Menu
-    if (gmenu.isOpen()) { if (!gmenu.justOpened()) gmenu.close(); return; }
-    if (escBusy) { for (const id of ESC_PANELS) $(id)?.classList.add('hidden'); if (wheel.isOpen()) wheel.close(); return; }
-    if (state.lock || state.focus) { state.lock = 0; state.focus = 0; return; }
-    menuOpen(); return;
-  }
-  if (gmenu.isOpen()) return; // the menu is up: no moving, attacking or hotkeys (the game itself keeps running)
-  if (e.key === 'Enter') { freeCursor(); chat.focus(); e.preventDefault(); return; }
-  keys.add(k);
-  if (k === 'j') attackHeld = true;
-  if (k === ' ') { e.preventDefault(); if (!e.repeat) jump(); }
-  if (k === '1' || k === '2' || k === '3') useSkill(+k);
-  if (k === 'shift') dodge();
-  if (k === 'k' && !e.repeat) talents.toggle(); // Skill Tree window (public/talents.js)
-  if (k === 'r' && !e.repeat) combat.guard(true);
-  if (k === 'tab') { e.preventDefault(); cycleLock(); }
-  if (k === 'v' && !e.repeat) wheel.keydown(e); // bot command wheel
-  if (k === 't' && !e.repeat) teamplay.press(); // Team Burst: start it (full bar) or join the sync window
-  if (k === 'p') $('players-btn').click();
-  if (k === 'b' || k === 'i') toggleBag();
-  if (k === 'f') interact();
-  if (k === 'c' && !e.repeat) threat.cover(); // Guardian Cover
-  const ci = ['4', '5', '6'].indexOf(k);
-  if (ci >= 0) useItem(CONSUMABLE_IDS[ci]);
+const onPress = (action, fn) => input.on(action, e => { if (e.down) fn(e); });
+onPress('perfOverlay', () => { perf.toggle(); settingsUi.refresh(); }); // the diagnostics overlay
+onPress('menu', () => { // Esc: close what's open, else clear the target, else the Game Menu
+  if (gmenu.isOpen()) { if (!gmenu.justOpened()) gmenu.close(); return; }
+  if (escBusy) { panels.close(); if (wheel.isOpen()) wheel.close(); return; }
+  if (state.lock || state.focus) { state.lock = 0; state.focus = 0; return; }
+  menuOpen();
 });
+onPress('chat', () => { freeCursor(); $('chat-input').focus(); });
+$('chat-input').addEventListener('keydown', e => { // (typing: the input layer leaves these keys alone)
+  const chat = e.target;
+  if (e.key === 'Enter') { sendChat(chat.value); chat.value = ''; chat.blur(); }
+  if (e.key === 'Escape') chat.blur();
+});
+input.on('attack', e => { attackHeld = e.down; });
+onPress('jump', e => { if (!e.repeat) jump(); });
+onPress('skill1', () => useSkill(1));
+onPress('skill2', () => useSkill(2));
+onPress('skill3', () => useSkill(3));
+onPress('dodge', () => dodge());
+onPress('skillTree', e => { if (!e.repeat) talents.toggle(); }); // Skill Tree window (public/talents.js)
+input.on('guard', e => { if (!e.down) combat.guard(false); else if (!e.repeat) combat.guard(true); });
+onPress('lockNext', () => cycleLock());
+input.on('botWheel', e => { if (!e.down) wheel.keyup(); else if (!e.repeat) wheel.keydown(e.event); }); // bot command wheel
+onPress('teamBurst', e => { if (!e.repeat) teamplay.press(); }); // Team Burst: start it (full bar) or join the sync window
+onPress('players', () => $('players-btn').click());
+onPress('bag', () => toggleBag());
+onPress('interact', () => interact());
+onPress('cover', e => { if (!e.repeat) threat.cover(); }); // Guardian Cover
+['item1', 'item2', 'item3'].forEach((a, i) => onPress(a, () => useItem(CONSUMABLE_IDS[i])));
+onPress('selectAimed', e => { if (locked()) selectAim(); else selectAt(e.event?.clientX ?? mouse.x, e.event?.clientY ?? mouse.y); }); // Ctrl+click: select (mouse look: what the crosshair is aimed at)
+onPress('clearTarget', () => clearSelection()); // Ctrl+right-click: deselect
 // Was something open when Esc went down? (Capture phase: before the panels' own Esc handlers close them.)
-const ESC_PANELS = ['players', 'bag', 'hall', 'warp', 'smith', 'settings', 'skillsp'];
 let escBusy = false;
 addEventListener('keydown', e => { if (e.key === 'Escape') escBusy = e.cancelBubble || cursorPanelOpen() || wheel.isOpen() || talents.isOpen() || !!document.getElementById('mvp'); }, true);
-function menuOpen() { keys.clear(); attackHeld = false; mouseAttack = false; combat.guard(false); stick.active = false; stick.dx = stick.dy = 0; gmenu.open(); }
-addEventListener('keyup', e => {
-  const k = e.key.toLowerCase();
-  keys.delete(k);
-  if (k === 'j') attackHeld = false;
-  if (k === 'r') combat.guard(false);
-  if (k === 'v') wheel.keyup();
-});
+function menuOpen() { keys.clear(); attackHeld = false; combat.guard(false); stick.active = false; stick.dx = stick.dy = 0; gmenu.open(); }
 addEventListener('blur', () => { keys.clear(); attackHeld = false; combat.guard(false); });
 
 // camera drag (mouse + touch on the right/anywhere outside the stick)
 // (settings: loaded at the top, before the renderer)
 const mouseLook = () => settings.camera === 'mouse' && !isTouch;
 const locked = () => document.pointerLockElement === canvas;
-function lockCursor() { if (mouseLook() && !locked() && state.joined && !state.spectator) try { canvas.requestPointerLock()?.catch?.(() => {}); } catch {} }
+function lockCursor() { if (mouseLook() && !locked() && state.joined && !state.spectator && input.device !== 'pad') try { canvas.requestPointerLock()?.catch?.(() => {}); } catch {} }
 let freeing = false; // we let the cursor go ourselves (a panel, chat): not the player's Esc
 function freeCursor() { if (locked()) { freeing = true; document.exitPointerLock(); } }
 document.addEventListener('pointerlockchange', () => {
@@ -954,8 +953,7 @@ addEventListener('mousemove', e => {
   state.pitch = Math.min(1.25, Math.max(0.12, state.pitch + e.movementY * s * (settings.invertY ? -1 : 1)));
 });
 // Panels need the cursor: free it whenever one is open.
-const CURSOR_PANELS = ['players', 'bag', 'hall', 'warp', 'smith', 'skillsp', 'settings', 'talentsp', 'botwheel', 'botmenu', 'gamemenu'];
-function cursorPanelOpen() { return CURSOR_PANELS.some(id => { const el = $(id); return el && !el.classList.contains('hidden'); }); }
+const cursorPanelOpen = () => panels.isOpen();
 // Top-right chips: lay them out right-to-left by their real widths, so a long gold count never overlaps a neighbour.
 function layoutChips() {
   let right = 10;
@@ -967,48 +965,19 @@ function layoutChips() {
 addEventListener('resize', layoutChips);
 setTimeout(layoutChips, 0); setTimeout(layoutChips, 1500);
 
-function renderSettings() {
-  const el = $('settings');
-  el.innerHTML = `<div class="top"><b>Settings</b><button class="x" data-a="close">✕</button></div>
-    <h4>Camera</h4>
-    <label class="opt"><input type="radio" name="cam" value="mouse" ${settings.camera === 'mouse' ? 'checked' : ''}> Follows the mouse <small>click the game to capture the cursor · Esc to free it</small></label>
-    <label class="opt"><input type="radio" name="cam" value="classic" ${settings.camera === 'classic' ? 'checked' : ''}> Classic <small>right-drag to look · rest the cursor at a screen edge to turn</small></label>
-    <h4>Mouse sensitivity <span id="sens-v">${settings.sens.toFixed(1)}×</span></h4>
-    <input type="range" min="0.3" max="3" step="0.1" value="${settings.sens}" data-a="sens">
-    <label class="opt"><input type="checkbox" data-a="inv" ${settings.invertY ? 'checked' : ''}> Invert vertical look</label>
-    <h4>Chat</h4>
-    <label class="opt"><input type="checkbox" data-a="bub" ${settings.bubbles !== false ? 'checked' : ''}> Speech bubbles <small>chat lines over the speaker's head (the chat log keeps everything)</small></label>
-    <h4>Graphics</h4>
-    ${['auto', 'low', 'medium', 'high'].map(q => `<label class="opt"><input type="radio" name="gq" value="${q}" ${settings.quality === q ? 'checked' : ''}> ${QLABEL[q]}${q === 'auto' && settings.quality === 'auto' ? ` <small>now: ${Q.level}</small>` : ''}</label>`).join('')}
-    <small class="note">Lower settings draw fewer pixels, effects and shadows. Smoothing edges (High) changes after a reload.</small>
-    <label class="opt"><input type="checkbox" data-a="perf" ${settings.perf ? 'checked' : ''}> Performance overlay <small>F3 · frame rate, ping, snapshots</small></label>
-    <label class="opt"><input type="checkbox" data-a="ping" ${settings.ping !== false ? 'checked' : ''}> Show ping in the corner</label>`;
-}
-const QLABEL = { auto: 'Auto <small>picks a level that keeps the game smooth</small>', low: 'Low <small>fastest: no shadows, fewer effects, shorter view</small>', medium: 'Medium', high: 'High <small>sharpest, with shadows and full effects</small>' };
+const settingsUi = initSettingsPanel({ el: $('settings'), settings, save: saveSettings, Q, perf, applyQuality, freeCursor, bubbles, sfx }); // public/settings.js
 $('menu-btn').onclick = () => menuOpen(); // phones: the Game Menu
-$('settings-btn').onclick = () => { const el = $('settings'); el.classList.toggle('hidden'); if (!el.classList.contains('hidden')) renderSettings(); sfx.play('ui'); };
-$('settings').addEventListener('click', e => { if (e.target.closest('[data-a=close]')) $('settings').classList.add('hidden'); });
-$('settings').addEventListener('input', e => {
-  const t = e.target;
-  if (t.name === 'cam') { settings.camera = t.value; if (t.value === 'classic') freeCursor(); }
-  if (t.dataset.a === 'sens') { settings.sens = +t.value; $('sens-v').textContent = `${settings.sens.toFixed(1)}×`; }
-  if (t.dataset.a === 'inv') settings.invertY = t.checked;
-  if (t.dataset.a === 'bub') { settings.bubbles = t.checked; if (!t.checked) bubbles.clear(); }
-  if (t.name === 'gq') { settings.quality = t.value; perf.setMode(t.value); if (t.value !== 'auto') applyQuality(t.value); }
-  if (t.dataset.a === 'perf') settings.perf = t.checked;
-  if (t.dataset.a === 'ping') settings.ping = t.checked;
-  saveSettings();
-});
+$('settings-btn').onclick = () => settingsUi.toggle();
 
 const drag = { id: null, x: 0, y: 0 };
-let mouseAttack = false;
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse') {
-    if (e.button === 0 && (e.ctrlKey || e.metaKey)) { if (locked()) selectAim(); else selectAt(e.clientX, e.clientY); return; } // Ctrl+click: select (mouse look: what the crosshair is aimed at)
-    if (e.button === 2 && (e.ctrlKey || e.metaKey)) { clearSelection(); return; } // Ctrl+right-click: deselect
+    if (input.device === 'pad') return; // under Controller the mouse is for menus: clicks on the game don't attack
+    const hit = input.peek(e); // what this click is bound to
+    if (hit?.binding.includes('+')) { input.mouseDown(e); return; } // chords first: Ctrl+click select, Ctrl+right-click clear
     if (e.button === 0 && mouseLook() && !locked()) { lockCursor(); return; } // the first click captures the cursor
-    if (e.button === 0) { mouseAttack = true; attackHeld = true; return; }
+    if (hit) { input.mouseDown(e); return; } // attack (released by the input layer on pointerup)
     if (locked()) return; // no right-drag needed while the camera follows the mouse
     if (e.button !== 2) return;
   }
@@ -1023,17 +992,13 @@ canvas.addEventListener('pointermove', e => {
   state.pitch = Math.min(1.25, Math.max(0.12, state.pitch + (e.clientY - drag.y) * s));
   drag.x = e.clientX; drag.y = e.clientY;
 });
-const endDrag = e => {
-  if (e.pointerType === 'mouse' && e.button === 0 && mouseAttack) { mouseAttack = false; attackHeld = false; }
-  if (e.pointerId === drag.id) drag.id = null;
-};
-addEventListener('pointerup', e => { if (e.pointerType === 'mouse' && e.button === 0 && mouseAttack) { mouseAttack = false; attackHeld = false; } });
+const endDrag = e => { if (e.pointerId === drag.id) drag.id = null; };
 // screen-edge turning: park the cursor at the left/right edge to turn the camera that way
 const EDGE_DELAY = 0.1; // seconds the cursor must rest at a screen edge before the camera turns
 const mouse = { x: 0, y: 0, inside: false, onCanvas: false, edgeSide: 0, edgeSince: 0 };
 addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.inside = true; mouse.onCanvas = e.target === canvas || e.target.closest?.('#labels'); });
 document.documentElement.addEventListener('mouseleave', () => { mouse.inside = false; });
-addEventListener('blur', () => { mouse.inside = false; mouseAttack = false; });
+addEventListener('blur', () => { mouse.inside = false; });
 canvas.addEventListener('pointerup', endDrag);
 canvas.addEventListener('pointercancel', endDrag);
 canvas.addEventListener('wheel', e => { state.camDist = Math.min(22, Math.max(5, state.camDist + e.deltaY * 0.01)); }, { passive: true });
@@ -2009,6 +1974,7 @@ function frame(now) {
   frameNo++; entStats.interp = entStats.extrap = entStats.hold = 0;
   frustum.setFromProjectionMatrix(frM4.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); // (last frame's camera)
   corr.step(dt * 1000);
+  input.tick(); input.setContext('downedAlly', !!state.joined && revive.usesE()); // (pads polled here from K1b; E revives instead of turning)
   const lm = state.joined && !state.spectator ? lockedMob() : null;
   const la = !lm && state.joined && !state.spectator ? focusedAlly() : null;
   const sel = lm || la;
@@ -2038,7 +2004,7 @@ function frame(now) {
   } else { lockRing.visible = false; selArrow.visible = false; }
   // Mouse look: preview what Ctrl+click would select under the crosshair.
   // Hold Ctrl to preview what a click would select (crosshair in mouse look, cursor otherwise).
-  const ctrlHeld = keys.has('control') || keys.has('meta');
+  const ctrlHeld = input.armed('selectAimed'); // (Ctrl / Cmd down)
   hovered = !ctrlHeld || !state.joined || state.spectator ? null : locked() ? pickAim()?.ent || null : mouse.inside ? pickAt(mouse.x, mouse.y)?.ent || null : null;
   $('crosshair').className = hovered ? (hovered.kind === 'mob' ? 'foe' : 'ally') : '';
   updateTargetFrame(sel, !!lm);
@@ -2048,12 +2014,9 @@ function frame(now) {
     let ix = 0, iz = 0;
     const typing = document.activeElement === $('chat-input') || gmenu.isOpen(); // (the Game Menu blocks movement too)
     if (!typing) {
-      if (keys.has('w') || keys.has('arrowup')) iz += 1;
-      if (keys.has('s') || keys.has('arrowdown')) iz -= 1;
-      if (keys.has('a') || keys.has('arrowleft')) ix -= 1;
-      if (keys.has('d') || keys.has('arrowright')) ix += 1;
-      if (keys.has('q')) state.yaw += dt * 2;
-      if (keys.has('e') && !revive.usesE()) state.yaw -= dt * 2; // (E revives a downed partymate in reach)
+      const mv = input.axis('move'); ix += mv.x; iz += mv.y;
+      if (input.held('turnLeft')) state.yaw += dt * 2;
+      if (input.held('turnRight')) state.yaw -= dt * 2; // (not while E revives: a downed partymate in reach)
     }
     if (stick.active && !gmenu.isOpen()) { ix += stick.dx; iz -= stick.dy; }
     const mag = Math.min(1, Math.hypot(ix, iz));
@@ -2180,4 +2143,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality };
+window.__fb = { input, panels, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality };

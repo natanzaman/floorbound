@@ -296,6 +296,75 @@ try {
   }
   ok('Ctrl+click selects, Ctrl+right-click clears');
 
+  // ---- the input layer's own rules (K1a) ----
+  {
+    const I = await S(() => { const i = window.__fb.input; return { dev: i.device, attack: i.label('attack'), revive: i.label('revive'), f0: i.frames }; });
+    assert.deepEqual([I.dev, I.attack, I.revive], ['kbm', 'Click', 'E'], 'device and labels');
+    await frames(3);
+    assert.ok(await S(() => window.__fb.input.frames) >= I.f0 + 3, 'frames counts polled frames');
+    assert.equal(await S(() => window.__fb.input.setDevice('pad')), false, 'Controller only with a pad connected');
+  }
+  ok('__fb.input: device, labels, frame counter; no Controller without a pad');
+  // Shift+1 is still skill 1 (bound by key code, not by the character it types)
+  await ready(1);
+  m = await mark();
+  await p.keyboard.down('ShiftLeft'); await frames(1); await tap('Digit1'); await p.keyboard.up('ShiftLeft'); await frames(1);
+  assert.deepEqual((await sent(m, 'skill')).map(o => o.slot), [1], 'Shift+1 uses skill 1');
+  ok('keys are bound by code: Shift+1 is skill 1');
+  // typing fields swallow game keys (any input, not just the chat)
+  await S(() => { const i = document.createElement('input'); i.id = 'kt-field'; i.style.cssText = 'position:fixed;left:0;top:0;z-index:99'; document.body.appendChild(i); i.focus(); });
+  m = await mark();
+  await p.keyboard.type('b1 '); await tap('KeyB'); await tap('Tab');
+  assert.equal((await sent(m, 'skill')).length + (await sent(m, 'jump')).length, 0, 'no skills or jumps from a text field');
+  assert.ok(!(await visible('bag')), 'no bag from a text field');
+  assert.equal(await S(() => document.getElementById('kt-field').value.startsWith('b1 b')), true, 'the field got the text');
+  await S(() => document.getElementById('kt-field').remove());
+  ok('typing in any text field never plays the game');
+  // rebinding: a new key works, the old one doesn't, a reserved one is refused; capture reads a chord, Esc cancels
+  {
+    const r = await S(() => window.__fb.input.setBinding('kbm', 'jump', 0, 'KeyG'));
+    assert.ok(r.ok, 'G is free for jump');
+    await p.waitForFunction(() => performance.now() > window.__fb.state.jumpReady && !window.__fb.state.roll, null, { timeout: 5000 });
+    m = await mark(); await tap('Space'); assert.equal((await sent(m, 'jump')).length, 0, 'Space no longer jumps');
+    m = await mark(); await tap('KeyG'); assert.equal((await sent(m, 'jump')).length, 1, 'G jumps');
+    assert.equal(await S(() => JSON.parse(localStorage.getItem('fb_controls')).kbm.jump[0]), 'KeyG', 'saved in fb_controls');
+    assert.equal(await S(() => window.__fb.input.setBinding('kbm', 'jump', 0, 'F5').error), 'reserved', 'F5 refused');
+    await S(() => window.__fb.input.resetBindings('kbm'));
+    assert.equal(await S(() => window.__fb.input.bindings('kbm').jump[0]), 'Space', 'reset to defaults');
+    const cap = S(() => window.__fb.input.capture());
+    await frames(1); m = await mark();
+    await p.keyboard.down('ControlLeft'); await p.keyboard.down('KeyZ'); await p.keyboard.up('KeyZ'); await p.keyboard.up('ControlLeft');
+    assert.equal(await cap, 'Ctrl+KeyZ', 'capture reads Ctrl+Z');
+    const cap2 = S(() => window.__fb.input.capture());
+    await frames(1); await tap('Digit2'); assert.equal(await cap2, 'Digit2', 'capture reads a key');
+    assert.equal((await sent(m, 'skill')).length, 0, 'and swallows it');
+    const cap3 = S(() => window.__fb.input.capture());
+    await frames(1); await tap('Escape'); assert.equal(await cap3, null, 'Esc cancels');
+    assert.ok(!(await menuOpen()), 'without opening the menu');
+  }
+  ok('rebinding works and saves, reserved keys are refused, capture reads keys and chords and swallows them, Esc cancels');
+  // the panel registry, and the settings split (sensitivity and invert-Y move to fb_controls)
+  await tap('KeyB'); await tap('KeyP');
+  assert.equal(await S(() => window.__fb.panels.top()), 'players', 'top() is the panel opened last');
+  assert.ok(await S(() => window.__fb.panels.isOpen('bag') && window.__fb.panels.isOpen()));
+  await tap('Escape');
+  assert.ok(!(await S(() => window.__fb.panels.isOpen())), 'Esc closed both');
+  {
+    const r = await S(async () => {
+      const keep = [localStorage.getItem('fb_settings'), localStorage.getItem('fb_controls')];
+      localStorage.setItem('fb_settings', JSON.stringify({ camera: 'classic', sens: 2.2, invertY: true, quality: 'low' }));
+      localStorage.removeItem('fb_controls');
+      const { loadSettings } = await import('/settings.js');
+      const s = loadSettings();
+      const out = { s, local: JSON.parse(localStorage.getItem('fb_settings')), controls: JSON.parse(localStorage.getItem('fb_controls')) };
+      localStorage.setItem('fb_settings', keep[0]); localStorage.setItem('fb_controls', keep[1]);
+      return out;
+    });
+    assert.deepEqual([r.s.camera, r.s.sens, r.s.invertY, r.s.quality], ['classic', 2.2, true, 'low'], 'old settings load the same');
+    assert.deepEqual(r.controls, { v: 1, access: { sens: 2.2, invertY: true } }, 'sensitivity and invert-Y moved to fb_controls');
+  }
+  ok('panel registry: top / isOpen / Esc closes; old fb_settings migrate to fb_controls');
+
   assert.deepEqual(errors, [], 'no page errors');
   console.log(`keys: all ${n} checks passed`);
 } finally {
