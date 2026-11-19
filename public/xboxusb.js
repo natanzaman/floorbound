@@ -10,6 +10,12 @@
 import { GIP_FILTER, powerOn, ackFor, parseGip, blankPad } from '/shared/gip.js';
 
 const open = new Map(); // USBDevice -> { st, alive }
+const resetAt = new Map(); // vendor:product:serial -> when it was last reset
+// A short log for checking a pad by hand (window.__xboxusb.log in the console): what was sent, read and failed.
+const log = [];
+const note = (...a) => { log.push(`${(performance.now() / 1000).toFixed(2)} ${a.join(' ')}`); if (log.length > 200) log.shift(); };
+const hx = b => [...b].map(x => x.toString(16).padStart(2, '0')).join(' ');
+if (typeof window !== 'undefined') window.__xboxusb = { log, pads: () => pads(), devices: () => [...open.keys()] };
 const hex = n => n.toString(16).padStart(4, '0');
 export const supported = () => typeof navigator !== 'undefined' && !!navigator.usb;
 export const pads = () => [...open.values()].map(p => p.st);
@@ -31,32 +37,51 @@ async function start(dev) {
     const g = gipInterface(dev);
     if (!g) { await dev.close().catch(() => {}); return false; }
     await dev.claimInterface(g.num);
-    if (g.alt) await dev.selectAlternateInterface(g.num, g.alt).catch(() => {});
+    // A pad only listens to the wake-up after it has announced itself (packet 0x02), which it does once, right after
+    // it's plugged in: by the time the page opens it, that's long gone. A USB reset makes it announce again
+    // (seen on a SCUF 2e95:0504: no packets at all before the reset, input right after). Once per pad per 10 s, in
+    // case the reset shows up as unplug + plug (the connect listener would land here again).
+    const key = `${dev.vendorId}:${dev.productId}:${dev.serialNumber || ''}`;
+    if (!(Date.now() - (resetAt.get(key) || 0) < 10000)) {
+      resetAt.set(key, Date.now());
+      try { await dev.reset(); note('reset'); } catch (e) { note('reset failed', e.message); }
+      if (!dev.opened) await dev.open();
+      if (!dev.configuration) await dev.selectConfiguration(1);
+      await dev.claimInterface(g.num).catch(e => note('reclaim', e.message));
+    }
     const name = (dev.productName && dev.productName !== 'Controller' ? dev.productName : `${dev.manufacturerName || 'Xbox'} controller`).trim();
-    const p = { st: blankPad(`${name} (Xbox wired USB, Vendor: ${hex(dev.vendorId)} Product: ${hex(dev.productId)})`, 100 + open.size), alive: true, seq: 1 };
+    const p = { st: blankPad(`${name} (Xbox wired USB, Vendor: ${hex(dev.vendorId)} Product: ${hex(dev.productId)})`, 100 + open.size), alive: true, seq: 0, inputs: 0 };
     open.set(dev, p);
-    const send = bytes => dev.transferOut(g.outEp, bytes).catch(() => {});
-    await send(powerOn(p.seq++));
+    note('opened', dev.manufacturerName, dev.productName, hex(dev.vendorId), hex(dev.productId), JSON.stringify(g));
+    const send = bytes => dev.transferOut(g.outEp, bytes).then(r => note('out', r.status, hx(bytes))).catch(e => note('out failed', hx(bytes), e.message));
+    p.wake = async () => { p.woken = true; for (const pk of initPackets(p)) await send(pk); };
+    setTimeout(() => { if (p.alive && !p.woken) p.wake(); }, 1000); // (no announce: wake it anyway)
     dispatchEvent(new Event('gamepadconnected'));
     (async () => { // the read loop: one packet per transfer, until the pad goes away
       while (p.alive) {
         let r;
-        try { r = await dev.transferIn(g.inEp, g.size); } catch { break; }
+        try { r = await dev.transferIn(g.inEp, g.size); } catch (e) { note('in failed', e.message); break; }
         if (r.status === 'stall') { await dev.clearHalt('in', g.inEp).catch(() => {}); continue; }
         if (!r.data) continue;
         const b = new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength);
+        if (b[0] !== 0x20 || p.inputs++ < 3) note('in', hx(b));
         const ack = ackFor(b); if (ack) send(ack);
-        if (b[0] === 0x02) send(powerOn(p.seq++)); // (the pad announced itself again: wake it again)
+        if (b[0] === 0x02) p.wake(); // (the pad announced itself: wake it)
         parseGip(b, p.st);
       }
       stop(dev);
     })();
     return true;
   } catch (e) {
-    console.warn('wired Xbox pad: could not open it', e);
+    console.warn('wired Xbox pad: could not open it', e); note('open failed', e.message);
     try { await dev.close(); } catch {}
     return false;
   }
+}
+// The wake-up, as the Linux xpad driver sends it: power on, then the One S init (harmless on other pads).
+function initPackets(p) {
+  const q = () => (p.seq++) & 0xff;
+  return [powerOn(q()), new Uint8Array([0x05, 0x20, q(), 0x0f, 0x06])];
 }
 function stop(dev) {
   const p = open.get(dev);
