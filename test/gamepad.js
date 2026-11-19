@@ -102,7 +102,11 @@ const fakePad = ({ down = [], vals = {}, axes = [0, 0, 0, 0], mapping = 'standar
   assert.deepEqual(lookFrom({ x: 0.5, y: -1 }, { sens: 2 }), { x: 1, y: 2 });
   assert.deepEqual(lookFrom({ x: 0.5, y: -1 }, { invertY: true }), { x: 0.5, y: -1 });
   assert.deepEqual(lookFrom({ x: 1, y: 0 }, { sens: 'x' }), { x: 1, y: -0 }, 'a bad sensitivity reads as 1');
-  ok('camera stick: sensitivity and invert-Y');
+  assert.deepEqual(lookFrom({ x: 0.5, y: -1 }, { sens: 2, padSens: 1.5 }), { x: 0.75, y: 1.5 }, 'padSens (K3) wins over sens');
+  assert.deepEqual(lookFrom({ x: 0.5, y: -1 }, { sens: 2, padSens: null }), { x: 1, y: 2 }, 'no padSens: sens as before');
+  assert.deepEqual(lookFrom({ x: 0.5, y: -1 }, { sens: 2, padSens: 0 }), { x: 1, y: 2 }, 'a bad padSens: sens');
+  assert.deepEqual(lookFrom({ x: 0, y: -1 }, { padSens: 2, invertY: true }), { x: 0, y: -2 }, 'invert-Y with padSens');
+  ok('camera stick: sensitivity (padSens, else sens) and invert-Y');
 }
 
 // ---- glyphs ----

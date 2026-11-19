@@ -117,7 +117,7 @@ export function initMvp({ state, guide }) {
   }
   function show(card, secs) {
     close();
-    el = document.createElement('div'); el.id = 'mvp';
+    el = document.createElement('div'); el.id = 'mvp'; el.dataset.nav = 'mvp'; // (controller: A on ✕ or B closes it)
     if (card.result !== 'kill') el.classList.add('mv-wipe');
     el.innerHTML = cardHtml(card, state.myId);
     document.body.appendChild(el);

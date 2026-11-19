@@ -13,7 +13,7 @@
   <div id="labels"><div id="merchant-lbl" class="lbl npc" style="display:none"></div><div id="hall-lbl" class="lbl npc hall" style="display:none"></div></div>
 
   <!-- Login -->
-  <div id="login">
+  <div id="login" data-nav="login">
     <div class="login-card">
       <div class="logo">FLOORBOUND</div>
       <div class="tagline">100 floors. One way out. Clear them together.</div>
@@ -34,7 +34,7 @@
         <label class="field">Name<input id="name" maxlength="16" placeholder="Your name" autocomplete="off" /></label>
         <div id="classes"></div>
         <button id="enter" class="primary">Enter the Tower</button>
-        <button id="create-back" class="ghost hidden">Back</button>
+        <button id="create-back" class="ghost hidden" data-nav="back">Back</button>
       </div>
       <div id="login-msg"></div>
       <div class="hint">WASD move · mouse to look (click to capture, Esc to free) · click attack · 1 2 3 skills · K skill tree · Shift dodge · Space jump · R guard (Guardian) · 4 potion · B bag · F interact · P party · V bot orders</div>
@@ -66,14 +66,14 @@
     <button id="chat-btn" class="chip">Chat</button>
     <button id="sound-btn" class="chip">Sound on</button>
     <button id="settings-btn" class="chip">Settings</button>
-    <div id="settings" class="panel hidden"></div>
+    <div id="settings" class="panel hidden" data-nav="settings"></div>
     <div id="crosshair"></div>
     <div id="selmsg"></div>
     <button id="lock-btn" class="chip">Lock on</button>
     <button id="bag-btn" class="chip">Bag <span id="gold-chip"></span></button>
     <button id="skills-btn" class="chip">Skills</button>
     <div id="players" class="panel hidden"></div>
-    <div id="bag" class="panel hidden"></div>
+    <div id="bag" class="panel hidden" data-nav="bag"></div>
     <div id="hall" class="panel hidden"></div>
     <div id="gatebox" class="panel hidden"></div>
     <div id="guide" class="panel hidden"></div>
@@ -88,7 +88,7 @@
 
     <div id="skills"></div>
     <div id="stick"><div id="knob"></div></div>
-    <div id="dead" class="hidden"><div>You were defeated</div><small>Returning to town…</small></div>
+    <div id="dead" class="hidden" data-nav="dead"><div>You were defeated</div><small>Returning to town…</small></div>
   </div>
 
   <script type="module" src="/main.js"></script>

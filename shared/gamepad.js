@@ -4,7 +4,7 @@
 //   readSticks(gp)          { LS, RS }: { x, y } after the deadzone (Gamepad convention: x right, y down)
 //   padEdges(prev, now)     [{ name, down }]: what went down or up since the last frame
 //   pressAction(...)        the action a button press triggers (LB is the modifier and never triggers on its own)
-//   lookFrom(stick, access) the camera stick with sensitivity and invert-Y (y up)
+//   lookFrom(stick, access) the camera stick with sensitivity (padSens, else sens) and invert-Y (y up)
 //   glyphFamily(id)         'sony' | 'nintendo' | 'xbox', from the pad's id string; padLabel(binding, family)
 // A pad whose mapping isn't 'standard' is read the same way, by raw index (index i -> PAD_BUTTONS[i]), so it can be
 // rebound button by button; input.js flags it as not recognised.
@@ -58,8 +58,10 @@ export function pressAction(bindings, held, name, ctx = new Set()) {
 }
 
 // The camera stick: x right, y up (stick pushed up = look up, like moving the mouse up), unless invert-Y.
+// Sensitivity: access.padSens (the controller's own, K3) when set, else the shared access.sens.
+const posNum = v => v != null && v !== '' && Number.isFinite(+v) && +v > 0;
 export function lookFrom(s, access = {}) {
-  const sens = Number.isFinite(+access.sens) && +access.sens > 0 ? +access.sens : 1;
+  const sens = posNum(access.padSens) ? +access.padSens : posNum(access.sens) ? +access.sens : 1;
   return { x: s.x * sens, y: -s.y * sens * (access.invertY ? -1 : 1) };
 }
 

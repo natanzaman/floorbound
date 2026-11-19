@@ -48,6 +48,7 @@ import { initGameMenu } from '/gamemenu.js'; // the Game Menu (Esc / ☰)
 import { createInput } from '/input.js'; // keys, mouse buttons (and pads, K1b) -> actions, by the bindings in shared/controls.js
 import { createPanels } from '/panels.js'; // the panels that free the cursor / close on Esc
 import { cue } from '/palette.js'; // sound cue for telegraphs
+import { createFocusNav } from '/focusnav.js'; // controller menu navigation (d-pad / stick, A, B)
 import { loadSettings, saveSettings as storeSettings, initSettingsPanel, applyAccess } from '/settings.js'; // fb_settings + fb_controls, the Settings panel
 
 const sfx = new Sound();
@@ -242,7 +243,7 @@ function renderChars() {
     : `<span class="who">Guest account: saved in this browser</span>${acct.cfg.discord ? '<button id="link-discord" class="link">Link Discord</button>' : ''}<button id="signout">Sign out</button>`;
   $('char-list').innerHTML = characters.map(c => {
     const k = CLASSES[c.cls], hex = '#' + k.color.toString(16).padStart(6, '0');
-    return `<div class="char"><span class="dot" style="background:${hex}"></span><div class="info"><b>${esc(c.name)}</b><small>Lv ${c.lvl} ${k.name} · ${k.role}</small></div><button class="play" data-id="${c.id}">Play</button><button class="del" data-id="${c.id}" title="Delete">✕</button></div>`;
+    return `<div class="char"><span class="dot" style="background:${hex}"></span><div class="info"><b>${esc(c.name)}</b><small>Lv ${c.lvl} ${k.name} · ${k.role}</small></div><button class="play" data-id="${c.id}" data-nav="play-${c.id}">Play</button><button class="del" data-id="${c.id}" data-nav="del-${c.id}" title="Delete">✕</button></div>`;
   }).join('');
   $('new-char').classList.toggle('hidden', characters.length >= (acct.cfg.maxCharacters || 8));
   for (const b of $('char-list').querySelectorAll('.play')) b.onclick = () => {
@@ -930,7 +931,7 @@ onPress('perfOverlay', () => { perf.toggle(); settingsUi.refresh(); }); // the d
 onPress('menu', e => { // Esc / Start: close what's open, else clear the target, else the Game Menu
   if (gmenu.isOpen()) { if (!gmenu.justOpened()) gmenu.close(); return; }
   if (e.source === 'pad') escBusy = cursorPanelOpen() || wheel.isOpen() || talents.isOpen() || !!document.getElementById('mvp'); // (Start: no keydown to look at)
-  if (escBusy) { panels.close(); if (wheel.isOpen()) wheel.close(); return; }
+  if (escBusy) { panels.close(); if (wheel.isOpen()) wheel.close(); if (e.source === 'pad') { if (talents.isOpen()) talents.toggle(false); mvp.close(); } return; } // (the keyboard's Esc: they close themselves)
   if (state.lock || state.focus) { state.lock = 0; state.focus = 0; return; }
   menuOpen();
 });
@@ -1006,6 +1007,14 @@ addEventListener('resize', layoutChips);
 setTimeout(layoutChips, 0); setTimeout(layoutChips, 1500);
 
 const settingsUi = initSettingsPanel({ el: $('settings'), settings, save: saveSettings, Q, PRESETS, perf, applyQuality, freeCursor, bubbles, sfx }); // public/settings.js
+// Controller menu navigation over the window on top (public/focusnav.js): the MVP card, else the top panel, else
+// character select, else the death card; only windows marked data-nav. B: back (Settings opened from the Game Menu
+// goes back to it); the Game Menu's Controls page backs out to the menu first.
+const nav = createFocusNav({ input, panels, order: ['mvp', '*', 'login', 'dead'], hooks: {
+  gamemenu: { back: () => { const b = $('gamemenu').querySelector('[data-a=back]'); if (b) b.click(); else gmenu.close(); }, open: () => menuOpen() },
+  talentsp: { back: () => talents.toggle(false) },
+  mvp: { back: () => mvp.close() },
+} });
 $('menu-btn').onclick = () => menuOpen(); // phones: the Game Menu
 $('settings-btn').onclick = () => settingsUi.toggle();
 
@@ -2028,7 +2037,7 @@ function frame(now) {
   frameNo++; entStats.interp = entStats.extrap = entStats.hold = 0;
   frustum.setFromProjectionMatrix(frM4.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); // (last frame's camera)
   corr.step(dt * 1000);
-  input.tick(); input.setContext('downedAlly', !!state.joined && (revive.usesE() || rescue.usesE())); // (pads polled here; E / D-pad down revives / cuts free instead of turning)
+  input.tick(); nav.tick(now); input.setContext('downedAlly', !!state.joined && (revive.usesE() || rescue.usesE())); // (pads polled here; E / D-pad down revives / cuts free instead of turning)
   if (input.device === 'pad' && state.joined && !state.spectator && !gmenu.isOpen()) { // the right stick: camera, or picks on the bot wheel
     if (wheel.isOpen()) { const s = input.stick(input.bindings('pad').look?.[0]); wheel.point(s.x, s.y); }
     else { const lk = input.axis('look'); state.yaw -= lk.x * dt * 2.6; state.pitch = Math.min(1.25, Math.max(0.12, state.pitch - lk.y * dt * 1.5)); }
@@ -2070,7 +2079,7 @@ function frame(now) {
   if (state.joined && !state.dead && !state.spectator && !arenas.frozen()) { // (frozen: falling / landing in a boss arena)
     // movement input
     let ix = 0, iz = 0;
-    const typing = document.activeElement === $('chat-input') || gmenu.isOpen(); // (the Game Menu blocks movement too)
+    const typing = document.activeElement === $('chat-input') || gmenu.isOpen() || nav.active(); // (the Game Menu blocks movement too; so does a window the left stick is navigating)
     if (!typing) {
       const mv = input.axis('move'); ix += mv.x; iz += mv.y;
       if (input.held('turnLeft')) state.yaw += dt * 2;
@@ -2205,4 +2214,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { settings, combat, wheel, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };
+window.__fb = { settings, combat, wheel, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };
