@@ -5,7 +5,7 @@
 //     builds weapons; the tails, the hood's tail and the lantern sway and lag behind when the character moves
 //   - a signature weapon in the hand slot (the weapon style underneath still plays its attacks)
 //   - an aura: a faint ground glow, motes rising from the lantern, a short trail while moving
-//   - plate(): the nameplate treatment; swatch(): a round badge for UI lists
+//   - plate(): the nameplate treatment; lookSwatch(lookId) / swatch(entityId): a round badge for UI lists
 // Entities without a KayKit rig (block models, most mobs) get the aura and the nameplate only.
 // main.js calls snap() per snapshot and frame() per entity per frame.
 import * as THREE from 'three';
@@ -19,12 +19,13 @@ const CSS = `
 const HIDDEN = 31; // a render layer no camera draws: hides rig parts without touching .visible (which styles and skills toggle)
 
 // ---------- emblems: flat polygons in a -1..1 box (y up), used on capes (3D) and swatches (SVG) ----------
-const mirror = pts => pts.map(([x, y]) => [-x, y]).reverse();
-const mothWing = [[0.1, 0.28], [0.86, 0.72], [0.98, 0.12], [0.48, -0.1], [0.1, 0]], mothTail = [[0.1, -0.06], [0.52, -0.16], [0.62, -0.66], [0.26, -0.72], [0.1, -0.36]];
-const sunRay = a => { const c = Math.cos(a), s = Math.sin(a), w = 0.11; return [[c * 0.62 - s * w, s * 0.62 + c * w - 0.3], [c * 0.98, s * 0.98 - 0.3], [c * 0.62 + s * w, s * 0.62 - c * w - 0.3]]; };
+const stone = (cx, cy, w, h) => [[cx - w, cy], [cx - w * 0.7, cy + h], [cx + w * 0.7, cy + h], [cx + w, cy], [cx + w * 0.7, cy - h], [cx - w * 0.7, cy - h]];
 export const EMBLEMS = {
-  moth: [[[0, 0.6], [0.09, 0], [0, -0.62], [-0.09, 0]], mothWing, mirror(mothWing), mothTail, mirror(mothTail)],
-  sun: [Array.from({ length: 9 }, (_, i) => [Math.cos((i / 8) * Math.PI) * 0.5, Math.sin((i / 8) * Math.PI) * 0.5 - 0.3]), ...[0.3, 0.94, 1.57, 2.2, 2.84].map(sunRay), [[-0.95, -0.42], [0.95, -0.42], [0.95, -0.56], [-0.95, -0.56]]],
+  cairn: [stone(0, -0.56, 0.86, 0.24), stone(0.07, -0.02, 0.6, 0.22), stone(-0.05, 0.48, 0.36, 0.2)], // three stacked stones
+  hearth: [ // a flame over a hearthstone
+    [[0.02, 0.92], [0.3, 0.5], [0.52, 0.1], [0.46, -0.28], [0.2, -0.5], [-0.2, -0.5], [-0.46, -0.28], [-0.5, 0.06], [-0.28, 0.34], [-0.16, 0.06], [0, 0.36], [-0.1, 0.62]],
+    [[-0.78, -0.64], [0.78, -0.64], [0.78, -0.86], [-0.78, -0.86]],
+  ],
 };
 const hex = n => `#${(n >>> 0).toString(16).padStart(6, '0')}`;
 
@@ -191,16 +192,12 @@ function addMantle(rig, m, chest) { // a half-cape over one shoulder
   const shell = mesh(geo, body, 0, -len / 2, 0); if (side < 0) shell.scale.x = -1;
   g.add(shell);
   if (m.trim !== undefined) g.add(mesh(new THREE.OctahedronGeometry(0.075), metal(m.trim), 0.14 * side, -0.02, 0.2)); // the clasp
-  if (m.spots !== undefined) { // two eye-spots, like a moth's wing
-    const sm = lit(m.spots), ring = lit(m.color);
-    for (const th of [1.25, 2.2]) {
-      const f = 0.62, r = (0.2 + (r1 - 0.2) * f) + 0.012, slope = Math.atan2(r1 - 0.2, len);
-      const s = new THREE.Group(); s.position.set(Math.sin(th) * r * side, -len * f, Math.cos(th) * r); s.rotation.set(0, th * side, 0, 'YXZ'); s.rotateX(-slope);
-      s.add(mesh(new THREE.CircleGeometry(0.085, 10), sm, 0, 0, 0, false));
-      s.add(mesh(new THREE.CircleGeometry(0.04, 8), ring, 0, 0, 0.004, false));
-      for (const o of s.children) o.material.side = THREE.DoubleSide;
-      g.add(s);
-    }
+  const mg = m.mark && emblemGeo(m.mark);
+  if (mg) { // his mark on the cloth, unlit so it reads as faintly glowing
+    const th = 2.25, f = 0.56, r = (0.2 + (r1 - 0.2) * f) + 0.014, slope = Math.atan2(r1 - 0.2, len);
+    const s = new THREE.Group(); s.position.set(Math.sin(th) * r * side, -len * f, Math.cos(th) * r); s.rotation.set(0, th * side, 0, 'YXZ'); s.rotateX(-slope);
+    const mk = mesh(mg, lit(m.markColor ?? 0xffffff), 0, 0, 0, false); mk.material.side = THREE.DoubleSide; mk.scale.setScalar(0.2);
+    s.add(mk); g.add(s);
   }
   const piv = new THREE.Group(); piv.add(g);
   rig.tick.push((t, mv) => { piv.rotation.x = Math.sin(t * 1.9) * 0.02 + mv * 0.06; });
@@ -229,7 +226,7 @@ const WEAPONS = {
   // A hooked glaive: a long dark haft, a crook at the top with a crescent blade along its back, and a caged lantern
   // hanging from the tip of the hook.
   lanternglaive(rig, w) {
-    const g = new THREE.Group(), haft = metal(w.haft, { metalness: 0.2, roughness: 0.7 }), steel = metal(w.steel, { side: THREE.DoubleSide, metalness: 0.15, roughness: 0.5 }), iron = metal(w.cage), top = 2.25, R = 0.4;
+    const g = new THREE.Group(), haft = metal(w.haft, { metalness: 0.2, roughness: 0.7 }), steel = metal(w.steel, { side: THREE.DoubleSide, metalness: 0.15, roughness: 0.5, emissive: w.steel, emissiveIntensity: 0.22 }), iron = metal(w.cage), top = 2.25, R = 0.4;
     g.add(mesh(new THREE.CylinderGeometry(0.045, 0.055, 3.25, 6), haft, 0, top - 1.625, 0));
     const butt = mesh(new THREE.ConeGeometry(0.07, 0.2, 5), iron, 0, top - 3.33, 0); butt.rotation.x = Math.PI; g.add(butt);
     for (const y of [0.42, -0.3, 1.5]) g.add(mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.1, 6), steel, 0, y, 0)); // pale bindings
@@ -307,6 +304,15 @@ function addAura(rig, a, e) {
   });
 }
 
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// A round badge for UI lists, by look id (the Friends tab has it from shared/named.js: look.id). '' when there is none.
+export function lookSwatch(id, px = 16) {
+  const l = lookOf(id), s = l?.swatch;
+  if (!s) return '';
+  const d = (EMBLEMS[l.emblem] || []).map(p => `M${p.map(([x, y]) => `${(50 + x * 30).toFixed(1)} ${(50 - y * 30).toFixed(1)}`).join('L')}Z`).join('');
+  return `<svg class="lk-sw" width="${px}" height="${px}" viewBox="0 0 100 100" aria-label="${esc(l.name || l.id)}"><title>${esc(l.name || l.id)}</title><circle cx="50" cy="50" r="50" fill="${hex(s.bg)}"/><circle cx="50" cy="50" r="43" fill="none" stroke="${hex(s.accent ?? s.fg)}" stroke-width="7"/><path d="${d}" fill="${hex(s.fg)}"/></svg>`;
+}
+
 export function initLooks({ players, mobs }) {
   const css = document.createElement('style'); css.textContent = CSS; document.head.appendChild(css);
   const rigs = new Map(); // entity -> rig
@@ -372,21 +378,14 @@ export function initLooks({ players, mobs }) {
     for (const f of rig.tick) f(rig.t, rig.mv, dt);
   }
 
-  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  // The nameplate: nameHtml as it is without a look; with one, in the look's colour with its glyph, and its title beneath.
+  // The nameplate: nameHtml as it is without a look; with one, the look's swatch, its colour, and its title beneath.
   function plate(e, nameHtml) {
-    const pl = e.look && lookOf(e.look)?.plate;
+    const l = e.look && lookOf(e.look), pl = l?.plate;
     if (!pl) return nameHtml;
-    return `<span class="lk" style="color:${pl.color || '#fff'};text-shadow:0 0 7px ${pl.glow || '#000'},0 1px 2px #000">${pl.glyph ? `${esc(pl.glyph)} ` : ''}${nameHtml}</span>${pl.title ? `<span class="lk-t" style="color:${pl.color || '#fff'}">${esc(pl.title)}</span>` : ''}`;
+    return `<span class="lk" style="color:${pl.color || '#fff'};text-shadow:0 0 7px ${pl.glow || '#000'},0 1px 2px #000">${lookSwatch(l.id, 13)}${nameHtml}</span>${pl.title ? `<span class="lk-t" style="color:${pl.color || '#fff'}">${esc(pl.title)}</span>` : ''}`;
   }
-  // A round badge for UI lists: by look id (the Friends tab knows it from shared/named.js) or by entity id (who wears one now).
-  function swatch(look, px = 16) {
-    const l = lookOf(typeof look === 'number' ? worn.get(look) : look), s = l?.swatch;
-    if (!s) return '';
-    const polys = EMBLEMS[l.emblem] || [];
-    const d = polys.map(p => `M${p.map(([x, y]) => `${(50 + x * 30).toFixed(1)} ${(50 - y * 30).toFixed(1)}`).join('L')}Z`).join('');
-    return `<svg class="lk-sw" width="${px}" height="${px}" viewBox="0 0 100 100" aria-label="${esc(l.name || l.id)}"><title>${esc(l.name || l.id)}</title><circle cx="50" cy="50" r="50" fill="${hex(s.bg)}"/><circle cx="50" cy="50" r="43" fill="none" stroke="${hex(s.accent ?? s.fg)}" stroke-width="7"/><path d="${d}" fill="${hex(s.fg)}"/></svg>`;
-  }
+  // The badge of whoever wears a look now (by entity id), for UI lists; '' for everyone else.
+  const swatch = (id, px) => lookSwatch(worn.get(id), px);
 
   return { snap, frame, plate, swatch, of: id => worn.get(id) || null, clear };
 }

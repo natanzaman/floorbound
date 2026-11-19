@@ -8,13 +8,14 @@ import WebSocket from 'ws';
 import { Game } from '../server/game.js';
 import { BotManager } from '../server/botmanager.js'; // (its admin actions: server/botedit.js)
 import { LOOKS, LOOK_IDS, isLook, lookOf, validateLooks } from '../shared/looks.js';
+import { NAMED } from '../shared/named.js';
 
 let n = 0;
 const ok = name => console.log(`  ok ${++n} - ${name}`);
 
 { // the table
   assert.deepEqual(validateLooks(), []);
-  for (const id of ['loner', 'heroes', 'hero_tank', 'hero_healer', 'hero_blade', 'hero_shot']) assert.ok(isLook(id), id);
+  for (const id of ['cairn', 'hearthward', 'halvard', 'maribel', 'tovin', 'sennet']) assert.ok(isLook(id), id);
   assert.equal(isLook('toString'), false); assert.equal(isLook(3), false); assert.equal(lookOf('nope'), null);
   assert.ok(validateLooks({ Bad: {} }).length, 'bad id');
   assert.ok(validateLooks({ aa: { base: 'zz' } }).length, 'unknown base');
@@ -25,12 +26,12 @@ const ok = name => console.log(`  ok ${++n} - ${name}`);
   ok('the look table validates; bad tables are caught');
 }
 { // the loner: every part of a recognisable look, in colours nobody else has
-  const l = lookOf('loner');
+  const l = lookOf('cairn');
   for (const k of ['tint', 'hair', 'cloak', 'weapon', 'aura', 'plate', 'swatch']) assert.ok(l[k] && typeof l[k] === 'object', `loner.${k}`);
   assert.equal(l.cloak.kind, 'coat'); assert.ok(l.cloak.mantle); assert.ok(l.hair.tail);
   assert.ok(l.weapon.model); assert.ok(l.aura.motes && l.aura.trail && l.aura.ground);
-  assert.ok(l.plate.title && l.plate.glyph && l.plate.color);
-  const others = LOOK_IDS.filter(id => id !== 'loner').map(lookOf);
+  assert.ok(l.plate.title && l.plate.color && l.emblem && l.cloak.mantle.mark);
+  const others = LOOK_IDS.filter(id => id !== 'cairn').map(lookOf);
   const colours = o => JSON.stringify(o).match(/\d{5,8}/g) || [];
   for (const o of others) {
     assert.notEqual(o.plate?.color, l.plate.color, `${o.id}: plate colour`);
@@ -41,17 +42,27 @@ const ok = name => console.log(`  ok ${++n} - ${name}`);
   ok('the loner has every part, and his colours and weapon are his alone');
 }
 { // the Heroes: one base (party colour, emblem, plate), a trim each; data only
-  const base = lookOf('heroes'), heroes = ['hero_tank', 'hero_healer', 'hero_blade', 'hero_shot'].map(lookOf);
-  assert.equal(base.cloak.kind, 'cape'); assert.equal(base.emblem, 'sun');
+  const base = lookOf('hearthward'), heroes = ['halvard', 'maribel', 'tovin', 'sennet'].map(lookOf);
+  assert.equal(base.cloak.kind, 'cape'); assert.equal(base.emblem, 'hearth');
   for (const h of heroes) {
     assert.equal(h.base, undefined, 'the base is folded in');
-    assert.equal(h.cloak.color, base.cloak.color); assert.equal(h.cloak.emblem, 'sun'); assert.equal(h.plate.glyph, base.plate.glyph);
+    assert.equal(h.cloak.color, base.cloak.color); assert.equal(h.cloak.emblem, 'hearth'); assert.deepEqual(h.plate, base.plate);
     assert.equal(h.cloak.trim, LOOKS[h.id].cloak.trim, 'own trim wins');
     assert.equal(h.weapon, undefined, 'their weapons stay');
   }
   assert.equal(new Set(heroes.map(h => h.cloak.trim)).size, 4, 'a trim colour each');
-  assert.equal(LOOKS.heroes.cloak.trim, lookOf('heroes').cloak.trim, 'folding never changes the table');
+  assert.equal(LOOKS.hearthward.cloak.trim, lookOf('hearthward').cloak.trim, 'folding never changes the table');
   ok('the four Heroes share the party cape, emblem and plate, with a trim each');
+}
+
+{ // the Named (shared/named.js) each name a look that exists; the loner's is his own, the Heroes share a base
+  for (const d of NAMED) {
+    assert.ok(isLook(d.look?.id), `${d.id}: look.id`);
+    assert.ok(Number.isInteger(d.look.color), `${d.id}: look.color (the plain portrait colour)`);
+    assert.equal(LOOKS[d.look.id].base, d.group === 'heroes' ? 'hearthward' : undefined, `${d.id}: base`);
+  }
+  assert.equal(new Set(NAMED.map(d => d.look.id)).size, NAMED.length, 'one look each');
+  ok('every Named in shared/named.js has a look of its own');
 }
 
 const g = new Game();
@@ -65,38 +76,38 @@ const snap = () => JSON.parse(g.snapshot());
 }
 { // set, list, refuse unknown, clear
   const row = snap().players[0].length;
-  assert.equal(g.setLook(a, 'loner'), true);
-  assert.equal(g.setLook(a, 'loner'), false, 'same look again: no change');
-  assert.equal(g.setLook(a, 'tuxedo'), false); assert.equal(g.setLook(a, 'constructor'), false); assert.equal(a.look, 'loner');
-  assert.equal(g.setLook(null, 'loner'), false);
+  assert.equal(g.setLook(a, 'cairn'), true);
+  assert.equal(g.setLook(a, 'cairn'), false, 'same look again: no change');
+  assert.equal(g.setLook(a, 'tuxedo'), false); assert.equal(g.setLook(a, 'constructor'), false); assert.equal(a.look, 'cairn');
+  assert.equal(g.setLook(null, 'cairn'), false);
   const w1 = snap(), w2 = snap();
-  assert.deepEqual(w1.looks, [[a.id, 'loner']]);
-  assert.deepEqual(w2.looks, [[a.id, 'loner']], 'in every snapshot (late joiners)');
+  assert.deepEqual(w1.looks, [[a.id, 'cairn']]);
+  assert.deepEqual(w2.looks, [[a.id, 'cairn']], 'in every snapshot (late joiners)');
   assert.equal(w2.players[0].length, row, 'player row layout unchanged');
-  g.setLook(b, 'hero_tank');
-  assert.deepEqual(snap().looks, [[a.id, 'loner'], [b.id, 'hero_tank']]);
+  g.setLook(b, 'halvard');
+  assert.deepEqual(snap().looks, [[a.id, 'cairn'], [b.id, 'halvard']]);
   assert.equal(g.setLook(b, null), true); assert.equal(g.setLook(a, 'none'), true);
   assert.equal(snap().looks, undefined);
   ok('setLook stores a known look, snapshots list it as [id, look], null clears it');
 }
 { // any entity with an id: a mob
   const m = [...g.mobs.values()].find(m => m.type === 'boar');
-  assert.equal(g.setLook(m, 'loner'), true);
-  g.setLook(a, 'hero_blade');
-  assert.deepEqual(snap().looks, [[a.id, 'hero_blade'], [m.id, 'loner']]);
+  assert.equal(g.setLook(m, 'cairn'), true);
+  g.setLook(a, 'tovin');
+  assert.deepEqual(snap().looks, [[a.id, 'tovin'], [m.id, 'cairn']]);
   m.dead = true;
-  assert.deepEqual(snap().looks, [[a.id, 'hero_blade']], 'a dead mob is not listed');
+  assert.deepEqual(snap().looks, [[a.id, 'tovin']], 'a dead mob is not listed');
   m.dead = false; g.setLook(m, null); g.setLook(a, null);
   ok('a look works on any entity with an id (a mob), not only players');
 }
 { // the testing aid is off unless TEST_HOOKS is set
   const was = process.env.TEST_HOOKS;
   delete process.env.TEST_HOOKS;
-  g.handle(a, { type: 'test', look: 'loner' });
+  g.handle(a, { type: 'test', look: 'cairn' });
   assert.equal(a.look ?? null, null, 'ignored without TEST_HOOKS');
   process.env.TEST_HOOKS = '1';
-  g.handle(a, { type: 'test', look: 'loner' });
-  assert.equal(a.look, 'loner');
+  g.handle(a, { type: 'test', look: 'cairn' });
+  assert.equal(a.look, 'cairn');
   g.handle(a, { type: 'test', hurt: 0.5 }); // the other test hooks still work
   assert.equal(a.hp, Math.round(a.maxHp * 0.5));
   g.handle(a, { type: 'test', look: null });
@@ -106,10 +117,10 @@ const snap = () => JSON.parse(g.snapshot());
 }
 { // the admin action on a bot (server/botedit.js action 'look')
   const e = { bid: 1 }, mgr = { game: g, entry: () => e, live: () => b, view: x => ({ look: x.look || '' }), action: BotManager.prototype.action };
-  assert.deepEqual(mgr.action(1, 'look', { look: 'hero_healer' }), { look: 'hero_healer' });
-  assert.equal(b.look, 'hero_healer'); assert.equal(e.look, 'hero_healer');
+  assert.deepEqual(mgr.action(1, 'look', { look: 'maribel' }), { look: 'maribel' });
+  assert.equal(b.look, 'maribel'); assert.equal(e.look, 'maribel');
   assert.throws(() => mgr.action(1, 'look', { look: 'tuxedo' }), /Unknown look/);
-  assert.equal(b.look, 'hero_healer', 'a bad look changes nothing');
+  assert.equal(b.look, 'maribel', 'a bad look changes nothing');
   assert.deepEqual(mgr.action(1, 'look', {}), { look: '' });
   assert.equal(b.look, null);
   ok('admin bot action look: wears a look, refuses unknown ones, clears with none');
@@ -139,11 +150,11 @@ try {
   });
   ok('a live server sends no w.looks while nobody wears a look');
   const { ws: pws, st } = await conn({ type: 'join', name: 'Vesper', cls: 'swordsman' }, (m, s, ws) => {
-    if (m.type === 'welcome') { s.id = m.id; ws.send(JSON.stringify({ type: 'test', look: 'loner' })); }
-    return m.type === 'snap' && m.w.looks?.some(([id, k]) => id === s.id && k === 'loner');
+    if (m.type === 'welcome') { s.id = m.id; ws.send(JSON.stringify({ type: 'test', look: 'cairn' })); }
+    return m.type === 'snap' && m.w.looks?.some(([id, k]) => id === s.id && k === 'cairn');
   });
   ok('a live look shows up in the wearer\'s own snapshots');
-  const { ws: sws } = await conn({ type: 'spectate' }, m => m.type === 'snap' && m.w.looks?.length === 1 && m.w.looks[0][0] === st.id && m.w.looks[0][1] === 'loner');
+  const { ws: sws } = await conn({ type: 'spectate' }, m => m.type === 'snap' && m.w.looks?.length === 1 && m.w.looks[0][0] === st.id && m.w.looks[0][1] === 'cairn');
   ok('a spectator joining later sees it');
   pws.close(); sws.close(); plain.ws.close();
 } finally { proc.kill(); }

@@ -138,9 +138,9 @@ try {
 
   // ---------- wear a look (shared/looks.js) ----------
   ok(!w.looks.size, 'nobody wears a look until asked');
-  r = await call('POST', `/api/admin/bots/${a.bid}/look`, adminTok, { look: 'loner' });
-  ok(r.status === 200 && r.body.bot.look === 'loner', 'look: the bot wears the loner look');
-  await until(() => w.looks.get(aid) === 'loner', 3000, 'look in snapshots');
+  r = await call('POST', `/api/admin/bots/${a.bid}/look`, adminTok, { look: 'cairn' });
+  ok(r.status === 200 && r.body.bot.look === 'cairn', 'look: the bot wears Cairn's look');
+  await until(() => w.looks.get(aid) === 'cairn', 3000, 'look in snapshots');
   ok(w.looks.size === 1, 'snapshots list it (w.looks), for that bot only');
   ok((await call('POST', `/api/admin/bots/${a.bid}/look`, adminTok, { look: 'tuxedo' })).status === 400, 'an unknown look: 400');
 
@@ -150,7 +150,7 @@ try {
   const nb = r.body.bot.bid;
   await until(() => w.roster.some(p => p.name === `Ren${tag}` && p.cls === 'guardian') && !w.roster.some(p => p.id === aid), 5000, 'respawned in roster');
   ok(true, 'the roster has the Guardian and not the old Swordsman');
-  await until(() => { const np = w.roster.find(p => p.name === `Ren${tag}`); return np && w.looks.get(np.id) === 'loner'; }, 4000, 'look after respawn');
+  await until(() => { const np = w.roster.find(p => p.name === `Ren${tag}`); return np && w.looks.get(np.id) === 'cairn'; }, 4000, 'look after respawn');
   ok(true, 'its look survives Respawn as…');
   r = await call('POST', `/api/admin/bots/${nb}/look`, adminTok, { look: '' });
   await until(() => !w.looks.size, 3000, 'look cleared');
