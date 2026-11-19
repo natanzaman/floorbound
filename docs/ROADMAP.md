@@ -331,7 +331,7 @@ Same rules as F/G/H (flock lock, push with `--force-with-lease`).
 |---|---|---|---|---|
 | I1 Named characters + friendship (code) | `feat/named` | done | agent named | 0058550, 8e70c2d, 3a0d087 |
 | I2 The loner's look | `feat/lonerlook` | done: looks in `shared/looks.js` (Cairn + the Hearthward), `game.setLook`, snapshot `looks`, admin Look picker; I1 calls `setLook(p, def.look.id)` | agent lonerlook | f6686dc |
-| I3 Personalities, talk, memory, nudges (AI) | `feat/namedai` | todo (after I1) | | |
+| I3 Personalities, talk, memory, nudges (AI) | `feat/namedai` | in progress | agent namedai | |
 | I4 Requests and invitations | `feat/namedquests` | todo (after I1; AI phrasing optional) | | |
 
 - **I1 review fixes merged (274b300):** friendship load can't overwrite stored rows, one Named per party re-checked on accept and calls, Named-only clears are quiet on all floors, Friends tab only with `NAMED_ENABLED` on, bot names reserved, boss help counts healing done to others, shutdown awaits the Named's writes, plus the nice-to-haves.
