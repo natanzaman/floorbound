@@ -139,7 +139,7 @@ try {
   // ---------- wear a look (shared/looks.js) ----------
   ok(!w.looks.size, 'nobody wears a look until asked');
   r = await call('POST', `/api/admin/bots/${a.bid}/look`, adminTok, { look: 'cairn' });
-  ok(r.status === 200 && r.body.bot.look === 'cairn', 'look: the bot wears Cairn's look');
+  ok(r.status === 200 && r.body.bot.look === 'cairn', "look: the bot wears Cairn's look");
   await until(() => w.looks.get(aid) === 'cairn', 3000, 'look in snapshots');
   ok(w.looks.size === 1, 'snapshots list it (w.looks), for that bot only');
   ok((await call('POST', `/api/admin/bots/${a.bid}/look`, adminTok, { look: 'tuxedo' })).status === 400, 'an unknown look: 400');
