@@ -229,7 +229,7 @@ export class NamedManager {
   inviteBlock(h, st) {
     const def = st.def, p = this.playerOf(st), g = this.game;
     if (!p && !this.resting(st)) return `${def.name} isn't around right now.`;
-    if (h.party && p.party === h.party) return `${def.name} is already in your party.`;
+    if (p && h.party && p.party === h.party) return `${def.name} is already in your party.`;
     const rec = this.peek(h, def.id) || newFriendship();
     if (!canInvite(def, rec.pts)) return `${def.name} only joins ${art(TIERS[tierAt(def.trust.invite)].name)} (you: ${TIERS[tierIndex(rec.pts)].name}).`;
     return (p && this.freeBlock(h, st, p)) || (this.namedInParty(g.partyOf(h)).length ? 'One of the Named per party.' : (g.partyOf(h)?.members.length || 1) >= PARTY_MAX ? 'Your party is full.' : '');
