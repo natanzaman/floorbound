@@ -59,6 +59,7 @@ g.time = 10; clear();
   ok('slam / charge / quake / rockfall start at once; unknown moves return false');
 
   const S = g.sovereign, v = g.addPlayer(null, 'Juno', 'ranger');
+  g.setTwist2(null); // no Sovereign twist (Riptide would send two waves)
   v.x = F2.arena.x; v.z = F2.arena.z - 6; S.threat.set(v.id, 1); S.engaged = true;
   assert.equal(g.forceBossMove(S, 'tidal_wave', v.id), true); assert.equal(ev('f2wave').length, 1);
   assert.equal(g.forceBossMove(S, 'geyser', v.id), true); assert.equal(ev('tele').filter(e => e.k === 'geyser').length, 1);

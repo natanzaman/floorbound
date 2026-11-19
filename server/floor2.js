@@ -392,11 +392,11 @@ export const F2Methods = {
   },
 
   // The Deluge: the Sovereign calls it (a wind-up pose and a flood line filling in from the wall to the safe ring),
-  // then the outer court floods for the rest of the fight (delugeT holds the flood until the call lands).
+  // then the outer court floods for the rest of the fight (delugeAt: when the call lands; delugeT: the next damage tick).
   callDeluge(m) {
     const D = (this.sovS || SOVEREIGN).deluge, t = this.time;
     m.busyUntil = Math.max(m.busyUntil, t + D.wind); m.windupAt = 0;
-    this.deluge = true; this.delugeT = t + D.wind;
+    this.deluge = true; this.delugeAt = this.delugeT = t + D.wind;
     this.events.push({ t: 'f2fx', k: 'dcall', id: m.id, x: F2.arena.x, z: F2.arena.z, r: D.r, r2: F2.arena.r, d: D.wind });
   },
 
@@ -617,7 +617,7 @@ export const F2Methods = {
       ph: this.sovereign?.phase || 0,
       orbs: this.orbs.map(o => [o.id, r1(o.x), r1(o.z)]),
       pools: this.pools.map(p => [p.id, r1(p.x), r1(p.z), p.r, t >= p.armAt ? 1 : 0]),
-      bur, del: this.deluge && t >= (this.delugeT || 0) ? 1 : 0, dcall: this.deluge && t < (this.delugeT || 0) ? 1 : 0, // the flood; the Deluge being called
+      bur, del: this.deluge && t >= (this.delugeAt || 0) ? 1 : 0, dcall: this.deluge && t < (this.delugeAt || 0) ? 1 : 0, // the flood; the Deluge being called
       tw: this.twist2?.id || null, // the Sovereign's twist (server/sovtwists.js)
       stair: this.portal ? [this.portal.x, this.portal.z, r1(this.portal.until - t)] : 0,
     };

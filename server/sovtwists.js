@@ -4,7 +4,8 @@
 // current twist. Coral Hide's armour shares the Warden's Ironhide hooks (server/twists.js twistTaken / twistAfterHit).
 // The table lives in shared/floor2.js (SOV_TWISTS). SOVEREIGN_TWIST=<id> forces one (tests).
 import { SOVEREIGN, SOV_TWISTS, SOV_TWIST_IDS } from '../shared/floor2.js';
-import { DROPS, SLOTS, makeItem, rollRarity } from '../shared/items.js';
+import { DROPS, SLOTS, rollRarity } from '../shared/items.js';
+import { rollGear } from '../shared/loot.js';
 import { rewardText } from '../shared/twists.js';
 
 const r2 = v => Math.round(v * 100) / 100;
@@ -67,9 +68,9 @@ export const SovTwistMethods = {
       const p = this.players.get(pid);
       if (!p) continue;
       const items = [];
-      for (let i = 0; i < (R.loot || 0); i++) { // TODO(H2): roll from the Sovereign's set table once shared/loot.js lands
+      for (let i = 0; i < (R.loot || 0); i++) { // like the Warden's twist rolls (server/twists.js); its set pieces come from LOOT['boss:sovereign']
         const slot = SLOTS[Math.floor(Math.random() * SLOTS.length)];
-        const it = makeItem(slot, rollRarity(D.table), p.cls, Math.random, undefined, 'roll');
+        const it = rollGear(slot, rollRarity(D.table), p.cls, Math.random, undefined, 'roll'); // weapons roll a style; affixes (shared/loot.js)
         if (this.giveItem(p, it)) items.push({ name: it.name, r: it.r });
         if (it.r >= 2) this.track(p, 'loot', { r: it.r, slot, mob: 'sovereign', twist: id });
       }

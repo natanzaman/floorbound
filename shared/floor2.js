@@ -92,7 +92,7 @@ export const F2_MOBS = {
   lurker: { name: 'Bog Lurker', hp: 440, atk: 22, speed: 5.0, aggro: 15, range: 2.2, atkCd: 1.5, xp: 100, radius: 1.0, level: 13, f2: true, ai: 'f2Lurker' },
   matron: { name: 'Mire Matron', hp: 2000, atk: 30, speed: 4.2, aggro: 14, range: 3.0, atkCd: 1.9, xp: 480, radius: 1.7, level: 15, f2: true, ai: 'f2Matron', elite: true },
   thrall: { name: 'Drowned Thrall', hp: 320, atk: 24, speed: 5.4, aggro: 30, range: 2.0, atkCd: 1.4, xp: 25, radius: 0.8, level: 16, f2: true, ai: 'f2Brute' },
-  sovereign: { name: 'The Drowned Sovereign', hp: 9000, atk: 64, speed: 3.9, aggro: 20, range: 4.8, atkCd: 2.4, xp: 1800, radius: 2.4, level: 18, f2: true, ai: 'f2Sovereign', boss: true, f2boss: true },
+  sovereign: { name: 'The Drowned Sovereign', hp: 9000, atk: 72, speed: 3.9, aggro: 20, range: 4.8, atkCd: 2.4, xp: 1800, radius: 2.4, level: 18, f2: true, ai: 'f2Sovereign', boss: true, f2boss: true },
 };
 export const F2_BITE = { shieldback: [3.2, 0.75], lurker: [2.8, 0.7], matron: [3.8, 0.9], thrall: [2.8, 0.6], sovereign: [6.0, 1.0] };
 
@@ -115,7 +115,7 @@ export const SOVEREIGN = { // sweep / geyser / wave / deluge wind-ups and repeat
   // Scaled like the Warden (server/floor2.js scaleSovereign): party weight = the sum of each fighter's role weight;
   // health = (hpBase + hpPer * weight^hpExp) * (1 + hpLvl * levels above 18); damage = atk * (1 + atkLvl * levels above 18)
   // * (1 + atkPer * fighters above 3). A filmed director show keeps the old linear scaling (show).
-  phases: [0.66, 0.33], hpBase: 4500, hpPer: 2450, hpExp: 2.05, hpLvl: 0.12, atkLvl: 0.06, atkPer: 0.25,
+  phases: [0.66, 0.33], hpBase: 4500, hpPer: 2450, hpExp: 2.05, hpLvl: 0.12, atkLvl: 0.06, atkPer: 0.2,
   hpRole: { Tank: 0.6, Healer: 0.5, Support: 0.8, Damage: 1.2 },
   show: { hpBase: 4600, hpPer: 2000, hpExp: 1, hpRole: null, hpLvl: 0, atkLvl: 0, atkPer: 0, atk: 40 },
   sweep: { wind: 1.1, mult: 1.15 },

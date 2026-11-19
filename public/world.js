@@ -544,8 +544,8 @@ export const POSES = {
     'upperleg.l': [-25, 0, 0], 'upperleg.r': [-15, 0, 0], 'lowerleg.l': [35, 0, 0], 'lowerleg.r': [25, 0, 0] },
   staffHigh: { hips: [-8, 0, 0], spine: [-10, 0, 0], chest: [-12, 0, 0], head: [-18, 0, 0], // geysers: trident raised high overhead
     'upperarm.l': [-160, 0, -10], 'upperarm.r': [-160, 0, 10], 'lowerarm.l': [-10, 0, 0], 'lowerarm.r': [-10, 0, 0], 'upperleg.l': [-20, 0, 0], 'lowerleg.l': [15, 0, 0] },
-  staffDown: { drop: 0.07, hips: [10, 0, 0], spine: [16, 0, 0], chest: [12, 0, 0], head: [8, 0, 0], // ... and driven into the ground
-    'upperarm.l': [-60, 0, -10], 'upperarm.r': [-60, 0, 10], 'lowerarm.l': [-35, 0, 0], 'lowerarm.r': [-35, 0, 0],
+  staffDown: { drop: 0.1, hips: [14, 0, 0], spine: [24, 0, 0], chest: [18, 0, 0], head: [10, 0, 0], // ... and driven into the ground
+    'upperarm.l': [-35, 0, -10], 'upperarm.r': [-35, 0, 10], 'lowerarm.l': [-20, 0, 0], 'lowerarm.r': [-20, 0, 0],
     'upperleg.l': [-40, 0, 0], 'upperleg.r': [-30, 0, 0], 'lowerleg.l': [50, 0, 0], 'lowerleg.r': [40, 0, 0] },
   gather: { drop: 0.1, hips: [18, 0, 0], spine: [12, 0, 0], chest: [8, 0, 0], head: [-10, 0, 0], // Tidal Wave: crouched, arms swept back, gathering the water
     'upperarm.l': [45, 0, -55], 'upperarm.r': [45, 0, 55], 'lowerarm.l': [-25, 0, 0], 'lowerarm.r': [-25, 0, 0],
