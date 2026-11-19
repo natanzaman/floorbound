@@ -350,6 +350,7 @@ export class NamedManager {
     g.autoSpendTalents?.(p);
     g.recompute(p); p.hp = p.maxHp;
     p.invDirty = true; p.masteryDirty = true; p.masteryNow = true;
+    g.setLook?.(p, st.def.look?.id); // their look (I2: shared/looks.js), on every join
     st.pid = p.id; st.outfitLvl = p.lvl;
   }
 

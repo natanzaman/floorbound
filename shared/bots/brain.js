@@ -122,7 +122,7 @@ function onSnap(b, msg) {
   b.gateOpen = !!gate?.[0];
   b.gateReady = gate?.[2] || 0;
   b.ovOn = !!f3?.ov; b.air = f3?.air || []; // Floor 3: the Colossus's Overload; harpies aloft
-  b.orbs = f2?.orbs || []; b.pools = f2?.pools || []; b.deluge = !!f2?.del;
+  b.orbs = f2?.orbs || []; b.pools = f2?.pools || []; b.deluge = !!(f2?.del || f2?.dcall); // (dcall: the Deluge is being called: head in now)
   b.tb = msg.w.tb || null; // Team Burst gauges (server/teamplay.js teamSnap)
   b.players = msg.w.players.map(p => ({ id: p[0], x: p[1], z: p[2], face: p[3], hp: p[4], maxHp: p[5], lvl: p[6], cls: CLASS_IDS[p[7]], party: p[8], dead: !!p[9], style: STYLE_IDS[p[11]] || null }));
   const mine = b.players.find(p => p.id === b.id);
@@ -180,7 +180,6 @@ function onEvent(b, e) {
       break;
     case 'pcancel': b.sweep = null; break;
     case 'perfect': case 'parry': L?.(`[${e.t}] by ${e.id}`); break;
-    case 'f2wave': b.waves.push({ x: e.x, z: e.z, start: b.t + e.d, sp: e.sp, w: e.w, max: e.max }); break;
     case 'stair': b.stair = { x: e.x, z: e.z, until: b.t + e.d, f: e.f || 2 }; break;
     case 'sys': if (!e.to) L?.(`[sys] ${e.text}`); break;
     case 'hit': {
@@ -633,5 +632,7 @@ function goalText(b, P, M, tgt) {
   if (M.beh === 'follow') return `Looking for ${b.follow || 'a player'}`;
   if (M.beh !== 'warden' && b.noBoss) return floorOf(b.x) > 1 ? 'Hunting the field' : 'Farming the field';
   if (M.beh !== 'warden' && (b.me?.lvl || 1) < BOSS_LVL[floorOf(b.x)]) return 'Levelling up';
-  return gate ? 'Waiting at the raid gate' : `Heading to the ${({ 1: 'Warden', 2: 'Sovereign', 3: 'Colossus' })[floorOf(b.x)]}`;
+  const boss = ({ 1: 'Warden', 2: 'Sovereign', 3: 'Colossus' })[floorOf(b.x)];
+  if (inBossRoom(b.x, b.z) && !b.mobs.some(m => m.def.boss && floorOf(m.x) === floorOf(b.x))) return `Waiting for the ${boss} to rise`; // killed: it respawns here
+  return gate ? 'Waiting at the raid gate' : `Heading to the ${boss}`;
 }

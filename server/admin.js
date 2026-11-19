@@ -471,7 +471,7 @@ export async function handle(req, res, url) {
       if (!b) return json(res, 400, { error: 'Bad JSON.' }), true;
       return json(res, 200, { bot: bots.edit(+mm[1], b) }), true;
     }
-    if ((mm = path.match(/^\/api\/admin\/bots\/(\d+)\/(teleport|kill|revive|heal|respawn|command)$/)) && m === 'POST') {
+    if ((mm = path.match(/^\/api\/admin\/bots\/(\d+)\/(teleport|kill|revive|heal|respawn|command|look)$/)) && m === 'POST') {
       const b = await readBody(req) || {};
       return json(res, 200, { bot: bots.action(+mm[1], mm[2], b) }), true;
     }

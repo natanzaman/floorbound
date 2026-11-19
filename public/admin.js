@@ -10,6 +10,7 @@ import { BOT_SKILLS, BOT_SKILL_DEFAULT } from '/shared/botskill.js';
 import { STYLES, CLASS_STYLES, styleLine } from '/shared/styles.js';
 import { TREES, pointsAt, spentOf } from '/shared/talents.js';
 import { AFFIXES, AFFIX_IDS, SETS, affixText, isTeamAffix, setSlots, bestSetFor } from '/shared/loot.js';
+import { LOOKS } from '/shared/looks.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -258,6 +259,7 @@ function buildCard(b) {
       <select data-k="tp" title="Teleport"></select>
       <select data-k="respawn" title="Re-add as another class: same bot, name, level, capability, behaviour, party and orders"></select>
       <select data-k="order" title="Give this bot an order, as its party would"></select>
+      <select data-k="look" title="Wear a look (shared/looks.js): preview a Named character's appearance on this bot"></select>
       <span class="grow"></span>
       <button class="small danger icon" data-a="remove" title="Remove this bot"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>`;
@@ -304,6 +306,10 @@ function buildCard(b) {
     if (!v) return;
     const [cmd, name] = v.split(':');
     post('command', { cmd, name }, `${nm.dataset.v}: ${ORDERS[cmd]}${name ? ` (${name})` : ''}.`);
+  };
+  q('look').onchange = () => {
+    const v = q('look').value;
+    post('look', { look: v }, v ? `${nm.dataset.v} wears ${LOOKS[v].name || v}.` : `${nm.dataset.v}: look removed.`);
   };
   q('respawn').onchange = () => {
     const c = q('respawn').value; q('respawn').value = '';
@@ -364,6 +370,9 @@ function updateCard(el, b, force = false) {
   tp.disabled = !!b.dead;
   const rs = q('respawn');
   if (!rs.options.length) rs.innerHTML = `<option value="">⟳ Respawn as…</option>${CLASS_IDS.filter(c => c !== b.cls).map(c => `<option value="${c}">${esc(clsName(c))}</option>`).join('')}`;
+  const lk = q('look');
+  if (!lk.options.length) lk.innerHTML = `<option value="">◈ Look: none</option>${Object.entries(LOOKS).map(([id, l]) => `<option value="${id}">${esc(l.name || id)}</option>`).join('')}`;
+  if (!focused(lk)) lk.value = b.look || '';
 }
 
 // ---------- PLAYERS ----------

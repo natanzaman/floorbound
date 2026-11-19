@@ -39,6 +39,7 @@ function watcher(name) {
     const m = JSON.parse(raw.toString());
     if (m.type === 'welcome') c.id = m.id;
     if (m.type === 'roster') c.roster = m.players;
+    if (m.type === 'snap') c.looks = new Map(m.w.looks || []); // who wears a look (server/looks.js)
     if (m.type === 'snap') { c.pl = new Map(m.w.players.map(p => [p[0], { x: p[1], z: p[2], hp: p[4], maxHp: p[5], lvl: p[6], cls: CLASS_IDS[p[7]], party: p[8], dead: !!p[9] }])); }
   });
   return c;
@@ -135,12 +136,25 @@ try {
   ok((await call('POST', `/api/admin/bots/${a.bid}/explode`, adminTok)).status === 404, 'unknown action: 404');
   ok((await call('PATCH', '/api/admin/bots/99999', adminTok, { lvl: 2 })).status === 404, 'unknown bot: 404');
 
+  // ---------- wear a look (shared/looks.js) ----------
+  ok(!w.looks.size, 'nobody wears a look until asked');
+  r = await call('POST', `/api/admin/bots/${a.bid}/look`, adminTok, { look: 'cairn' });
+  ok(r.status === 200 && r.body.bot.look === 'cairn', "look: the bot wears Cairn's look");
+  await until(() => w.looks.get(aid) === 'cairn', 3000, 'look in snapshots');
+  ok(w.looks.size === 1, 'snapshots list it (w.looks), for that bot only');
+  ok((await call('POST', `/api/admin/bots/${a.bid}/look`, adminTok, { look: 'tuxedo' })).status === 400, 'an unknown look: 400');
+
   // ---------- respawn as another class ----------
   r = await call('POST', `/api/admin/bots/${a.bid}/respawn`, adminTok, { cls: 'guardian' });
   ok(r.status === 200 && r.body.bot.cls === 'guardian' && r.body.bot.name === `Ren${tag}` && r.body.bot.skill === 1 && r.body.bot.lvl === 12 && r.body.bot.bid === a.bid, 'respawn as Guardian: same name, level, capability; same bot id');
   const nb = r.body.bot.bid;
   await until(() => w.roster.some(p => p.name === `Ren${tag}` && p.cls === 'guardian') && !w.roster.some(p => p.id === aid), 5000, 'respawned in roster');
   ok(true, 'the roster has the Guardian and not the old Swordsman');
+  await until(() => { const np = w.roster.find(p => p.name === `Ren${tag}`); return np && w.looks.get(np.id) === 'cairn'; }, 4000, 'look after respawn');
+  ok(true, 'its look survives Respawn as…');
+  r = await call('POST', `/api/admin/bots/${nb}/look`, adminTok, { look: '' });
+  await until(() => !w.looks.size, 3000, 'look cleared');
+  ok(r.status === 200 && r.body.bot.look === '', 'look: none clears it');
   const after = (await bots()).bots;
   ok(after.filter(b => b.bid === a.bid).length === 1 && after.find(b => b.bid === nb)?.cls === 'guardian' && after.find(b => b.bid === nb)?.status !== 'gone', 'the bot list swapped the entry in place');
   ok((await call('POST', `/api/admin/bots/${nb}/respawn`, adminTok, { cls: 'wizard' })).status === 400, 'respawn as an unknown class: 400');

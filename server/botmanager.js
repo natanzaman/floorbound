@@ -137,7 +137,7 @@ export class BotManager {
       dead: !!p?.dead, area: p ? areaName(p.x, p.z) : 'joining…', floor: p ? floorOf(p.x) : 0,
       party: party ? party.members.filter(id => id !== p.id).map(id => g.players.get(id)?.name).filter(Boolean) : [],
       behaviour: e.behaviour, follow: e.follow, team: e.team, owner: this.ownedRec?.(e.bid)?.ownerName || '', skill: e.b.skill, skillName: skillName(e.b.skill), status: e.b.closed ? 'gone' : p ? 'online' : 'joining', since: e.at,
-      goal: p?.dead ? 'Down' : e.b.goal || '', role: e.b.role, order: e.b.cmd ? { cmd: e.b.cmd.k, by: e.b.cmd.byName || '' } : null, partyLead: e.b.anchor?.name || '',
+      goal: p?.dead ? 'Down' : e.b.goal || '', role: e.b.role, order: e.b.cmd ? { cmd: e.b.cmd.k, by: e.b.cmd.byName || '' } : null, partyLead: e.b.anchor?.name || '', look: e.look || '',
     };
   }
 
@@ -149,6 +149,7 @@ export class BotManager {
     for (const e of this.bots) {
       const p = this.livePlayer(e);
       if (e.carry) this.reattach(e, p); // a respawned bot: back into its party, with its orders
+      if (p && e.look && p.look !== e.look) this.game.setLook(p, e.look); // (an admin-set look survives Respawn as…)
       if (!p || p.dead) continue;
       let t = null;
       if (e.behaviour === 'follow') {

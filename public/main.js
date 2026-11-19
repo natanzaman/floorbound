@@ -9,6 +9,7 @@ import { RARITY, CONSUMABLES, CONSUMABLE_IDS, SHOP, MERCHANT, SLOTS, statLabel, 
 import { TITLES, TITLE_BY_ID, DEFAULT_TITLE, HALL, titleProgress } from '/shared/titles.js';
 import { Guide } from '/guide.js';
 import { createWorld, makePlayerModel, makeMobModel, Effects, loadAssets } from '/world.js';
+import { initLooks } from '/looks.js';
 import { TwistClient } from '/twists.js';
 import { Sound } from '/audio.js';
 import { createSmith } from '/smith.js';
@@ -263,6 +264,7 @@ const classesB = initClassesB({ state, players, mobs, fx, sfx, mastery, combat, 
 const classesA = initClassesA({ scene, state, players, mobs, fx, sfx, floatNum, shake: a => shake(a), log: (a, b) => log(a, b), $ });
 // weapon styles: held weapon models, styled basic attacks and their effects, bag text (public/styles.js)
 const styles = initStyles({ state, players, fx, sfx, shake: a => shake(a), floatNum, rebuildBar: () => { if (state.joined && !state.spectator) buildSkillBar(); } });
+const looks = initLooks({ players, mobs }); // character looks: the Named's own appearance, on any entity (public/looks.js)
 // Players panel tabs + player-owned bots (public/playerbots.js)
 const pbots = initPlayerBots({ $, send, state, players, log: (a, b) => log(a, b), sfx, rerender: () => { lobby.html = ''; renderPlayers(); } });
 const friends = initNamed({ $, send, state, log: (a, b) => log(a, b), sfx, banner: (a, b) => banner(a, b) }); // public/named.js
@@ -385,6 +387,7 @@ function onSnapshot({ me, w }) {
     Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, moving: flags & 1, engaged: flags & 2, enraged: flags & 4, stunned: flags & 8, winding: flags & 16, staggered: flags & 32, frenzy: flags & 64, launched: flags & 128, posture: posture || 0 });
   }
   for (const [id, e] of mobs) if (!seenM.has(id) && !e.dying) { removeEntity(e); mobs.delete(id); if (e === boss) boss = null; }
+  looks.snap(w.looks); // who wears a look (after the entities and their weapon styles are in step)
   renderPlayersThrottled();
 }
 
@@ -513,7 +516,7 @@ function handleEvent(e) {
       const m = mobs.get(e.id);
       if (m) {
         m.wind = e.d;
-        if (m.def?.boss && m.model.anim?.windup) m.model.anim.windup('cleave', e.d); else m.model.anim?.shot('2H_Melee_Attack_Chop', m.def?.boss ? 1.4 / PACE : 1.4); // bosses: a readable wind-up pose (world.js WINDUPS)
+        if (m.def?.boss && m.model.anim?.windup) m.model.anim.windup(m.type === 'sovereign' ? 'trident' : 'cleave', e.d); else m.model.anim?.shot('2H_Melee_Attack_Chop', m.def?.boss ? 1.4 / PACE : 1.4); // bosses: a readable wind-up pose (world.js WINDUPS)
         if ((m.type === 'wolf' || m.type === 'alpha') && Math.random() < 0.4) sfx.play('growl', m.model.group.position, 0.7);
         if (e.r) fx.wedge(m.x, m.z, e.f, e.r, e.h, e.d);                 // bite wedge: step out of it
         if (e.ax !== undefined) fx.aimLine(m.x, m.z, e.ax, e.az, e.d);   // thorn shot: sidestep the line
@@ -537,9 +540,11 @@ function handleEvent(e) {
       if (e.k === 'rock') { if (mine) { sfx.play('warn', { x: e.x, z: e.z }, 0.6); guide.tip('rock'); } break; }
       sfx.play('warn', { x: e.x, z: e.z });
       if (mine) guide.tip('slam');
-      if (boss && e.k !== 'lurk' && e.k !== 'pool') {
-        if (boss.def.f2) bossShot(boss.id, e.follow ? '2H_Melee_Attack_Spin' : '2H_Melee_Attack_Slice', 1.2 / PACE, Math.max(0, e.d - 0.55 * PACE));
-        else boss.model.anim?.windup?.(e.follow ? 'spin' : 'slam', e.d); // the Warden rears up (slam) or winds round (spin)
+      const tb = boss && !!boss.def.f2 === onFloor2(e.x) ? boss : [...mobs.values()].find(m => m.def?.boss && !!m.def.f2 === onFloor2(e.x) && !m.dying); // the boss on the telegraph's floor
+      if (tb && e.k !== 'lurk' && e.k !== 'pool') {
+        if (tb.def.f2 && e.k === 'geyser') tb.model.anim?.windup?.('geyser', e.d); // trident raised high, then driven down (world.js WINDUPS)
+        else if (tb.def.f2) bossShot(tb.id, e.follow ? '2H_Melee_Attack_Spin' : '2H_Melee_Attack_Slice', 1.2 / PACE, Math.max(0, e.d - 0.55 * PACE));
+        else tb.model.anim?.windup?.(e.follow ? 'spin' : 'slam', e.d); // the Warden rears up (slam) or winds round (spin)
       }
       break;
     }
@@ -625,6 +630,7 @@ function handleEvent(e) {
       break;
     case 'enrage': if (boss) { bossShot(boss.id, 'Cheer', 1.2); sfx.play('roar', boss.model.group.position, 1.4); } banner('THE WARDEN IS ENRAGED', 'Phase 3: spins, falling rocks, triple Quake Rings. Keep moving'); break;
     case 'twist': twists.announce(e); updateGateBox(true); break;
+    case 'twist2': twists.announce(e, true, onFloor2(state.x) && !state.spectator); updateGateBox(true); break; // the Sovereign's (Floor 2 only)
     case 'la': {
       fx.beam(e.x, e.z, 0xfbbf24, 4.5); sfx.play('loot', { x: e.x, z: e.z }, 1.3);
       setTimeout(() => banner('LAST ATTACK BONUS', `${e.name} · Horn of the Warden`), 3400);
@@ -1316,7 +1322,7 @@ function updateGateBox(force) {
   el.innerHTML = `<b>${onFloor3(state.x) ? 'THE STORM GATE' : gate2 ? 'THE SUNKEN GATE' : 'RAID GATE'}</b><div class="sub">${onFloor3(state.x) ? f3.gateText() : f2.gateText()} · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}</div>`
     + (count > 0 ? `<div class="count">${Math.ceil(count)}</div>` : '')
     + `<button class="${state.meReady ? 'on' : ''}">${state.meReady ? 'Ready ✓' : `Ready${isTouch ? '' : ' (F)'}`}</button>`;
-  if (!gate2) twists.gateBox(el); // the Warden's twist only applies behind Floor 1's gate
+  if (!onFloor3(state.x)) twists.gateBox(el, onFloor2(state.x)); // the twist of the boss behind this gate (the Warden's, or the Sovereign's on Floor 2)
   el.querySelector('button').onclick = interact;
 }
 
@@ -1391,7 +1397,7 @@ function renderPlayers() {
       const p = players.get(id);
       const inParty = state.party && p?.party === state.party;
       const right = inParty ? '<small>Party</small>' : humanParty(p?.party) ? '<small style="opacity:.6">In a party</small>' : `<button data-inv="${id}">Invite</button>`;
-      botRows.push(`<div class="p"><span>${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small><span class="tag">BOT</span></span>${right}</div>`);
+      botRows.push(`<div class="p"><span>${looks.swatch(id)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small><span class="tag">BOT</span></span>${right}</div>`);
       continue;
     }
     online++;
@@ -1400,7 +1406,7 @@ function renderPlayers() {
     const inParty = state.party && p?.party === state.party;
     const lfgTag = (p?.buffs || 0) & 4 ? '<span class="tag">LFG</span>' : '';
     const pf = p ? floorOf(p.tx ?? p.x) : 1, floorTag = pf > 1 ? `<span class="tag f2">F${pf}</span>` : '';
-    rows.push(`<div class="p"><span>${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}</div>`);
+    rows.push(`<div class="p"><span>${looks.swatch(id)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}</div>`);
   }
   const meE = players.get(state.myId), seeking = !!((meE?.buffs || 0) & 4);
   const lfgBtn = `<button class="lfg ${seeking ? 'on' : ''}">${state.party ? (seeking ? 'Recruiting via party finder ✓' : 'Recruit with party finder') : seeking ? 'Searching for a party… (cancel)' : 'Find party'}</button>`;
@@ -1459,7 +1465,7 @@ function updateHud(now) {
   const partyHtml = teamplay.partyBar() + mates.map(p => {
     const pc = (p.hp / p.maxHp) * 100, bot = state.roster.get(p.id)?.bot;
     const nm = state.roster.get(p.id)?.name || p.name;
-    return `<div class="frame ${p.dead ? 'dead' : ''} ${p.downed ? 'downed' : ''} ${bot && !state.spectator ? 'botf' : ''}" ${bot && !state.spectator ? `data-bot="${esc(nm)}" title="Click for ${esc(nm)}'s orders"` : ''}><div class="row" style="font-size:12px;margin:0"><span>${bot && !state.spectator ? '<span class="bcmd">⌘</span> ' : ''}${esc(p.name)}${bot ? ' <small class="bottag">BOT</small>' : ''}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}${p.downed ? ` <b class="dtag">${p.downed.by ? 'REVIVING' : 'DOWNED'}</b>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div>${classesA.frameBar(p)}</div>`;
+    return `<div class="frame ${p.dead ? 'dead' : ''} ${p.downed ? 'downed' : ''} ${bot && !state.spectator ? 'botf' : ''}" ${bot && !state.spectator ? `data-bot="${esc(nm)}" title="Click for ${esc(nm)}'s orders"` : ''}><div class="row" style="font-size:12px;margin:0"><span>${bot && !state.spectator ? '<span class="bcmd">⌘</span> ' : ''}${looks.swatch(p.id, 14)}${esc(p.name)}${bot ? ' <small class="bottag">BOT</small>' : ''}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}${p.downed ? ` <b class="dtag">${p.downed.by ? 'REVIVING' : 'DOWNED'}</b>` : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div>${classesA.frameBar(p)}</div>`;
   }).join('') + (!state.spectator && mates.some(p => state.roster.get(p.id)?.bot) ? `<button id="bots-btn" class="pbtn" title="Orders for all your bots (or hold V for the wheel)">⌘ All bots <small>V</small></button>` : '');
   if (partyHtml !== hudParty) { hudParty = partyHtml; $('party').innerHTML = partyHtml; }
 
@@ -1474,7 +1480,7 @@ function updateHud(now) {
     combat.bossBar(boss);
     threat.bossBar(boss); // who it's after, my threat meter
     $('boss-phase').textContent = onF3 ? f3.phaseText() : onF2 ? f2.phaseText() : ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '';
-    if (!onF2 && !onF3) twists.bossLine($('boss-phase'));
+    if (!onF3) twists.bossLine($('boss-phase'), onF2); // the Warden's twist, or the Sovereign's on Floor 2
   }
 
   // items, raid gate, merchant, guide
@@ -1733,6 +1739,7 @@ function animateEntity(e, dt) {
     }
   }
   if (e.flash > 0) e.flash -= dt;
+  looks.frame(e, dt); // a look's cloth, lantern and aura (public/looks.js)
   if (e.flinch !== undefined) { // hit flinch: quick squash plus a small shove away from the attacker (visual only)
     e.flinch = Math.max(0, e.flinch - dt);
     const fk = e.flinch / FLINCH_T, amt = (e.flinchAmt || 0) * fk;
@@ -1756,7 +1763,7 @@ function animateEntity(e, dt) {
     e.label.el.style.display = '';
     e.label.el.style.transform = `translate(${p[0]}px, ${p[1]}px) translate(-50%, -100%)`;
     e.label.el.style.left = '0'; e.label.el.style.top = '0';
-    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${e.def.name}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}` : `<span class="lv">Lv${e.lvl}</span>${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}`;
+    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${looks.plate(e, e.def.name)}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}` : `<span class="lv">Lv${e.lvl}</span>${looks.plate(e, `${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}`)}`;
     if (txt !== e.label.text) { e.label.text = txt; e.label.nm.innerHTML = txt; }
     const pct = Math.round((e.hp / e.maxHp) * 100);
     if (pct !== e.label.pct) { e.label.pct = pct; e.label.fill.style.width = `${pct}%`; }
@@ -1978,4 +1985,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { state, players, mobs, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m) };
+window.__fb = { state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m) };

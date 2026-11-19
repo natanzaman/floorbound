@@ -69,8 +69,8 @@ export const TWIST_IDS = Object.keys(TWISTS);
 // Thorn Totem (Thornbound): a stone-tinted Bramble Spitter that lives only in the chamber.
 export const TOTEM = { name: 'Thorn Totem', hp: 110, hpPer: 35, atk: 9, speed: 0, aggro: 40, range: 20, atkCd: 2.8, xp: 10, radius: 0.9, level: 9, ranged: true };
 
-export function rewardText(id) {
-  const r = TWISTS[id]?.reward;
+export function rewardText(id, table = TWISTS) { // table: SOV_TWISTS (shared/floor2.js) for the Sovereign's
+  const r = table[id]?.reward;
   if (!r) return '';
   const out = [];
   if (r.loot) out.push(`+${r.loot} loot roll${r.loot > 1 ? 's' : ''}`);

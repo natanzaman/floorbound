@@ -92,7 +92,7 @@ const methods = {
         }
         case 'deluge':
           if (!this.deluge) {
-            this.deluge = true; this.delugeT = t + 1;
+            this.callDeluge(m); // its wind-up and flood line, then the flood
             this.events.push({ t: 'f2phase', id: m.id, n: 2 }); // the client's Deluge banner and roar
             this.sys('The Deluge! The outer court floods. Stay near the centre.');
           }
@@ -172,6 +172,7 @@ const methods = {
     if (v !== null && v !== 'off' && !TWISTS[v]) return false;
     this.twistOverride = v;
     if (v === 'off' && this.twist) this.newTwist();
+    if (v === 'off' && this.twist2) this.setTwist2(null); // the Sovereign's twist too (server/sovtwists.js; it rolls none while 'off')
     else if (v && v !== 'off' && this.twist?.id !== v) this.newTwist();
     return true;
   },

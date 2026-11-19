@@ -4,7 +4,8 @@
 //   action(bid, act, body)                              teleport (to: player | town | gate | camp2 | gate2 | camp3 | gate3), kill (stays down until revived),
 //                                                       revive, heal, respawn (as another class: same bot id, settings, party,
 //                                                       owner link and orders), command ({ cmd, name }: a party order from the
-//                                                       admin, see shared/bots/social.js)
+//                                                       admin, see shared/bots/social.js), look ({ look }: wear a
+//                                                       look from shared/looks.js, or none)
 //   setLevel(e, lvl)                                    a bot's level (stats, talents re-checked; player-added bots: server/playerbots.js)
 // A bot is linked to the party it serves (owner decision, docs/ROADMAP.md): none of these leave it detached. An edit keeps
 // it in its party (a new follow target outside it moves it straight into theirs); Respawn as… rejoins the same party.
@@ -13,6 +14,7 @@ import { BOT_SKILLS } from '../shared/botskill.js';
 import { floorOf } from '../shared/floor2.js';
 import { BEHAVIOURS } from './botmanager.js';
 import { BOT_COMMANDS } from '../shared/bots/social.js';
+import { isLook } from '../shared/looks.js';
 
 export class BotError extends Error { constructor(msg, code = 400) { super(msg); this.name = 'BotError'; this.code = code; } }
 const int = (v, lo, hi, what) => {
@@ -125,7 +127,7 @@ export const BotEditMethods = {
     this.bots = this.bots.filter(x => x !== e);
     const view = this.start([cls], [p.name], keep, e.team, e.bid)[0];
     const ne = this.bots.find(x => x.bid === e.bid && x.b !== b);
-    Object.assign(ne, { partied: e.partied, carry });
+    Object.assign(ne, { partied: e.partied, carry, look: e.look }); // (its look goes back on in upkeep)
     this.bots.splice(this.bots.indexOf(ne), 1); this.bots.splice(Math.max(0, i), 0, ne); // same place in the list
     return view;
   },
@@ -202,6 +204,12 @@ export const BotEditMethods = {
         if (cmd === 'follow' || cmd === 'come' || cmd === 'heal') t = this.findPlayerAny(body.name);
         if (cmd === 'attack') throw new BotError('Attack orders come from a player with a target locked.');
         e.b.command({ k: cmd, by: t?.id || 0, byName: t?.name || 'Admin', followId: t?.id, adm: true, group: [e.b.id] });
+        break;
+      }
+      case 'look': { // wear a look from shared/looks.js (or none): a preview for any bot
+        const id = body.look || null;
+        if (id && !isLook(id)) throw new BotError('Unknown look.');
+        g.setLook(p, id); e.look = id;
         break;
       }
       default: throw new BotError('Unknown action.', 404);

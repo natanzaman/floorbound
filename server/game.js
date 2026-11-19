@@ -16,6 +16,7 @@ import crypto from 'node:crypto';
 import { SmithMethods } from './smith.js';
 import { GroundMethods } from './ground.js';
 import { TwistMethods } from './twists.js';
+import { SovTwistMethods } from './sovtwists.js';
 import { installCombat } from './combat.js';
 import { MasteryMethods } from './mastery.js';
 import { MASTERY } from '../shared/mastery.js';
@@ -37,6 +38,7 @@ import { installBossTeam } from './bossteam.js'; // boss team mechanics: stack, 
 import { installTeamplay } from './teamplay.js'; // skill combos + Team Burst + team stats (G2)
 import { installMvp } from './mvp.js'; // post-fight MVP card (G5)
 import { installLoot } from './loot.js';
+import { installLooks } from './looks.js'; // character looks: setLook, w.looks (I2)
 import { rollGear } from '../shared/loot.js'; // affixes, boss sets, loadouts, drop tables (H2)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
@@ -1343,7 +1345,7 @@ export class Game {
     const g = this.gate;
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
     const gate = [g.open ? 1 : 0, waiting, g.ready.size, g.countAt ? r1(Math.max(0, g.countAt - this.time)) : 0];
-    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
+    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
     this.events = [];
     return out;
   }
@@ -1368,6 +1370,7 @@ export class Game {
 Object.assign(Game.prototype, SmithMethods);
 Object.assign(Game.prototype, GroundMethods); // items on the ground (server/ground.js)
 Object.assign(Game.prototype, TwistMethods); // Warden twists (server/twists.js)
+Object.assign(Game.prototype, SovTwistMethods); // Sovereign twists (server/sovtwists.js)
 installCombat(Game); // posture, perfect dodge, guard/parry, Horn Sweep (server/combat.js)
 Object.assign(Game.prototype, MasteryMethods); // skill mastery + evolutions (server/mastery.js)
 Object.assign(Game.prototype, F2Methods); // Floor 2 (server/floor2.js)
@@ -1388,5 +1391,6 @@ installTalents(Game); // talent trees: methods + wrappers around skills, damage,
 installTeamplay(Game); // skill combos between players, the Team Burst gauge, teamStat() for the post-fight card (server/teamplay.js); after the talents
 installMvp(Game); // the post-fight MVP card from the team stats, downs and deaths; in the fight's tracking row (server/mvp.js); after the team play
 installLoot(Game); // loot and builds: drops from shared/loot.js, gear in p.tal, set rules, loadouts (server/loot.js); after the talents and team play
+installLooks(Game); // character looks: setLook(entity, id), listed in snapshots as w.looks (server/looks.js)
 installNamed(Game); // the Named: humans-first rules, friendship, invites by tier (server/named.js); a no-op without a NamedManager
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last

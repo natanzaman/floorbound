@@ -3,7 +3,8 @@
 // they're doing, and Invite / Call buttons by tier. Tier-ups get a banner; the one loss (leaving them downed) a log line.
 // A tab for public/playerbots.js (addTab): { id, label, root, show(), onMessage(msg) }. { type: 'named' } messages.
 import { CLASSES } from '/shared/data.js';
-import { TIERS, GROUPS } from '/shared/named.js';
+import { TIERS, GROUPS, NAMED_BY_ID } from '/shared/named.js';
+import { lookSwatch } from '/looks.js'; // each character's badge (I2)
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const hex = v => `#${(v >>> 0).toString(16).padStart(6, '0').slice(-6)}`;
@@ -40,7 +41,7 @@ export function initNamed({ $, send, state, log, sfx, banner }) {
     const where = r.online ? `${esc(r.doing)}${r.area ? ` · ${esc(r.area)}` : ''}` : esc(r.doing);
     const btn = (op, label, o, at) => (r.mine && op === 'invite' ? '' : `<button data-op="${op}" data-id="${r.id}" ${o.ok ? '' : 'disabled'} title="${esc(o.ok ? '' : o.why)}">${label}${o.ok || r.tier >= TIERS.findIndex(t => t.name === at) ? '' : ` <small>${esc(at)}</small>`}</button>`);
     return `<div class="nf-row ${r.online ? '' : 'off'}" style="--c:${c};--t:${tc}">
-      <div class="nf-top"><span class="nf-sw" data-named="${r.id}"></span><b>${esc(r.name)}</b><small>Lv ${r.lvl} ${esc(CLASSES[r.cls]?.name || r.cls)} · ${esc(r.role)}</small><span class="nf-tier">${esc(r.tierName)}</span></div>
+      <div class="nf-top">${lookSwatch(NAMED_BY_ID[r.id]?.look?.id, 18) || `<span class="nf-sw" data-named="${r.id}"></span>`}<b>${esc(r.name)}</b><small>Lv ${r.lvl} ${esc(CLASSES[r.cls]?.name || r.cls)} · ${esc(r.role)}</small><span class="nf-tier">${esc(r.tierName)}</span></div>
       <div class="nf-blurb">${esc(r.blurb)}</div>
       <div class="nf-bar"><div style="width:${pct}%"></div></div>
       <div class="nf-pts">${toNext}${today}</div>

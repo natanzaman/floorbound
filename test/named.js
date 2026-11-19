@@ -140,6 +140,7 @@ function world({ store = null } = {}) {
   tick(1);
   ok(heroes.every(p => p.lvl === 12) && cairn.lvl === 12, 'level: the top players + 2 (one level-10 player: 12)');
   const L = loadoutFor(12);
+  ok(cairn.look === 'cairn' && hp.look === 'halvard' && g.looksSnap().length === 5 && !nat.look, 'each wears their own look (I2)');
   ok(heroes.every(p => p.inv.eq.weapon?.r === L.rarity && p.inv.eq.armor && p.inv.eq.charm) && cairn.inv.eq.weapon.style === 'warhammer' && P('sennet').inv.eq.weapon.style === 'halberd', 'gear is the premade setup for their level, in their own weapon style');
   nat.lvl = 16; clock.t += 61000; tick(2);
   ok(P('halvard').lvl === 18 && P('halvard').inv.eq.weapon.r === loadoutFor(18).rarity, 'they level as the players do (gear follows)');
