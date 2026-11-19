@@ -132,6 +132,7 @@ export const pickable = device => ACTIONS.filter(a => !a.fixed && a.type !== 'ax
 export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controlsui' }) {
   const el = document.createElement('div');
   el.id = id; el.className = 'panel hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Controls');
+  el.dataset.nav = id; // (the controller drives it: public/focusnav.js)
   document.body.appendChild(el);
   let tab = input.device === 'pad' ? 'pad' : 'kbm', busy = null, msg = '', prompt = null, resetArmed = null, poll = null, padCount = 0;
   let pop = null; // the picture's popover: { device, code, mode: 'info' | 'list', filter }

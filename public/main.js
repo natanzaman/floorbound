@@ -1033,7 +1033,7 @@ const controlsUi = initControlsUi({ input, sfx, onChange: controlsChanged });
 panels.register('controlsui', { esc: true });
 const controlSync = createControlSync({
   api, signedIn: () => !!(acct.cfg.accounts && acct.token),
-  onApply: () => { input.reload(); Object.assign(settings, loadSettings(), { device: settings.device }); settingsUi.refresh(); controlsUi.refresh(); controlsChanged(); },
+  onApply: () => { input.reload(); Object.assign(settings, loadSettings(), { device: settings.device }); applyAccess(settings); settingsUi.refresh(); controlsUi.refresh(); controlsChanged(); },
 });
 
 const drag = { id: null, x: 0, y: 0 };

@@ -246,9 +246,9 @@ try {
   await p.hover(K('LB', 'pad')); await frames(2);
   assert.match(await tipText('pad'), /Cover an ally \(Guardian\) · combo LB\+A/);
   await shot('12-pad-hover');
-  await S(() => { window.__fb.input.padHeld = n => n === 'X'; }); await frames(3);
+  await S(() => { window.__padHeld0 = window.__fb.input.padHeld; window.__fb.input.padHeld = n => n === 'X'; }); await frames(3);
   assert.ok(await hasCls(K('X', 'pad'), 'lit') && !(await hasCls(K('A', 'pad'), 'lit')), 'a held pad button lights up (input.padHeld)');
-  await S(() => { delete window.__fb.input.padHeld; });
+  await S(() => { window.__fb.input.padHeld = window.__padHeld0; }); // (K1b's own reading: no pad, nothing held)
   await frames(3); assert.ok(!(await hasCls(K('X', 'pad'), 'lit')), 'and goes out when the reading stops');
   await p.click(K('Y', 'pad')); await frames(1);
   assert.match(await S(() => document.getElementById('cu-pop').textContent), /Skill 2/);
