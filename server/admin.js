@@ -9,7 +9,7 @@
 import * as db from './db.js';
 import * as accounts from './accounts.js';
 import { CLASSES, MAX_LEVEL, xpToNext, areaName } from '../shared/data.js';
-import { SLOTS, BAG_SIZE, RARITY, CONSUMABLE_IDS, makeItem, lastAttackItem, lastAttackItem2, newInventory } from '../shared/items.js';
+import { SLOTS, BAG_SIZE, RARITY, CONSUMABLE_IDS, makeItem, lastAttackItem, lastAttackItem2, lastAttackItem3, newInventory } from '../shared/items.js';
 import { STYLES } from '../shared/styles.js';
 import { SETS, AFFIX_COUNT, cleanAffixes, rollAffixes, rollGear, makeSetPiece, setSlots, fitAffixes, bestSetFor } from '../shared/loot.js';
 import { MAT_IDS } from '../shared/crafting.js';
@@ -190,6 +190,7 @@ function applyEdit(c, body, online) {
     c.stats[k] = int(v, 0, 1e9, k);
   }
   if (body.floor2 !== undefined) c.stats.floor2 = body.floor2 ? 1 : 0;
+  if (body.floor3 !== undefined) c.stats.floor3 = body.floor3 ? 1 : 0;
   if (body.titles !== undefined) {
     if (!Array.isArray(body.titles)) throw new Bad('titles must be a list.');
     c.stats.titles = [...new Set(body.titles.filter(id => TITLE_BY_ID[id]))];
@@ -221,13 +222,13 @@ function applyEdit(c, body, online) {
   }
 }
 
-// "Maxed" preset: max level, Floor 2, every skill Mastery 5 (evolved), all talent points spent, best gear, a stock of consumables.
+// "Maxed" preset: max level, Floors 2 and 3, every skill Mastery 5 (evolved), all talent points spent, best gear, a stock of consumables.
 // Talents follow the class's recommended path (TREES[cls].bot), then any points left go to the first node that accepts one.
 // Gear: a full boss set for the class role (shared/loot.js bestSetFor; the weapon keeps the worn weapon's style), top stat
 // rolls and 3 top role-fit affixes per piece. What was worn goes to the bag while there's room, then the two Last Attack
 // items if the character doesn't have them.
 function maxOut(c) {
-  c.lvl = MAX_LEVEL; c.xp = 0; c.stats.floor2 = 1;
+  c.lvl = MAX_LEVEL; c.xp = 0; c.stats.floor2 = 1; c.stats.floor3 = 1;
   for (const [sk, e] of Object.entries(c.mastery)) { e.pts = Math.max(e.pts | 0, MASTERY.need[MASTERY.max]); if (!e.br && BRANCHES[sk]) e.br = 'A'; }
   const t = {}, total = pointsAt(c.lvl), want = {};
   for (const id of TREES[c.cls]?.bot || []) { want[id] = (want[id] || 0) + 1; if ((t[id] | 0) < want[id] && !spendBlock(c.cls, t, c.lvl, id)) t[id] = (t[id] | 0) + 1; }
@@ -244,7 +245,7 @@ function maxOut(c) {
     gear[s].u = freeU(c.inv); c.inv.eq[s] = gear[s];
   }
   const owns = la => [...c.inv.bag, ...SLOTS.map(s => c.inv.eq[s])].some(it => it?.la === la);
-  for (const [la, make] of [[1, lastAttackItem], [2, lastAttackItem2]]) if (!owns(la) && c.inv.bag.length < BAG_SIZE) giveToBag(c, make());
+  for (const [la, make] of [[1, lastAttackItem], [2, lastAttackItem2], [3, lastAttackItem3]]) if (!owns(la) && c.inv.bag.length < BAG_SIZE) giveToBag(c, make());
   for (const k of CONSUMABLE_IDS) c.inv.cons[k] = Math.max(c.inv.cons[k] | 0, 20);
 }
 
@@ -289,7 +290,7 @@ function applyOp(c, op) {
       checkLoot(it, 'item');
       return;
     }
-    case 'addLastAttack': return giveToBag(c, op.which === 2 ? lastAttackItem2() : lastAttackItem());
+    case 'addLastAttack': return giveToBag(c, op.which === 3 ? lastAttackItem3() : op.which === 2 ? lastAttackItem2() : lastAttackItem());
     case 'removeItem': {
       const u = op.u | 0;
       const i = c.inv.bag.findIndex(it => it.u === u);

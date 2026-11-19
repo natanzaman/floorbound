@@ -19,12 +19,12 @@ export const BellMethods = {
 
 export function installBell(Game) {
   Object.assign(Game.prototype, BellMethods);
-  // Testing aid (TEST_HOOKS=1 only): { type: 'test', clear: 1 | 2 } kills that floor's boss at once, credited to the
+  // Testing aid (TEST_HOOKS=1 only): { type: 'test', clear: 1 | 2 | 3 } kills that floor's boss at once, credited to the
   // sender, with every player on the server as a fighter (a scripted clear for the bell and engraved-Hall checks).
   const handle = Game.prototype.handle;
   Game.prototype.handle = function (p, msg) {
-    if (msg?.type === 'test' && process.env.TEST_HOOKS && (msg.clear === 1 || msg.clear === 2) && p) {
-      const m = [...this.mobs.values()].find(m => m.type === (msg.clear === 2 ? 'sovereign' : 'warden') && !m.dead);
+    if (msg?.type === 'test' && process.env.TEST_HOOKS && [1, 2, 3].includes(msg.clear) && p) {
+      const m = [...this.mobs.values()].find(m => m.type === ({ 1: 'warden', 2: 'sovereign', 3: 'colossus' })[msg.clear] && !m.dead);
       if (!m) return;
       for (const q of this.players.values()) m.contributors.add(q.id);
       return this.killMob(m, p);

@@ -28,7 +28,7 @@ const methods = {
     }
     const secs = Math.round(this.time - f.start);
     if (!rows.length || !rows.some(r => r.dmg > 0) || secs < MVP.minSecs) return (f.card = null);
-    return (f.card = buildCard({ boss: m?.def?.name || (floor === 2 ? 'The Drowned Sovereign' : 'The Horned Warden'), floor, result, secs, rows }));
+    return (f.card = buildCard({ boss: m?.def?.name || (floor === 3 ? 'The Storm Colossus' : floor === 2 ? 'The Drowned Sovereign' : 'The Horned Warden'), floor, result, secs, rows }));
   },
   mvpCompact(f) { return f?.card ? compactCard(f.card) : undefined; },
   // A fight ended: send its card to the fighters (not during a show).
@@ -68,7 +68,7 @@ export function installMvp(Game) {
     if (p && !p.dead) this.teamStat(p, 'death');
     return orig.call(this, p, ...a);
   });
-  for (const [floor, start, end, field] of [[1, 'startFight', 'endFight', 'fight'], [2, 'startFight2', 'endFight2', 'fight2']]) {
+  for (const [floor, start, end, field] of [[1, 'startFight', 'endFight', 'fight'], [2, 'startFight2', 'endFight2', 'fight2'], [3, 'startFight3', 'endFight3', 'fight3']]) {
     wrap(start, function (orig, ...a) {
       const out = orig.apply(this, a), f = this[field];
       if (f) { f.meta = new Map(); for (const id of f.ids) { const p = this.players.get(id); if (p) f.meta.set(id, meta(p)); } }

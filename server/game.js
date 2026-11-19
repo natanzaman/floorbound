@@ -10,6 +10,8 @@ import {
 import { TITLES, newStats, meetsTitle } from '../shared/titles.js';
 import { F2, crossesGate2, floorOf, inArena2 } from '../shared/floor2.js';
 import { F2Methods } from './floor2.js';
+import { F3, crossesGate3, inArena3 } from '../shared/floor3.js';
+import { installFloor3, installFloor3Moves } from './floor3.js'; // Floor 3 — The Gale Spires
 import crypto from 'node:crypto';
 import { SmithMethods } from './smith.js';
 import { GroundMethods } from './ground.js';
@@ -63,6 +65,7 @@ export class Game {
     this.spawnMobs();
     this.newTwist(); // Warden twist for the first fight
     this.initFloor2(); // Floor 2 — The Glimmering Mire (server/floor2.js)
+    this.initFloor3(); // Floor 3 — The Gale Spires (server/floor3.js)
   }
 
   id() { return this.nextId++; }
@@ -231,13 +234,15 @@ export class Game {
     if (!this.walk(x, z)) return;
     if (!this.gate.open && crossesGate(p.x, p.z, x, z)) return;
     if (!this.gate2.open && crossesGate2(p.x, p.z, x, z)) return;
+    if (!this.gate3.open && crossesGate3(p.x, p.z, x, z)) return;
     p.x = x; p.z = z;
   }
 
-  walk(x, z) { return walkable(x, z, !(x > F2.split ? this.gate2 : this.gate).open); }
+  walk(x, z) { return walkable(x, z, !(x > F3.split ? this.gate3 : x > F2.split ? this.gate2 : this.gate).open); }
 
   // ---------- raid gate ----------
   toggleReady(p) {
+    if (p.x > F3.split) return this.toggleReady3(p); // the Storm Gate (server/floor3.js)
     if (p.x > F2.split) return this.toggleReady2(p);
     const g = this.gate;
     if (p.dead || g.open || !inGateZone(p.x, p.z)) return;
@@ -697,6 +702,7 @@ export class Game {
   damageMob(m, p, base, { threat = 1, stun = 0, brk = false, interrupt = false, knock = 0, heavy = false, sk = null, frac = null } = {}) {
     if (!this.targetable(m)) return;
     if (m.def.f2 && (base = this.f2DamageMod(m, p, base)) <= 0) return; // Floor 2: shells, burrowed lurkers
+    if (m.def.f3 && (base = this.f3DamageMod(m, p, base)) <= 0) return; // Floor 3: harpies aloft, armour, Wind Wards
     const t = this.time;
     p.lastCombat = t;
     const crit = Math.random() < (p.crit ?? 0.1);
@@ -757,6 +763,7 @@ export class Game {
     if (!killer.kills++) this.track(killer, 'first_kill', { secs: Math.round(this.time - killer.joinedAt), mob: m.type });
     this.statKill(m, killer);
     if (m.def.f2boss) return this.killSovereign(m, killer);
+    if (m.def.f3boss) return this.killColossus(m, killer); // server/floor3.js
     if (m.def.boss) {
       const names = [];
       for (const id of m.contributors) {
@@ -880,7 +887,7 @@ export class Game {
     if (this.fight && (this.fight.ids.has(p.id) || inArena(p.x, p.z))) (this.fight.pd ||= new Map()).set(p.id, (this.fight.pd.get(p.id) || 0) + 1); // for "Undying"
     this.bumpStat(p, 'deaths');
     const floor = floorOf(p.x); // the respawn point (and the stats page) depend on the floor you died on
-    this.track(p, 'death', { cause: src, lvl: p.lvl, floor, area: (floor === 2 ? inArena2(p.x, p.z) : inArena(p.x, p.z)) ? 'arena' : p.z > 95 ? 'woods' : 'field', ...this.fightCtx?.(p) });
+    this.track(p, 'death', { cause: src, lvl: p.lvl, floor, area: (floor === 3 ? inArena3(p.x, p.z) : floor === 2 ? inArena2(p.x, p.z) : inArena(p.x, p.z)) ? 'arena' : p.z > 95 ? 'woods' : 'field', ...this.fightCtx?.(p) });
     this.events.push({ t: 'pdie', id: p.id, src, f: floor });
     this.sys(`${p.name} was defeated.`);
   }
@@ -924,6 +931,7 @@ export class Game {
     this.updateGate();
     this.updateGround();
     this.updateFloor2(dt);
+    this.updateFloor3(dt);
     this.updateRare();
     if (t >= this.lfgT) { this.lfgT = t + 1; this.matchParties(); }
 
@@ -1104,7 +1112,9 @@ export class Game {
       return;
     }
     if (t < R.next) return;
-    const type = Object.keys(RARE.spawns)[Math.floor(Math.random() * Object.keys(RARE.spawns).length)];
+    const all = Object.keys(RARE.spawns), floors = new Set([...this.players.values()].filter(p => !p.bot).map(p => floorOf(p.x)));
+    const near = all.filter(k => floors.has(floorOf(RARE.spawns[k].x[0]))); // prefer a floor someone is on (Floor 3 has its own)
+    const pool = near.length ? near : all, type = pool[Math.floor(Math.random() * pool.length)];
     const pos = this.rareSpot(type);
     if (!pos) { R.next = t + 5; return; }
     this.spawnRare(type, pos[0], pos[1]);
@@ -1333,7 +1343,7 @@ export class Game {
     const g = this.gate;
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
     const gate = [g.open ? 1 : 0, waiting, g.ready.size, g.countAt ? r1(Math.max(0, g.countAt - this.time)) : 0];
-    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), gi: this.groundSnap(), poses: this.posesSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
+    const out = JSON.stringify({ players, mobs, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
     this.events = [];
     return out;
   }
@@ -1343,7 +1353,7 @@ export class Game {
       xp: p.xp, next: xpToNext(p.lvl), lvl: p.lvl,
       cds: p.cds.map(c => Math.max(0, r2(c - this.time))),
       dodge: Math.max(0, r2(p.dodgeCd - this.time)),
-      gold: p.gold, ready: this.gate.ready.has(p.id) || this.gate2.ready.has(p.id) ? 1 : 0,
+      gold: p.gold, ready: this.gate.ready.has(p.id) || this.gate2.ready.has(p.id) || this.gate3.ready.has(p.id) ? 1 : 0,
       ccd: Object.fromEntries(Object.entries(p.consCd).map(([k, v]) => [k, Math.max(0, r1(v - this.time))])),
       tonic: Math.max(0, r1(p.tonicUntil - this.time)), draught: Math.max(0, r1(p.draughtUntil - this.time)),
     };
@@ -1361,6 +1371,7 @@ Object.assign(Game.prototype, TwistMethods); // Warden twists (server/twists.js)
 installCombat(Game); // posture, perfect dodge, guard/parry, Horn Sweep (server/combat.js)
 Object.assign(Game.prototype, MasteryMethods); // skill mastery + evolutions (server/mastery.js)
 Object.assign(Game.prototype, F2Methods); // Floor 2 (server/floor2.js)
+installFloor3(Game); // Floor 3 (server/floor3.js): its methods, plus travel / respawn / Sovereign-kill wrappers
 installClassesB(Game); // Lancer, Bard skills + their hooks (server/classes-b.js)
 Object.assign(Game.prototype, ClassesAMethods); // Ranger and Berserker (server/classes-a.js)
 installStyles(Game); // weapon styles (server/styles.js)
@@ -1371,6 +1382,7 @@ installTracking(Game); // play-tracking hooks: boss fight rows, death / quit con
 installThreat(Game); // threat you can see, healer threat, Cover, flanking (server/threat.js)
 installStaging(Game); // staging hooks for the scene director: boss moves, reserved Last Attack, scripted deaths (server/staging.js)
 installBossTeam(Game); // boss team mechanics (server/bossteam.js); after staging: adds meteor / spread / tether to forceBossMove
+installFloor3Moves(Game); // the Storm Colossus's moves in forceBossMove, Floor 3 testing aids (server/floor3.js); after boss team mechanics
 installRevive(Game); // downed + revive (server/revive.js); after staging and boss team mechanics
 installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js)
 installTeamplay(Game); // skill combos between players, the Team Burst gauge, teamStat() for the post-fight card (server/teamplay.js); after the talents

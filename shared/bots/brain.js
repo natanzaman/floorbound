@@ -16,7 +16,9 @@
 // createBot() returns the bot object: b.configure({ behaviour, follow }), b.command({ k, by, byName, tgt }),
 // b.setSkill(level), b.stop(); b.goal / b.cmd describe what it is doing (admin page).
 import { MOBS, MOB_IDS, CLASS_IDS, PLAYER_SPEED, SPRINT_SPEED, inGateZone, inArena } from '../data.js';
-import { F2, WAYSTONES, STAIRWAY, inGateZone2, inArena2, onFloor2, floorUnlocked } from '../floor2.js';
+import { WAYSTONES, STAIRWAY, inGateZone2, inArena2, floorOf, floorUnlocked } from '../floor2.js';
+import { FLOOR_BOSS, FLOOR_X, inGateZone3, inArena3 } from '../floor3.js';
+import { beamDodge, overloadTurn } from './floor3.js'; // Floor 3 reflexes: Tempest Beam jumps, Overload Breaks
 import { MASTERY, BRANCHES, masteryLevel } from '../mastery.js';
 import { TREES, spendBlock } from '../talents.js';
 import { perceive, potionAt, setSkill, clampSkill } from '../botskill.js';
@@ -32,17 +34,19 @@ import './classes.js'; // built-in class plug-ins (Guardian, Swordsman, Cleric, 
 import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
 import { comboTurn, burstTurn } from './teamplay.js'; // combo payoffs + Team Burst (G2)
 
-const F2_BOSS_LVL = 15;
+const BOSS_LVL = { 1: 5, 2: 15, 3: 25 }; // a leader levels on its floor's field until this, then goes for the boss
+const floorFor = beh => (beh === 'floor3' ? 3 : beh === 'floor2' ? 2 : 0); // a behaviour's own floor (0: none)
 const LEASH = 24; // a follower drops its target and regroups beyond this distance from its anchor (not in boss fights)
 const byId = (a, c) => a.id - c.id;
 const pct = p => p.hp / (p.maxHp || 1);
-const inBossRoom = (x, z) => inArena(x, z) || inArena2(x, z);
+const inBossRoom = (x, z) => inArena(x, z) || inArena2(x, z) || inArena3(x, z);
+const inAnyGate = (x, z) => inGateZone(x, z) || inGateZone2(x, z) || inGateZone3(x, z);
 
 // peers: an optional shared Set of bot ids (bots started together that the server doesn't flag as bots, e.g. test/team.js
 // and /bots.html connect as ordinary players).
 export function createBot({ url, WebSocket: WS = globalThis.WebSocket, cls, name, join = {}, behaviour = 'field', follow = '', skill = 5, floor = 1, branch = null, log = null, logEvents = false, quiet = false, peers = null }) {
   const b = {
-    cls, name, behaviour, follow: String(follow || ''), floor: behaviour === 'floor2' ? 2 : floor, branch, log, logEvents, quiet,
+    cls, name, behaviour, follow: String(follow || ''), floor: floorFor(behaviour) || floor, branch, log, logEvents, quiet,
     id: 0, x: 0, z: 0, seq: 0, face: 0, t: 0, mobs: [], players: [], me: null, dead: false, hp: 1, maxHp: 1, party: 0,
     tele: [], cds: [0, 0, 0, 0], dodgeCd: 0, roll: null, stag: {}, waves: [], orbs: [], pools: [], life: null, cons: null,
     names: new Map(),      // player id -> roster row { name, cls, bot }
@@ -69,7 +73,7 @@ export function createBot({ url, WebSocket: WS = globalThis.WebSocket, cls, name
 }
 
 function configure(b, o = {}) {
-  if (o.behaviour) { b.behaviour = o.behaviour; b.floor = o.behaviour === 'floor2' ? 2 : 1; }
+  if (o.behaviour) { b.behaviour = o.behaviour; b.floor = floorFor(o.behaviour) || 1; }
   if (o.follow !== undefined) b.follow = String(o.follow);
   b.tgtId = null; b.home = null; b.cmd = null;
 }
@@ -114,9 +118,10 @@ function onSnap(b, msg) {
   if (b.t - (b.dodgePressed || -9) > 0.3) b.dodgeCd = msg.me.dodge || 0;
   b.mobs = msg.w.mobs.map(m => ({ id: m[0], type: MOB_IDS[m[1]], x: m[2], z: m[3], hp: m[5], maxHp: m[6], engaged: !!(m[7] & 2), enraged: !!(m[7] & 4), winding: !!(m[7] & 16), staggered: !!(m[7] & 32), marked: !!(m[7] & 256), def: MOBS[MOB_IDS[m[1]]] })).filter(m => m.def);
   const th = new Map(msg.w.th || []); for (const m of b.mobs) m.tgt = th.get(m.id) || 0; // who a boss / elite is after (server/threat.js)
-  const f2 = msg.w.f2, onF2 = onFloor2(b.x);
-  b.gateOpen = onF2 ? !!f2?.gate?.[0] : !!msg.w.gate?.[0];
-  b.gateReady = (onF2 ? f2?.gate?.[2] : msg.w.gate?.[2]) || 0;
+  const f2 = msg.w.f2, f3 = msg.w.f3, fl = floorOf(b.x), gate = fl === 3 ? f3?.gate : fl === 2 ? f2?.gate : msg.w.gate;
+  b.gateOpen = !!gate?.[0];
+  b.gateReady = gate?.[2] || 0;
+  b.ovOn = !!f3?.ov; b.air = f3?.air || []; // Floor 3: the Colossus's Overload; harpies aloft
   b.orbs = f2?.orbs || []; b.pools = f2?.pools || []; b.deluge = !!f2?.del;
   b.tb = msg.w.tb || null; // Team Burst gauges (server/teamplay.js teamSnap)
   b.players = msg.w.players.map(p => ({ id: p[0], x: p[1], z: p[2], face: p[3], hp: p[4], maxHp: p[5], lvl: p[6], cls: CLASS_IDS[p[7]], party: p[8], dead: !!p[9], style: STYLE_IDS[p[11]] || null }));
@@ -176,7 +181,7 @@ function onEvent(b, e) {
     case 'pcancel': b.sweep = null; break;
     case 'perfect': case 'parry': L?.(`[${e.t}] by ${e.id}`); break;
     case 'f2wave': b.waves.push({ x: e.x, z: e.z, start: b.t + e.d, sp: e.sp, w: e.w, max: e.max }); break;
-    case 'stair': b.stair = { x: e.x, z: e.z, until: b.t + e.d }; break;
+    case 'stair': b.stair = { x: e.x, z: e.z, until: b.t + e.d, f: e.f || 2 }; break;
     case 'sys': if (!e.to) L?.(`[sys] ${e.text}`); break;
     case 'hit': {
       let h = b.hits.get(e.id); if (!h) b.hits.set(e.id, h = new Map());
@@ -275,7 +280,7 @@ function command(b, c) {
     }
     case 'farm': case 'boss': b.cmd = { ...base, k: c.k, group }; return ack(c.k);
     case 'ready':
-      if (!b.gateOpen && (inGateZone(b.x, b.z) || inGateZone2(b.x, b.z))) {
+      if (!b.gateOpen && inAnyGate(b.x, b.z)) {
         if (!b.me?.ready) { b.readyT = b.t; b.send({ type: 'ready' }); }
         return ack('ready');
       }
@@ -376,7 +381,7 @@ function think(b) {
   b.anchor = M.anchor ? { id: M.anchor.id, name: M.anchor.name, bot: !!M.anchor.bot } : null;
   upkeep(b, P, M);
   burstTurn(b, P); // join / start a Team Burst
-  if (stepRoll(b) || perilous(b) || waveDodge(b) || travel(b, M)) return;
+  if (stepRoll(b) || perilous(b) || waveDodge(b) || beamDodge(b) || travel(b, M)) return;
   if (reviveTurn(b, P)) return; // a partymate is down and it's our job to pick them up
   act(b, P, M);
 }
@@ -393,9 +398,8 @@ function social(b, P) {
 
 function upkeep(b, P, M) {
   // Raid gate: ready up once the party is all at the gate (with humans: once someone readied, or when ordered).
-  if (!b.script && !b.gateOpen && (inGateZone(b.x, b.z) || inGateZone2(b.x, b.z)) && !b.me.ready && b.t - (b.readyT || -9) > 1) { // (scripted actors ready only when told)
-    const zone = (x, z) => inGateZone(x, z) || inGateZone2(x, z);
-    const there = P.all.filter(p => !p.dead).every(p => zone(p.x, p.z));
+  if (!b.script && !b.gateOpen && inAnyGate(b.x, b.z) && !b.me.ready && b.t - (b.readyT || -9) > 1) { // (scripted actors ready only when told)
+    const there = P.all.filter(p => !p.dead).every(p => inAnyGate(p.x, p.z));
     const ordered = b.cmd?.k === 'boss';
     if (there && (!P.humans.length || ordered || b.gateReady > 0)) { b.readyT = b.t; b.send({ type: 'ready' }); }
     else if (!there) say(b, 'gateWait', {}, { p: 0.5, cd: 90 });
@@ -408,20 +412,22 @@ function upkeep(b, P, M) {
   }
 }
 
-// Floor 2: the Stairway right after a Warden kill, otherwise the town waystone (once unlocked). Goes when the bot
-// leads a Floor 2 run, or when its anchor is on Floor 2.
+// Floors 2 and 3: the Stairway right after a boss kill (Warden: up to Floor 2; Sovereign: up to Floor 3), otherwise this
+// floor's waystone (once unlocked). Goes when the bot leads a run on a higher floor, or when its anchor is up there.
 function travel(b, M) {
-  const want2 = M.mode === 'lead' ? M.beh === 'floor2' || b.floor === 2 && M.beh === b.behaviour : !!M.anchor && onFloor2(M.anchor.x);
-  if (!want2 || onFloor2(b.x) || !floorUnlocked(b.life, 2)) return false;
-  b.goal = 'Travelling to Floor 2';
-  const warp = () => { if (b.t - (b.warpT || -9) > 1) { b.warpT = b.t; b.send({ type: 'warp', f: 2 }); } };
-  if (b.stair && b.stair.until > b.t + 2 && b.z > 150) {
+  const own = floorFor(M.beh) || (M.beh === b.behaviour ? floorFor(b.behaviour) : 0);
+  const want = M.mode === 'lead' ? own : M.anchor ? floorOf(M.anchor.x) : 0, here = floorOf(b.x);
+  if (want < 2 || here === want || !floorUnlocked(b.life, want)) return false;
+  if (M.mode === 'lead' && here > want) return false; // already above the run's floor (e.g. a Floor 2 bot up on Floor 3)
+  b.goal = `Travelling to Floor ${want}`;
+  const warp = () => { if (b.t - (b.warpT || -9) > 1) { b.warpT = b.t; b.send({ type: 'warp', f: want }); } };
+  if (b.stair && b.stair.f === want && b.stair.until > b.t + 2 && b.z > 150 && floorOf(b.stair.x) === here) {
     if (!moveToward(b, b.stair.x, b.stair.z, 1.2) || d2(b.x, b.z, b.stair.x, b.stair.z) < STAIRWAY.use - 0.5) warp();
     return true;
   }
   if (b.z > 150 && !b.gateOpen) return false; // shut in the chamber: wait for the next Stairway
-  const w = WAYSTONES[0];
-  if (b.z > 20 && Math.abs(b.x) > 3) moveToward(b, 0, b.z - 6); // back to the road, then south to town
+  const w = WAYSTONES.find(w => w.floor === here) || WAYSTONES[0], ox = FLOOR_X[here] ?? 0;
+  if (b.z > 20 && Math.abs(b.x - ox) > 3) moveToward(b, ox, b.z - 6); // back to the road, then south to the camp
   else if (!moveToward(b, w.x, w.z + 2.4, 0.3) || d2(b.x, b.z, w.x, w.z) < 3) warp();
   return true;
 }
@@ -457,6 +463,7 @@ function act(b, P, M) {
     moveToward(b, b.x + Math.sin(a) * 3, b.z + Math.cos(a) * 3, 0.2, SPRINT_SPEED);
     return;
   }
+  if (!dodge && overloadTurn(b, tgt)) return; // Floor 3: the Colossus is Overloading: Break it
   if (comboTurn(b, tgt, ctx)) return; // a partner's combo setup on the target: cash it in
   if (!brain.combat || brain.combat(b, tgt, ctx) === false) brainFor('*').combat(b, tgt, ctx);
 }
@@ -481,6 +488,7 @@ function makeCtx(b, P, M, tgt, dodge) {
     const slam = b.seen.get(tank.id)?.gslam, held = b.hits.get(tgt.id)?.get(tank.id);
     ctx.mayBreak = slam !== undefined ? b.t - slam < 6 || b.t - slam > 16 : !held || b.t - held.first > 8;
   }
+  if (b.ovMob && tgt?.id === b.ovMob) ctx.mayBreak = true; // Overload (Floor 3): everyone Breaks
   ctx.peel = b.role === 'tank' && b.mobs.some(m => m.engaged && !m.def.boss && d2(m.x, m.z, b.x, b.z) < 8 + m.def.radius
     && alive.some(p => p.id !== b.id && p.role !== 'tank' && d2(p.x, p.z, m.x, m.z) < m.def.radius + 2.5));
   return ctx;
@@ -488,7 +496,7 @@ function makeCtx(b, P, M, tgt, dodge) {
 
 // ---------------- targets ----------------
 function chooseTarget(b, P, M) {
-  const f2 = onFloor2(b.x), here = b.mobs.filter(m => onFloor2(m.x) === f2);
+  const fl = floorOf(b.x), here = b.mobs.filter(m => floorOf(m.x) === fl);
   if (M.mode === 'attack') return here.find(m => m.id === b.cmd.tgt) || null;
   if (M.mode === 'stay') { // only what comes to us
     const c = b.cmd;
@@ -544,10 +552,10 @@ function assistTarget(b, P, anchor, here, leading) {
 // Leader targeting by behaviour (the classic progression and the single-bot behaviours).
 // Progression: boars until level 3, wolves until level 5, then the Warden. Floor 2: the Mire until 15, then the Sovereign.
 function pickProgress(b, here, minBoss) {
-  const lvl = b.me?.lvl || 1, f2 = onFloor2(b.x);
-  minBoss ??= f2 ? F2_BOSS_LVL : 5;
+  const lvl = b.me?.lvl || 1, fl = floorOf(b.x), f2 = fl > 1; // (f2: any floor above the first)
+  minBoss ??= BOSS_LVL[fl];
   if (b.noBoss) minBoss = 99; // told to keep to the field (the Named, server/named.js)
-  const boss = here.find(m => m.type === (f2 ? 'sovereign' : 'warden'));
+  const boss = here.find(m => m.type === FLOOR_BOSS[fl]);
   if (boss && b.z > 162 && lvl >= minBoss) return boss;
   const want = lvl >= minBoss ? null : f2 ? 'mire' : lvl < 3 ? 'boar' : 'wolf';
   return nearest(here, m => {
@@ -562,7 +570,7 @@ function pickProgress(b, here, minBoss) {
 }
 
 function leadTarget(b, beh, here) {
-  const lvl = b.me?.lvl || 1, f2 = onFloor2(b.x);
+  const lvl = b.me?.lvl || 1, f2 = floorOf(b.x) > 1;
   const threat = r => nearest(here, m => { const d = d2(m.x, m.z, b.x, b.z); return !m.def.boss && m.engaged && d < r ? d : null; });
   if (beh === 'follow') return threat(6);
   if (beh === 'field') {
@@ -592,15 +600,15 @@ function idle(b, P, M) {
     return;
   }
   // leading: wait for bot teammates that fell behind (e.g. respawned in town), up to 20 s at a time
-  const behind = P.mates.some(p => p.bot && !p.dead && onFloor2(p.x) === onFloor2(b.x) && d2(p.x, p.z, b.x, b.z) > 20);
+  const behind = P.mates.some(p => p.bot && !p.dead && floorOf(p.x) === floorOf(b.x) && d2(p.x, p.z, b.x, b.z) > 20);
   if (behind && !inBossRoom(b.x, b.z)) {
     b.waitFrom ??= b.t;
     if (b.t - b.waitFrom < 20) return;
   } else b.waitFrom = null;
-  const beh = M.beh, f2 = onFloor2(b.x), lvl = b.me?.lvl || 1;
+  const beh = M.beh, fl = floorOf(b.x), lvl = b.me?.lvl || 1;
   if (beh === 'follow') return;
   if (beh === 'field') { const [x, z] = fieldSpot(b); moveToward(b, x, z, 1); return; }
-  if (beh !== 'warden' && (b.noBoss || lvl < (f2 ? F2_BOSS_LVL : 5))) { moveToward(b, f2 ? F2.x : 0, f2 ? 70 : 60); return; } // into the field
+  if (beh !== 'warden' && (b.noBoss || lvl < BOSS_LVL[fl])) { moveToward(b, FLOOR_X[fl], fl > 1 ? 70 : 60); return; } // into the field
   travelToBoss(b);
 }
 
@@ -619,11 +627,11 @@ function goalText(b, P, M, tgt) {
   if (M.mode === 'attack') return `Attacking ${tgt?.def.name || 'target'} (${b.cmd.byName}'s order)`;
   if (M.mode === 'follow') return fight ? `${fight} with ${M.anchor.name}` : M.anchor.dead ? `Waiting for ${M.anchor.name}` : `Following ${M.anchor.name}`;
   if (fight) return fight;
-  const gate = !b.gateOpen && (inGateZone(b.x, b.z) || inGateZone2(b.x, b.z));
+  const gate = !b.gateOpen && inAnyGate(b.x, b.z);
   if (b.waitFrom != null && b.t - b.waitFrom < 20) return 'Waiting for the party';
   if (M.beh === 'field') return 'Farming the field';
   if (M.beh === 'follow') return `Looking for ${b.follow || 'a player'}`;
-  if (M.beh !== 'warden' && b.noBoss) return onFloor2(b.x) ? 'Hunting in the Mire' : 'Farming the field';
-  if (M.beh !== 'warden' && (b.me?.lvl || 1) < (onFloor2(b.x) ? F2_BOSS_LVL : 5)) return 'Levelling up';
-  return gate ? 'Waiting at the raid gate' : onFloor2(b.x) ? 'Heading to the Sovereign' : 'Heading to the Warden';
+  if (M.beh !== 'warden' && b.noBoss) return floorOf(b.x) > 1 ? 'Hunting the field' : 'Farming the field';
+  if (M.beh !== 'warden' && (b.me?.lvl || 1) < BOSS_LVL[floorOf(b.x)]) return 'Levelling up';
+  return gate ? 'Waiting at the raid gate' : `Heading to the ${({ 1: 'Warden', 2: 'Sovereign', 3: 'Colossus' })[floorOf(b.x)]}`;
 }

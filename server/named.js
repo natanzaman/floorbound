@@ -31,6 +31,7 @@
 // they have; NAMED_BOSS_AFTER=<s> is how long they farm before their first boss attempt of a visit.
 import { CLASSES, MAX_LEVEL, PARTY_MAX, areaName, inArena, inGateZone, resolveCollision } from '../shared/data.js';
 import { F2, floorOf, inArena2, inGateZone2 } from '../shared/floor2.js';
+import { F3, inArena3, inGateZone3 } from '../shared/floor3.js';
 import { makeItem, SLOTS } from '../shared/items.js';
 import { botAffixes } from '../shared/loot.js';
 import { MASTERY } from '../shared/mastery.js';
@@ -51,8 +52,9 @@ const isHuman = p => !!p && !p.bot;
 const FLOORS = {
   1: { home: g => g.spawnPoint(), arena: inArena, near: (x, z) => inArena(x, z) || inGateZone(x, z) || (z > 132 && Math.abs(x) < 24), fight: 'fight', minLvl: 5, beh: { farm: 'field', boss: 'warden' } },
   2: { home: () => [F2.camp.x, F2.camp.z], arena: inArena2, near: (x, z) => inArena2(x, z) || inGateZone2(x, z) || (z > 132 && Math.abs(x - F2.x) < 24), fight: 'fight2', minLvl: 15, beh: { farm: 'floor2', boss: 'floor2' } },
+  3: { home: () => [F3.camp.x, F3.camp.z], arena: inArena3, near: (x, z) => inArena3(x, z) || inGateZone3(x, z) || (z > 132 && Math.abs(x - F3.x) < 24), fight: 'fight3', minLvl: 25, beh: { farm: 'floor3', boss: 'floor3' } },
 };
-const inBossRoom = p => inArena(p.x, p.z) || inArena2(p.x, p.z);
+const inBossRoom = p => inArena(p.x, p.z) || inArena2(p.x, p.z) || inArena3(p.x, p.z);
 
 // ---------- Postgres (server/db.js makes the tables) ----------
 export function makeNamedStore(q, { adminIds = [] } = {}) {
@@ -310,7 +312,7 @@ export class NamedManager {
   // ---------- spawning ----------
   spawn(st, floor) {
     const def = st.def, F = FLOORS[floor] || FLOORS[1];
-    const [view] = this.mgr.start([def.cls], [def.name], { lvl: st.lvl, behaviour: F.beh.farm, follow: '', skill: NAMED_SKILL, join: { named: def.id, f2: 1 } });
+    const [view] = this.mgr.start([def.cls], [def.name], { lvl: st.lvl, behaviour: F.beh.farm, follow: '', skill: NAMED_SKILL, join: { named: def.id, f2: 1, f3: 1 } });
     const e = this.mgr.bots.find(x => x.bid === view.bid);
     e.named = def.id; e.b.noBoss = true;
     st.e = e; st.pid = 0; st.hostT = null;
@@ -621,7 +623,7 @@ export function installNamed(Game) {
   wrap('lastAttackHeld', function (orig, m, p) {
     if (orig.call(this, m, p)) return true;
     if (!this.named || !p?.named || !m?.def?.boss) return false;
-    const room = m.def.f2boss ? inArena2 : inArena;
+    const room = m.def.f3boss ? inArena3 : m.def.f2boss ? inArena2 : inArena;
     for (const id of m.contributors) { const h = this.players.get(id); if (isHuman(h) && !h.dead && room(h.x, h.z)) return true; }
     return false;
   });
@@ -641,9 +643,10 @@ export function installNamed(Game) {
   });
   heroesClear('recordClear', 'hadFirstClear', m => m.contributors);
   heroesClear('recordClear2', 'hadFirstClear2', (m, a) => a[0] || m.contributors);
+  heroesClear('recordClear3', 'hadFirstClear3', (m, a) => a[0] || m.contributors);
 
   // Friendship sources.
-  for (const [end, field] of [['endFight', 'fight'], ['endFight2', 'fight2']]) {
+  for (const [end, field] of [['endFight', 'fight'], ['endFight2', 'fight2'], ['endFight3', 'fight3']]) {
     wrap(end, function (orig, result, ...a) {
       const f = this[field], out = orig.call(this, result, ...a);
       if (this.named && f && !this[field]) this.named.onFightEnd(f, result);

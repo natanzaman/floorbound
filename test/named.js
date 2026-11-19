@@ -82,7 +82,7 @@ console.log('# pure rules (shared/named.js)');
   ok(!canSummon(hal, 84) && canSummon(hal, 85) && canSummon(cairn, 85), 'only a Sworn friend can call them');
   // level
   ok(namedLevel([20, 12, 8, 3]) === 15 && namedLevel([10]) === 12 && namedLevel([]) === 3, 'level: the top-3 average + 2');
-  ok(namedLevel([4, 4, 4], { floor: 15 }) === 15 && namedLevel([20, 20, 20]) === MAX_LEVEL && namedLevel([10], { offset: 5 }) === 15, 'never drops, never above the cap, the offset is adjustable');
+  ok(namedLevel([4, 4, 4], { floor: 15 }) === 15 && namedLevel([30, 30, 29]) === MAX_LEVEL && namedLevel([10], { offset: 5 }) === 15, 'never drops, never above the cap, the offset is adjustable');
   ok(isNamedName(' cairn ') && isNamedName('HALVARD') && !isNamedName('Cairnn'), 'their names are reserved');
   ok(awayLine('heroes', 600) === '' && /While you were away \(the last 5 hours\): The Hearthward .* level 14\./.test(awayLine('heroes', 5 * 3600, { lvlFrom: 12, lvlTo: 14 })), 'a "while you were away" line from the time gone and the level change');
 }

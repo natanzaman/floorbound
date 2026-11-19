@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { OBSTACLES } from '/shared/data.js';
 import { F2, GATE2, WAYSTONES, STAIRWAY, SOVEREIGN } from '/shared/floor2.js';
+import { ATMOS3 } from '/floor3world.js';
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
 const glow = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
@@ -13,6 +14,7 @@ function rng(seed) { return () => { seed = (seed * 1664525 + 1013904223) >>> 0; 
 const ATMOS = [
   { sky: 0x9cc9ee, near: 70, far: 230, hemiSky: 0xdbeaff, hemiGround: 0x3b5d2a, hemi: 1.1, sun: 0xfff1d6, sunI: 1.9 },
   { sky: 0x31454f, near: 22, far: 150, hemiSky: 0x9fd6e0, hemiGround: 0x1d2b22, hemi: 0.95, sun: 0xb9d4ff, sunI: 1.15 },
+  ATMOS3, // Floor 3 (floor3world.js)
 ];
 
 export function createFloor2(scene, { sun, occluders = [] } = {}) {
@@ -167,7 +169,7 @@ export function createFloor2(scene, { sun, occluders = [] } = {}) {
   // waystones (one per town) and the Stairway portal in the Warden's chamber
   const waystones = WAYSTONES.map(w => {
     const g = add(new THREE.Group(), scene); g.position.set(w.x, 0, w.z);
-    const color = w.floor === 2 ? 0x5eead4 : 0x93c5fd;
+    const color = ({ 2: 0x5eead4, 3: 0xfcd34d })[w.floor] || 0x93c5fd;
     add(new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.6, 0.5, 8), mat(0x6b7280)), g).position.y = 0.25;
     add(new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 0.4, 8), mat(0x9ca3af)), g).position.y = 0.7;
     const rune = add(new THREE.Mesh(new THREE.TorusGeometry(1.25, 0.06, 6, 32), glow(color)), g); rune.rotation.x = Math.PI / 2; rune.position.y = 0.52;
@@ -196,21 +198,25 @@ export function createFloor2(scene, { sun, occluders = [] } = {}) {
 
   // atmosphere switching (Floor 1 <-> Floor 2), eased so a warp fades the mist in
   const hemi = scene.children.find(o => o.isHemisphereLight);
-  const cur = { k: 0 }, c1 = new THREE.Color(), c2 = new THREE.Color();
-  const lerpHex = (a, b, k, out) => out.set(c1.setHex(a).lerp(c2.setHex(b), k));
-  function setAtmosphere(k) {
-    const [a, b] = ATMOS;
-    if (scene.background?.isColor) lerpHex(a.sky, b.sky, k, scene.background);
-    if (scene.fog) { lerpHex(a.sky, b.sky, k, scene.fog.color); scene.fog.near = a.near + (b.near - a.near) * k; scene.fog.far = a.far + (b.far - a.far) * k; }
-    if (hemi) { lerpHex(a.hemiSky, b.hemiSky, k, hemi.color); lerpHex(a.hemiGround, b.hemiGround, k, hemi.groundColor); hemi.intensity = a.hemi + (b.hemi - a.hemi) * k; }
-    if (sun) { lerpHex(a.sun, b.sun, k, sun.color); sun.intensity = a.sunI + (b.sunI - a.sunI) * k; }
+  // cur.k: how far into Floor 2's look, cur.k3: into Floor 3's (Floor 1 is the rest); a warp eases from one to the next
+  const cur = { k: 0, k3: 0 }, c1 = new THREE.Color(), c2 = new THREE.Color(), c3 = new THREE.Color();
+  const mix = (key, k, k3, out) => out.set(c1.setHex(ATMOS[0][key]).multiplyScalar(1 - k - k3).add(c2.setHex(ATMOS[1][key]).multiplyScalar(k)).add(c3.setHex(ATMOS[2][key]).multiplyScalar(k3)));
+  const num = (key, k, k3) => ATMOS[0][key] * (1 - k - k3) + ATMOS[1][key] * k + ATMOS[2][key] * k3;
+  function setAtmosphere(k, k3 = cur.k3) {
+    if (scene.background?.isColor) mix('sky', k, k3, scene.background);
+    if (scene.fog) { mix('sky', k, k3, scene.fog.color); scene.fog.near = num('near', k, k3); scene.fog.far = num('far', k, k3); }
+    if (hemi) { mix('hemiSky', k, k3, hemi.color); mix('hemiGround', k, k3, hemi.groundColor); hemi.intensity = num('hemi', k, k3); }
+    if (sun) { mix('sun', k, k3, sun.color); sun.intensity = num('sunI', k, k3); }
   }
 
   let time = 0;
-  function update(dt, onF2, deluged) {
+  function update(dt, onF2, deluged, onF3 = false) {
     time += dt;
-    const want = onF2 ? 1 : 0;
-    if (Math.abs(cur.k - want) > 0.001) { cur.k += (want - cur.k) * Math.min(1, dt * 2.5); if (Math.abs(cur.k - want) < 0.01) cur.k = want; setAtmosphere(cur.k); }
+    const want = onF2 ? 1 : 0, want3 = onF3 ? 1 : 0;
+    if (Math.abs(cur.k - want) > 0.001 || Math.abs(cur.k3 - want3) > 0.001) {
+      for (const [key, w] of [['k', want], ['k3', want3]]) { cur[key] += (w - cur[key]) * Math.min(1, dt * 2.5); if (Math.abs(cur[key] - w) < 0.01) cur[key] = w; }
+      setAtmosphere(cur.k, cur.k3);
+    }
     gate2.update(dt);
     root.visible = cur.k > 0.02 || onF2; // skip drawing the Mire from Floor 1
     for (const w of waystones) { w.core.rotation.y += dt * 0.8; w.shell.rotation.y -= dt * 0.5; w.core.position.y = 2.9 + Math.sin(time * 1.6 + w.x) * 0.15; w.shell.position.y = w.core.position.y; }

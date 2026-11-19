@@ -1,7 +1,8 @@
 // Floor 2 — The Glimmering Mire: client runtime. Snapshot state (gate 2, orbs, pools, burrowed lurkers, the Deluge,
 // the Stairway), Floor 2 events and effects, waystone travel UI, and atmosphere. main.js wires it in with a few calls.
 import * as THREE from 'three';
-import { F2, GATE2, WAYSTONES, STAIRWAY, PHASE_TEXT2, inArena2, inGateZone2, nearWaystone, floorUnlocked, onFloor2 } from '/shared/floor2.js';
+import { F2, GATE2, WAYSTONES, STAIRWAY, PHASE_TEXT2, inArena2, inGateZone2, nearWaystone, floorUnlocked, onFloor2, floorOf } from '/shared/floor2.js';
+import { FLOOR_NAMES, onFloor3 } from '/shared/floor3.js';
 import { createFloor2 } from '/floor2world.js';
 import { PACE } from '/shared/data.js';
 
@@ -34,12 +35,12 @@ export function initFloor2Client(ctx) {
   document.getElementById('hud').appendChild(panel);
   const unlocked = f => floorUnlocked(state.inv?.life, f);
   function renderPanel() {
-    const here = onFloor2(state.x) ? 2 : 1;
+    const here = floorOf(state.x);
     const row = w => {
       const open = unlocked(w.floor), cur = w.floor === here;
       const btn = cur ? '<small style="opacity:.6">You are here</small>' : open ? `<button data-f="${w.floor}" style="padding:6px 14px;border-radius:7px;border:0;font-weight:800;background:linear-gradient(90deg,#0d9488,#2dd4bf)">Travel</button>` : '<small style="opacity:.6">Sealed</small>';
-      const sub = open ? w.name : 'Help defeat the Horned Warden to open it';
-      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.07)"><span><b>Floor ${w.floor}${w.floor === 2 ? ' — The Glimmering Mire' : ' — Verdant Field'}</b><br><small style="opacity:.7">${sub}</small></span>${btn}</div>`;
+      const sub = open ? w.name : `Help defeat ${w.floor === 3 ? 'the Drowned Sovereign' : 'the Horned Warden'} to open it`;
+      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.07)"><span><b>${FLOOR_NAMES[w.floor]}</b><br><small style="opacity:.7">${sub}</small></span>${btn}</div>`;
     };
     panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;font-weight:800;letter-spacing:.12em;color:#99f6e4">WAYSTONE<button data-a="close" style="padding:2px 9px;border-radius:6px;border:1px solid rgba(160,200,255,.3);background:transparent">✕</button></div>${WAYSTONES.map(row).join('')}`;
   }
@@ -206,7 +207,7 @@ export function initFloor2Client(ctx) {
   function update(dt) {
     t += dt;
     const on2 = onFloor2(state.x);
-    world.update(dt, on2, !!data.del);
+    world.update(dt, on2, !!data.del, onFloor3(state.x));
     for (const o of orbs.values()) { const p = o.g.position; p.x += (o.x - p.x) * Math.min(1, dt * 14); p.z += (o.z - p.z) * Math.min(1, dt * 14); p.y = 1.2 + Math.sin(t * 8 + o.x) * 0.1; o.g.rotation.y += dt * 3; }
     for (const p of pools.values()) { p.t += dt; p.disc.material.opacity = p.armed ? 0.42 + Math.sin(p.t * 4) * 0.08 : 0.15 + 0.2 * Math.min(1, p.t); p.edge.material.color.setHex(p.armed ? 0xe879f9 : 0xc084fc); }
     for (const m of ripples) if (m.visible) { const k = (t * (m.userData.hot ? 3 : 1.2)) % 1; m.scale.setScalar(0.6 + k * (m.userData.hot ? 2.4 : 1.4)); m.material.opacity = 0.65 * (1 - k); }

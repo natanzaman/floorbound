@@ -4,13 +4,13 @@
 //  - recompute wrapper: p.tal = talent totals + worn gear (affixes and set bonuses), so every talent hook (posture,
 //    healing, threat, skill damage, dodge, Broken damage) reads gear too. Extra keys: stat.combo (server/teamplay.js),
 //    stat.revive (server/revive.js), p.tal.gear.cds (flat skill cooldown cuts) and p.tal.gear.keys (set rules).
-//  - Set rules: Rampart (breakMob), Undertow (damageMob, a Switch hit).
+//  - Set rules: Rampart (breakMob), Undertow (damageMob, a Switch hit), Stormcall (damageMob, a Switch on a Broken boss).
 //  - Loadouts: up to LOADOUTS saved builds (worn gear by uid + talents) in p.inv.loadouts (saved with the inventory);
 //    { type: 'loadout', op: 'save' | 'use' | 'clear' | 'rename', i, name }. Swapping only in town (a camp counts),
 //    never within LOADOUT_CALM seconds of combat, never downed or dead.
 //  - The Smith's affix reroll (server/smith.js calls rerollAx).
 //  - Bots equip what they loot when it's clearly better for their role.
-import { inTown } from '../shared/data.js';
+import { inTown, CLASSES } from '../shared/data.js';
 import { SLOTS } from '../shared/items.js';
 import {
   lootFor, sourceOf, rollTable, rollGear, makeSetPiece, pickSetSlot, buildTotals, rerollAffix, rerollCost, affixText,
@@ -199,6 +199,17 @@ export function installLoot(Game) {
       p.undertowT = this.time + K.cd;
       for (const o of this.players.values()) if (!o.dead && !o.downed && o.hp < o.maxHp && dist(o, p) <= K.r) this.healPlayer(o, o.maxHp * K.heal, p, null);
       this.events.push({ t: 'tproc', k: 'undertow', id: p.id, to: p.id, x: r2(p.x), z: r2(p.z), r: K.r });
+    }
+    return out;
+  });
+
+  // Stormcall (Stormforged 3): a Switch hit on a Broken boss hits harder and takes time off your Break skill.
+  wrap('damageMob', function (orig, m, p, base, opts = {}) {
+    if (!p?.tal?.gear?.keys.stormcall || !m?.def?.boss || !(this.time < m.staggerUntil) || p.id === m.staggerBy) return orig.call(this, m, p, base, opts);
+    const K = SET_KEYS.stormcall, ev0 = this.events.length, out = orig.call(this, m, p, base * (1 + K.dmg), opts);
+    if (this.events.slice(ev0).some(e => e.t === 'hit' && e.by === p.id && e.sw)) {
+      p.cls && (CLASSES[p.cls]?.skills || []).forEach((sk, i) => { if (sk.brk && p.cds[i] > this.time) p.cds[i] = Math.max(this.time, p.cds[i] - K.refund); });
+      this.events.push({ t: 'tproc', k: 'stormcall', id: p.id, to: p.id, x: r2(p.x), z: r2(p.z), r: 3 });
     }
     return out;
   });

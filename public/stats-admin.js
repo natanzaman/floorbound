@@ -16,7 +16,7 @@ const clsName = c => CLASSES[c]?.name || cap(c);
 const clsColor = c => { const v = CLASSES[c]?.color; return typeof v === 'number' ? `#${v.toString(16).padStart(6, '0')}` : v || '#9cc4ff'; };
 const styleName = s => STYLES[s]?.name || (s ? cap(s) : 'Default');
 const twistName = t => (t ? TWISTS[t]?.name || cap(t) : 'No twist');
-const BOSS = { 1: 'Warden', 2: 'Sovereign' };
+const BOSS = { 1: 'Warden', 2: 'Sovereign', 3: 'Colossus' };
 const date = iso => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
 // Categorical slots (dark steps of the validated reference palette, checked on this page's surface).
@@ -63,14 +63,14 @@ function deathsSection(d, who) {
   }
   const top = [...byCause.values()].sort((a, b) => b.n - a.n).slice(0, 12);
   const causeChart = hbars(top.map(c => ({
-    label: `${c.boss ? `<span class="fl ${c.boss === 2 ? 'f2' : ''}">${BOSS[c.boss]}</span>` : ''}${esc(c.cause)}`,
+    label: `${c.boss ? `<span class="fl ${c.boss > 1 ? `f${c.boss}` : ''}">${BOSS[c.boss]}</span>` : ''}${esc(c.cause)}`,
     segs: PHASE_SEG.map(s => ({ v: c[s.k], color: s.color, tip: `${c.cause}: ${c[s.k]} ${s.k === 'field' ? 'outside boss fights' : `in ${BOSS[c.boss] || 'boss'} phase ${s.k + 1}`}` })),
   })));
   // boss deaths by phase: floor x phase grid, shaded by count
-  const grid = { 1: [0, 0, 0], 2: [0, 0, 0] };
-  for (const r of rows) if (r.boss) grid[r.boss][Math.min(2, r.phase | 0)] += r.n;
+  const grid = { 1: [0, 0, 0], 2: [0, 0, 0], 3: [0, 0, 0] };
+  for (const r of rows) if (r.boss && grid[r.boss]) grid[r.boss][Math.min(2, r.phase | 0)] += r.n;
   const gmax = Math.max(1, ...Object.values(grid).flat());
-  const phaseGrid = `<table class="pgrid"><thead><tr><th></th><th>Phase 1</th><th>Phase 2</th><th>Phase 3</th></tr></thead><tbody>${[1, 2].map(f =>
+  const phaseGrid = `<table class="pgrid"><thead><tr><th></th><th>Phase 1</th><th>Phase 2</th><th>Phase 3</th></tr></thead><tbody>${[1, 2, 3].map(f =>
     `<tr><td>${BOSS[f]}</td>${grid[f].map((n, i) => `<td data-tip="${BOSS[f]} phase ${i + 1}: ${n} deaths" style="background:rgba(57,135,229,${(0.08 + 0.7 * n / gmax).toFixed(2)})">${n}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   // Warden twists: fights, kill rate, deaths per fight
   const tw = new Map();
@@ -122,7 +122,7 @@ function attemptsSection(d) {
   const who = r => r.members.map(m => m.bot ? `<span class="who"><i style="background:${clsColor(m.cls)}"></i>${esc(clsName(m.cls))} bot</span>`
     : `<span class="who"><i style="background:${clsColor(m.cls)}"></i>${esc(m.name)}</span>`).join('') + (r.bots && !r.members.some(m => m.bot) ? `<span class="tag">+${r.bots} bot${r.bots > 1 ? 's' : ''}</span>` : '');
   const table = rows.length ? `<table class="tbl"><thead><tr><th>Party</th><th>Boss</th><th>Attempts to first clear</th><th>Status</th></tr></thead><tbody>${rows.map(r =>
-    `<tr><td>${who(r)}</td><td><span class="fl ${r.floor === 2 ? 'f2' : ''}">${BOSS[r.floor] || `F${r.floor}`}</span></td>
+    `<tr><td>${who(r)}</td><td><span class="fl ${r.floor > 1 ? `f${r.floor}` : ''}">${BOSS[r.floor] || `F${r.floor}`}</span></td>
      <td><span class="ib"><span style="width:${(r.attempts / amax) * 100}%;background:${r.cleared ? C.s3 : C.s2}"></span></span>${r.attempts}</td>
      <td>${r.cleared ? `Cleared ${date(r.first_kill)}` : `Still trying${r.best_hp_left != null ? ` · best: boss at ${r.best_hp_left}%` : ''}`}</td></tr>`).join('')}</tbody></table>`
     : '<div class="sub">No boss fights yet.</div>';
@@ -191,7 +191,7 @@ function recentSection(d) {
     return `<span class="who mf" data-tip="${esc(`${f.n} (${clsName(f.c)}${f.b ? ' bot' : ''}): ${tip || 'no numbers'}${f.t?.length ? ` · ${f.t.map(k => MVP_TITLE[k]?.name || k).join(', ')}` : ''}`)}"><i style="background:${clsColor(f.c)}"></i>${f.n === mvp ? '★ ' : ''}${esc(f.n)}${f.b ? '<small class="bt">bot</small>' : ''}${t ? ` <em>${esc(t.name)}</em>` : ''}</span>`;
   };
   const table = `<table class="tbl recent"><thead><tr><th>When</th><th>Boss</th><th>Result</th><th>Time</th><th>Fighters (★ MVP, headline title; hover for numbers)</th></tr></thead><tbody>${rows.map(r =>
-    `<tr><td class="nw">${when(r.at)}</td><td><span class="fl ${r.floor === 2 ? 'f2' : ''}">${BOSS[r.floor] || `F${r.floor}`}</span></td>
+    `<tr><td class="nw">${when(r.at)}</td><td><span class="fl ${r.floor > 1 ? `f${r.floor}` : ''}">${BOSS[r.floor] || `F${r.floor}`}</span></td>
      <td class="nw">${r.result === 'kill' ? '<b class="win">Kill</b>' : `Wipe${r.hp_left != null ? ` · ${r.hp_left}%` : ''}`}</td><td>${fmtSecs(r.secs)}</td>
      <td>${r.mvp ? r.mvp.rows.map(f => fighter(f, r.mvp.mvp)).join('') : `<span class="nc">${r.humans} player${r.humans === 1 ? '' : 's'}, ${r.bots} bot${r.bots === 1 ? '' : 's'} (no card)</span>`}</td></tr>`).join('')}</tbody></table>`;
   return panel('Recent fights', 'The latest boss fights and their post-fight MVP card: who fought, the MVP and each fighter’s headline title.', table);
