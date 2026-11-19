@@ -262,11 +262,12 @@ function world({ store = null } = {}) {
   hp.dead = false; hp.hp = hp.maxHp;
   // daily cap through the live path, and the contract for I3 / I4
   fresh(nat, 'maribel');
-  for (let i = 0; i < 60; i++) g.addFriendship(nat, 'maribel', 1, 'request');
+  for (let i = 0; i < 60; i++) g.addFriendship(nat, 'maribel', 1, 'fight');
   const fr = g.namedFriendship(nat, 'maribel');
-  ok(fr.pts === 18 && fr.tier === 'known' && fr.left === 0 && g.addFriendship(nat.id, 'maribel', 5, 'request').d === 0, 'game.addFriendship / game.namedFriendship: capped per day');
+  ok(fr.pts === 18 && fr.tier === 'known' && fr.left === 0 && g.addFriendship(nat.id, 'maribel', 5, 'revive').d === 0, 'game.addFriendship / game.namedFriendship: capped per day');
+  ok(g.addFriendship(nat, 'maribel', 1, 'request').d === 1 && g.namedFriendship(nat, 'maribel').pts === 19, '(a finished request has its own cap, I4: server/namedquests.js)');
   clock.t += 86400e3;
-  ok(g.addFriendship(nat, 'maribel', 30, 'request').d === 18 && g.namedFriendship(nat, 'maribel').tier === 'ally', 'the next day more; a tier-up');
+  ok(g.addFriendship(nat, 'maribel', 30, 'fight').d === 18 && g.namedFriendship(nat, 'maribel').tier === 'ally', 'the next day more; a tier-up');
   ok(nat.sent.some(s => s.op === 'fr' && s.id === 'maribel' && s.up && s.tierName === 'Ally') && tracked.some(t => t.kind === 'named_tier' && t.data.named === 'maribel'), 'tier-ups are announced');
   ok(g.addFriendship(hp, 'maribel', 5, 'fight') === null && g.namedFriendship(hp, 'maribel') === null, 'bots have no friendship');
 

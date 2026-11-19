@@ -12,6 +12,7 @@
 //   loss    only one: leaving them downed (they bleed out with you standing within RULES.downR m, in their party)
 //   caps    one daily cap per Named (by your current tier with them), resetting at 10:00 UTC; talk has its own small cap
 //           and can never cross a tier by itself; a tier, once reached, is never lost
+//           finished requests (I4) have their own small cap instead (shared/namedquests.js REQ.friendDaily)
 // The server keeps one record per (player, Named): { pts, day, got (gained today), chat (gained from talk today) }.
 import { CLASSES, MAX_LEVEL } from './data.js';
 
@@ -178,6 +179,7 @@ export function gainFriendship(rec, def, source, base, now = Date.now()) {
   const was = tierIndex(rec.pts);
   let d = base * (def.trust.rate[source] ?? 1);
   if (d < 0) d = Math.max(d, TIERS[was].at - rec.pts); // (a tier is never lost)
+  else if (source === 'request') d = Math.min(d, FRIEND_MAX - rec.pts); // (I4: its own bounded cap, server/namedquests.js)
   else {
     d = Math.min(d, Math.max(0, dailyCap(def, rec.pts) - rec.got), FRIEND_MAX - rec.pts);
     if (source === 'chat') { // talk: its own small cap, and never across a tier by itself

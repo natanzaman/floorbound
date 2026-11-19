@@ -409,7 +409,7 @@ Same rules as F/G/H (flock lock, push with `--force-with-lease`).
 - **Where:** `server/named.js` (`installNamed` wrappers on Game + `NamedManager`), `server/named-admin.js`, `public/named.js` (Friends tab), `public/admin-named.js`, tables `named_chars` and `named_friendship`, `floor_clears.heroes`. README "The Named" has every number.
 - **Contract for I3 / I4:**
   - `game.namedFriendship(player, namedId)` → `{ pts, tier, tierIndex, tierName, left }` (or `null`: no such Named, a bot, or `NAMED_ENABLED=0`).
-  - `game.addFriendship(player, namedId, amount, reason)` → `{ d, pts, tier, up }`. `reason` is a source: `chat` (already capped at +3 a day and never across a tier; negative amounts never cost a tier), `request`, or any `GAINS` key. Everything shares the one daily cap per Named.
+  - `game.addFriendship(player, namedId, amount, reason)` → `{ d, pts, tier, up }`. `reason` is a source: `chat` (already capped at +3 a day and never across a tier; negative amounts never cost a tier), `request`, or any `GAINS` key. Everything shares the one daily cap per Named, except `request` (I4 caps it itself).
   - `game.named` is the manager: `chars` (id → `{ def, lvl, e (the BotManager entry), … }`), `playerOf(st)`, `say(p, text)` (a speech bubble), `hostOf(p)`, `listFor(player)`. Each `def` has `persona`, `blurb`, `trust` and `namedLine(def, key, vars)` canned lines (`refuse`, `busy`, `taken`, `join`, `called`, `home`, `raid`).
   - The existing AI minds skip `e.named` entries (`server/ai/index.js`), so I3's talk path is the only one that speaks for them.
   - Client: `{ type: 'named', op: 'fr', … }` already drives tier-up banners; add ops beside `list` / `invite` / `call` in `NamedManager.handle`.
@@ -451,6 +451,13 @@ Build it with the KayKit rig, procedural meshes and materials, the way `public/s
 1. **Personal requests** from templates (kill N of a mob, bring N materials, help in a boss fight, escort or spar). The AI picks and phrases them in character; code tracks and rewards them (friendship, gold, a small unique keepsake at Sworn).
 2. **Outreach:** at Friend and above, a Named may message you (whisper / chat) to invite you to a raid or a farm when you're online. Rate-limited, and polite if declined.
 3. **Accept when:** tests cover request tracking and rewards and outreach rate limits.
+
+**Built (I4):**
+- **Where:** data and rules `shared/namedquests.js` (templates, `PERSONA`, `REQ`, `OUTREACH`, `phraseRequest`); `server/namedquests.js` (`new NamedQuests(named)` in `server/index.js` hooks the manager's `tick`, `handle`, `listFor`, `onMobDead`, `add`, `dropFriends`, `flush` on that instance; `server/named.js` is unchanged); `public/namedquests.js` (the request card in the Friends tab, toasts, the outreach card); table `named_requests` (per character and Named: the active request, next offer, today's request friendship).
+- **Requests:** kill N (your floor, your level band; Named-only kills never count), bring N materials (Turn in within 12 m), help in their boss fight (real help in a kill). One active per Named, 24 h. Halvard kills + boss help, Maribel materials, Tovin kills (×1.5), Sennet boss help first, Cairn rarely (30% every 4 h) from Known. Rewards: gold (15 + 4 × level, boss ×2), sometimes a rolled item (`shared/loot.js` `rollGear`), friendship through `'request'`, which now skips the shared daily cap (`shared/named.js` `gainFriendship`) and is capped at 6 a day per Named by I4.
+- **Outreach:** Heroes at Friend+ message a free, online player (farm or raid, Accept / Decline): 1 h per Hero, 15 min across all, none after a decline that session, none in a show or mid-boss; Accept = they join your party. Cairn's whisper unchanged.
+- **Contract for I3:** `game.named.quests.phraser = async (def, req, player, moment) => text` replaces the canned line when it answers (moments: `offer`, `done`, `farm`, `raid`; errors or empty keep the canned line). `game.named.quests.turnIn(player, namedId, { talk: true })` hands materials over while talking; I3's talk path (`server/ai/namedtalk.js`) now calls it after a reply within 40 m. The phraser is not wired to the AI yet (canned lines for now).
+- **Screenshots:** `/home/claude/shots/i4-namedquests/`.
 
 ## Known issues and backlog
 - Floor 2 is untested by the owner: do a play pass before any Floor 3 work.
