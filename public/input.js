@@ -268,6 +268,7 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     tick() { api.frames++; poll(); },
     get pad() { return { connected: pad.index !== -1, id: pad.id, recognised: pad.recognised, family: pad.family }; },
     get glyphs() { return glyphs(); },
+    get glyphPick() { return GLYPH_FAMILIES.includes(settings.padGlyphs) ? settings.padGlyphs : 'auto'; }, // (the Controls screen's Xbox / PlayStation choice)
     setGlyphs(f) { settings.padGlyphs = GLYPH_FAMILIES.includes(f) ? f : undefined; save(); },
     onPad(fn) { padSubs.add(fn); return () => padSubs.delete(fn); },
     onDevice(fn) { deviceSubs.add(fn); return () => deviceSubs.delete(fn); },

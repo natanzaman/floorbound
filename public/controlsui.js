@@ -12,6 +12,7 @@
 //           refused keys get a reason; a key that's taken asks Swap / Unbind / Cancel (assign 'swap' | 'unbind').
 //   Reset to defaults per device. Every change saves to fb_controls (input.setBinding), which the account sync uploads.
 import { ACTION, ACTIONS, DEFAULTS, GROUPS, PAD_BUTTONS, PAD_MODIFIERS, bindingLabel, canSwap, check, isAxisBinding, keyName, modOfCode, tokens } from '/shared/controls.js';
+import { buttonGlyph, padLabel } from '/shared/gamepad.js';
 
 export const DEVICE_NAMES = { kbm: 'Keyboard & Mouse', pad: 'Controller' };
 // Why a binding is refused (check() errors), in plain words.
@@ -106,11 +107,33 @@ export const PAD_KEYS = [
   { k: 'View', x: 246, y: 116, w: 46, h: 22, rx: 11, label: 'View' }, { k: 'Start', x: 308, y: 116, w: 46, h: 22, rx: 11, label: 'Start' },
   { k: 'Home', cx: 300, cy: 170, r: 14, label: '⌂' },
 ];
+// A PlayStation pad (same button names underneath): d-pad top left, both sticks low in the middle, a touchpad.
+const FACE_SONY = { A: '#60a5fa', B: '#f87171', X: '#f472b6', Y: '#34d399' };
+export const PAD_KEYS_SONY = [
+  { k: 'LT', x: 95, y: 6, w: 90, h: 32, rx: 12, label: 'L2' }, { k: 'RT', x: 415, y: 6, w: 90, h: 32, rx: 12, label: 'R2' },
+  { k: 'LB', x: 85, y: 44, w: 120, h: 20, rx: 10, label: 'L1' }, { k: 'RB', x: 395, y: 44, w: 120, h: 20, rx: 10, label: 'R1' },
+  { k: 'Up', x: 157, y: 98, w: 26, h: 30, rx: 5, label: '▲' }, { k: 'Down', x: 157, y: 154, w: 26, h: 30, rx: 5, label: '▼' },
+  { k: 'Left', x: 127, y: 128, w: 30, h: 26, rx: 5, label: '◀' }, { k: 'Right', x: 183, y: 128, w: 30, h: 26, rx: 5, label: '▶' },
+  { k: 'LS', cx: 228, cy: 212, r: 36, label: '' }, { k: 'L3', cx: 228, cy: 212, r: 21, label: 'L3' },
+  { k: 'RS', cx: 372, cy: 212, r: 36, label: '' }, { k: 'R3', cx: 372, cy: 212, r: 21, label: 'R3' },
+  { k: 'Y', cx: 430, cy: 98, r: 17, label: '△' }, { k: 'A', cx: 430, cy: 172, r: 17, label: '✕' },
+  { k: 'X', cx: 393, cy: 135, r: 17, label: '□' }, { k: 'B', cx: 467, cy: 135, r: 17, label: '○' },
+  { k: 'View', x: 196, y: 80, w: 44, h: 18, rx: 9, label: 'Share' }, { k: 'Start', x: 360, y: 80, w: 44, h: 18, rx: 9, label: 'Options' },
+  { k: 'Home', cx: 300, cy: 178, r: 13, label: 'PS' },
+];
 const PAD_BODY = 'M150,70 C100,70 62,92 47,150 L20,262 C10,302 42,326 76,305 L150,252 L450,252 L524,305 C558,326 590,302 580,262 L553,150 C538,92 500,70 450,70 Z';
 const PIC = {
   kbm: { keys: [...KB_KEYS, ...MOUSE], w: 26.9 * KU, h: 6.3 * KU, back: '' },
-  pad: { keys: PAD_KEYS, w: 600, h: 330, back: `<path class="cu-body" d="${PAD_BODY}"/>` },
+  pad: { keys: PAD_KEYS, face: FACE, w: 600, h: 330, back: `<path class="cu-body" d="${PAD_BODY}"/>` },
+  padSony: { keys: PAD_KEYS_SONY, face: FACE_SONY, w: 600, h: 330, back: `<path class="cu-body" d="${PAD_BODY}"/><rect class="cu-touch" x="246" y="78" width="108" height="66" rx="10"/>` },
 };
+// Which controller picture: PlayStation for a Sony pad (detected or chosen), else Xbox (Nintendo pads too).
+export const PAD_STYLES = { xbox: 'Xbox', sony: 'PlayStation' };
+export const padStyle = family => (family === 'sony' ? 'sony' : 'xbox');
+// A controller button's name in the tooltip and popover, in the picture's own names ('✕ button', 'L1', 'D-pad ↑').
+export const padTitle = (k, family) => (['LS', 'RS', 'L3', 'R3'].includes(k) ? keyTitle(k)
+  : k === 'Home' ? (family === 'sony' ? 'PS button' : 'Guide button')
+  : ['A', 'B', 'X', 'Y'].includes(k) ? `${buttonGlyph(k, family)} button` : buttonGlyph(k, family));
 const AXIS_DIR_NAMES = ['up', 'left', 'down', 'right'];
 // A key's name in the picture's tooltip and popover.
 export const keyTitle = k => ({ Mouse: 'Mouse (moving it)', Wheel: 'Mouse wheel', LS: 'Left stick', RS: 'Right stick', L3: 'Left stick click', R3: 'Right stick click', Home: 'Guide button', ...KB_SHORT, Space: 'Space', Backspace: 'Backspace', CapsLock: 'Caps Lock', NumpadEnter: 'Num Enter' })[k] || keyName(k);
@@ -125,7 +148,7 @@ export function keyUses(bindings, device, code) {
   });
   return out;
 }
-const useText = u => `${ACTION[u.action].label}${u.dir ? ` (${u.dir})` : ''}${u.slot ? ' · alt' : ''}${u.chord ? ` · combo ${bindingLabel(u.binding)}` : ''}`;
+const useText = (u, lab = bindingLabel) => `${ACTION[u.action].label}${u.dir ? ` (${u.dir})` : ''}${u.slot ? ' · alt' : ''}${u.chord ? ` · combo ${lab(u.binding)}` : ''}`;
 // The controls a key can be given from the picture: one-key controls (not fixed, not the axes), on this device.
 export const pickable = device => ACTIONS.filter(a => !a.fixed && a.type !== 'axis' && !(a.kbmOnly && device === 'pad'));
 
@@ -141,6 +164,16 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
 
   const pads = () => { try { return input.readPads() || []; } catch { return []; } };
   const padName = p => (p && p.id ? String(p.id).replace(/\s*\(.*$/, '') || p.id : 'controller');
+  // Controller names follow the picture: Xbox (A, LB, RT) or PlayStation (✕, L1, R2); auto from the pad unless chosen.
+  const fam = () => input.glyphs || 'xbox';
+  const lab = (device, b) => (device === 'pad' ? padLabel(b, fam()) : bindingLabel(b));
+  const title = (device, k) => (device === 'pad' ? padTitle(k, fam()) : keyTitle(k));
+  function styleSwitch() {
+    const pick = input.glyphPick || 'auto', s = padStyle(fam()), det = input.pad?.connected ? PAD_STYLES[padStyle(input.pad.family)] : null;
+    const note = pick !== 'auto' ? `Chosen by you. <button data-glyph="auto" data-nav="cu-glyph-auto">Auto-detect${det ? ` (${det})` : ''}</button>`
+      : det ? `Auto: ${det} controller detected.` : 'Auto: follows the controller you connect.';
+    return `<div class="cu-style" role="radiogroup" aria-label="Controller buttons">${Object.entries(PAD_STYLES).map(([f, n]) => `<button role="radio" data-glyph="${f}" data-nav="cu-glyph-${f}" class="${s === f ? 'on' : ''}" aria-checked="${s === f}">${n}</button>`).join('')}<small>${note}</small></div>`;
+  }
 
   function header() {
     const p = pads(), dev = input.device === 'pad' ? 'pad' : 'kbm';
@@ -156,20 +189,21 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
     const can = rebindable(device, a.id) && !(device === 'pad' && !pads().length);
     const title = a.fixed ? 'Always this key' : !rebindable(device, a.id) ? 'Set by the device' : device === 'pad' && !pads().length ? 'Connect a controller to rebind it' : '';
     const isDef = restore && restore.device === device && restore.key === key && dflt === 'rb';
-    return `<span class="cu-slot ${slot ? 'alt' : ''}"><span class="cu-b ${b ? '' : 'none'}" data-b="${esc(key)}">${mine ? esc(busy.text) : esc(bindingLabel(b))}</span>`
+    return `<span class="cu-slot ${slot ? 'alt' : ''}"><span class="cu-b ${b ? '' : 'none'}" data-b="${esc(key)}">${mine ? esc(busy.text) : esc(lab(device, b))}</span>`
       + `<button class="cu-rb" data-rb="${esc(key)}" data-nav="cu-rb-${device}-${esc(key)}" ${isDef ? 'data-nav-default' : ''} ${can && !busy ? '' : 'disabled'} title="${esc(title)}">${mine ? 'Listening…' : slot ? 'Alt' : 'Rebind'}</button></span>`;
   }
   function picture(device) {
-    const P = PIC[device], b = input.bindings(device);
+    const P = device === 'pad' ? PIC[padStyle(fam()) === 'sony' ? 'padSony' : 'pad'] : PIC[device], b = input.bindings(device), f = fam();
     const keys = P.keys.map(K => {
       const uses = keyUses(b, device, K.k), sel = pop && pop.device === device && pop.code === K.k;
-      const fs = K.r ? Math.min(13, K.r * 0.8) : Math.min(13, K.h * 0.55, (K.w - 8) / Math.max(1, K.label.length * 0.62));
-      const shape = K.r ? `<circle class="cu-kc" cx="${K.cx}" cy="${K.cy}" r="${K.r}"${FACE[K.k] ? ` style="stroke:${FACE[K.k]}"` : ''}/>`
+      const label = f === 'nintendo' && device === 'pad' && /^(A|B|X|Y|LB|RB|LT|RT)$/.test(K.k) ? buttonGlyph(K.k, f) : K.label; // (a Switch pad: Xbox shape, its own letters)
+      const fs = K.r ? Math.min(13, K.r * 0.8) : Math.min(13, K.h * 0.55, (K.w - 8) / Math.max(1, label.length * 0.62));
+      const shape = K.r ? `<circle class="cu-kc" cx="${K.cx}" cy="${K.cy}" r="${K.r}"${P.face?.[K.k] ? ` style="stroke:${P.face[K.k]}"` : ''}/>`
         : `<rect class="cu-kc" x="${K.x + 2}" y="${K.y + 2}" width="${K.w - 4}" height="${K.h - 4}" rx="${K.rx}"/>`;
       const lx = K.r ? K.cx : K.x + K.w / 2, ly = K.r ? K.cy + 4.5 : K.ly ?? K.y + K.h / 2 + 4.5;
       const sx = K.r ? K.cx + K.r * 0.75 : K.x + K.w - 6, sy = K.r ? K.cy - K.r * 0.6 : K.y + 10;
       return `<g class="cu-k${uses.length ? ' bound' : ''}${sel ? ' sel' : ''}${lit.has(K.k) || padLit.has(K.k) ? ' lit' : ''}" data-k="${esc(K.k)}"><g class="cu-kin">${shape}`
-        + (K.label ? `<text class="cu-kl" x="${lx}" y="${ly}" font-size="${fs.toFixed(1)}">${esc(K.label)}</text>` : '')
+        + (label ? `<text class="cu-kl" x="${lx}" y="${ly}" font-size="${fs.toFixed(1)}">${esc(label)}</text>` : '')
         + (uses.length ? `<text class="cu-star" x="${sx}" y="${sy}">★</text>` : '') + '</g></g>';
     }).join('');
     return `<svg viewBox="0 0 ${P.w} ${P.h}" role="img" aria-label="${DEVICE_NAMES[device]} picture">${P.back}${keys}</svg>
@@ -177,16 +211,16 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
   }
   function popover(device) {
     const uses = keyUses(input.bindings(device), device, pop.code);
-    const head = `<div class="cu-pop-h"><b>${esc(keyTitle(pop.code))}</b><button data-pop="close" data-nav="cu-pop-close">✕</button></div>`;
+    const head = `<div class="cu-pop-h"><b>${esc(title(device, pop.code))}</b><button data-pop="close" data-nav="cu-pop-close">✕</button></div>`;
     if (pop.mode === 'list') return `<div class="cu-pop" id="cu-pop">${head}<input id="cu-filter" type="text" placeholder="Filter controls…" autocomplete="off" value="${esc(pop.filter || '')}" data-nav="cu-filter">
       <div class="cu-picks" id="cu-picks">${picks(device)}</div></div>`;
-    return `<div class="cu-pop" id="cu-pop">${head}<div class="cu-pop-b">${uses.length ? uses.map(u => `<div>${esc(useText(u))}</div>`).join('') : '<div class="none">Not bound</div>'}</div>
+    return `<div class="cu-pop" id="cu-pop">${head}<div class="cu-pop-b">${uses.length ? uses.map(u => `<div>${esc(useText(u, x => lab(device, x)))}</div>`).join('') : '<div class="none">Not bound</div>'}</div>
       <button data-pop="edit" data-nav="cu-pop-edit">Edit</button></div>`;
   }
   function picks(device) {
     const q = (pop?.filter || '').trim().toLowerCase(), b = input.bindings(device);
     const list = pickable(device).filter(a => !q || a.label.toLowerCase().includes(q) || a.group.toLowerCase().includes(q));
-    return list.length ? list.map(a => `<button data-pick="${a.id}" data-nav="cu-pick-${a.id}">${esc(a.label)} <small>${esc(bindingLabel(b[a.id]?.[0] ?? null))}</small></button>`).join('')
+    return list.length ? list.map(a => `<button data-pick="${a.id}" data-nav="cu-pick-${a.id}">${esc(a.label)} <small>${esc(lab(device, b[a.id]?.[0] ?? null))}</small></button>`).join('')
       : '<div class="none">No control matches.</div>';
   }
   function list(device) {
@@ -199,9 +233,9 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
     dflt = p ? 'prompt' : restore && !busy ? 'rb' : ''; // (while listening the Rebind button is disabled: no default yet)
     el.innerHTML = header()
       + ['kbm', 'pad'].map(d => `<section class="cu-tab ${tab === d ? '' : 'hidden'}" id="cu-tab-${d}" role="tabpanel">
-        <div class="cu-pic" id="cu-pic-${d}" data-device="${d}">${picture(d)}</div>
+        ${d === 'pad' ? styleSwitch() : ''}<div class="cu-pic" id="cu-pic-${d}" data-device="${d}">${picture(d)}</div>
         <div class="cu-msg ${msg ? '' : 'hidden'}" id="cu-msg-${d}" role="status">${esc(msg)}</div>
-        ${p && p.device === d ? `<div class="cu-prompt" id="cu-prompt"><div><b>${esc(bindingLabel(p.binding))}</b> is already on ${p.conflicts.map(c => `<b>${esc(ACTION[c.action].label)}</b>`).join(', ')}.</div>
+        ${p && p.device === d ? `<div class="cu-prompt" id="cu-prompt"><div><b>${esc(lab(p.device, p.binding))}</b> is already on ${p.conflicts.map(c => `<b>${esc(ACTION[c.action].label)}</b>`).join(', ')}.</div>
           ${p.swap ? '<button data-p="swap" data-nav="cu-p-swap" data-nav-default>Swap</button>' : ''}<button data-p="unbind" data-nav="cu-p-unbind"${p.swap ? '' : ' data-nav-default'}>Unbind ${p.conflicts.length > 1 ? 'them' : 'it'}</button><button data-p="cancel" data-nav="cu-p-cancel">Cancel</button></div>` : ''}
         <div class="cu-list">${list(d)}</div>
         <button class="cu-reset" data-reset="${d}" data-nav="cu-reset-${d}">${resetArmed === d ? `Sure? Reset ${DEVICE_NAMES[d]}` : `Reset ${DEVICE_NAMES[d]} to defaults`}</button>
@@ -239,9 +273,9 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
   // A new binding for a slot (from Rebind or the picture): save it, refuse it with the reason, or ask about a taken key.
   function decide(device, action, slot, binding) {
     const a = ACTION[action], cur = input.bindings(device)[action]?.[slot] ?? null;
-    if (binding === cur) return say(`${a.label} stays on ${bindingLabel(binding)}.`);
+    if (binding === cur) return say(`${a.label} stays on ${lab(device, binding)}.`);
     const r = check(input.bindings(device), device, action, slot, binding);
-    if (r.error) { sfx?.play?.('ui'); return say(`${bindingLabel(binding)}: ${REFUSED[r.error] || r.error}`); }
+    if (r.error) { sfx?.play?.('ui'); return say(`${lab(device, binding)}: ${REFUSED[r.error] || r.error}`); }
     if (r.conflicts.length) { prompt = { device, action, slot, binding, conflicts: r.conflicts, swap: canSwap(input.bindings(device), device, action, slot, binding) }; return say(''); }
     apply(device, action, slot, binding, 'unbind');
   }
@@ -249,7 +283,7 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
     const r = input.setBinding(device, action, slot, binding, mode);
     prompt = null;
     if (r?.error) return say(REFUSED[r.error] || r.error);
-    say(`${ACTION[action].label}: ${bindingLabel(binding)}.`);
+    say(`${ACTION[action].label}: ${lab(device, binding)}.`);
     changed();
   }
 
@@ -265,6 +299,7 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
     if (t.dataset.pop) { pop = t.dataset.pop === 'edit' ? { ...pop, mode: 'list', filter: '' } : null; return say(''); }
     if (t.dataset.pick) return pickFor(t.dataset.pick);
     if (t.dataset.a === 'close') return close();
+    if (t.dataset.glyph) { input.setGlyphs(t.dataset.glyph); pop = null; restore = null; sfx?.play?.('ui'); render(); changed(); return; }
     if (t.dataset.tab) { tab = t.dataset.tab; restore = null; prompt = null; resetArmed = null; pop = null; msg = ''; render(); return; }
     if (t.dataset.rb) { const [action, slot] = t.dataset.rb.split(':'); rebind(t.closest('section').id.slice(7), action, +slot); return; }
     if (t.dataset.p) {
@@ -297,7 +332,8 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
     const k = e.target.closest?.('[data-k]'), pic = k?.closest('.cu-pic'), tip = pic?.querySelector('.cu-tip');
     if (!tip) return;
     const uses = keyUses(input.bindings(pic.dataset.device), pic.dataset.device, k.dataset.k);
-    tip.innerHTML = `<b>${esc(keyTitle(k.dataset.k))}</b>${uses.length ? uses.map(u => `<div>${esc(useText(u))}</div>`).join('') : '<div class="none">Not bound</div>'}`;
+    const dv = pic.dataset.device;
+    tip.innerHTML = `<b>${esc(title(dv, k.dataset.k))}</b>${uses.length ? uses.map(u => `<div>${esc(useText(u, x => lab(dv, x)))}</div>`).join('') : '<div class="none">Not bound</div>'}`;
     const r = k.getBoundingClientRect(), pr = pic.getBoundingClientRect();
     tip.style.left = `${r.left - pr.left + r.width / 2}px`; tip.style.top = `${r.top - pr.top - 4}px`;
     tip.classList.remove('hidden');

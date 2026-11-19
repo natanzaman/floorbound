@@ -256,6 +256,27 @@ try {
   await p.click('#controlsui [data-a=close]'); await frames(1);
   ok('controller picture: ★, tooltip with combos, popover; pad buttons light up through input.padHeld');
 
+  // ---- Xbox / PlayStation picture (owner, 2026-11-19): auto from the pad, or chosen; names follow it ----
+  await tap('Escape'); await frames(2); await p.click('#gamemenu [data-a=bindings]'); await frames(1);
+  await p.click('.cu-tabs [data-tab=pad]'); await frames(1);
+  const kl = k => S(s => document.querySelector(s + ' .cu-kl')?.textContent, K(k, 'pad'));
+  const jumpLbl = () => S(() => document.querySelector('#cu-tab-pad [data-b="jump:0"]').textContent);
+  assert.ok(await S(() => document.querySelector('.cu-style [data-glyph=xbox]').classList.contains('on')), 'Xbox by default (no pad)');
+  assert.equal(await kl('A'), 'A'); assert.equal(await jumpLbl(), 'A');
+  await p.click('.cu-style [data-glyph=sony]'); await frames(1);
+  assert.ok(await S(() => document.querySelector('.cu-style [data-glyph=sony]').classList.contains('on')), 'PlayStation chosen');
+  assert.equal(await kl('A'), '✕'); assert.equal(await kl('LB'), 'L1'); assert.equal(await jumpLbl(), '✕', 'the list uses PlayStation names');
+  assert.ok(await S(() => !!document.querySelector('#cu-pic-pad .cu-touch')), 'the PlayStation picture (touchpad)');
+  await p.hover(K('Y', 'pad')); await frames(2);
+  assert.match(await tipText('pad'), /^△ button/);
+  await shot('14-pad-sony');
+  assert.equal(await S(() => JSON.parse(localStorage.getItem('fb_settings')).padGlyphs), 'sony', 'saved');
+  await p.click('.cu-style [data-glyph=auto]'); await frames(1);
+  assert.equal(await S(() => window.__fb.input.glyphPick), 'auto');
+  assert.equal(await kl('A'), 'A', 'back to auto: Xbox without a pad');
+  await p.click('#controlsui [data-a=close]'); await frames(1);
+  ok('controller picture: Xbox / PlayStation switch, auto by default, names follow, saved');
+
   // ---- review fixes: chat keeps its keys while the screen is open; Swap only when it can swap; Cmd chords; the guide escapes labels ----
   await tap('Escape'); await frames(2); await p.click('#gamemenu [data-a=bindings]'); await frames(1);
   assert.ok(await visible('controlsui'));
