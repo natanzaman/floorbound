@@ -142,6 +142,7 @@ function onConnection(ws) {
     if (ws.local) msg = raw; // (already an object: server/localws.js)
     else try { msg = JSON.parse(raw); } catch { return; }
     if (!msg || typeof msg !== 'object') return;
+    if (msg.type === 'ping' && !ws.local) return void ws.send(`{"type":"pong","t":${+msg.t || 0}}`); // round-trip time for the client's ping readout (public/perf.js)
     if (!player) {
       if (msg.type === 'spectate' && !spectators.has(ws)) {
         spectators.add(ws);
@@ -229,6 +230,7 @@ function tick(dt) {
   const t0 = performance.now();
   game.update(dt);
   const world = game.snapshot();
+  const st = Math.round(game.time * 1000); // st: the server clock (ms) this snapshot is for: clients interpolate on it (shared/netsmooth.js)
   let shared = null; // the world part for in-process bots: parsed once a tick, shared by all of them (read-only)
   const halfRate = halfRateOn(), humans = halfRate ? [...game.players.values()].filter(p => !p.bot) : null;
   tickNo++;
@@ -239,8 +241,8 @@ function tick(dt) {
       if (halfRate && (tickNo + p.id) % 2 && thinksSlow(p, humans)) { (p.evLater ||= []).push(shared.events); continue; } // 10 Hz: this tick's events wait for the next
       const later = p.evLater; p.evLater = null;
       const w = later ? { ...shared, events: [].concat(...later, shared.events) } : shared;
-      p.ws.deliver({ type: 'snap', me: game.meFor(p), w, ...(later ? { dt: (later.length + 1) / TICK_RATE } : {}) });
-    } else sendCounted(p.ws, `{"type":"snap","me":${JSON.stringify(game.meFor(p))},"w":${world}}`);
+      p.ws.deliver({ type: 'snap', st, me: game.meFor(p), w, ...(later ? { dt: (later.length + 1) / TICK_RATE } : {}) });
+    } else sendCounted(p.ws, `{"type":"snap","st":${st},"me":${JSON.stringify(game.meFor(p))},"w":${world}}`);
     if (p.invDirty) { p.invDirty = false; p.ws.send(JSON.stringify(game.invFor(p))); }
     if (p.talentsDirty) { p.talentsDirty = false; p.ws.send(JSON.stringify(game.talentsMsg(p))); } // talent tree: points, ranks
     if (p.masteryDirty && (p.masteryNow || game.time - (p.mSentT || 0) >= 1)) { // skill mastery: at most once a second, at once on a level-up/evolve
@@ -249,7 +251,7 @@ function tick(dt) {
     }
   }
   if (game.rosterDirty) { game.rosterDirty = false; broadcastRoster(); } // e.g. someone changed their title
-  for (const ws of spectators) if (ws.readyState === 1) sendCounted(ws, `{"type":"snap","me":null,"w":${world}}`);
+  for (const ws of spectators) if (ws.readyState === 1) sendCounted(ws, `{"type":"snap","st":${st},"me":null,"w":${world}}`);
   tickMs[tickN++ % tickMs.length] = performance.now() - t0;
 }
 

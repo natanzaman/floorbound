@@ -8,6 +8,7 @@
 //   - plate(): the nameplate treatment; lookSwatch(lookId) / swatch(entityId): a round badge for UI lists
 // Entities without a KayKit rig (block models, most mobs) get the aura and the nameplate only.
 // main.js calls snap() per snapshot and frame() per entity per frame.
+import { Q } from '/quality.js'; // graphics quality: aura motes / trail density, ground glow
 import * as THREE from 'three';
 import { lookOf } from '/shared/looks.js';
 
@@ -276,7 +277,7 @@ function addAura(rig, a, e) {
     const d = new THREE.Mesh(new THREE.CircleGeometry(a.ground.r, 24), new THREE.MeshBasicMaterial({ map: glowTexture(), color: a.color, transparent: true, opacity: a.ground.opacity, blending: THREE.AdditiveBlending, depthWrite: false }));
     d.rotation.x = -Math.PI / 2; d.position.y = 0.07; d.renderOrder = 1;
     grp.add(d); rig.objs.push(d);
-    rig.tick.push(t => { d.material.opacity = a.ground.opacity * (0.85 + Math.sin(t * 1.3) * 0.15); });
+    rig.tick.push(t => { d.visible = Q.auraGlow; d.material.opacity = a.ground.opacity * (0.85 + Math.sin(t * 1.3) * 0.15); });
   }
   if (!a.motes && !a.trail) return;
   const fx = new THREE.Group(); rig.fx = fx;
@@ -292,8 +293,8 @@ function addAura(rig, a, e) {
     if (fx.parent !== grp.parent) grp.parent ? grp.parent.add(fx) : fx.removeFromParent();
     const on = grp.visible && !e.dead;
     if (rig.light) rig.light.getWorldPosition(v); else v.set(grp.position.x, grp.position.y + e.model.height * 0.55, grp.position.z);
-    if (on && a.motes) for (accM += dt * a.motes.rate; accM >= 1; accM--) spawn(v.x + (Math.random() - 0.5) * 0.15, v.y, v.z + (Math.random() - 0.5) * 0.15, a.motes.size, a.motes.life, a.motes.rise, 0.25);
-    if (on && a.trail && mv > 0.25) for (accT += dt * a.trail.rate * mv; accT >= 1; accT--) spawn(v.x, v.y - 0.1, v.z, a.trail.size, a.trail.life, 0.08, 0.1);
+    if (on && a.motes) for (accM += dt * a.motes.rate * Q.fx; accM >= 1; accM--) spawn(v.x + (Math.random() - 0.5) * 0.15, v.y, v.z + (Math.random() - 0.5) * 0.15, a.motes.size, a.motes.life, a.motes.rise, 0.25);
+    if (on && a.trail && mv > 0.25) for (accT += dt * a.trail.rate * mv * Q.fx; accT >= 1; accT--) spawn(v.x, v.y - 0.1, v.z, a.trail.size, a.trail.life, 0.08, 0.1);
     for (let i = live.length - 1; i >= 0; i--) {
       const p = live[i]; p.age += dt;
       const k = p.age / p.life;

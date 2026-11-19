@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { OBSTACLES } from '/shared/data.js';
 import { F2, GATE2, WAYSTONES, STAIRWAY, SOVEREIGN } from '/shared/floor2.js';
 import { ATMOS3 } from '/floor3world.js';
+import { Q } from '/quality.js'; // graphics quality (effect density)
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
 const glow = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
@@ -226,7 +227,8 @@ export function createFloor2(scene, { sun, occluders = [] } = {}) {
     deluge.material.opacity = deluge.userData.k * (0.62 + Math.sin(time * 2) * 0.06);
     deluge.visible = deluge.userData.k > 0.01;
     if (onF2) {
-      for (let i = 0; i < motesN; i++) {
+      const on = Math.round(motesN * Q.fx); motesGeo.setDrawRange(0, on); // fewer motes on lower graphics settings
+      for (let i = 0; i < on; i++) {
         const [x, z, ph, h] = seeds[i];
         mp[i * 3] = x + Math.sin(time * 0.3 + ph) * 2.2; mp[i * 3 + 1] = h + Math.sin(time * 0.9 + ph * 2) * 0.4; mp[i * 3 + 2] = z + Math.cos(time * 0.25 + ph) * 2.2;
       }
