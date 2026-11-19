@@ -30,7 +30,7 @@ export function installAI({ game = null, bots, server = null }, opts = {}) {
   const env = opts.env || process.env;
   const cfg = readConfig(env);
   const provider = opts.provider || makeProvider(cfg, { env });
-  const listBots = () => (bots?.bots || []).filter(e => !e.b.closed && !e.director).map(e => e.b); // (never the director's actors)
+  const listBots = () => (bots?.bots || []).filter(e => !e.b.closed && !e.director && !e.named).map(e => e.b); // (never the director's actors)
   const onThink = game ? (b, on) => { if (b.id) game.events.push({ t: 'mind', id: b.id, on: on ? 1 : 0, party: b.party || 0 }); } : null;
   const minds = new Minds({ cfg, provider, listBots, env, now: opts.now, log: opts.log, onThink });
   if (game) game.aiOn = () => minds.active(); // (welcome: lets the client show the "talk to bots by name" tip)

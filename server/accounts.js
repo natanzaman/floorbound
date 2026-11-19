@@ -10,6 +10,7 @@ import crypto from 'node:crypto';
 import * as db from './db.js';
 const q = (...a) => db.q(...a);
 import { CLASSES, MAX_LEVEL } from '../shared/data.js';
+import { isNamedName } from '../shared/named.js';
 
 export const MAX_CHARACTERS = 8;
 const DISCORD_ID = process.env.DISCORD_CLIENT_ID;
@@ -100,6 +101,7 @@ export async function handle(req, res, url) {
       const name = String(raw || '').trim().replace(/\s+/g, ' ');
       if (!NAME_RE.test(name)) return json(res, 400, { error: 'Names are 3–16 letters or numbers (spaces, _ . - allowed inside).' }), true;
       if (!CLASSES[cls]) return json(res, 400, { error: 'Pick a class.' }), true;
+      if (process.env.NAMED_ENABLED !== '0' && isNamedName(name)) return json(res, 409, { error: 'That name is taken.' }), true; // the Named's names are theirs (shared/named.js)
       const [{ n }] = await q('SELECT count(*)::int AS n FROM characters WHERE account_id = $1', [a.id]);
       if (n >= MAX_CHARACTERS) return json(res, 400, { error: `You can have up to ${MAX_CHARACTERS} characters.` }), true;
       try {

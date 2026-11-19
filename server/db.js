@@ -63,4 +63,14 @@ async function setup() {
   await q(`CREATE INDEX IF NOT EXISTS ai_memories_updated ON ai_memories (updated_at)`);
   await q(`CREATE TABLE IF NOT EXISTS ai_spend (
     day DATE PRIMARY KEY, usd DOUBLE PRECISION NOT NULL DEFAULT 0, calls INT NOT NULL DEFAULT 0)`);
+  // The Named (server/named.js): each character's level and switch, and each player character's friendship with them.
+  // Their own clears are kept apart in the Hall (floor_clears.heroes).
+  await q(`CREATE TABLE IF NOT EXISTS named_chars (
+    id TEXT PRIMARY KEY, lvl INT NOT NULL DEFAULT 1, lvl_off INT NOT NULL DEFAULT 2, enabled BOOLEAN NOT NULL DEFAULT true,
+    seen_at TIMESTAMPTZ, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  await q(`CREATE TABLE IF NOT EXISTS named_friendship (
+    char_id INT NOT NULL REFERENCES characters(id) ON DELETE CASCADE, named_id TEXT NOT NULL,
+    pts REAL NOT NULL DEFAULT 0, day INT NOT NULL DEFAULT 0, got REAL NOT NULL DEFAULT 0, chat REAL NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (char_id, named_id))`);
+  await q(`ALTER TABLE floor_clears ADD COLUMN IF NOT EXISTS heroes BOOLEAN NOT NULL DEFAULT false`);
 }

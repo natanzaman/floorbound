@@ -1,6 +1,7 @@
 // Players panel tabs (Players | Bots) and the Bots tab: every bot in the world (your own first) and a form to add
 // your own bots (server/playerbots.js, { type: 'pbot' } messages). main.js calls render() from renderPlayers() when
-// the Bots tab is open and puts tabsHtml() / bindTabs() on the Players tab.
+// the Bots tab is open and puts tabsHtml() / bindTabs() on the Players tab. Other modules add their own tab with
+// addTab({ id, label(), root, show() }) (the Friends tab: public/named.js).
 import { CLASSES } from '/shared/data.js';
 import { RARITY } from '/shared/items.js';
 import { BRANCHES } from '/shared/mastery.js';
@@ -17,6 +18,7 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender }) 
     note: null, // { text, err, at }
     confirm: 0, // bid waiting for a second Dismiss click
   };
+  const extra = []; // tabs added by other modules
 
   // ---------- persistent DOM (so the form keeps its state between refreshes) ----------
   const root = document.createElement('div');
@@ -154,10 +156,10 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender }) 
   return {
     get tab() { return ui.tab; },
     tabsHtml(nPlayers, nBots) {
-      return `<div class="pb-tabs"><button data-tab="players" class="${ui.tab === 'players' ? 'on' : ''}">Players${nPlayers !== undefined ? ` (${nPlayers})` : ''}</button><button data-tab="bots" class="${ui.tab === 'bots' ? 'on' : ''}">Bots${nBots ? ` (${nBots})` : ''}</button></div>`;
+      return `<div class="pb-tabs"><button data-tab="players" class="${ui.tab === 'players' ? 'on' : ''}">Players${nPlayers !== undefined ? ` (${nPlayers})` : ''}</button><button data-tab="bots" class="${ui.tab === 'bots' ? 'on' : ''}">Bots${nBots ? ` (${nBots})` : ''}</button>${extra.map(t => `<button data-tab="${t.id}" class="${ui.tab === t.id ? 'on' : ''}">${esc(t.label())}</button>`).join('')}</div>`;
     },
     bindTabs(panel) {
-      if (ui.tab !== 'bots') panel.classList.remove('wide');
+      if (ui.tab === 'players') panel.classList.remove('wide');
       for (const b of panel.querySelectorAll('.pb-tabs [data-tab]')) b.onclick = () => {
         if (ui.tab === b.dataset.tab) return;
         ui.tab = b.dataset.tab; ui.sig = ''; sfx?.play('ui');
@@ -165,16 +167,19 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender }) 
         rerender();
       };
     },
-    // The Bots tab (keeps its DOM between calls).
+    addTab(t) { extra.push(t); },
+    // The Bots tab, or an added tab (each keeps its DOM between calls).
     render(panel, nPlayers, nBots) {
       panel.classList.add('wide');
+      const other = extra.find(t => t.id === ui.tab), body = other ? other.root : root;
       const tabs = panel.querySelector(':scope > .pb-tabs');
-      if (!tabs || panel.lastElementChild !== root) {
+      if (!tabs || panel.lastElementChild !== body) {
         panel.innerHTML = ui.tabsH = this.tabsHtml(nPlayers, nBots);
-        panel.appendChild(root);
+        panel.appendChild(body);
         ui.sig = '';
       } else { const h = this.tabsHtml(nPlayers, nBots); if (ui.tabsH !== h) { ui.tabsH = h; tabs.outerHTML = h; } }
       this.bindTabs(panel);
+      if (other) return other.show();
       poll();
       draw();
     },

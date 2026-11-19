@@ -37,7 +37,8 @@ export class BotManager {
     this.joining = false;
     // Keep bots out of play tracking (sessions, ...): they're not players. Their deaths go in as 'bot_death' (stats dashboard).
     const track = game.track;
-    game.track = (p, kind, ...a) => (this.joining ? undefined : p?.bot ? (kind === 'death' ? track(p, 'bot_death', ...a) : undefined) : track(p, kind, ...a));
+    // (a Named's death is flagged `named`: server/named.js)
+    game.track = (p, kind, ...a) => (this.joining ? undefined : p?.bot ? (kind === 'death' ? track(p, 'bot_death', ...(p.named ? [{ ...a[0], named: p.named }] : a)) : undefined) : track(p, kind, ...a));
     this.timer = setInterval(() => this.upkeep(), 1000);
     this.timer.unref?.();
   }
@@ -51,6 +52,7 @@ export class BotManager {
     let p;
     try { p = g.addPlayer(ws, msg.name, msg.cls); } finally { this.joining = false; }
     p.bot = true;
+    if (msg.named) this.namedJoin?.(p, String(msg.named)); // one of the Named (server/named.js)
     const lvl = Math.min(MAX_LEVEL, Math.max(1, msg.lvl | 0 || 1));
     p.lvl = lvl; p.xp = 0; p.lvlStart = lvl;
     p.stats.maxLvl = Math.max(p.stats.maxLvl, lvl);
@@ -61,7 +63,7 @@ export class BotManager {
   }
 
   // ---------- admin actions ----------
-  count() { return this.bots.filter(e => !e.b.closed).length; }
+  count() { return this.bots.filter(e => !e.b.closed && !e.named).length; } // (the Named have their own reserved slots: server/named.js)
   livePlayer(e) { const p = e.b.id && this.game.players.get(e.b.id); return p && p.bot ? p : null; }
 
   uniqueName(base) {
@@ -93,13 +95,14 @@ export class BotManager {
   }
 
   // bid: reuse a bot id (Respawn as…: the same bot to its party, its owner and the admin page)
-  start(roles, names, { lvl, behaviour, follow, skill }, team = 0, bid = 0) {
+  // join: extra fields for the join message (server/named.js)
+  start(roles, names, { lvl, behaviour, follow, skill, join = null }, team = 0, bid = 0) {
     lvl = Math.min(MAX_LEVEL, Math.max(1, lvl | 0 || 1));
     skill = clampSkill(skill); // (default 4: Skilled)
     const url = typeof this.url === 'function' ? this.url() : this.url;
     const group = startTeam({
       url, WebSocket, roles, names, behaviour, follow, skill,
-      join: { bot: this.key, lvl, f2: behaviour === 'floor2' || behaviour === 'follow' ? 1 : 0 },
+      join: { bot: this.key, lvl, f2: behaviour === 'floor2' || behaviour === 'follow' ? 1 : 0, ...(join || {}) },
     });
     const out = group.team.map(b => ({ bid: bid || this.nextBid++, b, group, behaviour, follow, team, lvl, at: Date.now() }));
     this.bots.push(...out);
@@ -114,10 +117,10 @@ export class BotManager {
     return true;
   }
 
-  removeAll() {
+  removeAll() { // (never the Named: they're not admin or player bots)
     const n = this.count();
-    for (const e of this.bots) e.group.drop(e.b);
-    this.bots = [];
+    for (const e of this.bots) if (!e.named) e.group.drop(e.b);
+    this.bots = this.bots.filter(e => e.named);
     return n;
   }
 
@@ -135,7 +138,7 @@ export class BotManager {
     };
   }
 
-  list() { return this.bots.map(e => this.view(e)); }
+  list() { return this.bots.filter(e => !e.named).map(e => this.view(e)); } // (the Named: the admin page's own card)
 
   // ---------- once a second: prune, followers join their player's party, and nobody gets left behind ----------
   upkeep() {

@@ -338,6 +338,7 @@ server/bossteam.js boss team mechanics: shared meteor (stack), spread markers, t
 server/poses.js  kneel / sit / bow: setPose, /kneel /sit /bow /stand chat, cleared by moving or acting (public/poses.js on the client)
 server/teamplay.js  skill combos between players, the Team Burst gauge and sync window, teamStat() per-fight counters (tables: shared/teamplay.js; client: public/teamplay.js; bots: shared/bots/teamplay.js)
 server/mvp.js  the post-fight MVP card from the per-fight team stats, downs and deaths; titles in shared/mvp.js; drawn by public/mvp.js
+server/named.js  the Named: the Hearthward and Cairn as their own bot kind, friendship, invites by tier, humans-first rules (data: shared/named.js; Friends tab: public/named.js; admin: server/named-admin.js, public/admin-named.js)
 server/index.js  static file server + WebSocket server (20 ticks/sec)
 server/shutdown.js  deploy drain on SIGTERM: "Update incoming", waits out a boss fight (4 min max), saves, exits
 public/          Three.js client (no build step): main.js, world.js, style.css
@@ -487,6 +488,33 @@ Protocol (WebSocket, validated server-side: ownership, limits, class, skill, nam
 
 Roster entries of owned bots carry `owner` (name) and `mode`. Code: `server/playerbots.js` (on top of `BotManager`'s add / edit / remove), `shared/playerbots.js` (setups, behaviours, loadout table), `public/playerbots.js` (tabs and the Bots tab). Test: `node test/playerbots.js` (own server on port 3641; level sync, `/b` leave; with `DATABASE_URL` it also checks admin access and that admin respawn / edit / remove keep a player's bot linked to its party).
 
+## The Named
+
+Five characters live in the tower and play the game like players do (`shared/named.js`, `server/named.js`). They are original characters, not the story cast:
+
+| Name | Class | Who |
+|---|---|---|
+| **Halvard** | Guardian (Sword & Shield), tank | Captain of **the Hearthward**. Counts heads before every pull. |
+| **Maribel** | Cleric (Staff), healer | The Hearthward's healer. Remembers who skipped their potions. |
+| **Tovin** | Ranger (Longbow), damage | The Hearthward's archer. Keeps score of everything. |
+| **Sennet** | Lancer (Halberd), damage | The Hearthward's lancer. Writes every boss pattern in a notebook. |
+| **Cairn** | Berserker (Warhammer), the loner | Hunts alone. Trusts what you do, not what you say. |
+
+- **Presence.** They are server bots at capability 5, of their own kind: five reserved slots outside `MAX_BOTS`, not in the Bots tab, never touched by the admin page's "remove all". They are only simulated while a player is online and only on a floor a player is on (the free Render plan sleeps when idle), they step out during a director show, and nothing is written to the database with nobody online. Coming back, you get a "while you were away" line (worked out from the time gone, not simulated).
+- **Level and gear.** They sit 2 levels above the top players: the top-3 average of non-admin characters played in the last 14 days, capped at the level cap, and they never drop. Gear, mastery and talents are the premade setup for that level, in their own weapon style. They take no XP, loot or items.
+- **What they do.** The Hearthward travel as one party; Cairn roams alone. They farm, and every 15-25 minutes (4-7 the first time) a group goes for its floor's boss, one group at a time, **only while no player is at the gate or in the arena**; they never walk into a player's fight unless they are in that player's party.
+- **Humans first.** One of the Named never lands a boss's killing blow while a player who fought it stands in the arena, so the Last Attack is yours. A field mob you damaged gives you full XP and your own loot even if they finish it, and in your party they take no share of the XP. On the MVP card, the MVP and the titles go to players first. A clear with no player in it is never a "first", rings no bell, and is carved apart on the Hall's **Heroes' record**.
+- **Friendship** (per character, 0-100): Stranger 0 → Known 15 → Ally 35 → Friend 60 → Sworn 85. Open **Players (P) → Friends** for each one's tier, bar, what's left of today's limit, where they are and what they're doing.
+  - **Gains:** a kill on an enemy you both fought within 25 m (+0.5; elites and rares +1.5), reviving them (+4), a real heal on them (+0.5, at most one per 6 s), Covering them (+1), and real help in their boss fight, at least 10% of the damage or healing (+8 for a kill, +3 for a wipe).
+  - **The only loss:** they bleed out while you stand within 40 m in their party (-4 with a Hero, -6 with Cairn). A tier, once reached, is never lost.
+  - **Daily limit, per character,** resetting at 10:00 UTC: a Hero gives up to 18 a day (9 once you're an Ally, 8 as a Friend, 5 as Sworn), so Ally takes about 2 sessions and Friend about 5. Cairn gives 7 a day (6, then 4) and counts unasked help for little (revive ×0.5, Cover ×0.5, heals ×0.25), so Friend takes 8-10 sessions.
+  - Anonymous players keep their friendship for the session; saved characters keep it in Postgres (`named_friendship`).
+- **Invites.** A Hero accepts your party invite from **Ally**; Cairn only from **Friend**. One of the Named per party. An invited Hero leaves the Hearthward and goes back when your party disbands or after 10 minutes without a fight. A **Sworn** friend can call one from anywhere: the **Call** button or `/b <name>: come`; first come, then nobody can call that one again for 10 minutes. They refuse while down, in a boss fight or in someone else's party.
+- **Cairn's raid invite.** When he heads for a boss he whispers every online Friend an invite (at most one an hour each, and none for the rest of your session after a decline). Accept and you're in his party; he leads the way.
+- **Admin page → Bots → The Named:** who is online, where and doing what; Spawn / Despawn each one; the level offset (and a level reset); every character's friendship, editable. `GET/POST /api/admin/named…` (`server/named-admin.js`).
+- **For the AI layer (I3) and requests (I4):** `game.namedFriendship(player, namedId)` → `{ pts, tier, tierName, left }` and `game.addFriendship(player, namedId, amount, reason)` (sources `chat` and `request` are already bounded: talk gives at most 3 a day and can't cross a tier by itself). Each entry of `NAMED` carries a `persona` text and canned lines; `look` is drawn by I2.
+- **Switches:** `NAMED_ENABLED=0` turns the whole feature off (the game is then exactly as before). Testing aids: `NAMED_ALWAYS=1` (in the world with nobody online), `NAMED_LEVEL=<n>`, `NAMED_BOSS_AFTER=<seconds>`.
+
 ### AI companions (optional, off by default)
 
 An LLM "mind" can sit on top of a bot's rule-based brain.
@@ -544,6 +572,8 @@ Floor 2: `SPAWN_AT=600,150` spawns at the Sunken Gate (spawning on Floor 2 also 
 START_LEVEL=16 SPAWN_AT=600,150 npm start
 FLOOR=2 node test/team.js                   # the party takes on the Drowned Sovereign
 ```
+
+The Named: `node test/named.js` (rules, the manager in process, then a real server; `DATABASE_URL=postgresql://postgres:pg@localhost/fb_named` adds the Postgres checks, `WARDEN=1` has the Hearthward clear the Warden on their own). `/status` reports the last minute's tick times (`tick.p95`).
 
 Measured on the prototype: 40 bots used about 5% of one CPU core, about 50 KB/s down per player.
 

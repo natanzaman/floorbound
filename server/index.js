@@ -17,6 +17,8 @@ import { installAI } from './ai/index.js'; // AI companions (off unless AI_PROVI
 import { makeStore as aiStore } from './ai/store.js'; // AI memories + daily spend in Postgres
 import { Director } from './director.js'; // the scene director (filming), server/director.js
 import { installDirectorAdmin } from './director-admin.js';
+import { NamedManager, makeNamedStore, namedOn } from './named.js'; // the Named: the Hearthward and the loner (NAMED_ENABLED=0 turns them off)
+import { installNamedAdmin } from './named-admin.js';
 import { TICK_RATE } from '../shared/data.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -48,6 +50,7 @@ const spectators = new Set(); // watch-only clients (?spectate=1)
 const bots = new BotManager(game, { url: () => `ws://127.0.0.1:${server.address().port}/ws` }); // admin-managed bots
 const playerBots = new PlayerBots(game, bots); // bots players add in game (P → Bots), server/playerbots.js
 game.director = new Director(game, bots); // plays cue sheets with bot actors (docs/ROADMAP.md F2)
+const named = namedOn() ? new NamedManager(game, bots) : null; // server/named.js (only while a human is online)
 
 const server = http.createServer(async (req, res) => {
   if (res.handled) return;
@@ -64,7 +67,7 @@ const server = http.createServer(async (req, res) => {
   const url = decodeURIComponent(full.pathname);
   if (url === '/status') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    return res.end(JSON.stringify({ players: game.players.size, floorClears: game.floorClears, uptime: Math.round(game.time) }));
+    return res.end(JSON.stringify({ players: game.players.size, floorClears: game.floorClears, uptime: Math.round(game.time), tick: tickStats() }));
   }
   for (const [prefix, dir] of MOUNTS) {
     if (!url.startsWith(prefix)) continue;
@@ -167,7 +170,15 @@ wss.on('connection', ws => {
   });
 });
 
+// How long the last minute of ticks took (ms), for /status.
+const tickMs = new Float32Array(60 * TICK_RATE); let tickN = 0;
+function tickStats() {
+  const a = [...tickMs.subarray(0, Math.min(tickN, tickMs.length))].sort((x, y) => x - y), at = q => +(a[Math.min(a.length - 1, Math.floor(a.length * q))] || 0).toFixed(2);
+  return { n: a.length, p50: at(0.5), p95: at(0.95), max: at(1) };
+}
+
 function tick(dt) {
+  const t0 = performance.now();
   game.update(dt);
   const world = game.snapshot();
   for (const p of game.players.values()) {
@@ -182,6 +193,7 @@ function tick(dt) {
   }
   if (game.rosterDirty) { game.rosterDirty = false; broadcastRoster(); } // e.g. someone changed their title
   for (const ws of spectators) if (ws.readyState === 1) ws.send(`{"type":"snap","me":null,"w":${world}}`);
+  tickMs[tickN++ % tickMs.length] = performance.now() - t0;
 }
 
 if (process.env.LOCKSTEP) {
@@ -228,6 +240,7 @@ async function shutdown(sig) {
         if (db.enabled) await Promise.allSettled([...game.players.values()].filter(p => p.charId).map(p => accounts.saveCharacter(p)));
         await track.flush().catch(() => {});
         await aiMinds.flush(); // AI memories + spend (server/ai/store.js)
+        await named?.flush(); // friendship still waiting to be saved (server/named.js)
       },
     });
   } catch (e) { console.error('shutdown', e); }
@@ -240,10 +253,12 @@ for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => void shutdown(sig
 admin.init({ game, bots });
 const aiMinds = installAI({ game, bots, server });
 installDirectorAdmin({ server, director: game.director }); // /api/admin/director (admin page: Director tab)
+installNamedAdmin({ server, named }); // /api/admin/named (admin page: The Named card)
 server.on('error', err => { console.error('Server error', err); if (err.code === 'EADDRINUSE' || err.code === 'EACCES') process.exit(1); }); // can't listen: don't linger
 db.migrate()
   .then(() => hall.load())
   .then(() => { game.hadFirstClear = hall.hasFirst(); game.hadFirstClear2 = hall.hasFirst(2); })
   .then(() => { if (db.enabled) aiMinds.useStore(aiStore(db.q)); }) // (async, never blocks or fails startup)
+  .then(() => { if (db.enabled && named) return named.useStore(makeNamedStore(db.q, { adminIds: (process.env.ADMIN_DISCORD_IDS || '').split(',').map(s => s.trim()).filter(Boolean) })); })
   .then(() => server.listen(PORT, () => console.log(`Floorbound running on http://localhost:${PORT}${db.enabled ? ' (accounts on' + (accounts.discordOn() ? ', Discord sign-in on' : '') + ')' : ''}`)))
   .catch(err => { console.error('Startup failed', err); process.exit(1); });

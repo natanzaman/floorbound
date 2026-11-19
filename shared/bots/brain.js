@@ -546,6 +546,7 @@ function assistTarget(b, P, anchor, here, leading) {
 function pickProgress(b, here, minBoss) {
   const lvl = b.me?.lvl || 1, f2 = onFloor2(b.x);
   minBoss ??= f2 ? F2_BOSS_LVL : 5;
+  if (b.noBoss) minBoss = 99; // told to keep to the field (the Named, server/named.js)
   const boss = here.find(m => m.type === (f2 ? 'sovereign' : 'warden'));
   if (boss && b.z > 162 && lvl >= minBoss) return boss;
   const want = lvl >= minBoss ? null : f2 ? 'mire' : lvl < 3 ? 'boar' : 'wolf';
@@ -599,7 +600,7 @@ function idle(b, P, M) {
   const beh = M.beh, f2 = onFloor2(b.x), lvl = b.me?.lvl || 1;
   if (beh === 'follow') return;
   if (beh === 'field') { const [x, z] = fieldSpot(b); moveToward(b, x, z, 1); return; }
-  if (beh !== 'warden' && lvl < (f2 ? F2_BOSS_LVL : 5)) { moveToward(b, f2 ? F2.x : 0, f2 ? 70 : 60); return; } // into the field
+  if (beh !== 'warden' && (b.noBoss || lvl < (f2 ? F2_BOSS_LVL : 5))) { moveToward(b, f2 ? F2.x : 0, f2 ? 70 : 60); return; } // into the field
   travelToBoss(b);
 }
 
@@ -622,6 +623,7 @@ function goalText(b, P, M, tgt) {
   if (b.waitFrom != null && b.t - b.waitFrom < 20) return 'Waiting for the party';
   if (M.beh === 'field') return 'Farming the field';
   if (M.beh === 'follow') return `Looking for ${b.follow || 'a player'}`;
+  if (M.beh !== 'warden' && b.noBoss) return onFloor2(b.x) ? 'Hunting in the Mire' : 'Farming the field';
   if (M.beh !== 'warden' && (b.me?.lvl || 1) < (onFloor2(b.x) ? F2_BOSS_LVL : 5)) return 'Levelling up';
   return gate ? 'Waiting at the raid gate' : onFloor2(b.x) ? 'Heading to the Sovereign' : 'Heading to the Warden';
 }

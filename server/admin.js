@@ -18,6 +18,7 @@ import { floorOf } from '../shared/floor2.js';
 import { MASTERY, BRANCHES, newMastery, masteryLevel } from '../shared/mastery.js';
 import { newTalents, allocError, TREES, spendBlock, nodesOf, pointsAt } from '../shared/talents.js';
 import { BEHAVIOURS } from './botmanager.js';
+import { isNamedName } from '../shared/named.js';
 import * as hall from './hall.js';
 import * as track from './track.js';
 
@@ -158,6 +159,7 @@ function applyEdit(c, body, online) {
   if (body.name !== undefined) {
     const name = String(body.name).trim().replace(/\s+/g, ' ');
     if (!NAME_RE.test(name)) throw new Bad('Names are 3–16 letters or numbers (spaces, _ . - allowed inside).');
+    if (process.env.NAMED_ENABLED !== '0' && isNamedName(name)) throw new Bad('That name belongs to one of the Named.', 409);
     c.name = name;
   }
   if (body.cls !== undefined && body.cls !== c.cls) {
