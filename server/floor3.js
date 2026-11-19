@@ -11,6 +11,7 @@ import {
 import { floorUnlocked, floorOf, nearWaystone } from '../shared/floor2.js';
 import { lastAttackItem3, rollRarity, SLOTS } from '../shared/items.js';
 import { rollGear } from '../shared/loot.js'; // drops and the Stormforged set: data in shared/loot.js (LOOT)
+import { AREA_COLLIDERS } from '../shared/arenas.js'; // the Undercroft's pillars and walls (multi-area fights, server/arenas.js)
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 export const COLOSSUS_MOVES = ['hammerfall', 'lightning', 'gale_push', 'overload', 'tempest_beam']; // forceBossMove names (director boss_move)
@@ -92,6 +93,10 @@ export const F3Methods = {
     const step = Math.min(d - stopAt, speed * dt);
     let nx = m.x + (dx / d) * step, nz = m.z + (dz / d) * step;
     [nx, nz] = resolveCollision(nx, nz, m.def.radius * 0.8);
+    if (m.def.boss && Math.hypot(nx - m.x, nz - m.z) < step * 0.3 && AREA_COLLIDERS.length) { // a lower area's pillar or wall in the way: go round
+      const a = Math.atan2(dx, dz);
+      for (const off of [1, -1, 1.6, -1.6]) { const [sx, sz] = resolveCollision(m.x + Math.sin(a + off) * step, m.z + Math.cos(a + off) * step, m.def.radius * 0.8); if (Math.hypot(sx - m.x, sz - m.z) > step * 0.5 && this.f3Free(m, sx, sz)) { nx = sx; nz = sz; break; } }
+    }
     if (!this.f3Free(m, nx, nz)) return false;
     if (!keepFace) m.face = Math.atan2(dx, dz);
     m.x = nx; m.z = nz; m.moving = true;
@@ -390,6 +395,7 @@ export const F3Methods = {
     while (m.phase < want) {
       m.phase++;
       this.events.push({ t: 'f3phase', id: m.id, n: m.phase });
+      if (F3STATS) console.log(`[phase] ${m.phase + 1} at ${Math.round(t - (this.fight3?.start ?? t))}s`);
       if (m.phase === 1) {
         this.sys('The Storm Colossus crackles with power! When it kneels to OVERLOAD: Break it, then Switch (or Team Burst).');
         m.ovT = Math.min(m.ovT, t + C.overload.first); m.harpyT = t + C.harpies.first;

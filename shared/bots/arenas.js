@@ -33,9 +33,21 @@ export const botCanRoll = b => !AREA_COLLIDERS.length || !sludgeAt(b.x, b.z);
 /** moveToward's hook: the next step, steered round hazards (null: no safe step). */
 export function botStep(b, nx, nz, tx, tz) {
   if (!AREA_COLLIDERS.length) return [nx, nz];
-  const sk = skillOf(b);
-  if (!hazardAt(nx, nz, sk) || hazardAt(b.x, b.z, sk)) return [nx, nz]; // (already in one: any way out will do)
-  return hazardStep(b.x, b.z, tx, tz, Math.hypot(nx - b.x, nz - b.z), sk);
+  const sk = skillOf(b), into = sludgeAt(tx, tz, 1.5); // (heading for someone in the sludge: wade in after them)
+  const bad = (x, z) => (into ? fireAt(x, z, 0.45) >= (sk >= 4 ? 1 : 2) : hazardAt(x, z, sk));
+  if (!bad(nx, nz) || bad(b.x, b.z)) return [nx, nz]; // (already in one: any way out will do)
+  return hazardStep(b.x, b.z, tx, tz, Math.hypot(nx - b.x, nz - b.z), into ? Math.min(sk, 2) : sk);
+}
+
+/** A way round a wall or pillar when a straight step barely moves (moveToward: after collisions). */
+export function sidestep(b, tx, tz, step, resolve, walkable) {
+  if (!AREA_COLLIDERS.length) return null;
+  const a = Math.atan2(tx - b.x, tz - b.z), side = b.side || (b.side = Math.random() < 0.5 ? 1 : -1);
+  for (const off of [0.9, 1.4, 1.9]) for (const sgn of [side, -side]) {
+    let [x, z] = resolve(b.x + Math.sin(a + off * sgn) * step, b.z + Math.cos(a + off * sgn) * step);
+    if (Math.hypot(x - b.x, z - b.z) > step * 0.5 && walkable(x, z) && !hazardAt(x, z, skillOf(b))) { b.side = sgn; return [x, z]; }
+  }
+  return null;
 }
 
 /** A spot out of the hazard the bot stands in (for dodgeSpot), or null. */
@@ -43,6 +55,8 @@ export function arenaEscape(b) {
   if (!AREA_COLLIDERS.length) return null;
   const sk = skillOf(b);
   if (!hazardAt(b.x, b.z, sk)) return null;
+  const tgt = b.tgtId && b.mobs?.find(m => m.id === b.tgtId);
+  if (!fireAt(b.x, b.z, 0.45) && tgt && sludgeAt(tgt.x, tgt.z, (tgt.def?.radius || 1) + 2.5)) return null; // fighting it in the sludge: stay
   for (const k of ARENA_KEYS) {
     const a = areaOf(k), L = arenaState(k);
     if (!a || !inRoom(ARENAS[k], b.x, b.z, 2)) continue;
@@ -89,21 +103,28 @@ export function arenaTurn(b, moveToward) {
   return false;
 }
 
-// The Tempest Beam in an area with great pillars: get behind one if we can make it before the beam reaches us.
+// The Tempest Beam in an area with great pillars: duck behind one just before the beam reaches us, if one is close
+// enough (else jump it as before), and step back out once it has passed. The rest of the sweep we keep fighting.
+const COVER_SECS = 2.2; // the farthest a bot walks for cover (s)
 function coverTurn(b, moveToward) {
   const now = clock(b);
   const live = b.beams.filter(m => now < m.start + m.turn + 0.2);
   if (!live.length) { b.coverAt = null; return false; }
-  const m = live[0];
-  if (losBlocked(m.x, m.z, b.x, b.z)) { b.goal = 'In cover from the beam'; return true; } // stay put until it's done
+  const e = beamEta(b, now, true); // (when it reaches us, cover or not)
+  if (!e) { b.coverAt = null; return false; }
+  const m = e.m;
+  if (losBlocked(m.x, m.z, b.x, b.z)) { // in cover: hold still while it passes
+    if (e.tIn < 1.0 && e.tOut > -0.15) { b.goal = 'In cover from the beam'; return true; }
+    return false;
+  }
   const sk = skillOf(b);
   if (sk < 3) return false;
-  const e = beamEta(b, now);
-  if (!e) return false;
   const spot = b.coverAt?.m === m ? b.coverAt.spot : coverSpot(m.x, m.z, b.x, b.z, sk);
   if (!spot) return false;
   const secs = Math.hypot(spot[0] - b.x, spot[1] - b.z) / (PLAYER_SPEED * Math.max(0.45, botSpeedAt(b)));
-  if (secs + 0.3 > e.tIn && b.coverAt?.m !== m) return false; // too far: jump it instead
+  const going = b.coverAt?.m === m;
+  if (secs + 0.15 > e.tIn) { b.coverAt = null; return false; } // won't make it in time: jump it (beamDodge)
+  if (!going && (secs > COVER_SECS || e.tIn > secs + 0.9)) return false; // too far (jump it), or not yet (keep fighting)
   b.coverAt = { m, spot };
   b.goal = 'Taking cover from the beam';
   moveToward(b, spot[0], spot[1], 0.15);

@@ -34,7 +34,7 @@ export const ARENAS = {
         id: 'undercroft', name: 'The Undercroft',
         blurb: 'Sludge slows you (no rolling in it), fire spreads in patterns, and the great pillars block the Tempest Beam.',
         pillars: [[-9, 5, 2.0, true], [9, 5, 2.0, true], [0, -10, 2.0, true], [-20, -12, 1.3, false], [20, -12, 1.3, false]],
-        walls: [[-1.0, -0.6, 17], [0.6, 1.0, 17]],
+        walls: [[-0.95, -0.65, 17], [0.65, 0.95, 17]],
         sludge: [[-14, -5, 3.8], [14, -5, 3.8], [0, 17.5, 4.0], [-6.5, -16.5, 2.4], [6.5, -16.5, 2.4]],
         slow: 0.45,
         fire: {

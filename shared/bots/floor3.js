@@ -15,12 +15,12 @@ registerBotHook('onEvent', (b, e) => {
 });
 
 // Seconds until the beam reaches us (tIn) and has passed (tOut); null if it won't (done, or we're out of its reach).
-export function beamEta(b, now = clock(b)) {
+export function beamEta(b, now = clock(b), ignoreCover = false) {
   let best = null;
   for (const m of b.beams || []) {
     const d = d2(b.x, b.z, m.x, m.z);
     if (d > m.len + 0.5) continue;
-    if (losBlocked(m.x, m.z, b.x, b.z)) continue; // behind a great pillar (the Undercroft): it passes us by
+    if (!ignoreCover && losBlocked(m.x, m.z, b.x, b.z)) continue; // behind a great pillar (the Undercroft): it passes us by
     const ap = Math.atan2(b.x - m.x, b.z - m.z), tol = Math.atan2(m.w + 0.45, Math.max(0.5, d));
     const ahead = wrap((ap - m.a0) * m.dir); // how far round the beam must sweep from its start to reach us
     const k = (now - m.start) / m.turn, swept = Math.max(0, k) * Math.PI * 2;

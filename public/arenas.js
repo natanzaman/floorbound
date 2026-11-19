@@ -57,7 +57,7 @@ export function initArenas(ctx) {
       }
       case 'fall': if (anim[key]?.kind !== 'fall') startFall(key, e.a, e.id, e.d, e.land); else Object.assign(anim[key], { d: e.d, land: e.land }); break;
       case 'land': if (mine) ctx.shake(0.45); if (near) { sfx.play('boom', null, 1.2); for (const p of players.values()) if (inRoomNow(key, p.x, p.z)) fx.ring(p.x, p.z, 2.2, 0xd6c9ae, 0.5); } break;
-      case 'enter': anim[key] = { kind: 'enter', t0: clock, d: e.d, i: e.i, boss: e.id, x: e.x, z: e.z }; if (near) sfx.play('warn', { x: e.x, z: e.z }, 1.4); if (mine) ctx.callout('IT FOLLOWS YOU DOWN', 'Get clear of where it lands!', e.i + 0.4); break;
+      case 'enter': mobs.get(e.id)?.model.anim?.cancelWindup?.(); anim[key] = { kind: 'enter', t0: clock, d: e.d, i: e.i, boss: e.id, x: e.x, z: e.z }; if (near) sfx.play('warn', { x: e.x, z: e.z }, 1.4); if (mine) ctx.callout('IT FOLLOWS YOU DOWN', 'Get clear of where it lands!', e.i + 0.4); break;
       case 'impact': {
         fx.ring(e.x, e.z, e.r + 2, 0xfde68a, 0.7); fx.ring(e.x, e.z, (e.r + 2) * 0.6, 0xffffff, 0.5); fx.shatter(e.x, e.z, true); fx.sparks(e.x, 0.4, e.z, 26, 0xd6c9ae, 0.35, 12);
         if (near) { sfx.play('boom', { x: e.x, z: e.z }, 1.6); sfx.play('roar', mobs.get(e.id)?.model.group.position || null, 1.4); ctx.shake(mine ? 0.8 : 0.3); }
@@ -66,7 +66,7 @@ export function initArenas(ctx) {
         break;
       }
       case 'fire': if (near && e.f === 2) sfx.play('spell', null, 0.5); if (mine && e.f === 1) ctx.tip('f3fire'); break;
-      case 'reset': delete anim[key]; if (rubble[key]) { for (const b of rubble[key].list) b.d.visible = false; delete rubble[key]; } v.crack(0); v.setArea(0); break;
+      case 'reset': if (anim[key]?.kind === 'crack') mobs.get(e.id)?.model.anim?.cancelWindup?.(); delete anim[key]; if (rubble[key]) { for (const b of rubble[key].list) b.d.visible = false; delete rubble[key]; } v.crack(0); v.setArea(0); break;
     }
     return true;
   }

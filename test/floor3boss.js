@@ -74,6 +74,7 @@ async function run(i) {
   if (!done) res.secs = Math.round((Date.now() - (start || t0)) / 1000);
   if (FROM_TOWN) res.journey = journey;
   g.stop(); srv.kill();
+  if (process.env.LOG_FILE) (await import('node:fs')).appendFileSync(process.env.LOG_FILE, `--- run ${i + 1}\n${log}`); // the server's log (F3_STATS lines) for a closer look
   const n = re => (log.match(re) || []).length;
   res.stop = { sw: n(/\[ov\] stop switch/g), burst: n(/\[ov\] stop burst/g), brk: n(/\[ov\] stop break/g) }; res.clap = n(/\[ov\] clap/g);
   res.beam = { jump: n(/\[beam\] jump/g), roll: n(/\[beam\] roll/g), hit: n(/\[beam\] hit/g), cover: n(/\[beam\] cover/g) };

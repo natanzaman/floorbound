@@ -5,7 +5,7 @@ import { F2, SOVEREIGN, inArena2, onFloor2, floorOf } from '../floor2.js';
 import { FLOOR_X } from '../floor3.js';
 import { skillReady, pressed, aimNoise, sweepError, quakeError } from '../botskill.js';
 import { brainFor, registerBotHook } from './registry.js';
-import { botStep, botSpeedAt, botCanRoll, arenaEscape } from './arenas.js'; // boss arenas' areas (J2): sludge, fire, cover
+import { botStep, botSpeedAt, botCanRoll, arenaEscape, sidestep } from './arenas.js'; // boss arenas' areas (J2): sludge, fire, cover
 
 export const DT = 0.05; // one snapshot (20 Hz)
 export const d2 = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
@@ -32,6 +32,7 @@ export function moveToward(b, tx, tz, stop = 0.4, speed = PLAYER_SPEED) {
   if (!safe) return false;
   [nx, nz] = safe;
   [nx, nz] = resolveCollision(nx, nz);
+  if (Math.hypot(nx - b.x, nz - b.z) < step * 0.3) [nx, nz] = sidestep(b, tx, tz, step, resolveCollision, (x, z) => walkable(x, z, !b.gateOpen)) || [nx, nz]; // stuck on a lower area's wall: round it
   if (!walkable(nx, nz, !b.gateOpen)) return false;
   b.x = nx; b.z = nz; b.face = Math.atan2(dx, dz);
   return true;

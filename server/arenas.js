@@ -98,7 +98,7 @@ const methods = {
     R.fire = null;
     this.events.push({ t: 'arena', k: key, s: 'crack', id: m.id, a: to, d: T.crack, x: r2(m.x), z: r2(m.z) });
     this.sys(`The ground cracks beneath ${m.def.name.replace(/^The /, 'the ')}! Brace yourselves: the floor is giving way!`);
-    if (STATS) console.log(`[arena] crack ${key} -> ${A.areas[to]?.id} at ${Math.round((100 * m.hp) / m.maxHp)}%`);
+    if (STATS) console.log(`[arena] crack ${key} -> ${A.areas[to]?.id} at ${Math.round((100 * m.hp) / m.maxHp)}%, ${Math.round(t - (this[A.fight]?.start ?? t))}s`);
     return true;
   },
 
@@ -148,7 +148,7 @@ const methods = {
       const F = A.areas[m.area]?.fire;
       R.fire = F ? { i: 0, k: 0, until: t + T.after, tickT: 0 } : null;
       this.events.push({ t: 'arena', k: key, s: 'resume', id: m.id, a: m.area });
-      if (STATS) console.log(`[arena] resume ${key} in ${A.areas[m.area]?.id}`);
+      if (STATS) console.log(`[arena] resume ${key} in ${A.areas[m.area]?.id}, ${Math.round(t - (this[A.fight]?.start ?? t))}s`);
     }
   },
 
@@ -179,6 +179,7 @@ const methods = {
     const spots = def.spots[F.i];
     for (const p of this.arenaPlayers(key)) {
       if (!spots.some(s => Math.hypot(p.x - s.x, p.z - s.z) < s.r)) continue;
+      if (t < p.iframeUntil || (t >= p.airFrom && t < p.airUntil)) continue; // rolling or jumping through: no tick (and no free "perfect dodge")
       this.damagePlayer(p, p.maxHp * def.dmg, { ground: true, src: 'fire', mob: m });
       if (STATS) console.log('[arena] fire hit');
     }
