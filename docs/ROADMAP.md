@@ -474,7 +474,7 @@ Same rules as F–I: flock lock, push with `--force-with-lease`.
 |---|---|---|---|---|
 | J1 Rescue mechanics | `feat/rescue` | todo | | |
 | J2 Multi-area boss fights (Floor 3 first) | `feat/arenas` | todo | | |
-| J3 Boss timing tables + melee openings + tuning harness | `feat/openings` | todo (after J1) | | |
+| J3 Boss timing tables + melee openings + tuning harness | `feat/openings` | todo (after J1 and J2) | | |
 | J4 Threat rules | `feat/threatrules` | todo | | |
 
 ### Shared contracts for J
@@ -482,6 +482,77 @@ Same rules as F–I: flock lock, push with `--force-with-lease`.
 - **Solo stays fair.** A rescue mechanic either never targets a lone player, or the trapped player can free themselves more slowly (e.g. by mashing an action) so a solo player can't be soft-locked.
 - **Credit** through `teamStat` (`rescue` key) and the MVP card ("Rescuer" title).
 - **Data-driven:** mechanics are described in shared tables, with small server modules and client visuals. Bosses opt in per phase.
+
+### Review amendments for J (Fable plan review, 2026-11-19: these override the task text below where they differ)
+**Order and ownership.** J1, J2 and J4 run in parallel; **J3 runs after J1 and J2** and moves all boss timings (including theirs) into the tables.
+- **J1** owns `server/bossteam.js` and a new `server/rescue.js`.
+- **J2** owns `server/floor3.js` and `public/floor3world.js`.
+- **J4** owns `server/threat.js` and the taunt cases in `game.js` / `mastery.js`.
+
+**Shared contracts addendum**
+- **One target picker.** `targetOf(m)` in `server/threat.js` is the only place targets are chosen: the lock holder, otherwise the top threat among living, non-trapped players. J4 builds it and replaces the copies in `game.js:~988`, `floor2.js:~68`, `floor3.js:~82`, `staging.js:~32`, talents' `topThreat` and threat's `topThreat`. J1 only sets `p.trap`.
+- **One team-scale mechanic per boss at a time** (G4 moves, J1 traps, Overload, the J2 transition), at least 8 s apart. Traps are new `BOSSTEAM` moves, not a new timer. They:
+  - need at least 2 free standing fighters;
+  - never pick the boss's current target;
+  - are off during director shows;
+  - are available to `forceBossMove`.
+- **Trap auto-release.** A trap releases harmlessly if no free ally remains to rescue. This covers solo play and a duo whose partner is down.
+- **J2 area is a state, not a place.** `m.area` lives on the same x,z footprint and is sent in `f3Snap` so reconnects and late joiners get it. `inArena3` is unchanged. The fall is a client effect.
+- **J2 rendering budget.** The lower arena keeps the same light count (recolour only). Fire uses emissive meshes, never new `PointLight`s, so shader warm-up still holds.
+
+**J1 changes**
+- **v1 traps, one per boss:**
+  - Warden: vines (Thornbind);
+  - Sovereign: Drowning Pillar;
+  - Colossus: storm crystal.
+- **Trap objects** are mobs flagged `prop`: no threat, XP, loot, posture or mastery, and they can't be taunted.
+- **Hold E:** revive wins over freeing someone from a trap.
+- **Cut:** "slows the boss's target swaps".
+- **Cut from v1:** the J1.4 run-around objectives, since Overload already fills that role.
+
+**J2 changes**
+- **When the transition fires:**
+  - It waits until nothing else is active (Overload, a wind-up, a G4 move, a trap), then clears beams and strikes.
+  - It fires once, even if a burst skips a phase.
+  - It resets on a wipe or respawn.
+  - Bleed-out is paused during the landing.
+- **Cut from v1:**
+  - the third area;
+  - the raised platform (the server has no heights).
+- **Fire:** fixed patterns, at most 10 patches, checked at 5 Hz.
+
+**J3 changes**
+- **Melee is defined as `inFlankReach`.**
+- **The opening bonus** is added to the flank bonus (not multiplied), doesn't apply while the boss is Grounded, and doesn't stack multiplicatively with Switch, Pincer or Grounded.
+- **Gaps and openings are off during director shows.** Re-run the Episode 1 rehearsal after J4.
+
+**J4 numbers** (`shared/threat.js`: `TAUNT`, `CLEAN`). These replace J4.2–J4.3; J4.3 is folded into the general cut.
+- **Scope and lock length:** every mob the skill hits.
+  - Taunt and War Cry lock for 6 s, Challenge for 8 s (× the Provoke talent's duration bonus, never more than cooldown − 3 s).
+  - Phalanx sets the user to the top, with no lock and no cuts.
+- **On taunt of m by T:**
+  ```
+  R = max(best non-taunter threat/s on m over the last 6 s, 2 × highest fighter atk)
+  L = 24 × R
+  every entry ×= L / max(top, 1); then T = L; others = min(v, 0.5 L)
+  everyone's clean multiplier → ×1.0;  m.lock = { by: T, L, until }
+  ```
+  A steady damage dealer gains about 25% of L per lock.
+- **During the lock:** the target is T, T's entry is frozen at L, and others build normally.
+- **When the lock ends:** T = 0.9 L, and the target becomes the highest entry (a tie goes to T). The lock ends early if T is dead, downed, trapped or out of the room.
+- **Re-taunt by anyone:** the same steps, from the current values. It replaces the lock.
+- **Clean multiplier** (one per player; applies on bosses and elites):
+  - It equals `min(2.5, 1 + 0.05 × cleanSecs)`.
+  - `cleanSecs` only advances if the player damaged a boss or elite in the last 3 s.
+  - It resets to 0 on any HP or shield loss (not on hits that were evaded, parried or Covered), a taunt, being downed, or the end of the fight.
+  - It multiplies damage threat only, not heal threat.
+- **Meter:**
+  - During a lock, the percentage is `v / L` (shown up to 150); otherwise it's % of top.
+  - `me.th = [bossId, pct, nextPct, mult×10, lockSecs, lockById]`.
+- **Bots:**
+  - Bot tanks don't taunt a mob held or locked by another Guardian (no ping-pong between two tanks).
+  - Only bots at skill 4 and above ease off at 90%.
+- **Accept when:** a skill-5 steady damage dealer ends a lock at 75–85%. Report the tank's share of boss time with and without taunting.
 
 ### J1. Rescue mechanics (`feat/rescue`)
 A generic "trapped player" system plus three trap types. Each boss gets at least one:
