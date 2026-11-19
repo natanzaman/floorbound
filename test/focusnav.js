@@ -1,7 +1,7 @@
 // Menu focus navigation (public/focusnav.js, roadmap K1b): the DOM-free parts. Picking the nearest element in a
 // direction from rects, the stick as a direction, held-direction repeat, item keys. Usage: node test/focusnav.js
 import assert from 'node:assert/strict';
-import { pickNext, stickDir, repeatStep, navKey, REPEAT_DELAY, REPEAT_RATE } from '../public/focusnav.js';
+import { pickNext, stickDir, repeatStep, navKey, createFocusNav, REPEAT_DELAY, REPEAT_RATE } from '../public/focusnav.js';
 
 let n = 0;
 const ok = name => console.log(`  ok ${++n} - ${name}`);
@@ -73,6 +73,33 @@ const id = r => r?.id ?? null;
   assert.equal(navKey(el('INPUT', { name: 'gq', value: 'low' })), 'INPUT:gq=low', 'radios: name and value');
   assert.equal(navKey(el('BUTTON', { text: '  Resume ' })), 'BUTTON"Resume', 'else the text');
   ok('item keys: data-nav, id, data-*, name / value, text');
+}
+
+// ---- focus restore after a re-render: [data-nav-default] wins over a memory key that is gone (a fake DOM) ----
+{
+  const mk = (nav, y, o = {}) => {
+    const cls = new Set(['x']);
+    const e = { tagName: 'BUTTON', dataset: { nav }, id: '', textContent: nav, isConnected: true, disabled: false, rect: { left: 0, top: y, width: 100, height: 20 }, nd: !!o.def,
+      classList: { contains: c => cls.has(c), add: c => cls.add(c), remove: c => cls.delete(c) },
+      getAttribute: a => (a === 'data-nav' ? nav : null), hasAttribute: () => false, getClientRects: () => [1], getBoundingClientRect: () => e.rect,
+      focus() {}, scrollIntoView() {}, contains: x => x === e };
+    return e;
+  };
+  const root = { id: 'scr', isConnected: true, kids: [], classList: { contains: () => false }, getClientRects: () => [1], hasAttribute: a => a === 'data-nav', contains: x => root.kids.includes(x),
+    querySelectorAll: () => root.kids.filter(k => k.isConnected), querySelector: sel => (sel === '[data-nav-default]' ? root.kids.find(k => k.isConnected && k.nd) || null : null) };
+  globalThis.document = { getElementById: i => (i === 'scr' ? root : null) };
+  globalThis.getComputedStyle = () => ({ visibility: 'visible' });
+  const input = { device: 'pad', onPad() {}, padHeld: () => false, stick: () => ({ x: 0, y: 0 }) };
+  const nav = createFocusNav({ input, panels: { top: () => 'scr', close() {} }, order: ['scr'] });
+  root.kids = [mk('close', 0), mk('row', 50)];
+  nav.tick(1000);
+  assert.equal(nav.current().key, 'close', 'no memory, no default: the top item');
+  root.kids.forEach(k => { k.isConnected = false; }); // the re-render: every element is new and the remembered one is gone
+  root.kids = [mk('rb', 0), mk('row2', 50), mk('prompt-swap', 100, { def: true })]; 
+  nav.tick(1002);
+  assert.equal(nav.current().key, 'prompt-swap', 'the key is gone: focus goes to [data-nav-default], not the top item');
+  delete globalThis.document; delete globalThis.getComputedStyle;
+  ok('focus restore: [data-nav-default] is used when the remembered element is gone');
 }
 
 console.log(`focusnav: ${n} passed`);

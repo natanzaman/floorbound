@@ -135,6 +135,7 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
   el.dataset.nav = id; // (the controller drives it: public/focusnav.js)
   document.body.appendChild(el);
   let tab = input.device === 'pad' ? 'pad' : 'kbm', busy = null, msg = '', prompt = null, resetArmed = null, poll = null, padCount = 0;
+  let restore = null, dflt = ''; // the Rebind button to put pad focus back on once a capture is over (focusnav's data-nav-default)
   let pop = null; // the picture's popover: { device, code, mode: 'info' | 'list', filter }
   const lit = new Set(), padLit = new Set(); // keys / pad buttons held now (live feedback)
 
@@ -154,8 +155,9 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
     const mine = busy && busy.key === key && busy.device === device;
     const can = rebindable(device, a.id) && !(device === 'pad' && !pads().length);
     const title = a.fixed ? 'Always this key' : !rebindable(device, a.id) ? 'Set by the device' : device === 'pad' && !pads().length ? 'Connect a controller to rebind it' : '';
+    const isDef = restore && restore.device === device && restore.key === key && dflt === 'rb';
     return `<span class="cu-slot ${slot ? 'alt' : ''}"><span class="cu-b ${b ? '' : 'none'}" data-b="${esc(key)}">${mine ? esc(busy.text) : esc(bindingLabel(b))}</span>`
-      + `<button class="cu-rb" data-rb="${esc(key)}" data-nav="cu-rb-${device}-${esc(key)}" ${can && !busy ? '' : 'disabled'} title="${esc(title)}">${mine ? 'Listening…' : slot ? 'Alt' : 'Rebind'}</button></span>`;
+      + `<button class="cu-rb" data-rb="${esc(key)}" data-nav="cu-rb-${device}-${esc(key)}" ${isDef ? 'data-nav-default' : ''} ${can && !busy ? '' : 'disabled'} title="${esc(title)}">${mine ? 'Listening…' : slot ? 'Alt' : 'Rebind'}</button></span>`;
   }
   function picture(device) {
     const P = PIC[device], b = input.bindings(device);
@@ -194,15 +196,17 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
   }
   function render() {
     const p = prompt;
+    dflt = p ? 'prompt' : restore && !busy ? 'rb' : ''; // (while listening the Rebind button is disabled: no default yet)
     el.innerHTML = header()
       + ['kbm', 'pad'].map(d => `<section class="cu-tab ${tab === d ? '' : 'hidden'}" id="cu-tab-${d}" role="tabpanel">
         <div class="cu-pic" id="cu-pic-${d}" data-device="${d}">${picture(d)}</div>
         <div class="cu-msg ${msg ? '' : 'hidden'}" id="cu-msg-${d}" role="status">${esc(msg)}</div>
         ${p && p.device === d ? `<div class="cu-prompt" id="cu-prompt"><div><b>${esc(bindingLabel(p.binding))}</b> is already on ${p.conflicts.map(c => `<b>${esc(ACTION[c.action].label)}</b>`).join(', ')}.</div>
-          ${p.swap ? '<button data-p="swap" data-nav="cu-p-swap">Swap</button>' : ''}<button data-p="unbind" data-nav="cu-p-unbind">Unbind ${p.conflicts.length > 1 ? 'them' : 'it'}</button><button data-p="cancel" data-nav="cu-p-cancel">Cancel</button></div>` : ''}
+          ${p.swap ? '<button data-p="swap" data-nav="cu-p-swap" data-nav-default>Swap</button>' : ''}<button data-p="unbind" data-nav="cu-p-unbind"${p.swap ? '' : ' data-nav-default'}>Unbind ${p.conflicts.length > 1 ? 'them' : 'it'}</button><button data-p="cancel" data-nav="cu-p-cancel">Cancel</button></div>` : ''}
         <div class="cu-list">${list(d)}</div>
         <button class="cu-reset" data-reset="${d}" data-nav="cu-reset-${d}">${resetArmed === d ? `Sure? Reset ${DEVICE_NAMES[d]}` : `Reset ${DEVICE_NAMES[d]} to defaults`}</button>
       </section>`).join('');
+    if (dflt === 'rb') restore = null; // (used once; the next render starts clean)
   }
   const say = t => { msg = t || ''; render(); if (pop?.mode === 'list') el.querySelector('#cu-filter')?.focus(); };
   const changed = () => { try { onChange(); } catch (e) { console.error(e); } };
@@ -211,7 +215,7 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
   async function rebind(device, action, slot) {
     if (busy) return;
     const a = ACTION[action];
-    prompt = null; resetArmed = null; pop = null;
+    prompt = null; resetArmed = null; pop = null; restore = { device, key: `${action}:${slot}` };
     let binding;
     if (a.type === 'axis') { // four keys, one per direction
       const keys = [];
@@ -261,7 +265,7 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
     if (t.dataset.pop) { pop = t.dataset.pop === 'edit' ? { ...pop, mode: 'list', filter: '' } : null; return say(''); }
     if (t.dataset.pick) return pickFor(t.dataset.pick);
     if (t.dataset.a === 'close') return close();
-    if (t.dataset.tab) { tab = t.dataset.tab; prompt = null; resetArmed = null; pop = null; msg = ''; render(); return; }
+    if (t.dataset.tab) { tab = t.dataset.tab; restore = null; prompt = null; resetArmed = null; pop = null; msg = ''; render(); return; }
     if (t.dataset.rb) { const [action, slot] = t.dataset.rb.split(':'); rebind(t.closest('section').id.slice(7), action, +slot); return; }
     if (t.dataset.p) {
       const p = prompt;
@@ -343,11 +347,11 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
 
   const isOpen = () => !el.classList.contains('hidden');
   function open() {
-    tab = input.device === 'pad' ? 'pad' : 'kbm'; msg = ''; prompt = null; resetArmed = null; pop = null; padCount = pads().length; lit.clear(); padLit.clear();
+    tab = input.device === 'pad' ? 'pad' : 'kbm'; msg = ''; prompt = null; resetArmed = null; pop = null; padCount = pads().length; lit.clear(); padLit.clear(); restore = null;
     render(); el.classList.remove('hidden'); sfx?.play?.('ui');
     if (!raf) raf = requestAnimationFrame(padLoop);
     clearInterval(poll); poll = setInterval(() => (isOpen() ? live() : clearInterval(poll)), 500);
   }
-  function close() { el.classList.add('hidden'); prompt = null; pop = null; if (busy) input.cancelCapture?.(); busy = null; clearInterval(poll); }
+  function close() { el.classList.add('hidden'); prompt = null; restore = null; pop = null; if (busy) input.cancelCapture?.(); busy = null; clearInterval(poll); }
   return { el, open, close, isOpen, render, refresh: () => { if (isOpen() && !busy) render(); }, get tab() { return tab; } };
 }
