@@ -290,7 +290,7 @@ function onMessage(msg) {
     return;
   }
   if (msg.type === 'welcome') {
-    Object.assign(state, { myId: msg.id, x: msg.x, z: msg.z, seq: msg.seq, joined: true });
+    Object.assign(state, { myId: msg.id, x: msg.x, z: msg.z, seq: msg.seq, joined: true, aiOn: !!msg.ai }); // ai: AI companions are on (H3)
     setTimeout(layoutChips, 50);
     $('login').classList.add('hidden'); $('hud').classList.remove('hidden');
     buildSkillBar();
@@ -645,12 +645,13 @@ function handleEvent(e) {
     case 'gdrop': if (e.id === me) sfx.play('ui'); break;
     case 'gpick': if (e.id === me) sfx.play('coin', null, 0.6); break;
     case 'equip': if (e.id === me) sfx.play('shield', null, 0.5); break;
-    case 'pjoin': if (e.id === me) { guide.did('party'); sfx.play('ui'); } if (e.party && e.party === state.party && state.roster.get(e.id)?.bot) guide.tip('bots'); break;
+    case 'pjoin': if (e.id === me) { guide.did('party'); sfx.play('ui'); } if (e.party && e.party === state.party && state.roster.get(e.id)?.bot) { guide.tip('bots'); if (state.aiOn) setTimeout(() => guide.tip('botmind'), 7000); } break;
     case 'gate':
       if (e.s === 'count' && inGateZone(state.x, state.z)) { for (let i = 0; i < e.d; i++) setTimeout(() => sfx.play('tick'), i * 1000); }
       if (e.s === 'open') { sfx.play('gate', { x: 0, z: 161 }, 1.5); if (Math.abs(state.x) < 30 && state.z > 120) banner('THE RAID GATE OPENS', 'The Horned Warden awaits'); }
       break;
     case 'invite': if (e.to === me) showInvite(e.from, e.name); break;
+    case 'mind': if (bubbles.mind(e) && !state.spectator) guide.tip('botmind'); break; // an AI companion is thinking about a line said to it (H3)
     case 'chat': // ch 'p': party chat (only your party sees it), 's': say (heard within 40 m)
       if (bubbles.chat(e) && e.id !== me && !state.spectator) guide.tip('bubbles'); // a bubble over the speaker's head (same rules as the log)
       cine.say(e); // film view: a scripted line as a subtitle
