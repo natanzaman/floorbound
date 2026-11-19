@@ -334,6 +334,8 @@ Same rules as F/G/H (flock lock, push with `--force-with-lease`).
 | I3 Personalities, talk, memory, nudges (AI) | `feat/namedai` | todo (after I1) | | |
 | I4 Requests and invitations | `feat/namedquests` | todo (after I1; AI phrasing optional) | | |
 
+- **I1 review fixes merged (274b300):** friendship load can't overwrite stored rows, one Named per party re-checked on accept and calls, Named-only clears are quiet on all floors, Friends tab only with `NAMED_ENABLED` on, bot names reserved, boss help counts healing done to others, shutdown awaits the Named's writes, plus the nice-to-haves.
+
 ### Shared contracts for I (from the Fable plan review, 2026-11-18: these override the task text below where they differ)
 - **Humans first.**
   - A Named never lands a boss's killing blow while a human contributor is alive (reuse `lastAttackHeld`).
