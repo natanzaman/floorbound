@@ -4,6 +4,7 @@
 // The brain asks mechSpot(b) for a spot each turn after dodging telegraphs (a red circle still comes first).
 import { WORLD, walkable, inArena } from '../data.js';
 import { F2, inArena2, onFloor2 } from '../floor2.js';
+import { F3, inArena3, onFloor3 } from '../floor3.js';
 import { registerBotHook, roleOf } from './registry.js';
 
 const d2 = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
@@ -21,7 +22,7 @@ registerBotHook('onEvent', (b, e) => {
   }
 });
 
-const room = b => (onFloor2(b.x) ? { x: F2.arena.x, z: F2.arena.z, r: F2.arena.r, in: inArena2 } : { x: WORLD.arena.x, z: WORLD.arena.z, r: WORLD.arena.r, in: inArena });
+const room = b => (onFloor3(b.x) ? { x: F3.arena.x, z: F3.arena.z, r: F3.arena.r, in: inArena3 } : onFloor2(b.x) ? { x: F2.arena.x, z: F2.arena.z, r: F2.arena.r, in: inArena2 } : { x: WORLD.arena.x, z: WORLD.arena.z, r: WORLD.arena.r, in: inArena });
 const inside = (b, R, x, z, margin = 2) => d2(x, z, R.x, R.z) < R.r - margin && walkable(x, z, !b.gateOpen);
 const pos = (b, id) => (id === b.id ? { id, x: b.x, z: b.z, dead: b.dead, cls: b.cls } : b.players.find(p => p.id === id) || null);
 const isTank = (b, p) => (p.id === b.id ? b.role : roleOf(p.cls)) === 'tank';

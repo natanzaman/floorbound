@@ -136,7 +136,7 @@ export const COLOSSUS = {
   gust: { every: [11, 10, 9], first: 7, wind: 1.5, r: 11, half: 0.75, mult: 1.6, shove: 7 },
   overload: { every: [0, 30, 26], first: 5, channel: 8, posture: 0.5, clap: 0.55, charged: 15, chargedMult: 1.25, stun: 4, weakD: 8, weak: 1.3 },
   harpies: { every: 26, n: 2, max: 3, first: 6 },
-  beam: { every: [0, 0, 14], first: 4, wind: 2.2, turn: 7, sweep: Math.PI * 2, len: 26, w: 0.8, mult: 2.6, from: 3 },
+  beam: { every: [0, 0, 14], first: 4, wind: 2.2, turn: 7, sweep: Math.PI * 2, len: 26, w: 0.8, mult: 2.6, from: 0.5 },
 };
 export const PHASE_TEXT3 = ['PHASE 1 · HAMMERFALL · LIGHTNING · GALE PUSH', 'PHASE 2 · OVERLOAD · HARPIES', 'PHASE 3 · TEMPEST BEAM'];
 

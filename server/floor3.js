@@ -15,7 +15,7 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
 const r2 = v => Math.round(v * 100) / 100;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const rr = ([a, b]) => a + Math.random() * (b - a);
+const F3STATS = !!process.env.F3_STATS; // test/floor3boss.js: count Overloads stopped / Thunderclaps, beam jumps / hits
 
 export const F3Methods = {
   // ---------- setup ----------
@@ -478,6 +478,7 @@ export const F3Methods = {
       m.ov = null; m.busyUntil = 0;
       m.stunUntil = Math.max(m.stunUntil, t + stun); m.groundedUntil = t + stun + O.weakD;
       this.events.push({ t: 'f3ov', s: 'stop', id: m.id, d: stun + O.weakD, by: ov.burst ? 'burst' : ov.solo ? 'break' : 'switch' });
+      if (F3STATS) console.log(`[ov] stop ${ov.burst ? 'burst' : ov.solo ? 'break' : 'switch'} after ${r1(t - ov.start)}s`);
       this.sys('The Colossus is GROUNDED! Hit it hard while it\'s down.');
       for (const p of this.players.values()) if (!p.dead && inArena3(p.x, p.z)) this.teamStat?.(p, 'mechanic');
       return;
@@ -485,6 +486,7 @@ export const F3Methods = {
     if (t < ov.until) return;
     m.ov = null; m.busyUntil = t + 0.6; m.chargedUntil = t + O.charged;
     this.events.push({ t: 'f3ov', s: 'clap', id: m.id, x: r2(m.x), z: r2(m.z) });
+    if (F3STATS) console.log(`[ov] clap (broke ${ov.broke ? 1 : 0})`);
     this.sys('THUNDERCLAP! The Colossus is Charged: it hits harder for a while.');
     for (const p of this.players.values()) {
       if (p.dead || !inArena3(p.x, p.z)) continue;
@@ -676,6 +678,7 @@ export const F3Methods = {
         const from = wrapAngle(ap - b.prev) * b.dir, to = (a - b.prev) * b.dir; // how far round the beam must go to reach p, and went
         if (!(from > -tol && from <= to + tol)) continue;
         b.hit.add(p.id);
+        if (F3STATS) console.log(`[beam] ${t < p.iframeUntil ? 'roll' : t >= p.airFrom && t < p.airUntil ? 'jump' : 'hit'}`);
         this.damagePlayer(p, b.atk, { ground: true, src: 'tempest beam', mob: b.m }); // airborne (jumping) or i-frames dodge it
       }
       b.prev = a; b.k = k;

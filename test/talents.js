@@ -91,7 +91,7 @@ g.time = 100;
 
 // ---------- points per level ----------
 {
-  assert.equal(pointsAt(1), 0); assert.equal(pointsAt(2), 1); assert.equal(pointsAt(10), 9); assert.equal(pointsAt(20), 19); assert.equal(pointsAt(99), 19);
+  assert.equal(pointsAt(1), 0); assert.equal(pointsAt(2), 1); assert.equal(pointsAt(10), 9); assert.equal(pointsAt(20), 19); assert.equal(pointsAt(30), 29); assert.equal(pointsAt(99), 29);
   const p = mk('swordsman', {}, 1);
   assert.equal(g.talentsMsg(p).pts, 0);
   g.talentAction(p, { op: 'spend', id: 'sw_edge' });
