@@ -21,6 +21,7 @@
 // (input, textarea, select, IME composition) swallow game keys; preventDefault only on keys that did something.
 import { ACTION, merged, loadBindings, resolve, actionsOn, bindingHeld, bindingArmed, axisFromKeys, assign, diff, bindingLabel, modOfCode, isAxisBinding, tokens } from '/shared/controls.js';
 import { readButtons, readSticks, padEdges, pressAction, lookFrom, glyphFamily, padLabel, GLYPH_FAMILIES } from '/shared/gamepad.js';
+import { pads as usbPads } from '/xboxusb.js'; // wired third-party Xbox pads on a Mac (WebUSB)
 
 // fb_controls: the bindings (and, from K3, accessibility), versioned; follows the account (K2: public/controlsync.js).
 // listen(fn): fn(c) after every set / replace (the account sync uploads changes).
@@ -178,6 +179,7 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
   function readPads() {
     let list = [];
     try { list = [...(navigator.getGamepads?.() || [])]; } catch {}
+    try { list = list.concat(usbPads()); } catch {}
     return list.filter(p => p && p.connected !== false);
   }
   function releasePad() {

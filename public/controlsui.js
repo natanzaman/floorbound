@@ -13,6 +13,7 @@
 //   Reset to defaults per device. Every change saves to fb_controls (input.setBinding), which the account sync uploads.
 import { ACTION, ACTIONS, DEFAULTS, GROUPS, PAD_BUTTONS, PAD_MODIFIERS, bindingLabel, canSwap, check, isAxisBinding, keyName, modOfCode, tokens } from '/shared/controls.js';
 import { buttonGlyph, padLabel } from '/shared/gamepad.js';
+import * as xboxUsb from '/xboxusb.js';
 
 export const DEVICE_NAMES = { kbm: 'Keyboard & Mouse', pad: 'Controller' };
 // Why a binding is refused (check() errors), in plain words.
@@ -181,6 +182,7 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
       <h4>Input device</h4>
       <div class="cu-dev" role="radiogroup">${['kbm', 'pad'].map(d => `<label class="cu-opt ${d === 'pad' && !p.length ? 'off' : ''}"><input type="radio" name="cu-dev" value="${d}" data-nav="cu-dev-${d}" ${dev === d ? 'checked' : ''} ${d === 'pad' && !p.length && dev !== 'pad' ? 'disabled' : ''}> ${DEVICE_NAMES[d]}</label>`).join('')}</div>
       <small class="cu-status" id="cu-status">${p.length ? `Controller connected: ${esc(padName(p[0]))}` : 'No controller connected (press a button on one to wake it).'}</small>
+      ${!p.length && xboxUsb.supported() ? '<small class="cu-usb">Wired Xbox controller with a blinking light (a Mac)? <button data-a="usb" data-nav="cu-usb">Connect it</button></small>' : ''}
       <div class="cu-tabs" role="tablist">${['kbm', 'pad'].map(d => `<button role="tab" data-tab="${d}" data-nav="cu-tab-${d}" class="${tab === d ? 'on' : ''}" aria-selected="${tab === d}">${DEVICE_NAMES[d]}</button>`).join('')}</div>`;
   }
   function slotCell(device, a, slot) {
@@ -299,6 +301,10 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
     if (t.dataset.pop) { pop = t.dataset.pop === 'edit' ? { ...pop, mode: 'list', filter: '' } : null; return say(''); }
     if (t.dataset.pick) return pickFor(t.dataset.pick);
     if (t.dataset.a === 'close') return close();
+    if (t.dataset.a === 'usb') {
+      xboxUsb.connect().then(ok => { padCount = pads().length; say(ok ? 'Wired controller connected. Choose Controller above to play with it.' : 'No controller opened. Pick it in the browser’s list (it may be called just “Controller”).'); });
+      return;
+    }
     if (t.dataset.glyph) { input.setGlyphs(t.dataset.glyph); pop = null; restore = null; sfx?.play?.('ui'); render(); changed(); return; }
     if (t.dataset.tab) { tab = t.dataset.tab; restore = null; prompt = null; resetArmed = null; pop = null; msg = ''; render(); return; }
     if (t.dataset.rb) { const [action, slot] = t.dataset.rb.split(':'); rebind(t.closest('section').id.slice(7), action, +slot); return; }
