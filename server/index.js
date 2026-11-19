@@ -214,7 +214,7 @@ const sendCounted = (ws, str) => { perf.bytesAll += str.length; ws.send(str); };
 // Bot think rate: a server bot with no human within THINK_NEAR m (on its floor) and not in a boss fight gets every other
 // snapshot (its brain runs at 10 Hz; the skipped tick's events come with the next one, and msg.dt tells it the step).
 // Near humans, in a boss room or fight, or while the director films, every snapshot (20 Hz). BOT_THINK=20: always 20 Hz.
-const halfRate = process.env.BOT_THINK !== '20';
+const halfRateOn = () => process.env.BOT_THINK !== '20';
 const THINK_NEAR = 60;
 let tickNo = 0;
 function thinksSlow(p, humans) {
@@ -230,7 +230,7 @@ function tick(dt) {
   game.update(dt);
   const world = game.snapshot();
   let shared = null; // the world part for in-process bots: parsed once a tick, shared by all of them (read-only)
-  const humans = halfRate ? [...game.players.values()].filter(p => !p.bot) : null;
+  const halfRate = halfRateOn(), humans = halfRate ? [...game.players.values()].filter(p => !p.bot) : null;
   tickNo++;
   for (const p of game.players.values()) {
     if (p.ws.readyState !== 1) continue;

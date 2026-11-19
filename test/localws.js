@@ -60,7 +60,7 @@ console.log('# the hub');
 console.log('# server: in-process vs WebSocket');
 {
   const PORT = Number(process.env.PORT) || 6070;
-  Object.assign(process.env, { PORT: String(PORT), TEST_HOOKS: '1', NAMED_ENABLED: '0', DATABASE_URL: '', BOT_FREEZE: '1', BOT_TRANSPORT: '' });
+  Object.assign(process.env, { PORT: String(PORT), TEST_HOOKS: '1', NAMED_ENABLED: '0', DATABASE_URL: '', BOT_FREEZE: '1', BOT_TRANSPORT: '', BOT_THINK: '20' });
   await import('../server/index.js');
   for (let i = 0; i < 100; i++) { try { await fetch(`http://127.0.0.1:${PORT}/status`); break; } catch { await sleep(100); } }
   const { game, bots, localHub } = globalThis.floorbound;
@@ -90,11 +90,34 @@ console.log('# server: in-process vs WebSocket');
   const welcome = m => { const { id, x, z, ...rest } = m.find(o => o.type === 'welcome'); return JSON.stringify(rest); };
   ok(welcome(lmsgs) === welcome(wmsgs), 'the same welcome (but for id and spawn spot)');
   ok(Object.isFrozen(lmsgs.at(-1).w ?? lmsgs.at(-1)) && le.b.mobs && !le.b.closed, 'what the in-process bot gets is frozen, and its brain runs on it without writing into it');
+  // the think rate: far from any human and out of a boss fight, every other snapshot, with both ticks' events
+  process.env.BOT_THINK = '';
+  const l0 = lmsgs.length, w0 = wmsgs.length;
+  await sleep(2000);
+  const ls = lmsgs.slice(l0).filter(m => m.type === 'snap'), wsn = wmsgs.slice(w0).filter(m => m.type === 'snap');
+  ok(ls.length > 10 && Math.abs(ls.length * 2 - wsn.length) <= 4 && ls.slice(1).every(m => m.dt === 0.1), `10 Hz far from humans: ${ls.length} snapshots to the WebSocket bot's ${wsn.length}, each with dt 0.1`);
+  const strip = w => JSON.stringify({ ...w, events: [] });
+  const k = wsn.findIndex(m => strip(m.w) === strip(ls[3].w));
+  ok(k > 0 && JSON.stringify(ls[3].w.events) === JSON.stringify([...wsn[k - 1].w.events, ...wsn[k].w.events]), 'a skipped tick\'s events come with the next snapshot, in order');
+  // a human comes within 60 m: back to every snapshot
+  const { default: WebSocket } = await import('ws');
+  const hws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
+  hws.on('open', () => hws.send(JSON.stringify({ type: 'join', name: 'Hugh', cls: 'cleric' })));
+  await sleep(500);
+  const hu = [...game.players.values()].find(p => !p.bot);
+  game.teleport(hu, lp.x + 5, lp.z);
+  await sleep(300);
+  const l1 = lmsgs.length;
+  await sleep(1000);
+  const near = lmsgs.slice(l1).filter(m => m.type === 'snap');
+  ok(near.length >= 17 && near.every(m => !m.dt), `20 Hz with a human ${Math.round(Math.hypot(hu.x - lp.x, hu.z - lp.z))} m away (${near.length} snapshots a second)`);
+  hws.close();
+  process.env.BOT_THINK = '20';
   const spawnAt = [lp.x, lp.z];
   await sleep(2500);
   ok(Math.hypot(lp.x - spawnAt[0], lp.z - spawnAt[1]) > 1 || lp.z > 20, 'its input is handled: it walks out to the field');
   const before = (await (await fetch(`http://127.0.0.1:${PORT}/status`)).json());
-  ok(before.online?.admin === 1 && before.online.humans === 0 && typeof before.cpu?.pct === 'number' && typeof before.bytes?.perSec === 'number', '/status: CPU, bytes and who is online by kind');
+  ok(before.online?.admin === 1 && typeof before.cpu?.pct === 'number' && typeof before.bytes?.perSec === 'number', '/status: CPU, bytes and who is online by kind');
   bots.remove(lv.bid);
   await sleep(200);
   ok(!game.players.has(lp.id) && le.b.closed, 'removing it closes its channel and takes it out of the game');
