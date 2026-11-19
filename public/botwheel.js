@@ -4,7 +4,8 @@
 // The chips under the wheel pick who gets the order: all your bots, or one of them.
 import { BOT_COMMANDS } from '/shared/bots/social.js';
 
-export function initBotWheel({ send, state, players, log }) {
+// keyLabel(action): the key the hint names (input.label: follows the player's bindings).
+export function initBotWheel({ send, state, players, log, keyLabel = () => 'V' }) {
   const el = document.createElement('div');
   el.id = 'botwheel'; el.className = 'hidden';
   document.getElementById('hud').appendChild(el);
@@ -23,8 +24,8 @@ export function initBotWheel({ send, state, players, log }) {
       return `<button class="wcmd" data-c="${id}" style="left:${Math.round(Math.cos(a) * R)}px;top:${Math.round(Math.sin(a) * R)}px" ${bots.length ? '' : 'disabled'}><span class="ic">${c.icon}</span>${esc(c.label)}</button>`;
     }).join('')}<div class="hub"><b>${bots.length ? 'ORDERS' : 'NO BOTS'}</b><small>${bots.length ? esc(who || 'all bots') : 'in your party'}</small></div></div>
     <div class="who">${bots.length ? `<button data-w="" class="${who ? '' : 'on'}">All bots</button>${bots.map(b => `<button data-w="${esc(b.name)}" class="${who === b.name ? 'on' : ''} ${b.dead ? 'dead' : ''}">${esc(b.name)}</button>`).join('')}<button data-c="leave" class="dismiss" title="Ask ${esc(who || 'every bot')} to leave the party">Dismiss</button>`
-      : '<span>Invite bots from the Players panel (P), or ask an admin for a party of bots.</span>'}</div>
-    <div class="hint">Release V on an order or click it · Esc to close · or type /b stay, /b Lyra: heal (/b help)</div>`;
+      : `<span>Invite bots from the Players panel (${esc(keyLabel('players'))}), or ask an admin for a party of bots.</span>`}</div>
+    <div class="hint">Release ${esc(keyLabel('botWheel'))} on an order or click it · Esc to close · or type /b stay, /b Lyra: heal (/b help)</div>`;
   }
 
   function open() {

@@ -11,6 +11,7 @@ import * as db from './db.js';
 const q = (...a) => db.q(...a);
 import { CLASSES, MAX_LEVEL } from '../shared/data.js';
 import { isNamedName } from '../shared/named.js';
+import { cleanControls, CONTROLS_MAX_BYTES } from '../shared/controls.js';
 
 export const MAX_CHARACTERS = 8;
 const DISCORD_ID = process.env.DISCORD_CLIENT_ID;
@@ -49,6 +50,22 @@ export async function saveCharacter(p) {
     [p.charId, Math.min(MAX_LEVEL, p.lvl), p.xp, Math.max(0, p.gold | 0), JSON.stringify(p.inv), JSON.stringify(p.stats || null), JSON.stringify(p.mastery || null), JSON.stringify(p.talents || null)]);
 }
 
+// Controls that follow the account (roadmap K2): the whole fb_controls object, cleaned (unknown ids dropped), with a
+// `v` field, at most CONTROLS_MAX_BYTES. null: nothing saved yet.
+export async function loadSettings(accountId) {
+  const rows = await q('SELECT settings FROM accounts WHERE id = $1', [accountId]);
+  return rows[0]?.settings ?? null;
+}
+// Returns { ok } or { error, code } (400: not a controls object / no v; 413: too big).
+export async function storeSettings(accountId, raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !Number.isInteger(raw.v)) return { error: 'Not a controls object.', code: 400 };
+  if (Buffer.byteLength(JSON.stringify(raw)) > CONTROLS_MAX_BYTES) return { error: 'Settings too big.', code: 413 };
+  const clean = cleanControls(raw);
+  if (Buffer.byteLength(JSON.stringify(clean)) > CONTROLS_MAX_BYTES) return { error: 'Settings too big.', code: 413 };
+  await q('UPDATE accounts SET settings = $2 WHERE id = $1', [accountId, JSON.stringify(clean)]);
+  return { ok: true, settings: clean };
+}
+
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _.-]{1,14}[A-Za-z0-9]$/;
 
 // ---------- HTTP routes ----------
@@ -56,6 +73,12 @@ const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'appli
 const readBody = req => new Promise(resolve => {
   let s = ''; req.on('data', c => { s += c; if (s.length > 4096) req.destroy(); });
   req.on('end', () => { try { resolve(JSON.parse(s || '{}')); } catch { resolve({}); } });
+});
+// (a body over max: { tooBig } once it has arrived, so the 413 still gets out; far over it, the connection is cut)
+const readCapped = (req, max) => new Promise(resolve => {
+  let s = '', n = 0;
+  req.on('data', c => { n += c.length; if (n <= max) s += c; else if (n > max * 8) req.destroy(); });
+  req.on('end', () => { if (n > max) return resolve({ tooBig: true }); try { resolve(JSON.parse(s || '{}')); } catch { resolve({}); } });
 });
 const bearer = req => (req.headers.authorization || '').replace(/^Bearer /, '');
 const origin = req => `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers['x-forwarded-host'] || req.headers.host}`;
@@ -89,6 +112,16 @@ export async function handle(req, res, url) {
         account: { id: a.id, discord: a.discord_name, avatar: a.discord_avatar && a.discord_id ? `https://cdn.discordapp.com/avatars/${a.discord_id}/${a.discord_avatar}.png?size=64` : null },
         characters: await listCharacters(a.id),
       }), true;
+    }
+    if (url.pathname === '/api/settings') { // GET: { settings } (null: none yet) · PUT { settings }: save
+      const a = await accountFromToken(bearer(req));
+      if (!a) return json(res, 401, { error: 'signed out' }), true;
+      if (req.method === 'GET') return json(res, 200, { settings: await loadSettings(a.id) }), true;
+      if (req.method !== 'PUT') return json(res, 405, { error: 'GET or PUT' }), true;
+      const body = await readCapped(req, CONTROLS_MAX_BYTES * 2);
+      if (body.tooBig) return json(res, 413, { error: 'Settings too big.' }), true;
+      const r = await storeSettings(a.id, body.settings);
+      return json(res, r.code || 200, r.error ? { error: r.error } : { ok: true }), true;
     }
     if (url.pathname === '/api/logout' && req.method === 'POST') {
       await q('DELETE FROM sessions WHERE token_hash = $1', [sha(bearer(req))]);

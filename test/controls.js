@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   ACTIONS, ACTION, GROUPS, DEFAULTS, resolve, check, assign, merged, diff, validate, normalize, axisFromKeys,
   bindingHeld, bindingArmed, bindingLabel, keyName, actionsOn, RESERVED,
+  cleanControls, loadBindings, syncPlan, CONTROLS_V, CONTROLS_MAX_BYTES,
 } from '../shared/controls.js';
 
 let n = 0;
@@ -151,6 +152,42 @@ const H = (...k) => new Set(k);
   assert.equal(merged('pad', { chat: ['A'] }).chat, undefined, 'no kbm-only actions on the pad');
   assert.deepEqual(merged('pad', { jump: ['B', 'Y'] }).jump, ['B', null], 'one slot on the pad');
   ok('assign with swap or unbind; only changes are saved; loading drops unknown, fixed and malformed entries');
+}
+
+// ---- saving and account sync (K2) ----
+{
+  // cleaning: only known, rebindable ids, [main, alt] strings, short access values; v kept (or set)
+  const c = cleanControls({ v: 1, kbm: { jump: ['KeyB', null], nope: ['KeyX', null], menu: ['KeyM', null], bag: 'bad', skill1: [42, 'KeyZ', 'KeyY'] },
+    pad: { jump: ['B', 'Y'], chat: ['A', null] }, access: { sens: 1.4, invertY: true, bad: { x: 1 }, s: 'x'.repeat(99) }, device: 'pad', quality: 'high' });
+  assert.deepEqual(c, { v: 1, kbm: { jump: ['KeyB', null], skill1: [null, 'KeyZ'] }, pad: { jump: ['B', null] }, access: { sens: 1.4, invertY: true } });
+  assert.equal(cleanControls(null), null); assert.equal(cleanControls([1]), null); assert.equal(cleanControls('x'), null);
+  assert.equal(cleanControls({}).v, CONTROLS_V, 'v is set when missing');
+  assert.ok(!('device' in c) && !('quality' in c), 'the device and graphics stay local');
+  assert.equal(cleanControls({ v: 1, kbm: { jump: ['K'.repeat(65), null] } }).kbm.jump[0], null, 'over-long bindings dropped');
+  assert.ok(CONTROLS_MAX_BYTES === 8192);
+  ok('cleanControls keeps only known ids, two slots, short access values and v');
+
+  // loading: a new action's default yields when a saved change took its key; refused saved bindings unbind
+  const L = loadBindings('kbm', { jump: ['KeyF', null] }); // F was Interact's
+  assert.equal(L.jump[0], 'KeyF'); assert.equal(L.interact[0], null, 'the default on a taken key is dropped');
+  assert.deepEqual(validate(L, 'kbm'), []);
+  assert.deepEqual(loadBindings('kbm', {}), merged('kbm'), 'no changes: the defaults');
+  assert.deepEqual(loadBindings('kbm', { nope: ['KeyX', null] }), merged('kbm'), 'unknown ids dropped');
+  assert.equal(loadBindings('kbm', { jump: ['F5', null] }).jump[0], null, 'a reserved key from a save is unbound');
+  assert.equal(loadBindings('kbm', { jump: ['Escape', null] }).jump[0], null, 'Esc from a save is unbound');
+  // a saved chord whose member has a default single action: the default yields
+  const C = loadBindings('kbm', { teamBurst: ['KeyF+KeyG', null] });
+  assert.equal(C.teamBurst[0], 'KeyF+KeyG'); assert.equal(C.interact[0], null);
+  assert.equal(loadBindings('pad', { skill1: ['A', null] }).jump[0], null, 'pad: Jump yields A to the saved Skill 1');
+  ok('loadBindings: saved changes win over defaults on the same key; refused saved bindings unbind');
+
+  // login: the account copy wins when there is one, else the local copy uploads
+  const local = { v: 1, kbm: { jump: ['KeyB', null] } }, server = { v: 1, kbm: { jump: ['KeyN', null] }, pad: {} };
+  assert.deepEqual(syncPlan(local, server), { use: { v: 1, kbm: { jump: ['KeyN', null] }, pad: {} }, upload: null }, 'server wins');
+  assert.deepEqual(syncPlan(local, null), { use: null, upload: { v: 1, kbm: { jump: ['KeyB', null] } } }, 'no server copy: local uploads');
+  assert.deepEqual(syncPlan({ v: 1, kbm: { zzz: ['KeyQ', null] } }, null).upload, { v: 1, kbm: {} }, 'unknown ids are not uploaded');
+  assert.deepEqual(syncPlan(null, null).upload, { v: CONTROLS_V }, 'nothing local: an empty copy uploads');
+  ok('syncPlan: the account copy wins on login, else this browser uploads');
 }
 
 console.log(`controls: all ${n} checks passed`);

@@ -280,3 +280,59 @@ export function bindingLabel(b) {
   if (isAxisBinding(b)) return AXIS_NAMES[b] || b.split(',').map(keyName).join(' ');
   return b.split('+').map(keyName).join('+');
 }
+
+// ---------- saving and account sync (fb_controls, roadmap K2) ----------
+// fb_controls = { v, kbm: {changes}, pad: {changes}, access: {...} }: the whole object follows the account
+// (accounts.settings), capped at CONTROLS_MAX_BYTES. Graphics, camera mode and the active device stay in fb_settings.
+export const CONTROLS_V = 1;
+export const CONTROLS_MAX_BYTES = 8192;
+const MAX_BINDING = 64, MAX_ACCESS = 32;
+
+// Keep only what fb_controls may hold: known, rebindable action ids with [main, alt] strings (or null), and short
+// plain access values. Anything else (unknown ids, other keys, odd values) is dropped. null for a non-object.
+export function cleanControls(c) {
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return null;
+  const out = { v: Number.isInteger(c.v) && c.v > 0 ? c.v : CONTROLS_V };
+  for (const d of DEVICES) {
+    const src = c[d];
+    if (!src || typeof src !== 'object' || Array.isArray(src)) continue;
+    const o = {};
+    for (const [id, slots] of Object.entries(src)) {
+      const a = ACTION[id];
+      if (!a || a.fixed || (a.kbmOnly && d === 'pad') || !Array.isArray(slots)) continue;
+      const s = [0, 1].map(i => (typeof slots[i] === 'string' && slots[i] && slots[i].length <= MAX_BINDING ? slots[i] : null));
+      o[id] = [s[0], d === 'pad' ? null : s[1]];
+    }
+    out[d] = o;
+  }
+  if (c.access && typeof c.access === 'object' && !Array.isArray(c.access)) {
+    const ok = v => typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && v.length <= MAX_ACCESS);
+    out.access = Object.fromEntries(Object.entries(c.access).filter(([k, v]) => k.length <= MAX_ACCESS && ok(v)).slice(0, MAX_ACCESS));
+  }
+  return out;
+}
+
+// The bindings in force from saved changes (merged(), made safe): a saved change the rules refuse is unbound, and an
+// action that keeps its default (one added since the save, say) loses it when a saved change has taken its key.
+export function loadBindings(device, overrides = {}) {
+  const out = merged(device, overrides);
+  const changed = new Set(Object.keys(overrides || {}).filter(id => out[id] && !ACTION[id].fixed));
+  for (const [id, slots] of Object.entries(out)) { // defaults yield to saved changes
+    if (changed.has(id) || ACTION[id]?.fixed) continue;
+    slots.forEach((b, s) => {
+      if (!b) return;
+      const r = check(out, device, id, s, b);
+      if (r.error || r.conflicts.some(c => changed.has(c.action))) out[id][s] = null;
+    });
+  }
+  for (const id of changed) out[id].forEach((b, s) => { if (b && check(out, device, id, s, b).error) out[id][s] = null; });
+  return out;
+}
+
+// On login: the account's copy wins when it has one (use it here); otherwise this browser's copy goes up.
+// Returns { use, upload } (one of them null), both cleaned.
+export function syncPlan(local, server) {
+  const s = cleanControls(server);
+  if (s) return { use: s, upload: null };
+  return { use: null, upload: cleanControls(local) || { v: CONTROLS_V } };
+}

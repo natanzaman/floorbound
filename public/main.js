@@ -36,6 +36,8 @@ import { initCine } from '/cine.js'; // film view camera, titles, fades, letterb
 import { initBubbles } from '/bubbles.js';
 import { initThreat } from '/threat.js'; // who bosses target, threat meter, Cover, Pincer tags (G3)
 import { initRevive } from '/revive.js'; // downed + revive (G1)
+import { initControlsUi } from '/controlsui.js'; // the Controls screen: device, bindings, rebind (K2)
+import { createControlSync } from '/controlsync.js'; // fb_controls follows the account (K2)
 import { initBossTeam } from '/bossteam.js'; // boss team mechanics: STACK, SPREAD, tether (G4)
 import { initRescue } from '/rescue.js'; // rescue traps: vines, Drowning Pillar, storm crystal (J1)
 import { initTeamplay } from '/teamplay.js'; // combo counters, the Team Burst bar and sync window (G2)
@@ -230,6 +232,7 @@ function showAuth() { $('discord-btn').classList.toggle('hidden', !acct.cfg.disc
 async function loadMe() {
   try {
     acct.me = await api('/api/me');
+    controlSync.login(); // (the account's controls win when it has some; else this browser's go up)
     renderChars();
     if (!acct.me.characters.length) showCreate(); else showPanel('chars');
   } catch (e) {
@@ -323,7 +326,13 @@ function reconnect(joinMsg) {
   setTimeout(poll, 1500);
 }
 const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
-const controlsText = () => isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion. ☰: the Game Menu.' : `WASD move (S back, A/D strafe) · mouse to look (click to capture, Esc frees it; Settings for classic) · Left click (or J) attack · 1 2 3 skills · K skill tree · Shift dodge · Space jump${state.cls === 'guardian' ? ' · R guard / parry · C cover an ally' : ''} · 4 5 6 items · B bag · F interact · P party · T Team Burst · V bot orders · Ctrl+click select · Esc menu · F3 performance`;
+// (key names follow the bindings and the active device: input.label)
+const keyLabel = a => input.label(a);
+const controlsText = () => {
+  if (isTouch && input.device !== 'pad') return 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion. ☰: the Game Menu.';
+  const L = keyLabel, pad = input.device === 'pad';
+  return `${L('move')} move · ${pad ? `${L('look')} to look` : 'mouse to look (click to capture, Esc frees it; Settings for classic)'} · ${L('attack')} attack · ${L('skill1')} ${L('skill2')} ${L('skill3')} skills · ${L('skillTree')} skill tree · ${L('dodge')} dodge · ${L('jump')} jump${state.cls === 'guardian' ? ` · ${L('guard')} guard / parry · ${L('cover')} cover an ally` : ''} · ${L('item1')} ${L('item2')} ${L('item3')} items · ${L('bag')} bag · ${L('interact')} interact · ${L('players')} party · ${L('teamBurst')} Team Burst · ${L('botWheel')} bot orders · ${L('selectAimed')} select · ${L('menu')} menu${pad ? '' : ` · ${L('perfOverlay')} performance`} · Game Menu → Controls to change them`;
+};
 // Leave the game from the Game Menu: back to character select ('char'; anonymous: the name / class screen), signed out
 // ('logout'), or out of the spectator view ('spectate'). A clean reload with no automatic rejoin; the server saves
 // your character on disconnect, as when a tab closes. Asks first when leaving would cost you something.
@@ -344,11 +353,11 @@ async function leaveGame(kind) {
 }
 const gmenu = initGameMenu({
   state, isTouch, guide, sfx, controls: () => esc(controlsText()), steps: () => GUIDE_STEPS.map(s => ({ title: esc(s.title), text: esc(s.text()) })),
-  openSettings: () => settingsUi.open(),
+  openSettings: () => settingsUi.open(), openControls: () => controlsUi.open(),
   lockCursor: () => lockCursor(), leave: k => leaveGame(k), accounts: () => !!(acct.cfg.accounts && acct.token),
   checkAdmin: () => api('/api/admin/me').then(r => r.admin),
 });
-const wheel = initBotWheel({ send, state, players, log }); // orders for the bots in your party: hold V (public/botwheel.js)
+const wheel = initBotWheel({ send, state, players, log, keyLabel }); // orders for the bots in your party: hold V (public/botwheel.js)
 const bubbles = initBubbles({ state, players, project, camera, layer: $('labels'), enabled: () => settings.bubbles !== false && !cine.film }); // speech bubbles over heads (public/bubbles.js); the film view uses subtitles
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
@@ -379,7 +388,7 @@ const loot = initLoot({ state, send, $, styleTitle: it => styles.title(it), fx, 
 // the Tower Bell (toll, sway, banner) and the engraved Hall stones (public/bell.js)
 const bell = initBell({ scene, sfx, guide, banner: (a, b, c) => banner(a, b, c) });
 // downed + revive: your downed overlay, "Hold E to revive", markers over downed partymates (public/revive.js)
-const revive = initRevive({ state, players, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), isTouch });
+const revive = initRevive({ state, players, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), isTouch, keyLabel });
 // boss team mechanics: the gold STACK circle, SPREAD rings, tether beams, first-time prompts (public/bossteam.js)
 // rescue traps: telegraphs, the pillar's beam, your trapped banner, "Hold E to cut free", markers (public/rescue.js)
 const rescue = initRescue({ state, players, mobs, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), callout: (a, b, c) => callout(a, b, c), isTouch, revive });
@@ -1017,6 +1026,15 @@ const nav = createFocusNav({ input, panels, order: ['mvp', '*', 'login', 'dead']
 } });
 $('menu-btn').onclick = () => menuOpen(); // phones: the Game Menu
 $('settings-btn').onclick = () => settingsUi.toggle();
+// The Controls screen (public/controlsui.js) and the account copy of fb_controls (public/controlsync.js). A change of
+// bindings (or the account's copy arriving) relabels the HUD.
+function controlsChanged() { if (state.joined && !state.spectator) buildSkillBar(); }
+const controlsUi = initControlsUi({ input, sfx, onChange: controlsChanged });
+panels.register('controlsui', { esc: true });
+const controlSync = createControlSync({
+  api, signedIn: () => !!(acct.cfg.accounts && acct.token),
+  onApply: () => { input.reload(); Object.assign(settings, loadSettings(), { device: settings.device }); settingsUi.refresh(); controlsUi.refresh(); controlsChanged(); },
+});
 
 const drag = { id: null, x: 0, y: 0 };
 canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -1072,6 +1090,7 @@ stickEl.addEventListener('pointerup', endStick);
 stickEl.addEventListener('pointercancel', endStick);
 
 // skill bar
+const BAR_ACTIONS = { 0: 'attack', 1: 'skill1', 2: 'skill2', 3: 'skill3', dodge: 'dodge', jump: 'jump', guard: 'guard', cover: 'cover', ...Object.fromEntries(CONSUMABLE_IDS.map((id, i) => [id, `item${i + 1}`])) };
 function buildSkillBar(lvl = state.lvl) {
   const skills = CLASSES[state.cls].skills;
   mastery.barChanged(); // remember the names/pips this bar was built with
@@ -1087,6 +1106,10 @@ function buildSkillBar(lvl = state.lvl) {
     + threat.coverButton(state.cls, isTouch)
     + CONSUMABLE_IDS.map(id => `<button class="sk it2 ${id}" data-item="${id}" title="${CONSUMABLES[id].name}: ${CONSUMABLES[id].desc}"><span class="key">${isTouch ? '' : CONSUMABLES[id].key}</span>${CONSUMABLES[id].name.split(' ').pop()}<span class="cnt"></span><span class="cd"></span></button>`).join('')
     + `<button class="sk act" data-slot="act">Ready</button>`;
+  if (!isTouch || input.device === 'pad') for (const b of $('skills').children) { // key names from the bindings
+    const a = BAR_ACTIONS[b.dataset.slot] || BAR_ACTIONS[b.dataset.item], k = a && b.querySelector('.key');
+    if (k) k.textContent = keyLabel(a).toUpperCase();
+  }
   for (const b of $('skills').children) {
     if (b.dataset.item || b.dataset.slot === 'act') {
       b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('pressed'); if (b.dataset.item) useItem(b.dataset.item); else interact(); });
@@ -1631,7 +1654,7 @@ function updateHud(now) {
     const pc = (p.hp / p.maxHp) * 100, bot = state.roster.get(p.id)?.bot;
     const nm = state.roster.get(p.id)?.name || p.name;
     return `<div class="frame ${p.dead ? 'dead' : ''} ${p.downed ? 'downed' : ''} ${bot && !state.spectator ? 'botf' : ''}" ${bot && !state.spectator ? `data-bot="${esc(nm)}" title="Click for ${esc(nm)}'s orders"` : ''}><div class="row" style="font-size:12px;margin:0"><span>${bot && !state.spectator ? '<span class="bcmd">⌘</span> ' : ''}${looks.swatch(p.id, 14)}${esc(p.name)}${bot ? ' <small class="bottag">BOT</small>' : ''}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}${p.downed ? ` <b class="dtag">${p.downed.by ? 'REVIVING' : 'DOWNED'}</b>` : ''}${p.trap && !p.downed ? ' <b class="dtag">TRAPPED</b>' : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div>${classesA.frameBar(p)}</div>`;
-  }).join('') + (!state.spectator && mates.some(p => state.roster.get(p.id)?.bot) ? `<button id="bots-btn" class="pbtn" title="Orders for all your bots (or hold V for the wheel)">⌘ All bots <small>V</small></button>` : '');
+  }).join('') + (!state.spectator && mates.some(p => state.roster.get(p.id)?.bot) ? `<button id="bots-btn" class="pbtn" title="Orders for all your bots (or hold ${esc(keyLabel('botWheel'))} for the wheel)">⌘ All bots <small>${esc(keyLabel('botWheel'))}</small></button>` : '');
   if (partyHtml !== hudParty) { hudParty = partyHtml; $('party').innerHTML = partyHtml; }
 
   // boss bar (the boss of the floor you're on)
