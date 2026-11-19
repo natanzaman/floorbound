@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { OBSTACLES } from '/shared/data.js';
 import { F3, GATE3, STAIRWAY3 } from '/shared/floor3.js';
 import { Q } from '/quality.js'; // graphics quality (effect density)
+import { ARENAS, FIRE_MAX } from '/shared/arenas.js'; // the Undercroft: the Colossus's lower area (J2)
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0.04, flatShading: true, ...opts });
 const glow = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
@@ -29,7 +30,8 @@ export function createFloor3(scene, { occluders = [] } = {}) {
   // the mountaintop: a sandy-stone plateau, then a cliff edge and the cloud sea far below
   const { rect } = F3;
   flat(new THREE.PlaneGeometry(rect.x1 - rect.x0 + 30, rect.z1 - rect.z0 + 46), sand, 0, X, (rect.z0 + rect.z1) / 2 + 4);
-  flat(new THREE.CircleGeometry(F3.arena.r + 9, 56), mat(0xa39d92), -0.01, F3.arena.x, F3.arena.z);
+  const upper = []; // the Eye of the Storm's own pieces: hidden while the fight is down in the Undercroft
+  upper.push(flat(new THREE.CircleGeometry(F3.arena.r + 9, 56), mat(0xa39d92), -0.01, F3.arena.x, F3.arena.z));
   const clouds = flat(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ color: 0xfff6e4, emissive: 0x6b5a40, emissiveIntensity: 0.35, roughness: 1, flatShading: true }), -26, X, 80);
   clouds.receiveShadow = false;
   // cliff faces around the plateau (they read as the edge of the world)
@@ -113,7 +115,7 @@ export function createFloor3(scene, { occluders = [] } = {}) {
       add(new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.3, 9, 6), slate), g).position.y = 4.5;
       const cap = add(new THREE.Mesh(new THREE.OctahedronGeometry(0.9), glow(0x7dd3fc)), g); cap.position.y = 10.2; cap.scale.y = 1.6;
       for (const y of [3, 6]) { const band = add(new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.08, 6, 20), glow(0x60a5fa)), g); band.rotation.x = Math.PI / 2; band.position.y = y; }
-      g.userData.cap = cap; (root.userData.pylons ||= []).push(g);
+      g.userData.cap = cap; (root.userData.pylons ||= []).push(g); upper.push(g);
       g.traverse(m => { if (m.isMesh && m.material.isMeshStandardMaterial) m.castShadow = true; });
     }
   }
@@ -128,19 +130,19 @@ export function createFloor3(scene, { occluders = [] } = {}) {
 
   // the Eye of the Storm: a rune-ringed plateau, broken temple walls, the storm overhead
   const A = F3.arena;
-  flat(new THREE.CircleGeometry(A.r, 64), mat(0x8e8a84), 0.025, A.x, A.z);
-  flat(new THREE.RingGeometry(A.r - 1.2, A.r - 0.8, 72), mat(0x93c5fd, { emissive: 0x1e40af, emissiveIntensity: 0.6 }), 0.03, A.x, A.z);
-  flat(new THREE.RingGeometry(8, 8.4, 48), mat(0x6b7280), 0.03, A.x, A.z);
+  upper.push(flat(new THREE.CircleGeometry(A.r, 64), mat(0x8e8a84), 0.025, A.x, A.z));
+  upper.push(flat(new THREE.RingGeometry(A.r - 1.2, A.r - 0.8, 72), mat(0x93c5fd, { emissive: 0x1e40af, emissiveIntensity: 0.6 }), 0.03, A.x, A.z));
+  upper.push(flat(new THREE.RingGeometry(8, 8.4, 48), mat(0x6b7280), 0.03, A.x, A.z));
   for (let i = 0; i < 12; i++) { // radial cracks
     const a = (i / 12) * Math.PI * 2 + 0.1, l = 6 + (i % 3) * 3;
-    const c = flat(new THREE.PlaneGeometry(0.25, l), mat(0x5b6476), 0.035, A.x + Math.sin(a) * (8.5 + l / 2), A.z + Math.cos(a) * (8.5 + l / 2)); c.rotation.z = -a;
+    const c = flat(new THREE.PlaneGeometry(0.25, l), mat(0x5b6476), 0.035, A.x + Math.sin(a) * (8.5 + l / 2), A.z + Math.cos(a) * (8.5 + l / 2)); c.rotation.z = -a; upper.push(c);
   }
   for (let i = 0; i < 30; i++) { // temple wall stubs (open to the south)
     const a = (i / 30) * Math.PI * 2;
     if (Math.sin(a) < -0.94) continue;
     const h = 2 + ((i * 5) % 7) * 0.9;
     const w = add(new THREE.Mesh(new THREE.BoxGeometry(5.2, h, 1.3), stone));
-    w.position.set(A.x + Math.cos(a) * (A.r + 1.2), h / 2, A.z + Math.sin(a) * (A.r + 1.2)); w.rotation.y = -a + Math.PI / 2; w.castShadow = true; occluders.push(w);
+    w.position.set(A.x + Math.cos(a) * (A.r + 1.2), h / 2, A.z + Math.sin(a) * (A.r + 1.2)); w.rotation.y = -a + Math.PI / 2; w.castShadow = true; occluders.push(w); upper.push(w);
   }
   const storm = add(new THREE.Group()); storm.position.set(A.x, 34, A.z);
   for (let i = 0; i < 26; i++) {
@@ -228,7 +230,8 @@ export function createFloor3(scene, { occluders = [] } = {}) {
     } else for (const c of storm.children) c.material.emissiveIntensity *= 0.85;
   }
 
-  return { root, gate3, stairway, update };
+  const arena = makeUndercroft(root, upper, r); // the Colossus's lower area, cracks and debris (public/arenas.js runs it)
+  return { root, gate3, stairway, update, arena };
 }
 
 // A jagged lightning bolt from the clouds (the summit's storm, and the Colossus's strikes).
@@ -393,3 +396,165 @@ export function makeF3Mob(type) {
   return { group: g, body, legs, armR, cursor, mats, height, fly, baseHeight: height };
 }
 
+
+// ---------- the Undercroft: the Storm Colossus's lower area (docs/ROADMAP.md J2, shared/arenas.js) ----------
+// Same footprint as the Eye of the Storm, a different place: a dark, flooded hall under the ruin. Great carved pillars
+// (they block the Tempest Beam), rubble walls, sludge pools, fire that spreads in patterns, the broken plateau hanging
+// overhead with the storm showing through. No new lights: the hall is lit by a recoloured sky/sun (ATMOS3_LOW, eased by
+// public/arenas.js) and emissive fire. Also the plateau's cracks (the warning) and the debris that falls with you.
+export const ATMOS3_UP = { ...ATMOS3 };
+export const ATMOS3_LOW = { sky: 0x231c26, near: 34, far: 150, hemiSky: 0x8f7fb0, hemiGround: 0x4a2a16, hemi: 0.85, sun: 0xffa36b, sunI: 0.95 };
+
+function makeUndercroft(root, upper, r) {
+  const AR = ARENAS.colossus, A = AR.room, U = AR.areas[1];
+  const lower = new THREE.Group(); lower.name = 'undercroft'; lower.visible = false; root.add(lower);
+  const add = (o, parent = lower) => { parent.add(o); return o; };
+  const flat = (geo, material, y, x, z, parent = lower) => { const m = new THREE.Mesh(geo, material); m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; return add(m, parent); };
+  const rock = mat(0x4a423d), darkRock = mat(0x2f2a28), wet = mat(0x3a3431, { roughness: 0.55, metalness: 0.08 });
+
+  // the floor: wet dark flagstones, a scorched ring, old drains
+  flat(new THREE.CircleGeometry(A.r + 9, 56), wet, -0.005, A.x, A.z);
+  flat(new THREE.RingGeometry(A.r - 1.4, A.r - 0.9, 72), mat(0xb45309, { emissive: 0x7c2d12, emissiveIntensity: 0.5 }), 0.03, A.x, A.z);
+  for (let i = 0; i < 18; i++) { const a = r() * Math.PI * 2, d = 4 + r() * (A.r - 6), s = 1.5 + r() * 2.5; const f = flat(new THREE.PlaneGeometry(s, s * (0.6 + r() * 0.5)), mat(i % 2 ? 0x332d2a : 0x403835), 0.012, A.x + Math.sin(a) * d, A.z + Math.cos(a) * d); f.rotation.z = r() * 3; }
+  // the cave wall around the hall (open to the south, the way in) and the plateau's broken edge hanging overhead
+  const wallN = 64, cave = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), darkRock, wallN);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sv = new THREE.Vector3(), pv = new THREE.Vector3(), e = new THREE.Euler();
+  for (let i = 0; i < wallN; i++) {
+    const a = (i / wallN) * Math.PI * 2 + (r() - 0.5) * 0.05;
+    let d = A.r + 4.5 + r() * 3, h = 9 + r() * 12;
+    if (Math.cos(a) < -0.93) { d += 9; h *= 0.5; } // the way in from the Storm Gate
+    m4.compose(pv.set(A.x + Math.sin(a) * d, h * 0.42, A.z + Math.cos(a) * d), q.setFromEuler(e.set((r() - 0.5) * 0.25, r() * 3, (r() - 0.5) * 0.25)), sv.set(3.2 + r() * 2, h * 0.5, 3.2 + r() * 2));
+    cave.setMatrixAt(i, m4);
+  }
+  cave.castShadow = true; add(cave);
+  for (let i = 0; i < 16; i++) { // slabs of the plateau, broken off and hanging at the rim
+    const a = (i / 16) * Math.PI * 2 + r() * 0.2;
+    if (Math.cos(a) < -0.85) continue;
+    const d = A.r - 2 + r() * 5, slab = add(new THREE.Mesh(new THREE.BoxGeometry(7 + r() * 5, 1.4, 5 + r() * 3), mat(0x8e8a84)));
+    slab.position.set(A.x + Math.sin(a) * d, 17 + r() * 4, A.z + Math.cos(a) * d); slab.rotation.set((r() - 0.5) * 0.5, -a, (r() - 0.5) * 0.4); slab.castShadow = true;
+  }
+  // great pillars (carved, ringed with storm runes: they hold back the beam), broken pillars, and the pylon roots
+  const PH = 34; // (up into the dark: the tops stay out of a normal view)
+  for (const o of U.colliders) {
+    if (o.kind !== 'pillar') continue;
+    const g = add(new THREE.Group()); g.position.set(o.x, 0, o.z);
+    if (o.los) {
+      add(new THREE.Mesh(new THREE.CylinderGeometry(o.r * 0.92, o.r * 1.05, PH, 10), rock), g).position.y = PH / 2;
+      add(new THREE.Mesh(new THREE.CylinderGeometry(o.r * 1.25, o.r * 1.35, 1.1, 10), darkRock), g).position.y = 0.55;
+      for (const y of [2.4, 5.2, 8]) { const band = add(new THREE.Mesh(new THREE.TorusGeometry(o.r * 0.97, 0.07, 6, 28), glow(0x93c5fd)), g); band.rotation.x = Math.PI / 2; band.position.y = y; }
+    } else {
+      const h = 3 + r() * 3;
+      add(new THREE.Mesh(new THREE.CylinderGeometry(o.r * 0.9, o.r, h, 8), rock), g).position.y = h / 2;
+      const top = add(new THREE.Mesh(new THREE.DodecahedronGeometry(o.r * 0.8, 0), darkRock), g); top.position.set(0.4, h + 0.2, 0.2);
+    }
+    g.traverse(m => { if (m.isMesh && m.material.isMeshStandardMaterial) { m.castShadow = true; m.receiveShadow = true; } });
+  }
+  for (const o of OBSTACLES) { // the storm pylons stand on these: thick roots of rock reaching up to the plateau
+    if (o.kind !== 'pylon') continue;
+    const c = add(new THREE.Mesh(new THREE.CylinderGeometry(o.r * 0.95, o.r * 1.3, PH, 7), darkRock)); c.position.set(o.x, PH / 2, o.z); c.castShadow = true;
+  }
+  const walls = U.colliders.filter(o => o.kind === 'wall');
+  for (let i = 0; i + 1 < walls.length; i++) { // rubble walls between consecutive wall colliders of the same arc
+    const a = walls[i], b = walls[i + 1], len = Math.hypot(b.x - a.x, b.z - a.z);
+    if (len > 3) continue;
+    const h = 1.8 + r() * 1.2, w = add(new THREE.Mesh(new THREE.BoxGeometry(1.5, h, len + 0.9), mat(0x5a524b)));
+    w.position.set((a.x + b.x) / 2, h / 2, (a.z + b.z) / 2); w.rotation.set(0, Math.atan2(b.x - a.x, b.z - a.z), (r() - 0.5) * 0.08); w.castShadow = true; w.receiveShadow = true;
+  }
+  // sludge pools: thick, dark green, slowly bubbling
+  const bubbles = [];
+  const sludge = mat(0x3f4a1e, { roughness: 0.35, metalness: 0.15, emissive: 0x1a2408, emissiveIntensity: 0.5 });
+  for (const p of U.pools) {
+    flat(new THREE.CircleGeometry(p.r, 36), sludge, 0.04, p.x, p.z);
+    flat(new THREE.RingGeometry(p.r - 0.15, p.r + 0.35, 40), mat(0x2b2a1a), 0.035, p.x, p.z);
+    for (let i = 0; i < 4; i++) {
+      const b = add(new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), mat(0x55632a, { roughness: 0.3 })));
+      const a = r() * 6.28, d = r() * (p.r - 0.6); b.position.set(p.x + Math.sin(a) * d, 0.05, p.z + Math.cos(a) * d); b.userData.ph = r() * 6; bubbles.push(b);
+    }
+  }
+  // fire patches: a pool of FIRE_MAX, moved to each pattern's spots. Emissive flames (no lights), a warning ring first.
+  const patches = [];
+  const flameMat = mat(0xff7a1a, { emissive: 0xff5a00, emissiveIntensity: 1.6, flatShading: true }), coreMat = mat(0xffd27a, { emissive: 0xffb02e, emissiveIntensity: 1.8 });
+  for (let i = 0; i < FIRE_MAX; i++) {
+    const g = add(new THREE.Group()); g.visible = false;
+    const fr = U.fire.r;
+    const bed = flat(new THREE.CircleGeometry(fr, 28), fade(0xff6a00, 0.5, true), 0.06, 0, 0, g);
+    const warn = flat(new THREE.RingGeometry(fr - 0.3, fr, 36), fade(0xffa04a, 0.8), 0.07, 0, 0, g);
+    const flames = [];
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * 6.28 + r(), d = k ? fr * 0.55 : 0, f = add(new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.6, 6), k ? flameMat : coreMat), g);
+      f.position.set(Math.sin(a) * d, 0.8, Math.cos(a) * d); f.userData.ph = r() * 6; flames.push(f);
+    }
+    patches.push({ g, bed, warn, flames });
+  }
+  // embers drifting up through the hall
+  const emN = 140, ep = new Float32Array(emN * 3), eseeds = [];
+  for (let i = 0; i < emN; i++) { const a = r() * 6.28, d = r() * A.r; eseeds.push([A.x + Math.sin(a) * d, A.z + Math.cos(a) * d, r() * 6.28, 0.5 + r()]); }
+  const emGeo = new THREE.BufferGeometry(); emGeo.setAttribute('position', new THREE.BufferAttribute(ep, 3));
+  const embers = add(new THREE.Points(emGeo, new THREE.PointsMaterial({ color: 0xffa04a, size: 0.16, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending })));
+  embers.frustumCulled = false;
+
+  // the warning on the Eye: glowing cracks running out across the plateau (scaled in by crack(k))
+  const cracks = new THREE.Group(); cracks.visible = false; root.add(cracks);
+  const crackMat = glow(0xfde68a), crackSegs = [];
+  for (let i = 0; i < 16; i++) {
+    let a = (i / 16) * Math.PI * 2 + r() * 0.3, x = A.x + Math.sin(a) * 1.5, z = A.z + Math.cos(a) * 1.5;
+    for (let k = 0; k < 6; k++) {
+      const l = 2.4 + r() * 2.2; a += (r() - 0.5) * 0.7;
+      const x2 = x + Math.sin(a) * l, z2 = z + Math.cos(a) * l;
+      if (Math.hypot(x2 - A.x, z2 - A.z) > A.r - 1) break;
+      const s = new THREE.Mesh(new THREE.BoxGeometry(0.38 + r() * 0.3, 0.06, l), crackMat);
+      s.position.set((x + x2) / 2, 0.06, (z + z2) / 2); s.rotation.y = Math.atan2(x2 - x, z2 - z); s.userData.at = Math.hypot(x - A.x, z - A.z) / A.r;
+      cracks.add(s); crackSegs.push(s); x = x2; z = z2;
+    }
+  }
+  // debris: slabs of the plateau that fall with you (public/arenas.js drops them), then settle as rubble and sink
+  const debris = [];
+  for (let i = 0; i < 18; i++) { const d = add(new THREE.Mesh(new THREE.BoxGeometry(1.1 + r() * 1.6, 0.4 + r() * 0.3, 1.0 + r() * 1.4), mat(0x8e8a84)), root); d.visible = false; d.castShadow = true; debris.push(d); }
+
+  let area = 0, warming = false, fireKey = '';
+  const view = {
+    key: 'colossus', room: A, atmos: [null, ATMOS3_LOW], base: ATMOS3, up: ATMOS3_UP, debris, lower,
+    setArea(i) { area = i; if (!warming) apply(); },
+    area: () => area,
+    crack(k) { // 0: hidden; (0, 1]: spreading out from the middle
+      cracks.visible = k > 0 && area === 0;
+      for (const s of crackSegs) { const v = Math.max(0, Math.min(1, (k * 1.25 - s.userData.at) * 3)); s.scale.set(1, 1, Math.max(0.001, v)); s.visible = v > 0.01; }
+    },
+    fire(fi, fk) { // fk: 0 out, 1 warning, 2 burning
+      const key = `${area}:${fi}:${fk}`;
+      if (key === fireKey) return;
+      fireKey = key;
+      const spots = area === 1 && fk ? U.fire.spots[fi % U.fire.spots.length] : [];
+      patches.forEach((p, i) => {
+        const s = spots[i];
+        p.g.visible = !!s; if (!s) return;
+        p.g.position.set(s.x, 0, s.z);
+        p.bed.visible = fk === 2; for (const f of p.flames) f.visible = fk === 2;
+        p.warn.visible = true;
+      });
+    },
+    warm(on) { // shader warm-up (main.js prewarm): show every piece once so its shader is compiled up front
+      warming = on;
+      if (on) { lower.visible = true; cracks.visible = true; for (const d of debris) d.visible = true; for (const p of patches) { p.g.visible = true; p.bed.visible = true; for (const f of p.flames) f.visible = true; } }
+      else { for (const d of debris) d.visible = false; fireKey = ''; view.fire(0, 0); view.crack(0); apply(); }
+    },
+    update(dt, time) {
+      if (area !== 1 || !lower.visible) return;
+      for (const b of bubbles) { const k = (time * 0.5 + b.userData.ph) % 1; b.scale.setScalar(0.3 + k * 1.1); b.position.y = 0.05 + k * 0.12; }
+      for (const p of patches) {
+        if (!p.g.visible) continue;
+        p.warn.material.opacity = p.bed.visible ? 0.45 : 0.35 + 0.45 * (0.5 + 0.5 * Math.sin(time * 12));
+        if (p.bed.visible) { p.bed.material.opacity = 0.45 + Math.random() * 0.15; for (const f of p.flames) { const k = 0.75 + 0.35 * Math.sin(time * 13 + f.userData.ph); f.scale.set(1, k, 1); f.rotation.y += dt * 2; } }
+      }
+      const on = Math.round(emN * Q.fx); emGeo.setDrawRange(0, on);
+      for (let i = 0; i < on; i++) { const [x, z, ph, sp] = eseeds[i], h = ((time * sp + ph * 3) % 14); ep[i * 3] = x + Math.sin(time * 0.7 + ph) * 1.2; ep[i * 3 + 1] = h; ep[i * 3 + 2] = z + Math.cos(time * 0.6 + ph) * 1.2; }
+      emGeo.attributes.position.needsUpdate = true;
+    },
+  };
+  function apply() {
+    lower.visible = area === 1;
+    for (const o of upper) o.visible = area === 0;
+    if (area !== 0) cracks.visible = false;
+  }
+  return view;
+}
