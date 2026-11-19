@@ -330,7 +330,7 @@ Same rules as F/G/H (flock lock, push with `--force-with-lease`).
 | Task | Branch | Status | Owner | Merge |
 |---|---|---|---|---|
 | I1 Named characters + friendship (code) | `feat/named` | in progress | agent named | |
-| I2 The loner's look | `feat/lonerlook` | todo | | |
+| I2 The loner's look | `feat/lonerlook` | in progress | agent lonerlook | |
 | I3 Personalities, talk, memory, nudges (AI) | `feat/namedai` | todo (after I1) | | |
 | I4 Requests and invitations | `feat/namedquests` | todo (after I1, I3) | | |
 
