@@ -76,7 +76,7 @@ try {
 
   // ---- Tab locks on / cycles; Esc clears the target before opening the menu ----
   await keepAlive(); await clearTarget();
-  assert.ok(await S(() => [...window.__fb.mobs.values()].some(e => !e.dying && !e.hidden && Math.hypot(e.x - window.__fb.state.x, e.z - window.__fb.state.z) < 25)), 'a mob in range for Tab');
+  await p.waitForFunction(() => [...window.__fb.mobs.values()].some(e => !e.dying && !e.hidden && Math.hypot(e.x - window.__fb.state.x, e.z - window.__fb.state.z) < 22), null, { timeout: 30000 }); // (a mob in range for Tab; they wander)
   await tap('Tab');
   const first = await S(() => window.__fb.state.lock);
   assert.ok(first > 0, 'Tab locks on');
@@ -279,18 +279,22 @@ try {
     // a mob on screen, its middle in screen pixels
     const pick = () => S(() => {
       for (const e of window.__fb.mobs.values()) {
-        if (e.dying || e.hidden) continue;
+        if (e.dying || e.hidden || Math.hypot(e.x - window.__fb.state.x, e.z - window.__fb.state.z) > 38) continue; // (a lock drops past 45 m)
         const g = e.model.group.position, a = window.__fb.project(g.x, g.y + e.model.height / 2, g.z);
-        if (a && a[0] > 80 && a[0] < innerWidth - 80 && a[1] > 80 && a[1] < innerHeight - 160) return { id: e.id, x: a[0], y: a[1] };
+        if (a && a[0] > 80 && a[0] < innerWidth - 80 && a[1] > 80 && a[1] < innerHeight - 160 && document.elementFromPoint(a[0], a[1])?.id === 'view') return { id: e.id, x: a[0], y: a[1] };
       }
       return null;
     });
-    let t = null;
-    for (let i = 0; i < 16 && !(t = await pick()); i++) { await S(() => { window.__fb.state.yaw += Math.PI / 8; }); await frames(2); }
-    assert.ok(t, 'a mob on screen');
-    await clearTarget();
-    await p.keyboard.down('ControlLeft'); await p.mouse.click(t.x, t.y); await p.keyboard.up('ControlLeft'); await frames(1);
-    assert.ok(await S(() => window.__fb.state.lock) > 0, 'Ctrl+click selects the enemy under the cursor');
+    let picked = false;
+    for (let tries = 0; tries < 6 && !picked; tries++) { // (mobs move between frames: aim again if one slipped away)
+      let t = null;
+      for (let i = 0; i < 16 && !(t = await pick()); i++) { await S(() => { window.__fb.state.yaw += Math.PI / 8; }); await frames(2); }
+      assert.ok(t, 'a mob on screen');
+      await clearTarget();
+      await p.keyboard.down('ControlLeft'); await p.mouse.click(t.x, t.y); await p.keyboard.up('ControlLeft'); await frames(1);
+      picked = await S(() => window.__fb.state.lock) > 0;
+    }
+    assert.ok(picked, 'Ctrl+click selects the enemy under the cursor');
     await p.keyboard.down('ControlLeft'); await p.mouse.click(vx, vy, { button: 'right' }); await p.keyboard.up('ControlLeft'); await frames(1);
     assert.equal(await S(() => window.__fb.state.lock), 0, 'Ctrl+right-click clears the selection');
   }

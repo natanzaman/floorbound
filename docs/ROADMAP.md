@@ -763,6 +763,16 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
 6. `renderSettings` moves to `public/settings.js`. Storage splits into `fb_settings` (local) and `fb_controls` (synced, with `v`).
 7. The rules above: no pointer lock under Controller, typing fields swallow game keys, pad disconnect falls back to keyboard & mouse, and press-action keys can't be chord members.
 
+**K1a as landed (notes for K1b–K4)**
+- **Binding strings:** key codes (`KeyW`, `Digit1`, `ShiftLeft`), `Mouse0/1/2`, `Mouse`, `Wheel`; pad names `A B X Y LB RB LT RT View Start L3 R3 Up Down Left Right`, sticks `LS RS` (`PAD_BUTTONS` maps standard indices to names). Chords join with `+`, modifiers first (`Ctrl+Mouse0`, `LB+X`); a key axis lists up,left,down,right (`KeyW,KeyA,KeyS,KeyD`). Per device `{ action: [main, alt] }`; the pad's alt is always null.
+- **`shared/controls.js`:** `resolve(bindings, held, { code }, ctx, device)` (most specific wins; a context action beats a plain one), `check()` (errors: `fixed reserved kbmOnly noAlt axis chord modifier`, plus `conflicts`), `assign(..., 'swap' | 'unbind')`, `merged` / `diff` / `validate`, `bindingLabel`.
+- **`public/input.js` (`__fb.input`):** a `gate(action)` from main.js decides what may fire (joined; under the Game Menu only Esc). Under `pad` the keyboard keeps only Esc, chat and F3, canvas clicks don't attack and there is no pointer lock. `readPads()` is a stub returning `[]`, so `setDevice('pad')` is refused. K1b fills `readPads()` and polls it in `tick()` (main.js calls it every frame), resolves pad buttons against `bindings('pad')`, and makes `held()` / `axis()` read the pad. `setDevice` already releases holds; `gamepaddisconnected` already falls back with a log line. Contexts: main.js sets `downedAlly` every frame.
+- **Storage:** `fb_controls` = `{ v: 1, kbm: {changes only}, pad: {changes only}, access: { sens, invertY } }` (K2 syncs this whole object); `fb_settings` = camera, graphics, overlays, `device` (local).
+- **Panels:** `panels.register(id, { esc })`. K2 registers its Controls panel there. K1b's focus navigation reads `panels.top()`.
+- **Not done yet:** labels. `input.label(action)` exists, but the skill bar, revive prompt, wheel hint and controls text still have the key names hard-coded (K1b / K2).
+- **Intended changes:** keys bind by code (Shift+1 is skill 1; AZERTY players get physical WASD). Every text field swallows game keys, not just the chat. Bound keys get `preventDefault`.
+- **Tests:** `node test/controls.js`; `PORT=67xx node test/keys.mjs` (Node Playwright: `npm i --no-save playwright`, or `PLAYWRIGHT=<.../playwright/index.mjs>`). Checks 1–21 are the old keyboard & mouse behaviour; 22–26 cover the new layer.
+
 ### K1. Input layer + controller support (`feat/input`)
 1. **Replace scattered key handling** (many `e.key`/`e.code` checks in `public/main.js` and feature modules) with one input layer (`public/input.js`) that maps raw events to actions using the bindings. Feature modules subscribe to actions, not keys.
 2. **Gamepad support** (Gamepad API, standard mapping) for the full action set:
