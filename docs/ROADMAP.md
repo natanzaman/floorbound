@@ -635,7 +635,8 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
 
 | Task | Branch | Status | Owner | Merge |
 |---|---|---|---|---|
-| K1 Input layer + controller support | `feat/input` | todo | | |
+| K1a Input contract + keyboard rewire + keys test | `feat/input` | todo | | |
+| K1b Gamepad + focus navigation | `feat/gamepad` | todo (after K1a) | | |
 | K2 Controls screen (pictures, lists, editing) | `feat/controlsui` | todo (after K1's action/binding contract lands) | | |
 | K3 Accessibility options | `feat/access` | todo (with K2) | | |
 | K4 Controller verification (scripted gamepad "bots") | `feat/padtest` | todo (after K1) | | |
@@ -654,6 +655,113 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
   - Chat typing always uses the keyboard.
   - Esc and Start always open the menu, whatever the device.
 - **No game logic changes.** Input produces the same calls as today (`useSkill`, `jump`, `dodge`, `guard`, `interact`, `send(...)`). Behaviour is identical with the default keyboard bindings.
+
+### Review amendments for K (Fable plan review, 2026-11-19: these override the task text below where they differ)
+**Order.** K1a lands the contract first: small and fast, since `main.js` is busy with J and perf work. After that, these run in parallel:
+- **K1b:** gamepad + focus navigation, in new files;
+- **K2:** `controlsui.js` + one Game Menu entry;
+- **K3:** `settings.js`;
+- **K4.**
+
+**Must-fix rules**
+1. **Keyboard regression test first.** `test/keys.mjs` lands before any refactor: it presses every current key and checks the resulting `send()` message or `__fb.state` change. It must pass unchanged after K1.
+2. **Keyboard keeps today's keys.** It gets an `alt` slot (attack: click + J, bag: B + I, move: WASD + arrows). Actions can carry a `context`: revive (hold E) outranks turn-right (E) when a downed ally is in reach. "One key per control" applies to the main slot. The alt slot is optional and also conflict-checked.
+3. **Chords without timing windows.** A key with its own press action can't be part of a chord, and the binding screen refuses it. On the pad, only LB is a modifier, and it has no action of its own.
+4. **Device switching can't lock anyone out.**
+   - If the pad disconnects, all holds release and input falls back to keyboard & mouse, with a toast.
+   - Controller can only be selected while one is connected.
+   - The mouse always works in menus; the keyboard always works for chat and Esc.
+5. **No pointer lock under Controller,** and canvas clicks don't attack.
+6. **Typing fields swallow game keys.** Gameplay actions are ignored when focus is in an input, textarea or select, or during IME composition. Rebind capture swallows everything, and Esc cancels it.
+7. **Reserved keys are refused:** Ctrl+W/T/N, Ctrl+Shift+W/T/N, Ctrl+Tab, Cmd+Q/W, F5, F11, F12, Alt+F4. Esc and Start are fixed and can't be rebound. `preventDefault` only on bound keys.
+
+**Should-fix rules**
+- **Bind by `e.code`, not `e.key`** (Shift+1 and non-QWERTY layouts).
+- **Gamepad reading:**
+  - support `mapping === 'standard'`, polling `getGamepads()` every frame;
+  - triggers via `buttons[6/7].value` with hysteresis;
+  - non-standard pads get a "not recognised" note but can rebind by raw index;
+  - button glyphs come from the pad id (Sony / Nintendo / else Xbox), with a manual override.
+- **Menu navigation:** one `public/focusnav.js` does spatial navigation over the top panel, restoring focus by a stable `data-nav` key.
+  - One panel registry (`open`, `close`, `top`, `isOpen`) replaces `ESC_PANELS` and `CURSOR_PANELS`.
+  - v1 covers the Game Menu, Settings, Controls, Bag, Skill Tree, the MVP and death cards, and character select. Smith, Hall and Players stay mouse-only in v1.
+- **Account sync:**
+  - `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS settings JSONB`, capped at 8 KB, with a `v` field;
+  - only bindings and accessibility sync; graphics, camera mode and active device stay local;
+  - on login the server copy wins if present, otherwise local uploads;
+  - unknown ids are dropped, and new actions get their defaults unless the key is taken.
+- **K3 cuts:** "sprint" (sprinting is automatic) and "aim assist strength" (attacks already auto-aim). Reduce-motion is checked inside `shake()` and `slowMotion()`, exempting `cine.js`. The colour-blind telegraph palette and sound cues wait until J merges (telegraph colours are spread across files J is editing).
+- **Touch** is a third, automatic device on the same action bus. The touch HUD hides while a pad is active.
+- **Labels:** replace hard-coded key names with `input.label(action)`: skill bar, revive prompt, wheel hint and controls text in v1.
+- **Detection prompt:** a one-time "Controller detected, switch?" toast.
+
+**K4 changes**
+- **Fake pad:** `addInitScript` overrides `navigator.getGamepads` with a 17-button, 4-axis standard pad, and dispatches a plain `Event('gamepadconnected')` with a `gamepad` property.
+- **Timing:** each press is held for N polled frames using an `__fb.input.frames` counter, not milliseconds.
+- **Quake Ring:** "survive a Quake Ring" becomes "jump registered during a ring".
+- **Cut:** the Named chat step.
+- **Unit tests:** binding resolution lives in DOM-free `shared/controls.js`, so plain node tests are the main regression net.
+
+### K contract (K1a lands this first)
+**Actions** (`shared/controls.js`: id, label, group, type, optional `context`, `kbmOnly`, `fixed`):
+
+| Group | Actions |
+|---|---|
+| Axes | `move`, `look` |
+| Combat | `attack` (hold), `skill1`, `skill2`, `skill3`, `dodge`, `jump`, `guard` (hold; Guardian), `cover` (Guardian), `teamBurst` |
+| Target | `lockNext`, `selectAimed`, `clearTarget` |
+| World | `interact`, `revive` (hold; context: downed ally in reach) |
+| Items | `item1`, `item2`, `item3` |
+| Menus | `bag`, `skillTree`, `players`, `botWheel` (hold), `menu` (fixed) |
+| Keyboard & mouse only | `chat`, `perfOverlay`, `turnLeft`, `turnRight`, `zoom` |
+
+**Default controller** (Xbox names; glyphs follow the pad):
+
+| Button | Action | With LB held |
+|---|---|---|
+| Left stick / Right stick | Move / Camera | Right stick picks on the bot wheel |
+| RT | Attack (hold) | |
+| RB | Dodge | |
+| LT | Guard / parry (hold) | |
+| LB | Modifier | |
+| A | Jump (menus: confirm) | Cover |
+| X | Skill 1 | Team Burst |
+| Y | Skill 2 | Bot wheel (hold) |
+| B | Skill 3 (menus: back) | Select what you aim at |
+| R3 | Lock on / next target | Clear target |
+| L3 | Unbound | |
+| D-pad Up / Left / Right | Potion / Tonic / Draught | Up: Skill Tree; Right: Players |
+| D-pad Down | Interact; hold to revive | |
+| View | Bag | |
+| Start | Game Menu (fixed) | |
+
+**Default keyboard & mouse** (same as today; bound by `e.code`):
+
+| Action | Key | Alt |
+|---|---|---|
+| Move | WASD | Arrows |
+| Camera | Mouse | Q / E turn, wheel zoom |
+| Attack | Left click | J |
+| Skills 1–3 | 1, 2, 3 | |
+| Dodge / Jump | Shift / Space | |
+| Guard / Cover | R / C | |
+| Team Burst | T | |
+| Lock on / next target | Tab | |
+| Select / clear target | Ctrl+click / Ctrl+right-click | Cmd on Mac |
+| Interact / Revive | F / hold E | |
+| Items | 4, 5, 6 | |
+| Bag / Skill Tree / Players | B / K / P | I (bag) |
+| Bot wheel | V (hold) | |
+| Chat / Menu / Overlay | Enter / Esc (fixed) / F3 | |
+
+**K1a must land first**
+1. `test/keys.mjs`: every key above, checking `send()` or state. It passes before and after the refactor.
+2. `shared/controls.js` (DOM-free): actions, defaults, `resolve(bindings, held, event)`, the conflict check and the reserved-key list, with node unit tests.
+3. `public/input.js`: `on(action, fn)`, `held(action)`, `axis('move'|'look')`, `label(action)`, `device` (`kbm`|`pad`|`touch`), `setBinding`, `capture()`, `readPads()`, `frames`. Exposed as `__fb.input`.
+4. `main.js` calls the same functions as today through `input.on`. `keys` stays as a shim over `held()`.
+5. A panel registry (`open`, `close`, `top`, `isOpen`) replaces `ESC_PANELS` and `CURSOR_PANELS`.
+6. `renderSettings` moves to `public/settings.js`. Storage splits into `fb_settings` (local) and `fb_controls` (synced, with `v`).
+7. The rules above: no pointer lock under Controller, typing fields swallow game keys, pad disconnect falls back to keyboard & mouse, and press-action keys can't be chord members.
 
 ### K1. Input layer + controller support (`feat/input`)
 1. **Replace scattered key handling** (many `e.key`/`e.code` checks in `public/main.js` and feature modules) with one input layer (`public/input.js`) that maps raw events to actions using the bindings. Feature modules subscribe to actions, not keys.
