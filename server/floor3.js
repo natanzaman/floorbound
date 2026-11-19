@@ -787,12 +787,13 @@ export function installFloor3Moves(Game) {
     }
     return false;
   };
-  // Testing aids (TEST_HOOKS=1 only): { type: 'test', tp: [x, z] } moves you there (screenshot tours);
+  // Testing aids (TEST_HOOKS=1 only): { type: 'test', tp: [x, z] } moves you there (screenshot tours); { unlock: 3 };
   // { type: 'test', f3move } forces one of the Colossus's moves (forceBossMove).
   const handle = P.handle;
   P.handle = function (p, msg) {
     if (msg?.type === 'test' && process.env.TEST_HOOKS && p) {
       if (Array.isArray(msg.tp)) { const [x, z] = msg.tp.map(Number); if (walkable(x, z)) this.teleport(p, x, z); return; }
+      if (msg.unlock === 3) { p.stats.floor2 = 1; p.stats.floor3 = 1; p.dirty = true; this.invChanged(p); return; } // { unlock: 3 }: Floors 2 and 3 open (journey runs)
       if (msg.f3move && this.colossus) { if (!this.colossus.engaged && inArena3(p.x, p.z)) this.engageColossus(this.colossus); this.forceBossMove(this.colossus, msg.f3move, p.id); return; }
     }
     return handle.call(this, p, msg);
