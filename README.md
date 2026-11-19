@@ -551,7 +551,7 @@ Five characters live in the tower and play the game like players do (`shared/nam
 | **Maribel** | Cleric (Staff), healer | The Hearthward's healer. Remembers who skipped their potions. |
 | **Tovin** | Ranger (Longbow), damage | The Hearthward's archer. Keeps score of everything. |
 | **Sennet** | Lancer (Halberd), damage | The Hearthward's lancer. Writes every boss pattern in a notebook. |
-| **Cairn** | Berserker (Warhammer), the loner | Hunts alone. Trusts what you do, not what you say. |
+| **Cairn** | Lancer (Glaive), the loner | Hunts alone. Trusts what you do, not what you say. |
 
 - **Presence.** They are server bots at capability 5, of their own kind: five reserved slots outside `MAX_BOTS`, not in the Bots tab, never touched by the admin page's "remove all". They are only simulated while a player is online and only on a floor a player is on (the free Render plan sleeps when idle), they step out during a director show, and nothing is written to the database with nobody online. Coming back, you get a "while you were away" line (worked out from the time gone, not simulated).
 - **Level and gear.** They sit 2 levels above the top players: the top-3 average of non-admin characters played in the last 14 days, capped at the level cap, and they never drop. Gear, mastery and talents are the premade setup for that level, in their own weapon style. They take no XP, loot or items.

@@ -403,7 +403,7 @@ Same rules as F/G/H (flock lock, push with `--force-with-lease`).
    - screenshots of the Friends tab.
 
 **Built (I1):**
-- **Who:** the Hearthward (Halvard, Guardian tank; Maribel, Cleric healer; Tovin, Ranger; Sennet, Lancer) and Cairn the loner (Berserker, Warhammer). Data, rules and canned lines: `shared/named.js`.
+- **Who:** the Hearthward (Halvard, Guardian tank; Maribel, Cleric healer; Tovin, Ranger; Sennet, Lancer) and Cairn the loner (Lancer, Glaive: his look's lantern glaive). Data, rules and canned lines: `shared/named.js`.
 - **Where:** `server/named.js` (`installNamed` wrappers on Game + `NamedManager`), `server/named-admin.js`, `public/named.js` (Friends tab), `public/admin-named.js`, tables `named_chars` and `named_friendship`, `floor_clears.heroes`. README "The Named" has every number.
 - **Contract for I3 / I4:**
   - `game.namedFriendship(player, namedId)` → `{ pts, tier, tierIndex, tierName, left }` (or `null`: no such Named, a bot, or `NAMED_ENABLED=0`).
@@ -411,6 +411,7 @@ Same rules as F/G/H (flock lock, push with `--force-with-lease`).
   - `game.named` is the manager: `chars` (id → `{ def, lvl, e (the BotManager entry), … }`), `playerOf(st)`, `say(p, text)` (a speech bubble), `hostOf(p)`, `listFor(player)`. Each `def` has `persona`, `blurb`, `trust` and `namedLine(def, key, vars)` canned lines (`refuse`, `busy`, `taken`, `join`, `called`, `home`, `raid`).
   - The existing AI minds skip `e.named` entries (`server/ai/index.js`), so I3's talk path is the only one that speaks for them.
   - Client: `{ type: 'named', op: 'fr', … }` already drives tier-up banners; add ops beside `list` / `invite` / `call` in `NamedManager.handle`.
+- **Cairn is a Glaive Lancer** (changed from Berserker after I2 gave his look a lantern glaive): the premade Lancer setup, Lancer talents and evolutions; alone he killed the Warden 3 of 3 times at levels 12, 16 and 20. His look's weapon carries its own standing clip (`weapon.idle` in `shared/looks.js`), so he holds the glaive upright on the Lancer rig too.
 - **Left for later:** Floor 2 and 3 boss attempts by the Named are wired but only bot-tested on Floor 1; "attacking their target off-cue" and trade or gifts were cut by the review; the away line is flavour only.
 
 ### I2. The loner's look (`feat/lonerlook`)

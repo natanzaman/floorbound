@@ -15,7 +15,9 @@
 //   hair     { kind: 'hood', color, lining, tail: { len, color }, mask }: headwear (mask: a band over the lower face)
 //   cloak    { kind: 'coat' | 'cape', color, lining, ... }; a coat can carry a one-shoulder mantle (mark: an emblem on
 //            it); a cape has an emblem on the back
-//   weapon   { model, ...colours, offhand: 'hide' | 'keep' }: replaces the held weapon model (the style still plays)
+//   weapon   { model, ...colours, offhand: 'hide' | 'keep', idle }: replaces the held weapon model (the style still plays);
+//            idle: the standing clip to carry it with on any rig (Cairn is a Glaive Lancer: without it the Lancer's
+//            low, couched carry drags the lantern along the ground)
 //   aura     { color, ground: { r, opacity }, motes: { rate, life, size, rise }, trail: { rate, life, size } }
 //   plate    { color, glow, title }: nameplate colour and a title line under the name (the swatch sits before the name)
 //   swatch   { bg, fg, accent }: the round badge in UI lists and nameplates, with the emblem
@@ -41,7 +43,7 @@ export const LOOKS = {
       kind: 'coat', color: ASH, lining: SOOT, length: 0.5, flare: 0.5, tails: 7, ragged: 0.45, collar: { color: ASH, height: 0.2 },
       mantle: { side: 'l', color: 0x26232c, trim: ASH, length: 0.62, mark: 'cairn', markColor: WISP },
     },
-    weapon: { model: 'lanternglaive', haft: 0x2a2730, steel: 0xe9e6dc, cage: 0x3a3d45, flame: WISP, offhand: 'hide' },
+    weapon: { model: 'lanternglaive', haft: 0x2a2730, steel: 0xe9e6dc, cage: 0x3a3d45, flame: WISP, offhand: 'hide', idle: '2H_Melee_Idle' },
     aura: { color: WISP, ground: { r: 1.5, opacity: 0.16 }, motes: { rate: 3, life: 1.6, size: 0.07, rise: 0.55 }, trail: { rate: 9, life: 1.1, size: 0.11 } },
     plate: { color: '#e6ff8f', glow: '#a3c520', title: 'the Last Lamp' },
     swatch: { bg: SOOT, fg: ASH, accent: WISP },

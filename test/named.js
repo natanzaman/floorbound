@@ -20,7 +20,9 @@ import { Game } from '../server/game.js';
 import { BotManager } from '../server/botmanager.js';
 import { NamedManager, makeNamedStore, namedOn } from '../server/named.js';
 import * as hall from '../server/hall.js';
-import { MAX_LEVEL, WORLD, GATE } from '../shared/data.js';
+import { MAX_LEVEL, WORLD, GATE, CLASSES } from '../shared/data.js';
+import { pointsAt } from '../shared/talents.js';
+import { masteryLevel } from '../shared/mastery.js';
 import { loadoutFor } from '../shared/playerbots.js';
 import { buildCard } from '../shared/mvp.js';
 import {
@@ -103,8 +105,9 @@ function world({ store = null } = {}) {
     this.joining = true;
     let p;
     try { p = g.addPlayer({ readyState: 1, send() {} }, names[0], roles[0]); } finally { this.joining = false; }
-    p.bot = true; p.lvl = lvl; if (join?.named) this.namedJoin?.(p, join.named);
+    p.bot = true; p.lvl = lvl;
     g.recompute(p); p.hp = p.maxHp;
+    if (join?.named) this.namedJoin?.(p, join.named);
     const e = { bid: this.nextBid++, behaviour, lvl, at: Date.now(), b: { id: p.id, name: p.name, cls: p.cls, closed: false, goal: 'Farming the field', cmd: null, t: 0 } };
     e.group = { configure: o => { e.b.cfg = o; }, drop: b => { b.closed = true; g.removePlayer(p); } };
     this.bots.push(e);
@@ -141,7 +144,9 @@ function world({ store = null } = {}) {
   ok(heroes.every(p => p.lvl === 12) && cairn.lvl === 12, 'level: the top players + 2 (one level-10 player: 12)');
   const L = loadoutFor(12);
   ok(cairn.look === 'cairn' && hp.look === 'halvard' && g.looksSnap().length === 5 && !nat.look, 'each wears their own look (I2)');
-  ok(heroes.every(p => p.inv.eq.weapon?.r === L.rarity && p.inv.eq.armor && p.inv.eq.charm) && cairn.inv.eq.weapon.style === 'warhammer' && P('sennet').inv.eq.weapon.style === 'halberd', 'gear is the premade setup for their level, in their own weapon style');
+  ok(heroes.every(p => p.inv.eq.weapon?.r === L.rarity && p.inv.eq.armor && p.inv.eq.charm) && cairn.inv.eq.weapon.style === 'glaive' && P('sennet').inv.eq.weapon.style === 'halberd', 'gear is the premade setup for their level, in their own weapon style');
+  ok(cairn.cls === 'lancer' && cairn.style === 'glaive' && cairn.inv.eq.weapon.cls === 'lancer' && /Glaive/.test(cairn.inv.eq.weapon.name), 'Cairn is a Lancer with a Glaive (the weapon his look carries)');
+  ok(Object.keys(cairn.mastery).sort().join() === CLASSES.lancer.skills.map(s => s.id).filter(id => cairn.mastery[id]).sort().join() && Object.values(cairn.mastery).every(x => masteryLevel(x.pts) === L.mastery && (!L.evolved || x.br)), 'his premade setup is a Lancer\'s: Lancer skills at the level\'s mastery, evolved');
   nat.lvl = 16; clock.t += 61000; tick(2);
   ok(P('halvard').lvl === 18 && P('halvard').inv.eq.weapon.r === loadoutFor(18).rarity, 'they level as the players do (gear follows)');
   nat.lvl = 4; clock.t += 61000; tick(2);
@@ -525,6 +530,8 @@ function client(name, cls = 'swordsman', join = {}) {
   v = await api('/api/admin/named/offset', 'POST', { off: 9, reset: true });
   await until(() => a.named().length === 5 && a.named().every(r => a.pl.get(r.id)?.lvl === 10), 12000, 'level 10');
   ok(v.chars.every(c => c.off === 9), 'admin: the level offset (1 + 9 = level 10)');
+  const cv = await until(async () => { const c = (await api('/api/admin/named')).chars.find(x => x.id === 'cairn'); return c.online && c.talents === pointsAt(10) && c.style === 'glaive' && c; }, 15000, 'Cairn to spend his talents');
+  ok(cv.cls === 'lancer' && cv.style === 'glaive' && cv.lvl === 10, `Cairn plays as a Glaive Lancer and spends every talent point in the Lancer tree (${cv.talents} at level 10)`);
   v = await api('/api/admin/named');
   ok(v.friends.some(f => f.online && f.f.halvard === 40) && v.chars.find(c => c.id === 'halvard').online, 'admin: the friendship table shows the live numbers');
 

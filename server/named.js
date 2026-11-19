@@ -90,7 +90,7 @@ export class NamedManager {
     this.away = {};             // group -> the "while you were away" line of this visit
     this.emptyAt = 0; this.flushAt = 0; this.parked = false;
     game.named = this;
-    mgr.namedJoin = (p, id) => { if (this.chars.has(id)) p.named = id; };
+    mgr.namedJoin = (p, id) => { const st = this.chars.get(id); if (st) { p.named = id; this.outfit(st, p); } }; // in their own gear and look from the first snapshot
     const roster = game.roster.bind(game); // roster rows of the Named carry their id (nameplates, the Friends tab)
     game.roster = () => roster().map(r => { const id = game.players.get(r.id)?.named; return id ? { ...r, named: id } : r; });
     if (interval) { this.timer = setInterval(() => this.upkeep(), interval); this.timer.unref?.(); }
@@ -316,7 +316,7 @@ export class NamedManager {
     const [view] = this.mgr.start([def.cls], [def.name], { lvl: st.lvl, behaviour: F.beh.farm, follow: '', skill: NAMED_SKILL, join: { named: def.id, f2: 1, f3: 1 } });
     const e = this.mgr.bots.find(x => x.bid === view.bid);
     e.named = def.id; e.b.noBoss = true;
-    st.e = e; st.pid = 0; st.hostT = null;
+    st.e = e; st.pid = 0; st.hostT = null; st.fresh = true;
   }
   despawn(st) {
     if (!st.e) return;
@@ -405,7 +405,7 @@ export class NamedManager {
       on: true, always: this.always, parked: this.parked, humans: this.humans().length, levels: this.levels.list, max: NAMED_MAX,
       chars: [...this.chars.values()].map(st => {
         const p = this.playerOf(st), host = p && this.hostOf(p);
-        return { id: st.def.id, name: st.def.name, cls: st.def.cls, group: st.def.group, gname: GROUPS[st.def.group].name, lvl: p?.lvl ?? st.lvl, off: st.off, enabled: st.enabled, online: !!p, area: p ? areaName(p.x, p.z) : '', doing: p ? (p.dead ? 'Down' : st.e.b.goal || '') : '', host: host?.name || '', plan: this.plans[st.def.group].mode };
+        return { id: st.def.id, name: st.def.name, cls: st.def.cls, style: p?.style || st.def.style, talents: p ? Object.values(p.talents || {}).reduce((s, r) => s + (r | 0), 0) : 0, group: st.def.group, gname: GROUPS[st.def.group].name, lvl: p?.lvl ?? st.lvl, off: st.off, enabled: st.enabled, online: !!p, area: p ? areaName(p.x, p.z) : '', doing: p ? (p.dead ? 'Down' : st.e.b.goal || '') : '', host: host?.name || '', plan: this.plans[st.def.group].mode };
       }),
     };
   }
@@ -446,7 +446,7 @@ export class NamedManager {
       if (!(st.enabled && (present || host))) { this.despawn(st); continue; }
       if (!st.e) { this.noteAway(group, st, now); this.spawn(st, floor); continue; }
       if (!p) continue; // still joining
-      if (st.pid !== p.id) { this.outfit(st, p); if (floor !== floorOf(p.x)) this.place(p, floor); g.rosterDirty = true; }
+      if (st.fresh) { st.fresh = false; if (st.pid !== p.id) this.outfit(st, p); if (floor !== floorOf(p.x)) this.place(p, floor); g.rosterDirty = true; }
       if (p.lvl < st.lvl) { this.mgr.setLevel(st.e, st.lvl); this.outfit(st, p); }
       if (host) this.withHost(st, p, host); else { st.hostT = null; if (st.e.b.cmd?.nm) st.e.b.cmd = null; free.push([st, p]); }
     }
