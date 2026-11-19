@@ -1,7 +1,7 @@
 # Floorbound: notes for Claude
 
 A Sword Art Online-inspired co-op 3D browser game. The owner (Natan) builds it with a few friends who play-test.
-Start every session by reading `docs/ROADMAP.md`: it holds the current plan, the owner's decisions and the task specs.
+Start every session by reading `docs/NEXT.md` (what to do next, local setup), then `docs/ROADMAP.md` (full specs, the owner's decisions and the task trackers).
 
 ## Stack
 - **Server:** Node 20, `ws`, authoritative at 20 Hz (`server/index.js` → `server/game.js`).
