@@ -12,6 +12,7 @@ import { floorUnlocked, floorOf, nearWaystone } from '../shared/floor2.js';
 import { lastAttackItem3, makeItem, rollRarity, SLOTS } from '../shared/items.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+export const COLOSSUS_MOVES = ['hammerfall', 'lightning', 'gale_push', 'overload', 'tempest_beam']; // forceBossMove names (director boss_move)
 const r1 = v => Math.round(v * 10) / 10;
 const r2 = v => Math.round(v * 100) / 100;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -395,7 +396,6 @@ export const F3Methods = {
     }
     const fighters = [...this.players.values()].filter(p => !p.dead && inArena3(p.x, p.z));
     const pick = () => fighters[Math.floor(Math.random() * fighters.length)] || target;
-    const rndSpot = (rmax = 20) => { const a = Math.random() * Math.PI * 2, d = 3 + Math.random() * (rmax - 3); return [F3.arena.x + Math.sin(a) * d, F3.arena.z + Math.cos(a) * d]; };
     const free = t >= m.busyUntil && !m.windupAt && !m.ov;
     if (m.ov) return; // channelling Overload: nothing else (updateFloor3 resolves it)
 
@@ -406,19 +406,7 @@ export const F3Methods = {
     // Gale Push: a cone in front, then a shove
     if (t >= m.gustT && free) { m.gustT = t + C.gust.every[m.phase] - (tw.gustSooner || 0); this.galePush(m, target); return; }
     // Lightning Strikes: under fighters plus strays
-    if (t >= m.strikeT && t >= m.busyUntil) {
-      const S = C.strike;
-      m.strikeT = t + S.every[m.phase];
-      const spots = [];
-      const v = pick(); spots.push([v.x, v.z]);
-      if (m.phase >= 1 && fighters.length > 1) { const w = pick(); if (w !== v) spots.push([w.x, w.z]); }
-      for (let i = 0; i < S.extra[m.phase] + (tw.extra || 0); i++) spots.push(rndSpot());
-      this.events.push({ t: 'f3fx', k: 'raise', id: m.id, d: S.wind }); // its free hand to the sky
-      for (const [x, z] of spots) {
-        this.f3Circle(m, x, z, S.r, S.wind, this.f3Atk(m) * S.mult, 'strike', 'colossus lightning');
-        if (tw.chain) this.schedule(tw.chain, () => { if (!m.dead && m.engaged) this.f3Circle(m, x, z, S.r, S.wind * 0.6, this.f3Atk(m) * S.mult * 0.7, 'strike', 'colossus lightning'); });
-      }
-    }
+    if (t >= m.strikeT && t >= m.busyUntil) this.lightningStrikes(m, fighters, target);
     // Gale Harpies drop in (phase 2+)
     if (m.phase >= 1 && t >= m.harpyT) {
       const H = C.harpies;
@@ -433,6 +421,22 @@ export const F3Methods = {
       }
     }
     this.bossTeam?.(m, fighters); // team mechanics: shared meteor, spread, tether (server/bossteam.js)
+  },
+
+  lightningStrikes(m, fighters, target) {
+    const t = this.time, S = COLOSSUS.strike, tw = this.twist3Def();
+    const pick = () => fighters[Math.floor(Math.random() * fighters.length)] || target;
+    const rndSpot = (rmax = 20) => { const a = Math.random() * Math.PI * 2, d = 3 + Math.random() * (rmax - 3); return [F3.arena.x + Math.sin(a) * d, F3.arena.z + Math.cos(a) * d]; };
+    m.strikeT = t + S.every[m.phase];
+    const spots = [];
+    const v = pick(); spots.push([v.x, v.z]);
+    if (m.phase >= 1 && fighters.length > 1) { const w = pick(); if (w !== v) spots.push([w.x, w.z]); }
+    for (let i = 0; i < S.extra[m.phase] + (tw.extra || 0); i++) spots.push(rndSpot());
+    this.events.push({ t: 'f3fx', k: 'raise', id: m.id, d: S.wind }); // its free hand to the sky
+    for (const [x, z] of spots) {
+      this.f3Circle(m, x, z, S.r, S.wind, this.f3Atk(m) * S.mult, 'strike', 'colossus lightning');
+      if (tw.chain) this.schedule(tw.chain, () => { if (!m.dead && m.engaged) this.f3Circle(m, x, z, S.r, S.wind * 0.6, this.f3Atk(m) * S.mult * 0.7, 'strike', 'colossus lightning'); });
+    }
   },
 
   galePush(m, target) {
@@ -751,5 +755,45 @@ export function installFloor3(Game) {
     const out = killSovereign.call(this, m, killer);
     this.f3SovereignKilled(ids);
     return out;
+  };
+
+}
+
+// After staging and boss team mechanics (game.js): forceBossMove (server/staging.js, the director's boss_move) learns the
+// Colossus's own moves (G4 team moves and the other bosses fall through), plus testing aids.
+export function installFloor3Moves(Game) {
+  const P = Game.prototype;
+  const force = P.forceBossMove;
+  P.forceBossMove = function (mob, move, targetId) {
+    const m = this.mobRef?.(mob) ?? mob;
+    if (!m || m.dead || m.type !== 'colossus' || !COLOSSUS_MOVES.includes(move)) return force ? force.call(this, mob, move, targetId) : false;
+    const fighters = [...this.players.values()].filter(p => !p.dead && inArena3(p.x, p.z));
+    let v = targetId != null ? this.players.get(targetId | 0) : null;
+    if (!v || v.dead) v = fighters.sort((a, b) => dist(a, m) - dist(b, m))[0] || null;
+    const t = this.time, C = COLOSSUS;
+    if (v) m.face = angleTo(m.x, m.z, v.x, v.z);
+    switch (move) {
+      case 'hammerfall': {
+        const [r, h] = BITE.colossus;
+        m.windupAt = t + C.cleave.wind; m.atkT = t + m.def.atkCd + C.cleave.wind; m.busyUntil = Math.min(m.busyUntil || 0, t);
+        this.events.push({ t: 'wind', id: m.id, d: C.cleave.wind, f: r2(m.face), r, h });
+        return true;
+      }
+      case 'lightning': this.lightningStrikes(m, fighters, v || m); return true;
+      case 'gale_push': if (!v) return false; m.gustT = t + C.gust.every[m.phase]; this.galePush(m, v); return true;
+      case 'overload': if (m.ov) return false; this.startOverload(m, fighters); return true;
+      case 'tempest_beam': m.beamT = t + C.beam.every[2]; this.tempestBeam(m); return true;
+    }
+    return false;
+  };
+  // Testing aids (TEST_HOOKS=1 only): { type: 'test', tp: [x, z] } moves you there (screenshot tours);
+  // { type: 'test', f3move } forces one of the Colossus's moves (forceBossMove).
+  const handle = P.handle;
+  P.handle = function (p, msg) {
+    if (msg?.type === 'test' && process.env.TEST_HOOKS && p) {
+      if (Array.isArray(msg.tp)) { const [x, z] = msg.tp.map(Number); if (walkable(x, z)) this.teleport(p, x, z); return; }
+      if (msg.f3move && this.colossus) { if (!this.colossus.engaged && inArena3(p.x, p.z)) this.engageColossus(this.colossus); this.forceBossMove(this.colossus, msg.f3move, p.id); return; }
+    }
+    return handle.call(this, p, msg);
   };
 }

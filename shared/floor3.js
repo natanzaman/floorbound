@@ -78,8 +78,8 @@ export function floor3Obstacles() {
     const x = F3.x + sx * 16;
     if (clear(x, z, 1)) out.push({ kind: 'pier', x, z, r: 1.6 });
   }
-  for (let i = 0; i < 6; i++) { // storm pylons around the Eye of the Storm
-    const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+  for (let i = 0; i < 6; i++) { // storm pylons around the Eye of the Storm (two flank the way in from the south)
+    const a = (i / 6) * Math.PI * 2;
     out.push({ kind: 'pylon', x: arena.x + Math.cos(a) * 22.5, z: arena.z + Math.sin(a) * 22.5, r: 1.3 });
   }
   return out;

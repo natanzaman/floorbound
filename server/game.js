@@ -11,7 +11,7 @@ import { TITLES, newStats, meetsTitle } from '../shared/titles.js';
 import { F2, crossesGate2, floorOf, inArena2 } from '../shared/floor2.js';
 import { F2Methods } from './floor2.js';
 import { F3, crossesGate3, inArena3 } from '../shared/floor3.js';
-import { installFloor3 } from './floor3.js'; // Floor 3 — The Gale Spires
+import { installFloor3, installFloor3Moves } from './floor3.js'; // Floor 3 — The Gale Spires
 import crypto from 'node:crypto';
 import { SmithMethods } from './smith.js';
 import { GroundMethods } from './ground.js';
@@ -1398,6 +1398,7 @@ installTracking(Game); // play-tracking hooks: boss fight rows, death / quit con
 installThreat(Game); // threat you can see, healer threat, Cover, flanking (server/threat.js)
 installStaging(Game); // staging hooks for the scene director: boss moves, reserved Last Attack, scripted deaths (server/staging.js)
 installBossTeam(Game); // boss team mechanics (server/bossteam.js); after staging: adds meteor / spread / tether to forceBossMove
+installFloor3Moves(Game); // the Storm Colossus's moves in forceBossMove, Floor 3 testing aids (server/floor3.js); after boss team mechanics
 installRevive(Game); // downed + revive (server/revive.js); after staging and boss team mechanics
 installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js)
 installTeamplay(Game); // skill combos between players, the Team Burst gauge, teamStat() for the post-fight card (server/teamplay.js); after the talents
