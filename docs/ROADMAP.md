@@ -616,6 +616,103 @@ Threat stays a raw number per player per enemy, but the rules below are stated i
 5. Bots respect it: DPS bots ease off as their meter nears 90% during a taunt, and tanks re-taunt on cooldown when the boss turns.
 6. **Accept when:** unit tests cover multiplier growth and reset, taunt cuts, taunt lock, the taunt-end handover at 90%, the double taunt, and losing aggro to a taunt; bot runs still clear with the Guardian holding the boss most of the time (report the share of boss time on the tank).
 
+## K. Controls, controller support and accessibility (owner request 2026-11-19)
+The owner's words, summarised:
+- Add a **Controls** screen reached from the Esc menu (Esc → Controls, or a Controls tab next to Settings).
+- At the top, an **Input device** choice: **Keyboard & Mouse** or **Controller**. Only one is active at a time, and the game takes input from that one.
+- Below it, two tabs to edit the **Keyboard & Mouse** bindings and the **Controller** bindings.
+- Each tab starts with a **cool, simply drawn picture** of the device (a keyboard plus mouse, or a controller):
+  - Hovering a key or button "presses" or highlights it and shows what it's bound to.
+  - Bound keys and buttons carry a ★ marker.
+  - Clicking one shows its binding (or "Not bound"). Clicking again, or pressing Edit, picks a control from a list with a type-to-filter box.
+- Scrolling down shows **a list of every control** with what it's bound to, editable from there too.
+- **One key per control and one control per key.** The exception is **combos**: modifier chords (Ctrl+Z, Ctrl+Shift+Z) or two-key chords (Z+X together).
+- **The number of controls should match what a controller can do**, including the combos it can do. Keyboard & Mouse may get a few extras or presets.
+- **Verify it with bots that drive controller input.**
+
+### Tracker
+Same rules as F–J: flock lock, push with `--force-with-lease`.
+
+| Task | Branch | Status | Owner | Merge |
+|---|---|---|---|---|
+| K1 Input layer + controller support | `feat/input` | todo | | |
+| K2 Controls screen (pictures, lists, editing) | `feat/controlsui` | todo (after K1's action/binding contract lands) | | |
+| K3 Accessibility options | `feat/access` | todo (with K2) | | |
+| K4 Controller verification (scripted gamepad "bots") | `feat/padtest` | todo (after K1) | | |
+
+### Shared contracts for K
+- **Action list** (`shared/controls.js`): every game control has an id, label, group (Move, Camera, Combat, Skills, Items, Social, Menus) and type (`button`, `hold`, `axis`, `toggle`).
+  - The set fits a controller: 4 face buttons, 2 bumpers, 2 triggers, 2 stick clicks, a 4-way d-pad and 2 menu buttons, plus **one modifier layer** (hold a bumper or trigger + face button or d-pad) for overflow, such as items and social.
+  - Movement and camera are the two sticks. On keyboard and mouse they're WASD and the mouse.
+  - A KBM-only extra is allowed if flagged (`kbmOnly`), e.g. chat, F3 overlay, screenshot.
+- **Bindings** (`binding` = a key or button, optionally with modifiers or a second key for a chord):
+  - one binding per action per device, and no binding used by two actions on the same device;
+  - binding a taken key asks to **swap** or **unbind** the other action;
+  - defaults per device; "Reset to defaults" per device;
+  - saved in localStorage (try/catch), and also on the account when logged in (a small JSONB `settings` on `accounts`, with a migration safe to run twice), so bindings follow you across browsers.
+- **Single active device:** the chosen device is the only input source for gameplay. An optional "auto-switch on use" setting is off by default.
+  - Chat typing always uses the keyboard.
+  - Esc and Start always open the menu, whatever the device.
+- **No game logic changes.** Input produces the same calls as today (`useSkill`, `jump`, `dodge`, `guard`, `interact`, `send(...)`). Behaviour is identical with the default keyboard bindings.
+
+### K1. Input layer + controller support (`feat/input`)
+1. **Replace scattered key handling** (many `e.key`/`e.code` checks in `public/main.js` and feature modules) with one input layer (`public/input.js`) that maps raw events to actions using the bindings. Feature modules subscribe to actions, not keys.
+2. **Gamepad support** (Gamepad API, standard mapping) for the full action set:
+   - left stick moves, right stick turns the camera, with deadzones, sensitivity and invert-Y;
+   - triggers and bumpers, the d-pad, and stick clicks;
+   - the modifier layer.
+3. **Controller-specific play aids:**
+   - **Targeting:** soft target-lock and cycle-target on a button, so you can lock on without a mouse.
+   - **Radial menus:** the bot V-wheel and the skill/item radial work with the stick.
+4. **Menus are fully controller-navigable:**
+   - focus movement with the d-pad or stick, A to confirm, B to go back;
+   - every panel the game opens works: Esc menu, Settings, Skill Tree, Bag, Smith, Players/Friends/Bots, party menus, the MVP card, the death screen, character select;
+   - visible focus rings.
+5. **On-screen prompts follow the active device:** the skill bar and guide hints show button glyphs (A/B/X/Y or ✕/○/□/△ depending on the controller id) when the controller is active.
+6. **Accept when:** default keyboard behaviour is unchanged (existing Playwright flows still pass), and unit tests cover binding resolution, chords, conflicts and the modifier layer.
+
+### K2. Controls screen (`feat/controlsui`)
+1. Reached from the **Esc menu → Controls** (its own entry, next to Settings).
+   - **Header:** an Input device toggle (Keyboard & Mouse / Controller), plus a live "Controller connected: …" status.
+   - **Tabs:** Keyboard & Mouse | Controller.
+2. **Device picture** (inline SVG, clean flat style matching the game UI):
+   - **Keyboard & mouse:** a full keyboard plus a mouse with left, right and middle buttons and the wheel.
+   - **Controller:** a generic gamepad with sticks, d-pad, face buttons, bumpers, triggers and menu buttons.
+   - **Hover:** the key or button visibly presses down and a tooltip shows the bound control.
+   - Bound keys show a ★ marker.
+   - **Click:** a popover shows the control (or "Not bound") with an **Edit** button. Clicking again (or Edit) opens a list of controls with a **filter box**.
+   - **Live feedback:** pressing a real key or button lights it up in the picture.
+3. **List of all controls** below the picture, grouped (Move, Camera, Combat, Skills, Items, Social, Menus):
+   - each row shows the control, its binding and a Rebind button;
+   - Rebind listens for the next key, button or chord;
+   - it handles conflicts (swap or unbind);
+   - Reset to defaults per device.
+4. **Works with the controller itself:** you can rebind the controller using the controller (focus navigation).
+5. **Accept when:** screenshots of both tabs, hover, the popover, the filter, the rebind flow and the conflict prompt; tests cover save, load and account sync.
+
+### K3. Accessibility options (`feat/access`), in Settings → Accessibility
+- **Holds can become toggles:** guard, sprint and the bot wheel.
+- **Camera:** sensitivity (mouse and stick) and invert-Y.
+- **Reduce motion:** turns off camera shake, hit-stop and big screen flashes.
+- **Text and UI scale**, plus a high-contrast mode for HUD text.
+- **Colour-blind-friendly telegraphs:** an alternative telegraph and danger palette, or pattern overlays.
+- **Sound cues** for telegraphs.
+- **Aim assist / soft-lock strength** for the controller.
+- Everything is saved with the bindings, with defaults that change nothing for current players.
+
+### K4. Controller verification with scripted gamepad "bots" (`feat/padtest`)
+1. A Playwright harness that fakes a gamepad: it overrides `navigator.getGamepads()` with a scripted virtual pad, standard mapping.
+2. It plays a session through controller input only:
+   - move along a path, turn the camera, lock on and cycle targets;
+   - attack, use all skills, dodge, jump, guard/parry;
+   - use an item;
+   - open and navigate the Esc menu, Settings and the Controls screen, rebind a button and check it took effect, then close everything;
+   - talk to a Named via the chat (keyboard fallback);
+   - fight the Warden in a party with bots, and survive at least one Quake Ring by jumping on the pad.
+3. It checks **game state** (positions, cooldowns, HP, server events), not frame timing, and runs in CI-like mode (`node test/padtest.mjs` or Python).
+4. A second scripted pad checks the **modifier layer** and **chords**.
+5. **Accept when:** the harness passes on the default controller layout and on a rebound layout. Report coverage: which actions were verified on the pad.
+
 ## Known issues and backlog
 - **Performance (done, c8d8fb4):** server bots on in-process sockets, 10 Hz brains far from humans, the Named rest at home until a player is in the field (invites / calls / outreach wake them). Bench CPU 0.084-0.098 → 0.040-0.057 s/s with players in town, about -11% with everyone in the field (README → Performance, `scripts/perfbench.js`, `/status` cpu + bot counts). Next if needed: don't simulate floors nobody is on (Floor 2/3 mobs cost CPU with no one there).
 - **Client performance + Game Menu (done, 43cd3d9):** F3 diagnostics overlay and ping chip, Settings → Graphics (Auto default / Low / Medium / High), snapshot interpolation ~100 ms behind with adaptive buffer (`shared/netsmooth.js`, `?netsim=120,60,2` to test, `?interp=0` old smoothing), shaders warmed at load and never recompiled mid-fight, DOM-on-change HUD; Esc / ☰ Game Menu (Resume, Settings, Controls & guide, Change character, Log out, Admin). Headless 6-bot Warden fight: High ≈ before (3 fps, GPU-bound in swiftshader), Low 2.1× faster (6.3 fps, 712 → 389 draw calls); remote motion wobble 2.75 → 0.96 m/s (good network), 4.69 → 0.59 (120±60 ms + 2% reorder). Next if needed: fewer draw calls (merge/instance static scenery; ~700 in a boss fight).
