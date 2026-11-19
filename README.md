@@ -107,7 +107,7 @@ The broken terraces of a sky temple on a wind-scoured mountaintop, above the clo
 
 **Twists** (one per spawn, shown on the gate panel and boss bar): *Tailwind* (Gale Push throws farther and comes sooner; +1 loot roll), *Thunderhead* (+2 strays, strikes land again 1.2 s later; +50% gold), *Stoneskin* (35% less damage unless Broken or Grounded; Grounded lasts longer; +1 loot roll), *Static* (Overload from phase 1, 1.5 s shorter; +1 loot roll and +50% gold), *Calm*. `F3_TWIST=<id>` forces one.
 
-Health scales with the party's role weight (like the Warden), damage a little with headcount. **Last Attack Bonus:** *Stormheart* (charm: +12% attack, +8% crit, 8% faster cooldowns). Everyone who fought gets gold and two Rare/Epic items, and a chance at the **Stormforged** set. Title: **Stormbreaker**. The first server clear rings the third bell. Bot runs (capability 5, Lv 30, no gear): trio (Guardian, Swordsman, Cleric) about 105–145 s, winning; six bots about 125 s with a few downs (`node test/floor3boss.js`).
+Health scales with the party's role weight (like the Warden), damage a little with headcount. **Last Attack Bonus:** *Stormheart* (charm: +12% attack, +8% crit, 8% faster cooldowns). Everyone who fought gets gold and two Rare/Epic items, and a chance at the **Stormforged** set. Title: **Stormbreaker**. The first server clear rings the third bell. Bot runs (capability 5, Lv 30, no gear): trio (Guardian, Swordsman, Cleric) about 105–120 s, winning every run with a down or two; six bots about 135 s with 6–7 downs, all revived; at capability 4 the trio still wins, down to its last few HP (`node test/floor3boss.js`).
 
 ## The raid gate and the Last Attack Bonus
 
