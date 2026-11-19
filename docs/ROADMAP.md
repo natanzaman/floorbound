@@ -335,6 +335,7 @@ Same rules as F/G/H (flock lock, push with `--force-with-lease`).
 | I4 Requests and invitations | `feat/namedquests` | done: requests (kill / bring / boss help) + outreach + phrasing hook; talk hands materials over | agent namedquests | e36cb22 |
 
 - **I1 review fixes merged (274b300):** friendship load can't overwrite stored rows, one Named per party re-checked on accept and calls, Named-only clears are quiet on all floors, Friends tab only with `NAMED_ENABLED` on, bot names reserved, boss help counts healing done to others, shutdown awaits the Named's writes, plus the nice-to-haves.
+- **I3/I4 glue merged (890343e):** requests, thank-yous and invitations are phrased by the AI in each Named's voice (count and target fixed by the template, same guard as talk, 10 a player a day on the Named slice, canned on any failure or after 3 s), and talk knows your active or recent request with that Named.
 
 ### Shared contracts for I (from the Fable plan review, 2026-11-18: these override the task text below where they differ)
 - **Humans first.**
