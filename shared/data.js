@@ -2,6 +2,7 @@
 import { F2, F2_MOB_IDS, F2_MOBS, F2_BITE, SOVEREIGN, inCamp2, walkable2, areaName2, floor2Obstacles } from './floor2.js';
 import { F3, F3_MOB_IDS, F3_MOBS, F3_BITE, F3_RARES, COLOSSUS, inCamp3, walkable3, areaName3, floor3Obstacles } from './floor3.js';
 import { RESCUE_MOB_IDS, RESCUE_MOBS } from './rescue.js';
+import { AREA_COLLIDERS } from './arenas.js'; // multi-area boss fights (J2): the active area's walls and pillars
 import { LANCER } from './classes/lancer.js';
 import { BARD } from './classes/bard.js';
 import { RANGER } from './classes/ranger.js';
@@ -130,6 +131,12 @@ export function resolveCollision(x, z, rad = PLAYER_RADIUS) {
   for (const o of OBSTACLES) {
     const dx = x - o.x, dz = z - o.z;
     const m = o.r + rad;
+    if (Math.abs(dx) > m || Math.abs(dz) > m) continue;
+    const d = Math.hypot(dx, dz);
+    if (d < m && d > 1e-4) { x = o.x + (dx / d) * m; z = o.z + (dz / d) * m; }
+  }
+  for (const o of AREA_COLLIDERS) { // a boss arena's lower area (shared/arenas.js): empty unless a fight fell into one
+    const dx = x - o.x, dz = z - o.z, m = o.r + rad;
     if (Math.abs(dx) > m || Math.abs(dz) > m) continue;
     const d = Math.hypot(dx, dz);
     if (d < m && d > 1e-4) { x = o.x + (dx / d) * m; z = o.z + (dz / d) * m; }

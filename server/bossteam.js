@@ -50,8 +50,9 @@ const methods = {
     for (let i = 0; i < list.length; i++) if (this.btStart(m, list[m.btI++ % list.length], fighters, null)) return; // (a trap that can't start: the next one)
   },
 
-  // A team-scale mechanic is running on this boss (or ended less than RESCUE.gap s ago, or the Colossus is Overloading).
-  btBusy(m) { return !!m.ov || this.time < (m.btGapUntil || 0) || (this.btActive || []).some(a => a.m === m); },
+  // A team-scale mechanic is running on this boss (or ended less than RESCUE.gap s ago, the Colossus is Overloading, or the
+  // boss is falling to its next area).
+  btBusy(m) { return !!m.ov || (m.ar?.stage || 0) >= 2 || this.time < (m.btGapUntil || 0) || (this.btActive || []).some(a => a.m === m); }, // (m.ar: J2's fall to the next area, server/arenas.js)
 
   // Start one now. targetId: a target player id (or null); forced: from forceBossMove. Returns false when it can't (a
   // tether needs two fighters, a trap two free ones).

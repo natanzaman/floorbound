@@ -19,6 +19,7 @@ import { initCombat } from '/combat.js';
 import { F2, inGateZone2, inArena2, onFloor2, floorOf, WAYSTONES } from '/shared/floor2.js';
 import { initFloor2Client } from '/floor2client.js';
 import { initFloor3Client } from '/floor3client.js';
+import { initArenas } from '/arenas.js'; // multi-area boss fights: the Colossus's fall to the Undercroft (J2)
 import { inArena3, inGateZone3, onFloor3 } from '/shared/floor3.js';
 import { initMastery } from '/mastery.js';
 import { initClassesB } from '/classes-b.js';
@@ -119,6 +120,9 @@ const f3 = initFloor3Client({
   send: o => send(o), banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a),
   log: (a, b) => log(a, b), shake: a => shake(a), project: (x, y, z) => project(x, y, z), hallOpen: () => !$('hall').classList.contains('hidden'),
 });
+// Boss arenas with areas (arenas.js): the fall, the lower area's look and rules (sludge, fire, pillars) for prediction.
+const arenas = initArenas({ scene, fx, sfx, state, mobs, players, camera, views: { colossus: f3.world.arena }, tip: id => guide.tip(id),
+  banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), shake: a => shake(a) });
 
 // ---------------- login ----------------
 let chosen = localStorage.getItem('fb_cls') || 'swordsman';
@@ -163,6 +167,7 @@ async function prewarm() {
   for (const t of MOB_IDS) try { models.push(makeMobModel(t)); } catch {}
   for (const m of models) { m.group.position.set(0, -40, 0); scene.add(m.group); }
   const roots = [floor1, f2.world.root, f3.world.root], was = roots.map(r => r.visible);
+  f3.world.arena?.warm(true); // the Undercroft, its fire and the falling debris are compiled with Floor 3's lights
   try {
     for (let i = 0; i < roots.length; i++) { // each floor's lights
       roots.forEach((r, j) => { r.visible = i === j; });
@@ -170,6 +175,7 @@ async function prewarm() {
     }
   } finally {
     roots.forEach((r, j) => { r.visible = was[j]; });
+    f3.world.arena?.warm(false);
     for (const e of warm) { scene.remove(e.mesh); e.mesh.traverse(o => { if (o.material) keepMats.push(o.material); }); }
     for (const m of models) { scene.remove(m.group); m.group.traverse(o => { if (o.material) keepMats.push(o.material); }); }
   }
@@ -469,6 +475,7 @@ function onSnapshot({ st, me, w }, arrival) {
   if (w.gate) { state.gate = w.gate; state.gateOpen = !!w.gate[0]; gateMesh.set(state.gateOpen); }
   if (w.f2) f2.snap(w.f2); // on Floor 2, state.gate/gateOpen become Floor 2's gate
   if (w.f3) f3.snap(w.f3); // likewise Floor 3's Storm Gate
+  if (w.f3) arenas.snap(w.f3.ar); // boss arenas: which area (and its colliders for prediction), the fall, fire
   state.phase = w.phase || 0;
   twists.snap(w);
   threat.snap(w, me); // boss / elite targets, my threat meter, Cover cooldown
@@ -514,6 +521,7 @@ function handleEvent(e) {
   const me = state.myId;
   if (e.t === 'cine' && (e.op === 'reset' || (e.op === 'fade' && e.to === 'black'))) sfx.hush(); // no voice-over under black or after a stop
   if (cine.event(e)) return; // shots, titles, fades, letterbox, clean feed, light
+  if (arenas.event(e)) return; // the fall to a boss's lower area (arenas.js)
   if (f3.onEvent(e)) return; // Floor 3 (floor3client.js)
   f2.onEvent(e);
   if (bell.event(e)) return; // the Tower Bell
@@ -1215,7 +1223,7 @@ function lockedMob() {
 
 function jump() {
   const now = performance.now();
-  if (state.dead || revive.isDown() || rescue.encased() || !state.joined || state.spectator || state.roll || now < state.jumpReady) return;
+  if (state.dead || revive.isDown() || rescue.encased() || !state.joined || state.spectator || state.roll || now < state.jumpReady || arenas.frozen()) return;
   state.jumpReady = now + JUMP.cd * 1000; state.jumpPress = now;
   state.air = { x: state.vel?.[0] || 0, z: state.vel?.[1] || 0 }; // take off with your running speed
   const me = players.get(state.myId);
@@ -1226,7 +1234,8 @@ function jump() {
 
 function dodge() {
   const now = performance.now();
-  if (state.dead || revive.isDown() || rescue.rooted() || !state.joined || state.spectator || state.roll || now < state.dodgeReady) return;
+  if (state.dead || revive.isDown() || rescue.rooted() || !state.joined || state.spectator || state.roll || now < state.dodgeReady || arenas.frozen()) return;
+  if (arenas.noDodge()) return; // no rolling in sludge
   const dir = state.moveDir ?? state.face;
   state.roll = { left: DODGE.time, dir };
   state.face = dir;
@@ -1267,7 +1276,7 @@ function nearestMob(range) {
 }
 
 function useSkill(slot) {
-  if (state.dead || revive.isDown() || rescue.encased() || !state.joined) return;
+  if (state.dead || revive.isDown() || rescue.encased() || !state.joined || arenas.frozen()) return;
   const sk = CLASSES[state.cls].skills[slot];
   const now = performance.now();
   if (!sk || state.lvl < sk.lvl || now < state.ready[slot] || combat.guarding) return;
@@ -1842,6 +1851,7 @@ function animateEntity(e, dt) {
     g.position.y = 4 * JUMP.height * jk * (1 - jk);
   } else { g.position.y = 0; e.jumpDur = undefined; }
   if (e.kind === 'mob') mastery.lift(e, dt); // Quake launches enemies
+  g.position.y += arenas.lift(e); // falling into a boss's lower area, the boss dropping in (arenas.js)
   if (e.punch > 0) e.punch -= dt;
   const kk = e.punch > 0 ? Math.min(1, dt * 22) : k;
   if (self) { g.position.x = state.x + corr.x; g.position.z = state.z + corr.z; } // a server correction slides out (Correction)
@@ -2062,7 +2072,7 @@ function frame(now) {
   $('crosshair').className = hovered ? (hovered.kind === 'mob' ? 'foe' : 'ally') : '';
   updateTargetFrame(sel, !!lm);
 
-  if (state.joined && !state.dead && !state.spectator) {
+  if (state.joined && !state.dead && !state.spectator && !arenas.frozen()) { // (frozen: falling / landing in a boss arena)
     // movement input
     let ix = 0, iz = 0;
     const typing = document.activeElement === $('chat-input') || gmenu.isOpen(); // (the Game Menu blocks movement too)
@@ -2094,7 +2104,7 @@ function frame(now) {
       let dx = 0, dz = 0;
       if (mag > 0.08) { const fy = state.yaw; dx = Math.sin(fy) * iz - Math.cos(fy) * ix; dz = Math.cos(fy) * iz + Math.sin(fy) * ix; const l = Math.hypot(dx, dz); dx /= l; dz /= l; }
       const sprint = performance.now() - state.lastCombat > SPRINT_AFTER * 1000 && !combat.guarding;
-      airStep(state.air, dx, dz, (sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult(), dt);
+      airStep(state.air, dx, dz, (sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult() * arenas.speedMult(), dt);
       let [nx, nz] = resolveCollision(state.x + state.air.x * dt, state.z + state.air.z * dt);
       const gc = !state.gateOpen;
       if (!walkable(nx, nz, gc)) { if (walkable(nx, state.z, gc)) nz = state.z; else if (walkable(state.x, nz, gc)) nx = state.x; else { nx = state.x; nz = state.z; } }
@@ -2106,7 +2116,7 @@ function frame(now) {
       let mx = fwd[0] * iz + right[0] * ix, mz = fwd[1] * iz + right[1] * ix;
       const ml = Math.hypot(mx, mz); mx /= ml; mz /= ml;
       const sprint = performance.now() - state.lastCombat > SPRINT_AFTER * 1000 && !combat.guarding;
-      const want = rescue.moveCap(revive.crawlCap((sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult(), mag)); // half speed while guarding; talents can add move speed; downed: crawl; trapped: none
+      const want = rescue.moveCap(revive.crawlCap((sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult() * arenas.speedMult(), mag)); // (sludge: arenas.js; trapped: none, rescue.js) // half speed while guarding; talents can add move speed; downed: crawl
       state.speed += (want - state.speed) * Math.min(1, dt * (want > state.speed ? 3 : 10));
       if (rescue.rooted()) state.speed = 0;
       const step = state.speed * dt;
@@ -2138,6 +2148,7 @@ function frame(now) {
   gateMesh.update(vdt);
   f2.update(vdt);
   f3.update(vdt);
+  arenas.frame(vdt);
   if (merchantNpc?.anim) merchantNpc.anim.update(vdt);
   smith.frame(vdt);
   ground.frame(vdt, isTouch);
@@ -2168,8 +2179,9 @@ function frame(now) {
   const cd = camCur * (slowMo > 0 ? 1 - 0.22 * Math.sin(Math.PI * (1 - slowMo / slowMoLen)) : 1); // killing-blow zoom
   shakeAmt = Math.max(0, shakeAmt - dt);
   const sx = (Math.random() - 0.5) * shakeAmt, sy = (Math.random() - 0.5) * shakeAmt;
-  camera.position.set(cx - Math.sin(state.yaw) * Math.cos(cp) * cd + sx, 1.6 + Math.sin(cp) * cd + sy, cz - Math.cos(state.yaw) * Math.cos(cp) * cd);
-  camera.lookAt(cx, 1.6, cz);
+  const ly = arenas.camLift(); // (falling with your character)
+  camera.position.set(cx - Math.sin(state.yaw) * Math.cos(cp) * cd + sx, 1.6 + ly + Math.sin(cp) * cd + sy, cz - Math.cos(state.yaw) * Math.cos(cp) * cd);
+  camera.lookAt(cx, 1.6 + ly, cz);
   const cf = cine.frame(dt, cx, cz); if (cf) [cx, cz] = cf; // film view: the director's shot takes over
   if (!state.joined) { // slow orbit behind the login screen
     state.yaw += dt * 0.08;
