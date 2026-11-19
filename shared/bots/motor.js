@@ -55,10 +55,10 @@ export function stepRoll(b) {
 }
 
 // Floor 2: seconds until the next Tidal Wave reaches us (Infinity if none).
-function waveEta(b) {
+function waveEta(b, now = clock(b)) {
   let best = Infinity;
   for (const w of b.waves) {
-    const r = (b.t - w.start) * w.sp, d = d2(b.x, b.z, w.x, w.z);
+    const r = (now - w.start) * w.sp, d = d2(b.x, b.z, w.x, w.z);
     if (r - w.w > d) continue; // already past us
     best = Math.min(best, (d - r - w.w) / w.sp);
   }
@@ -68,10 +68,11 @@ const waveSoon = (b, secs) => waveEta(b) < secs;
 // Roll INTO the wave just before it arrives: the i-frames carry us through. (Quake Rings first: see quakeDodge.)
 export function waveDodge(b) {
   if (quakeDodge(b)) return true;
-  b.waves = b.waves.filter(w => (b.t - w.start) * w.sp < w.max);
-  const eta = waveEta(b);
+  const now = clock(b);
+  b.waves = b.waves.filter(w => (now - w.start) * w.sp < w.max);
+  const eta = waveEta(b, now);
   if (eta > 0.22 || eta < -0.08 || b.roll || b.dodgeCd > 0) return false;
-  const w = b.waves.find(w => { const r = (b.t - w.start) * w.sp; return r - w.w <= d2(b.x, b.z, w.x, w.z); });
+  const w = b.waves.find(w => { const r = (now - w.start) * w.sp; return r - w.w <= d2(b.x, b.z, w.x, w.z); });
   roll(b, Math.atan2(w.x - b.x, w.z - b.z));
   return true;
 }
@@ -82,6 +83,7 @@ export function waveDodge(b) {
 const clock = b => (b.clock ? b.clock() : performance.now() / 1000);
 registerBotHook('onEvent', (b, e) => {
   if (e.t === 'quake') (b.quakes ||= []).push({ x: e.x, z: e.z, start: clock(b) + e.d, sp: e.sp, w: e.w, max: e.max });
+  if (e.t === 'f2wave') b.waves.push({ x: e.x, z: e.z, start: clock(b) + e.d, sp: e.sp, w: e.w, max: e.max }); // the Sovereign's Tidal Waves (wall clock too)
 });
 // Seconds until the nearest Quake Ring's wavefront reaches us (tIn) and has passed (tOut); null if none will.
 export function quakeEta(b, now = clock(b)) {

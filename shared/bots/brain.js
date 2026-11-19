@@ -175,7 +175,6 @@ function onEvent(b, e) {
       break;
     case 'pcancel': b.sweep = null; break;
     case 'perfect': case 'parry': L?.(`[${e.t}] by ${e.id}`); break;
-    case 'f2wave': b.waves.push({ x: e.x, z: e.z, start: b.t + e.d, sp: e.sp, w: e.w, max: e.max }); break;
     case 'stair': b.stair = { x: e.x, z: e.z, until: b.t + e.d }; break;
     case 'sys': if (!e.to) L?.(`[sys] ${e.text}`); break;
     case 'hit': {
@@ -623,5 +622,6 @@ function goalText(b, P, M, tgt) {
   if (M.beh === 'field') return 'Farming the field';
   if (M.beh === 'follow') return `Looking for ${b.follow || 'a player'}`;
   if (M.beh !== 'warden' && (b.me?.lvl || 1) < (onFloor2(b.x) ? F2_BOSS_LVL : 5)) return 'Levelling up';
+  if (inBossRoom(b.x, b.z) && !b.mobs.some(m => m.def.boss && onFloor2(m.x) === onFloor2(b.x))) return `Waiting for the ${onFloor2(b.x) ? 'Sovereign' : 'Warden'} to rise`; // killed: it respawns here
   return gate ? 'Waiting at the raid gate' : onFloor2(b.x) ? 'Heading to the Sovereign' : 'Heading to the Warden';
 }
