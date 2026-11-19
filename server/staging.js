@@ -92,7 +92,7 @@ const methods = {
         }
         case 'deluge':
           if (!this.deluge) {
-            this.deluge = true; this.delugeT = t + 1;
+            this.callDeluge(m); // its wind-up and flood line, then the flood
             this.events.push({ t: 'f2phase', id: m.id, n: 2 }); // the client's Deluge banner and roar
             this.sys('The Deluge! The outer court floods. Stay near the centre.');
           }

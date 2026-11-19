@@ -92,7 +92,7 @@ export const F2_MOBS = {
   lurker: { name: 'Bog Lurker', hp: 440, atk: 22, speed: 5.0, aggro: 15, range: 2.2, atkCd: 1.5, xp: 100, radius: 1.0, level: 13, f2: true, ai: 'f2Lurker' },
   matron: { name: 'Mire Matron', hp: 2000, atk: 30, speed: 4.2, aggro: 14, range: 3.0, atkCd: 1.9, xp: 480, radius: 1.7, level: 15, f2: true, ai: 'f2Matron', elite: true },
   thrall: { name: 'Drowned Thrall', hp: 320, atk: 24, speed: 5.4, aggro: 30, range: 2.0, atkCd: 1.4, xp: 25, radius: 0.8, level: 16, f2: true, ai: 'f2Brute' },
-  sovereign: { name: 'The Drowned Sovereign', hp: 9000, atk: 40, speed: 3.9, aggro: 20, range: 4.8, atkCd: 2.4, xp: 1800, radius: 2.4, level: 18, f2: true, ai: 'f2Sovereign', boss: true, f2boss: true },
+  sovereign: { name: 'The Drowned Sovereign', hp: 9000, atk: 50, speed: 3.9, aggro: 20, range: 4.8, atkCd: 2.4, xp: 1800, radius: 2.4, level: 18, f2: true, ai: 'f2Sovereign', boss: true, f2boss: true },
 };
 export const F2_BITE = { shieldback: [3.2, 0.75], lurker: [2.8, 0.7], matron: [3.8, 0.9], thrall: [2.8, 0.6], sovereign: [6.0, 1.0] };
 
@@ -111,14 +111,37 @@ export const MATRON = { callEvery: 13, callR: 24, aura: 0.25, auraR: 14 };      
 
 // The Drowned Sovereign: each phase ADDS attacks. 100-66%: trident sweep + geysers. 66-33%: + Tidal Wave (must-dodge),
 // Drowned Thralls, mire pools. Below 33%: + the Deluge (outer ring floods) and homing orb volleys; waves come faster.
-export const SOVEREIGN = { // sweep / geyser / wave wind-ups and repeats are paced by shared/data.js (paceMoves)
-  phases: [0.66, 0.33], hpBase: 4600, hpPer: 2000,
+export const SOVEREIGN = { // sweep / geyser / wave / deluge wind-ups and repeats are paced by shared/data.js (paceMoves)
+  // Scaled like the Warden (server/floor2.js scaleSovereign): party weight = the sum of each fighter's role weight;
+  // health = (hpBase + hpPer * weight^hpExp) * (1 + hpLvl * levels above 18); damage = atk * (1 + atkLvl * levels above 18)
+  // * (1 + atkPer * fighters above 3). A filmed director show keeps the old linear scaling (show).
+  phases: [0.66, 0.33], hpBase: 4500, hpPer: 2450, hpExp: 2.05, hpLvl: 0.12, atkLvl: 0.06, atkPer: 0.2,
+  hpRole: { Tank: 0.6, Healer: 0.5, Support: 0.8, Damage: 1.2 },
+  show: { hpBase: 4600, hpPer: 2000, hpExp: 1, hpRole: null, hpLvl: 0, atkLvl: 0, atkPer: 0, atk: 40 },
   sweep: { wind: 1.1, mult: 1.0 },
   geyser: { every: [7, 6, 5], r: 3.0, wind: 1.65, mult: 1.5, extra: [1, 2, 3] },
   wave: { every: [0, 15, 11], first: 3.5, wind: 2.3, speed: 11, width: 1.4, mult: 2.8 },
   thralls: { every: 24, n: 2, max: 4 },
   pools: { every: 10, n: 2, r: 3.8, arm: 1.2, life: 16, tick: 0.5, mult: 0.3, max: 6 },
-  deluge: { r: 16.5, tick: 0.5, mult: 0.25 },
+  deluge: { r: 16.5, tick: 0.5, mult: 0.25, wind: 2.4 }, // wind: the Sovereign calls it (pose + a flood line filling inward), then the outer court floods
   volley: { every: 9, n: 5 },
 };
+// Sovereign twists: a random fight modifier rolled each time the Drowned Sovereign rises (server/sovtwists.js), shown like
+// the Warden's (gate panel, boss bar, banner). reward: { loot: extra Rare+ rolls per player, gold: extra fraction of its gold }.
+export const SOV_TWISTS = {
+  hightide: { name: 'High Tide', color: '#67e8f9', desc: 'Tidal Waves from the first phase, and they come a third more often.', short: 'Tidal Waves from phase 1, more often', reward: { loot: 1 },
+    wave: { p0: 1.1, mult: 0.75, first: 9 } }, // phase-1 repeat = p0 x phase 2's; later repeats x mult
+  riptide: { name: 'Riptide', color: '#22d3ee', desc: 'Every Tidal Wave is chased by a second one: roll twice.', short: 'Every Tidal Wave comes twice', reward: { loot: 1, gold: 0.5 },
+    gap: 1.25 }, // s between the two walls of water
+  drownedhost: { name: 'Drowned Host', color: '#5eead4', desc: 'Drowned Thralls rise from the first second, three at a time, up to six.', short: 'Thralls from the start, up to 6', reward: { loot: 1 },
+    thralls: { first: 5, every: 18, n: 3, max: 6 } },
+  brackish: { name: 'Brackish', color: '#c084fc', desc: 'Every geyser leaves a mire pool behind. Don\'t fight in the puddles.', short: 'Geysers leave mire pools', reward: { gold: 0.5 },
+    life: 9 }, // s a geyser's pool lasts
+  coralhide: { name: 'Coral Hide', color: '#fda4af', desc: 'Takes 40% less damage unless Broken. Broken windows last longer: Break it, then Switch.', short: '40% less damage unless Broken', reward: { loot: 1 },
+    taken: 0.6, breakBonus: 1.6 },
+  moonless: { name: 'Moonless Mire', color: '#a5b4fc', desc: 'The court goes dark and every telegraph gives 15% less warning.', short: 'Darkness, faster telegraphs', reward: { loot: 2, gold: 1 },
+    wind: 0.85 },
+};
+export const SOV_TWIST_IDS = Object.keys(SOV_TWISTS);
+
 export const PHASE_TEXT2 = ['PHASE 1 · TRIDENT & GEYSERS', 'PHASE 2 · TIDAL WAVE · THRALLS · MIRE POOLS', 'PHASE 3 · THE DELUGE · ORB VOLLEYS'];

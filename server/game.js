@@ -14,6 +14,7 @@ import crypto from 'node:crypto';
 import { SmithMethods } from './smith.js';
 import { GroundMethods } from './ground.js';
 import { TwistMethods } from './twists.js';
+import { SovTwistMethods } from './sovtwists.js';
 import { installCombat } from './combat.js';
 import { MasteryMethods } from './mastery.js';
 import { MASTERY } from '../shared/mastery.js';
@@ -1374,6 +1375,7 @@ export class Game {
 Object.assign(Game.prototype, SmithMethods);
 Object.assign(Game.prototype, GroundMethods); // items on the ground (server/ground.js)
 Object.assign(Game.prototype, TwistMethods); // Warden twists (server/twists.js)
+Object.assign(Game.prototype, SovTwistMethods); // Sovereign twists (server/sovtwists.js)
 installCombat(Game); // posture, perfect dodge, guard/parry, Horn Sweep (server/combat.js)
 Object.assign(Game.prototype, MasteryMethods); // skill mastery + evolutions (server/mastery.js)
 Object.assign(Game.prototype, F2Methods); // Floor 2 (server/floor2.js)

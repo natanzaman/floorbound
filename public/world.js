@@ -538,6 +538,25 @@ export const POSES = {
     'upperarm.l': [-20, 0, -45], 'upperarm.r': [-20, 0, 45], 'lowerarm.l': [-25, 0, 0], 'lowerarm.r': [-25, 0, 0],
     'upperleg.l': [-40, 0, 0], 'upperleg.r': [-35, 0, 0], 'lowerleg.l': [55, 0, 0], 'lowerleg.r': [40, 0, 0] },
   cock: { spine: [-3, 15, 0], chest: [-4, 18, 0], 'upperarm.r': [-95, 0, 15], 'upperarm.l': [-85, 0, -10], 'lowerarm.r': [-20, 0, 0] },
+  // The Drowned Sovereign (mage rig, staff-trident in both hands).
+  tridentDraw: { drop: 0.05, hips: [4, -32, 0], spine: [4, -30, 0], chest: [2, -34, 0], head: [-4, 62, 0], // trident drawn back to its right
+    'upperarm.l': [-60, -30, -15], 'upperarm.r': [-35, -45, 55], 'lowerarm.l': [-35, 0, 0], 'lowerarm.r': [-25, 0, 0],
+    'upperleg.l': [-25, 0, 0], 'upperleg.r': [-15, 0, 0], 'lowerleg.l': [35, 0, 0], 'lowerleg.r': [25, 0, 0] },
+  staffHigh: { hips: [-8, 0, 0], spine: [-10, 0, 0], chest: [-12, 0, 0], head: [-18, 0, 0], // geysers: trident raised high overhead
+    'upperarm.l': [-160, 0, -10], 'upperarm.r': [-160, 0, 10], 'lowerarm.l': [-10, 0, 0], 'lowerarm.r': [-10, 0, 0], 'upperleg.l': [-20, 0, 0], 'lowerleg.l': [15, 0, 0] },
+  staffDown: { drop: 0.07, hips: [10, 0, 0], spine: [16, 0, 0], chest: [12, 0, 0], head: [8, 0, 0], // ... and driven into the ground
+    'upperarm.l': [-60, 0, -10], 'upperarm.r': [-60, 0, 10], 'lowerarm.l': [-35, 0, 0], 'lowerarm.r': [-35, 0, 0],
+    'upperleg.l': [-40, 0, 0], 'upperleg.r': [-30, 0, 0], 'lowerleg.l': [50, 0, 0], 'lowerleg.r': [40, 0, 0] },
+  gather: { drop: 0.1, hips: [18, 0, 0], spine: [12, 0, 0], chest: [8, 0, 0], head: [-10, 0, 0], // Tidal Wave: crouched, arms swept back, gathering the water
+    'upperarm.l': [45, 0, -55], 'upperarm.r': [45, 0, 55], 'lowerarm.l': [-25, 0, 0], 'lowerarm.r': [-25, 0, 0],
+    'upperleg.l': [-50, 0, 0], 'upperleg.r': [-50, 0, 0], 'lowerleg.l': [65, 0, 0], 'lowerleg.r': [65, 0, 0] },
+  surge: { hips: [-6, 0, 0], spine: [-8, 0, 0], chest: [-10, 0, 0], head: [-6, 0, 0], // ... and flung out at the court
+    'upperarm.l': [-95, 0, -40], 'upperarm.r': [-95, 0, 40], 'lowerarm.l': [-5, 0, 0], 'lowerarm.r': [-5, 0, 0], 'upperleg.l': [-35, 0, 0], 'lowerleg.l': [25, 0, 0] },
+  invoke: { hips: [-6, 0, 0], spine: [-12, 0, 0], chest: [-14, 0, 0], head: [-32, 0, 0], // the Deluge: arms raised wide, face to the sky
+    'upperarm.l': [-150, 0, -42], 'upperarm.r': [-150, 0, 42], 'lowerarm.l': [-8, 0, 0], 'lowerarm.r': [-8, 0, 0] },
+  drown: { drop: 0.09, hips: [12, 0, 0], spine: [16, 0, 0], chest: [12, 0, 0], head: [14, 0, 0], // ... and brought down: the court floods
+    'upperarm.l': [-25, 0, -80], 'upperarm.r': [-25, 0, 80], 'lowerarm.l': [-10, 0, 0], 'lowerarm.r': [-10, 0, 0],
+    'upperleg.l': [-45, 0, 0], 'upperleg.r': [-45, 0, 0], 'lowerleg.l': [60, 0, 0], 'lowerleg.r': [60, 0, 0] },
   // Held poses for players and actors (F5, Animator.setPose), tuned over the plain Idle clip.
   kneel: { drop: 0.105, spine: [8, 0, 0], chest: [6, 0, 0], head: [24, 0, 0], // right knee down, left foot planted, head lowered
     'upperleg.l': [-88, 0, 0], 'lowerleg.l': [88, 0, 0], 'upperleg.r': [5, 0, 0], 'lowerleg.r': [85, 0, 0], 'foot.r': [-20, 0, 0],
@@ -568,6 +587,11 @@ export const WINDUPS = pacedWindups({
   spin: { up: 'coil', clip: ['2H_Melee_Attack_Spinning', 1.2, 0.3] },
   quake: { up: 'stompUp', hit: 'stomp', hold: 0.3 },
   cleave: { up: 'cock', clip: ['2H_Melee_Attack_Chop', 1.6, 0.4] },
+  // The Drowned Sovereign's (main.js 'wind' / geyser 'tele', floor2client.js Tidal Wave and Deluge call)
+  trident: { up: 'tridentDraw', clip: ['2H_Melee_Attack_Slice', 1.3, 0.4] },
+  geyser: { up: 'staffHigh', hit: 'staffDown', hold: 0.35 },
+  wave: { up: 'gather', hit: 'surge', hold: 0.55 },
+  deluge: { up: 'invoke', hit: 'drown', hold: 0.8 },
 });
 const ORDER = ['hips', 'spine', 'chest', 'head', 'upperarm.l', 'lowerarm.l', 'upperarm.r', 'lowerarm.r', 'hand.r', 'upperleg.l', 'lowerleg.l', 'foot.l', 'upperleg.r', 'lowerleg.r', 'foot.r'];
 const D2R = Math.PI / 180, _e = new THREE.Euler(), _r = new THREE.Quaternion(), _g = new THREE.Quaternion(), _gi = new THREE.Quaternion(),

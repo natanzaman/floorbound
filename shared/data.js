@@ -227,7 +227,7 @@ export const WARDEN = {
   quake: { every: [15, 12, 9.5], first: [9, 5, 4], wind: 2.0, speed: 9, w: 0.55, max: 15, mult: 2.7, rings: [1, 2, 3], gap: 0.95 },
 };
 paceMoves(WARDEN, ['slam', 'charge', 'cleave', 'spin', 'rock', 'quake']); // slower, readable wind-ups (PACE above)
-paceMoves(SOVEREIGN, ['sweep', 'geyser', 'wave']); // shared/floor2.js can't import this file, so it is paced here
+paceMoves(SOVEREIGN, ['sweep', 'geyser', 'wave', 'deluge']); // shared/floor2.js can't import this file, so it is paced here
 export const THORN = { speed: 16, radius: 0.6, wind: 0.75 };
 // Rare named spawns: at most one alive; first after `first` s, then `every` s after the last one is gone.
 export const RARE = {

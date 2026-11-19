@@ -117,7 +117,7 @@ function onSnap(b, msg) {
   const f2 = msg.w.f2, onF2 = onFloor2(b.x);
   b.gateOpen = onF2 ? !!f2?.gate?.[0] : !!msg.w.gate?.[0];
   b.gateReady = (onF2 ? f2?.gate?.[2] : msg.w.gate?.[2]) || 0;
-  b.orbs = f2?.orbs || []; b.pools = f2?.pools || []; b.deluge = !!f2?.del;
+  b.orbs = f2?.orbs || []; b.pools = f2?.pools || []; b.deluge = !!(f2?.del || f2?.dcall); // (dcall: the Deluge is being called: head in now)
   b.tb = msg.w.tb || null; // Team Burst gauges (server/teamplay.js teamSnap)
   b.players = msg.w.players.map(p => ({ id: p[0], x: p[1], z: p[2], face: p[3], hp: p[4], maxHp: p[5], lvl: p[6], cls: CLASS_IDS[p[7]], party: p[8], dead: !!p[9], style: STYLE_IDS[p[11]] || null }));
   const mine = b.players.find(p => p.id === b.id);
