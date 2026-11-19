@@ -475,7 +475,7 @@ Same rules as F–I: flock lock, push with `--force-with-lease`.
 | J1 Rescue mechanics | `feat/rescue` | in progress | agent rescue | |
 | J2 Multi-area boss fights (Floor 3 first) | `feat/arenas` | in progress | agent arenas | |
 | J3 Boss timing tables + melee openings + tuning harness | `feat/openings` | todo (after J1 and J2) | | |
-| J4 Threat rules | `feat/threatrules` | in progress | agent threatrules | |
+| J4 Threat rules | `feat/threatrules` | done | agent threatrules | 2e52b29 |
 
 ### Shared contracts for J
 - **Every new mechanic** is telegraphed, has a guide tip and a first-few-times prompt, works with bots at all capability levels, respects the director (no surprise mechanics during a show unless a cue asks), and skips downed and dead players.
