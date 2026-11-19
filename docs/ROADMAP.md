@@ -474,7 +474,7 @@ Same rules as F–I: flock lock, push with `--force-with-lease`.
 |---|---|---|---|---|
 | J1 Rescue mechanics | `feat/rescue` | todo | | |
 | J2 Multi-area boss fights (Floor 3 first) | `feat/arenas` | todo | | |
-| J3 Melee openings | `feat/openings` | todo (after J1) | | |
+| J3 Boss timing tables + melee openings + tuning harness | `feat/openings` | todo (after J1) | | |
 | J4 Threat rules | `feat/threatrules` | todo | | |
 
 ### Shared contracts for J
@@ -504,12 +504,28 @@ A generic "trapped player" system plus three trap types. Each boss gets at least
 6. Make it **generic** (an `arenas` list per boss with transitions per phase) so the Warden and the Sovereign can get one later.
 7. **Accept when:** a bot party clears the Colossus through the fall and the new hazards (trio and 6 at skill 5, numbers reported); there's a screenshot tour of the fall and the lower arena; tests cover the transition (everyone moved, nobody stuck in walls, late joiners spawn in the right arena).
 
-### J3. Melee openings (`feat/openings`), after J1
-1. **Recovery windows:** after each boss's big moves (slam, charge, Horn Sweep, Tidal Wave, Overload, etc.) the boss has a clearly shown 2–4 s window. It's planted, slow, or exposes a weak point (a glowing spot on its back or legs) that takes extra melee damage and posture. Show it with a visual and a "OPENING" tag above the boss, visible to everyone (it's a target state).
-2. **Less constant pressure at melee range:** the boss shouldn't chain point-blank attacks back to back. Add a short gap rule between close-range attacks, and make the boss favour telegraphed area moves over instant swings.
-3. **Melee still the riskier, higher-damage role:** the weak-point bonus applies to melee hits only (e.g. +25% damage and posture). Ranged stays steady but lower.
-4. Bots use the openings: melee bots move in when a window opens and step out before it closes.
-5. **Accept when:** bot runs on all three bosses show more melee damage share without more melee deaths; numbers before and after are reported.
+### J3. Boss timing tables and melee openings (`feat/openings`), after J1
+The owner's intent: melee openings are really **the gaps between the boss's close-range and all-around attacks**. After certain abilities, or after a **sequence** of abilities, the boss pauses, walks a bit or is stunned, and melee gets in. Every one of these timings should be **defined in data**, so a boss's difficulty is tuned by changing numbers and re-running bots, not by rewriting AI code.
+
+1. **Boss timing tables** (`shared/bosstiming.js`, or per-boss files in `shared/`), for the Warden, the Sovereign and the Colossus:
+   - **Per ability:** wind-up (telegraph) time, active duration, damage (as a multiple of the boss's attack), radius/shape, **avoidability** (how it's avoided: roll, jump, block, parry, outrange, none, plus the safe-window timing), posture damage, cooldown, and **`after`**: the pause/recovery after the ability, with what the boss does then (`idle`, `walk`, `planted`, `stunned`, `exposed`).
+   - **Per phase, sequences** (combos): ordered lists of abilities with **gaps between steps** and a **pause after the sequence** (the main melee opening), and weights for how often each sequence is chosen. Example: `[slam →0.6s→ slam →1.0s→ hornSweep] then 3.0s exposed`.
+   - **Global difficulty knobs per boss:** `damageMul`, `windupMul`, `gapMul`, `pauseMul`, `cooldownMul`, so a boss is made easier or harder in one place. Add an optional per-party-size override.
+   - Move the existing hard-coded timings (`shared/data.js` Warden constants, the floor 2 and floor 3 boss tuning) into these tables **without changing behaviour at first**. Test that the default tables reproduce today's numbers. Then tune.
+2. **Openings:**
+   - After a sequence (and after selected big abilities) the boss enters its `after` state for the table's time. In `exposed`/`stunned`/`planted` a glowing weak point shows, an **"OPENING"** tag appears over the boss (visible to everyone), and melee hits there get +25% damage and posture (in the table).
+   - **No point-blank chaining:** add a minimum gap between close-range or all-around attacks (in the table), and make the boss favour telegraphed area moves over instant swings.
+   - Melee stays the riskier, higher-damage role. Ranged stays steady but lower.
+3. **Tuning harness** (`scripts/tuneboss.js`):
+   - Runs bot parties (trio and 6, at skills 3/4/5) against a boss with given knob values.
+   - Prints a table: kill rate, time, downs/deaths, damage share by role (melee vs ranged vs healer), how often each ability hit someone, and how much opening time melee actually used.
+   - Can sweep one knob over a range (e.g. `--sweep pauseMul=0.6:1.4:0.2`) so we can pick values.
+   - Optional: an admin page panel to view the current tables and live-override the knobs on a running server, for play-testing with friends. Overrides aren't saved unless exported.
+4. **Bots** read the same tables: melee bots move in when an opening starts and step out before it ends, and they respect each ability's avoidability (roll vs jump vs outrange).
+5. **Accept when:**
+   - the default tables reproduce today's behaviour (tests);
+   - a tuned pass on all three bosses gives a higher melee damage share without more melee deaths, with before/after numbers from the harness;
+   - the README has a "Tuning bosses" section showing how to change a table and run the harness.
 
 ### J4. Threat rules (`feat/threatrules`)
 Threat stays a raw number per player per enemy, but the rules below are stated in **percent of the current top threat** (100 = the top). The meter already shows "You 62% of top" (G3).
