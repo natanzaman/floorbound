@@ -89,7 +89,8 @@ const land = (g, B, k, v) => { assert.equal(g.forceBossMove(B, k, v.id), true, `
   const x0 = v.x, z0 = v.z;
   g.handle(v, { type: 'input', x: v.x + 0.5, z: v.z, face: 1, seq: v.posSeq });
   g.dodge(v, 0); g.jump(v);
-  assert.ok(v.x === x0 && v.z === z0 && !(v.rollUntil > g.time), 'rooted: no walking, rolling or jumping');
+  assert.ok(v.x === x0 && v.z === z0 && !(v.rollUntil > g.time), 'rooted: no walking or rolling');
+  assert.ok(v.airUntil > g.time, 'a jump in place still works (Quake Rings)');
   // damage over time
   const hp0 = v.hp; run(g, 2.1);
   assert.ok(v.hp < hp0, `light damage over time (${((hp0 - v.hp) / v.maxHp * 100).toFixed(1)}% in 2 s)`);
@@ -230,7 +231,8 @@ const land = (g, B, k, v) => { assert.equal(g.forceBossMove(B, k, v.id), true, `
   // encased: can't act, the boss can't hurt them
   const hp0 = v.hp, cd0 = JSON.stringify(v.cds);
   g.damagePlayer(v, 500, { src: 'hammerfall', mob: B });
-  g.useSkill(v, 0, 0); g.guard(v, true);
+  g.useSkill(v, 0, 0); g.guard(v, true); v.airUntil = 0; g.jump(v);
+  assert.ok(!(v.airUntil > g.time), 'encased: no jumping either');
   assert.ok(v.hp === hp0 && JSON.stringify(v.cds) === cd0 && !v.guarding, "encased: can't act or be hurt");
   // break it
   g.damageMob(cr, ps[2], cr.maxHp * 0.5, {}); g.damageMob(cr, ps[0], cr.maxHp, {});

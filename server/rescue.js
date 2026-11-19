@@ -7,7 +7,7 @@
 //    (the Sovereign's Drowning Pillar), 'crystal' (the Colossus's storm crystal). bossTeam starts one in turn with the
 //    G4 moves; forceBossMove takes the same names. A telegraph ('trap' event) runs `wind` s, then the trap lands.
 //  - The trapped player carries p.trap = { k, boss, at, until, prop, x, z, by, prog, blockT, next, a }: rooted (onInput
-//    keeps them in place, no rolls or jumps), and for the crystal also unable to act and safe from all damage but the
+//    keeps them in place, no rolls; jumping in place is fine), and for the crystal also unable to act and safe from all damage but the
 //    detonation. Target picks skip trapped players (game.js / floor2 / floor3 / staging / talents / threat: J4's
 //    targetOf in server/threat.js replaces them).
 //  - The trap object is a `prop` mob (shared/rescue.js RESCUE_MOBS) with its own HP bar: no threat (its threat map
@@ -298,8 +298,8 @@ export function installRescue(Game) {
     if (p?.trap && msg && typeof msg === 'object') msg = { ...msg, x: p.trap.x, z: p.trap.z };
     return orig.call(this, p, msg);
   });
-  // Trapped: no rolls or jumps; encased: no skills, guard or items either. Freeing: any of these breaks the channel.
-  const blocked = { dodge: () => true, jump: () => true, useItem: k => k === 'crystal', warp: () => false };
+  // Trapped: no rolls (a jump in place is fine); encased: no jumps, skills, guard or items either. Freeing: any of these breaks the channel.
+  const blocked = { dodge: () => true, jump: k => k === 'crystal', useItem: k => k === 'crystal', warp: () => false }; // (a jump in place still clears a Quake Ring)
   for (const name of Object.keys(blocked)) {
     wrap(name, function (orig, p, ...a) {
       if (p?.trap && blocked[name](p.trap.k)) return;

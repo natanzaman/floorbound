@@ -1212,7 +1212,7 @@ function lockedMob() {
 
 function jump() {
   const now = performance.now();
-  if (state.dead || revive.isDown() || rescue.rooted() || !state.joined || state.spectator || state.roll || now < state.jumpReady) return;
+  if (state.dead || revive.isDown() || rescue.encased() || !state.joined || state.spectator || state.roll || now < state.jumpReady) return;
   state.jumpReady = now + JUMP.cd * 1000; state.jumpPress = now;
   state.air = { x: state.vel?.[0] || 0, z: state.vel?.[1] || 0 }; // take off with your running speed
   const me = players.get(state.myId);

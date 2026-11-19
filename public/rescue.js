@@ -277,7 +277,7 @@ export function initRescue({ state, players, mobs, send, project, layer, guide, 
 
   return {
     snap, event, frame,
-    rooted: () => !!state.trap, // no walking, rolling or jumping
+    rooted: () => !!state.trap, // no walking or rolling (a jump in place is fine)
     encased: () => state.trap?.k === 'crystal', // no skills or items either
     usesE: () => !!freeTarget(),
     moveCap: want => (state.trap ? 0 : want),
