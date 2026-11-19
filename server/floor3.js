@@ -9,7 +9,8 @@ import {
   inArena3, inCamp3, inGateZone3, onFloor3,
 } from '../shared/floor3.js';
 import { floorUnlocked, floorOf, nearWaystone } from '../shared/floor2.js';
-import { lastAttackItem3, makeItem, rollRarity, SLOTS } from '../shared/items.js';
+import { lastAttackItem3, rollRarity, SLOTS } from '../shared/items.js';
+import { rollGear } from '../shared/loot.js'; // drops and the Stormforged set: data in shared/loot.js (LOOT)
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 export const COLOSSUS_MOVES = ['hammerfall', 'lightning', 'gale_push', 'overload', 'tempest_beam']; // forceBossMove names (director boss_move)
@@ -549,7 +550,7 @@ export const F3Methods = {
       if (!p) continue;
       names.push(p.name); this.giveXp(p, m.def.xp); this.dropLoot(p, m);
       for (let i = 0; i < (rw.loot || 0); i++) { // twist reward: extra Rare+ rolls
-        const it = makeItem(SLOTS[Math.floor(Math.random() * SLOTS.length)], Math.max(2, rollRarity('boss3')), p.cls, Math.random, undefined, 'roll');
+        const it = rollGear(SLOTS[Math.floor(Math.random() * SLOTS.length)], Math.max(2, rollRarity('boss3')), p.cls, Math.random, undefined, 'roll');
         if (this.giveItem(p, it)) this.invChanged(p);
       }
       if (rw.gold) { p.gold += Math.round(470 * rw.gold); p.dirty = true; }

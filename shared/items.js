@@ -113,7 +113,7 @@ const TABLES = {
   rare: [0, 20, 55, 25],
 };
 Object.assign(TABLES, { mire: [40, 40, 17, 3], mireElite: [0, 30, 48, 22], boss2: [0, 0, 45, 55] }); // Floor 2
-Object.assign(TABLES, { spire: [25, 45, 25, 5], spireRare: [0, 10, 50, 40], boss3: [0, 0, 30, 70] }); // Floor 3
+Object.assign(TABLES, { spire: [25, 45, 25, 5], spireRare: [0, 10, 50, 40], boss3: [0, 0, 30, 70] }); // Floor 3 (its drops: LOOT in shared/loot.js)
 export function rollRarity(table, rnd = Math.random) {
   const w = TABLES[table];
   let x = rnd() * w.reduce((a, b) => a + b, 0);
@@ -143,17 +143,6 @@ Object.assign(DROPS, { // Floor 2
   sovereign: { gold: [260, 340], item: 2, potion: 2, table: 'boss2' },
 });
 
-// Floor 3. TODO(H2): move these to shared/loot.js drop tables (mob:ram, mob:harpy, mob:acolyte, mob:sentinel,
-// rare:skyrender, rare:bastion) and add the Colossus's Stormforged set as boss:colossus (docs/floor3.md 7.3).
-Object.assign(DROPS, {
-  ram: { gold: [14, 22], item: 0.15, potion: 0.15, table: 'spire' },
-  harpy: { gold: [12, 20], item: 0.14, potion: 0.15, table: 'spire' },
-  acolyte: { gold: [13, 21], item: 0.15, potion: 0.15, table: 'spire' },
-  sentinel: { gold: [20, 30], item: 0.22, potion: 0.2, table: 'spire' },
-  skyrender: { gold: [90, 140], item: 1, potion: 1, table: 'spireRare' },
-  bastion: { gold: [110, 160], item: 2, potion: 1, table: 'spireRare' },
-  colossus: { gold: [420, 520], item: 2, potion: 2, table: 'boss3' },
-});
 
 export const RANDOM_SLOT = rnd => SLOTS[Math.floor(rnd() * SLOTS.length)];
 
