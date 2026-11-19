@@ -30,7 +30,7 @@ import { say } from './social.js';
 import { scriptTurn } from './script.js'; // the scene director's script layer (b.script; nothing without it)
 import { readDowned, downedTurn, reviveTurn } from './revive.js'; // downed + revive (G1)
 import { mechSpot } from './bossteam.js'; // boss team mechanics: stack, spread, tether (G4)
-import { readRescue, rescueTurn, rescueTarget } from './rescue.js'; // rescue traps: free trapped allies (J1)
+import { readRescue, rescueTurn, rescueTarget, propApproach } from './rescue.js'; // rescue traps: free trapped allies (J1)
 import './classes.js'; // built-in class plug-ins (Guardian, Swordsman, Cleric, generic)
 import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
 import { comboTurn, burstTurn } from './teamplay.js'; // combo payoffs + Team Burst (G2)
@@ -471,6 +471,15 @@ function act(b, P, M) {
   if (b.backOff > b.t && !dodge) { // low: step out of the fight for a moment
     const a = Math.atan2(b.x - tgt.x, b.z - tgt.z);
     moveToward(b, b.x + Math.sin(a) * 3, b.z + Math.cos(a) * 3, 0.2, SPRINT_SPEED);
+    return;
+  }
+  if (!dodge && tgt.def.prop) { // a trap object (J1): sprint over, then hit it from there (the class brain doesn't walk us off)
+    if (propApproach(b, tgt, ctx.basic.kind === 'ranged')) return;
+    const x = b.x, z = b.z, face = Math.atan2(tgt.x - b.x, tgt.z - b.z);
+    if (!brain.combat || brain.combat(b, tgt, ctx) === false) brainFor('*').combat(b, tgt, ctx);
+    b.x = x; b.z = z; b.face = face;
+    useSkill(b, 0, face); // (no-op while on cooldown)
+    b.goal = `Breaking the ${tgt.def.name}`;
     return;
   }
   if (!dodge && overloadTurn(b, tgt)) return; // Floor 3: the Colossus is Overloading: Break it

@@ -24,7 +24,7 @@ import { WORLD, walkable } from '../shared/data.js';
 import { F2 } from '../shared/floor2.js';
 import { F3 } from '../shared/floor3.js';
 import { DOWNED } from '../shared/revive.js';
-import { RESCUE, TRAP_MOVES, PROP_OF } from '../shared/rescue.js';
+import { RESCUE, TRAP_MOVES, PROP_OF, HELP_EXP } from '../shared/rescue.js';
 
 const r1 = v => Math.round(v * 10) / 10;
 const r2 = v => Math.round(v * 100) / 100;
@@ -84,11 +84,13 @@ const methods = {
     let [sx, sz] = [p.x, p.z];
     if (k === 'pillar') [sx, sz] = this.pillarSpot(m, p);
     const prop = this.addMob(PROP_OF[k], sx, sz);
-    const hp = Math.max(30, Math.round(T.hits * allies.reduce((s, o) => s + (o.atk || 10), 0) / allies.length));
+    const tgt = this.bossTargetId(m), helpers = Math.max(1, allies.filter(o => o.id !== tgt).length);
+    const hp = Math.max(30, Math.round(T.hits * Math.pow(helpers, HELP_EXP) * allies.reduce((s, o) => s + (o.atk || 10), 0) / allies.length));
     Object.assign(prop, { x: sx, z: sz, sx, sz, hp, maxHp: hp, threat: new NoThreat(), contributors: new NoCredit(), trapOf: p.id, face: 0 });
     const secs = k === 'crystal' ? T.fuse : T.max;
     p.trap = { k, boss: m.id, key, at: t, until: t + secs, prop: prop.id, x: p.x, z: p.z, by: 0, prog: 0, blockT: 0, blocked: false, next: t + (T.tick || 0), a };
     this.teleport(p, p.x, p.z); // stale inputs from before the root are dropped
+    this.btChannel(m, RESCUE.channel); // the boss's big telegraphed attacks wait a moment: time to react
     this.events.push({ t: 'trapon', k, id: p.id, prop: prop.id, x: r2(p.x), z: r2(p.z), sx: r2(sx), sz: r2(sz), d: secs, boss: m.id });
     const name = p.name;
     this.sys(k === 'vines' ? `${name} is caught in Thornbind! Cut the vines or hold E next to them.`

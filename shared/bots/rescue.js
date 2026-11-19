@@ -96,6 +96,17 @@ export function rescueTurn(b, P) {
   return true;
 }
 
+// Get to a trap object fast (sprint), close enough that nothing (the boss) stands in a ranged attack's line; true =
+// turn taken. Once there, the brain fights it from that spot (breakFrom).
+export function propApproach(b, tgt, ranged) {
+  const d = d2(b.x, b.z, tgt.x, tgt.z), want = tgt.def.radius + (ranged ? 2.4 : 1.2);
+  if (d <= want + 0.8) return false;
+  b.goal = `Breaking the ${tgt.def.name}`;
+  moveToward(b, tgt.x, tgt.z, want, d > 5 ? SPRINT_SPEED : undefined);
+  b.face = Math.atan2(tgt.x - b.x, tgt.z - b.z);
+  return true;
+}
+
 // The trap object to hit this turn instead of the usual target (the pillar's orb, the storm crystal), or null. (Vines:
 // one bot holds E, rescueTurn.)
 export function rescueTarget(b, P) {

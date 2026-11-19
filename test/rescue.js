@@ -185,7 +185,7 @@ const land = (g, B, k, v) => { assert.equal(g.forceBossMove(B, k, v.id), true, `
   assert.ok(on.sx === Math.round(orb.x * 100) / 100, 'trapon carries the source');
   const hp0 = v.hp; run(g, 1.1); assert.ok(v.hp < hp0, 'ticks damage');
   // break the orb
-  g.damageMob(orb, ps[1], orb.maxHp + 5, {});
+  g.damageMob(orb, ps[1], orb.maxHp * 2, {});
   assert.equal(v.trap, null); assert.equal(ev(g, 'trapend')[0].why, 'freed');
   assert.ok(stats.some(s => s[0] === ps[1].id && s[1] === 'rescue'));
   ok('pillar: pins the victim, ticks damage, fed by an orb elsewhere in the room; breaking the orb frees them');
@@ -215,7 +215,7 @@ const land = (g, B, k, v) => { assert.equal(g.forceBossMove(B, k, v.id), true, `
   g.events = []; B.btGapUntil = 0; v.hp = v.maxHp;
   land(g, B, 'pillar', v); run(g, RESCUE.pillar.max + 0.2);
   assert.equal(ev(g, 'trapend')[0].why, 'timeout'); assert.ok(!v.dead && !v.downed && lost(v) > 0.4, `drains away after ${RESCUE.pillar.max} s, having hurt (${(lost(v) * 100).toFixed(0)}%)`);
-  g.events = []; B.btGapUntil = 0; v.hp = Math.round(v.maxHp * 0.05);
+  g.events = []; B.btGapUntil = 0; v.hp = 2;
   land(g, B, 'pillar', v); run(g, 1.2);
   assert.ok(v.downed, 'low health: the pillar downs them'); assert.equal(ev(g, 'trapend')[0].why, 'down');
   ok('pillar: timeout (drains away) and fail (the victim goes down)');
