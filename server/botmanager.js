@@ -14,6 +14,7 @@ import WebSocket from 'ws';
 import { startTeam } from '../shared/teambots.js';
 import { CLASSES, MAX_LEVEL, PARTY_MAX, areaName, walkable, resolveCollision, inArena } from '../shared/data.js';
 import { floorOf, inArena2 } from '../shared/floor2.js';
+import { inArena3 } from '../shared/floor3.js';
 import { clampSkill, skillName } from '../shared/botskill.js'; // capability levels 1-5
 import { BotEditMethods } from './botedit.js'; // live edits + actions (admin page)
 
@@ -22,6 +23,7 @@ export const BEHAVIOURS = {
   field: 'Farm the field near town',
   warden: 'Go fight the Warden',
   floor2: 'Floor 2 (the Mire, then the Sovereign)',
+  floor3: 'Floor 3 (the Spires, then the Colossus)',
   auto: 'Level up, then the Warden (boars, wolves, then the boss)',
 };
 const NAMES = ['Rook', 'Wren', 'Tamsin', 'Orin', 'Sable', 'Dax', 'Mira', 'Corin', 'Ash', 'Nell', 'Vex', 'Juno', 'Pell', 'Iris', 'Bram', 'Cass', 'Edda', 'Fenn', 'Hale', 'Lark'];
@@ -55,6 +57,7 @@ export class BotManager {
     p.lvl = lvl; p.xp = 0; p.lvlStart = lvl;
     p.stats.maxLvl = Math.max(p.stats.maxLvl, lvl);
     if (msg.f2) p.stats.floor2 = 1; // lets Floor 2 / follow bots use the waystones
+    if (msg.f3) p.stats.floor3 = 1; // Floor 3 too
     g.recompute(p); p.hp = p.maxHp;
     g.rosterDirty = true;
     return p;
@@ -99,7 +102,7 @@ export class BotManager {
     const url = typeof this.url === 'function' ? this.url() : this.url;
     const group = startTeam({
       url, WebSocket, roles, names, behaviour, follow, skill,
-      join: { bot: this.key, lvl, f2: behaviour === 'floor2' || behaviour === 'follow' ? 1 : 0 },
+      join: { bot: this.key, lvl, f2: behaviour === 'floor2' || behaviour === 'floor3' || behaviour === 'follow' ? 1 : 0, f3: behaviour === 'floor3' || behaviour === 'follow' ? 1 : 0 },
     });
     const out = group.team.map(b => ({ bid: bid || this.nextBid++, b, group, behaviour, follow, team, lvl, at: Date.now() }));
     this.bots.push(...out);
@@ -153,7 +156,7 @@ export class BotManager {
       // the human this bot's brain is sticking with (its party, or a follow / come order)
       const a = e.b.anchor && !e.b.anchor.bot ? this.game.players.get(e.b.anchor.id) : null;
       if (a && !a.bot) t = a;
-      const busy = e.b.tgtId && (inArena(p.x, p.z) || inArena2(p.x, p.z)); // don't pull it out of a boss fight
+      const busy = e.b.tgtId && (inArena(p.x, p.z) || inArena2(p.x, p.z) || inArena3(p.x, p.z)); // don't pull it out of a boss fight
       if (t && !t.dead && !busy && Date.now() - (e.caughtUp || 0) > 8000 && (floorOf(p.x) !== floorOf(t.x) || Math.hypot(p.x - t.x, p.z - t.z) > 45)) { e.caughtUp = Date.now(); this.catchUp(p, t); }
     }
   }

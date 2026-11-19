@@ -1,7 +1,8 @@
 // Bot "body": moving, rolling out of telegraphs, the Horn Sweep, Tidal Waves, Quake Rings, pressing skills. Shared by every bot brain.
 // Capability levels (shared/botskill.js) hook in here: skill cadence, positioning noise, Horn Sweep / Quake Ring timing error.
 import { CLASSES, PLAYER_SPEED, DODGE, JUMP, SWEEP, walkable, resolveCollision } from '../data.js';
-import { F2, SOVEREIGN, inArena2, onFloor2 } from '../floor2.js';
+import { F2, SOVEREIGN, inArena2, onFloor2, floorOf } from '../floor2.js';
+import { FLOOR_X } from '../floor3.js';
 import { skillReady, pressed, aimNoise, sweepError, quakeError } from '../botskill.js';
 import { brainFor, registerBotHook } from './registry.js';
 
@@ -211,7 +212,7 @@ export const switchOpen = (b, m) => !!(m?.staggered && b.stag[m.id] && b.stag[m.
 
 // Up the road to the boss chamber, waiting at the raid gate while it's shut.
 export function travelToBoss(b) {
-  const ox = onFloor2(b.x) ? F2.x : 0;
+  const ox = FLOOR_X[floorOf(b.x)] ?? 0;
   if (!b.gateOpen && b.z > 120) { moveToward(b, ox, 154); return; }
   if (b.z < 150 && Math.abs(b.x - ox) > 3) moveToward(b, ox, Math.min(150, b.z + 6));
   else if (b.z < 162) moveToward(b, ox, 172);

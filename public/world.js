@@ -7,6 +7,7 @@ import { MERCHANT } from '/shared/items.js';
 import { HALL } from '/shared/titles.js';
 import { MOBS } from '/shared/data.js';
 import { makeF2Mob, decorateSovereign } from '/floor2world.js';
+import { makeF3Mob, decorateColossus, F3_POSES, F3_WINDUPS } from '/floor3world.js';
 import { attachClassA } from '/classes-a.js';
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
@@ -569,6 +570,7 @@ export const WINDUPS = pacedWindups({
   quake: { up: 'stompUp', hit: 'stomp', hold: 0.3 },
   cleave: { up: 'cock', clip: ['2H_Melee_Attack_Chop', 1.6, 0.4] },
 });
+Object.assign(POSES, F3_POSES); Object.assign(WINDUPS, F3_WINDUPS); // the Storm Colossus (floor3world.js)
 const ORDER = ['hips', 'spine', 'chest', 'head', 'upperarm.l', 'lowerarm.l', 'upperarm.r', 'lowerarm.r', 'hand.r', 'upperleg.l', 'lowerleg.l', 'foot.l', 'upperleg.r', 'lowerleg.r', 'foot.r'];
 const D2R = Math.PI / 180, _e = new THREE.Euler(), _r = new THREE.Quaternion(), _g = new THREE.Quaternion(), _gi = new THREE.Quaternion(),
   _p = new THREE.Quaternion(), _x = new THREE.Quaternion(), _v = new THREE.Vector3(), _s = new THREE.Vector3();
@@ -628,6 +630,7 @@ export function makePlayerModel(cls) {
 
 export function makeMobModel(type) {
   if (MOBS[type]?.f2) return type === 'sovereign' && ASSETS ? makeSovereignRig() : makeF2Mob(type); // Floor 2 (floor2world.js)
+  if (MOBS[type]?.f3) return type === 'colossus' && ASSETS ? makeColossusRig() : makeF3Mob(type); // Floor 3 (floor3world.js)
   if (type !== 'warden' || !ASSETS) return makeBlockMob(type);
   const { g, root, mats, height } = buildRig('warden');
   const cursor = cursorFor(0xef4444, height, 0.3);
@@ -643,6 +646,16 @@ function makeSovereignRig() {
   const cursor = cursorFor(0xef4444, height, 0.3);
   g.add(cursor);
   return { group: g, root, mats, cursor, height, anim: new Animator(root, 'Idle'), legs: [] };
+}
+
+// Floor 3's boss: the knight rig, huge and stone-grey, with its greatsword, lightning veins and a storm crown.
+function makeColossusRig() {
+  RIGS.colossus ||= { file: 'knight', hide: ['1H_Sword_Offhand', 'Badge_Shield', 'Rectangle_Shield', 'Round_Shield', 'Spike_Shield', '1H_Sword'], height: 7.2, tint: 0x8f9bb0 };
+  const { g, root, mats, height } = buildRig('colossus');
+  const veins = decorateColossus(root, height);
+  const cursor = cursorFor(0xef4444, height, 0.3);
+  g.add(cursor);
+  return { group: g, root, mats: [...mats, ...veins], cursor, height, anim: new Animator(root, '2H_Melee_Idle'), legs: [] };
 }
 
 // ---------- trees between the camera and the player turn see-through ----------

@@ -266,6 +266,7 @@ export class Director {
     const g = this.game;
     if (name === 'warden') return g.boss || null;
     if (name === 'sovereign') return g.sovereign || [...g.mobs.values()].find(m => m.type === BOSSES.sovereign) || null;
+    if (name === 'colossus') return g.colossus || null; // Floor 3 (server/floor3.js)
     return this.spawns.get(name) || g.stagedMob?.(name) || null;
   }
   // F4 target shape: { pid } | { mid } | { x, z }
@@ -425,7 +426,7 @@ export class Director {
       elapsed: this.running || this.state === 'done' ? r2(g.time - this.t0) : 0,
       running: tl ? tl.running().map(i => { const c = S.sc.cues[i]; return { n: i + 1, do: c.do, who: c.who ?? null, id: c.id ?? null, secs: r2(g.time - tl.startedAt[i]), text: c.text || c.until || c.to || c.target || c.shot || '' }; }) : [],
       actors: [...this.actors.values()].map(a => ({ id: a.id, name: a.name, cls: a.def.class, pid: a.p?.id || 0, lvl: a.p?.lvl || 0, hp: a.p?.hp ?? 0, maxHp: a.p?.maxHp ?? 0, dead: !!a.p?.dead, absent: !!a.absent, doing: a.mode?.k || '' })),
-      bosses: ['warden', 'sovereign', ...this.spawns.keys()].map(k => [k, this.mob(k)]).filter(([, m]) => m && S && floorOf(m.x) === (PLACES[S.sc.place]?.floor || 1))
+      bosses: ['warden', 'sovereign', 'colossus', ...this.spawns.keys()].map(k => [k, this.mob(k)]).filter(([, m]) => m && S && floorOf(m.x) === (PLACES[S.sc.place]?.floor || 1))
         .map(([k, m]) => ({ id: k, name: m.def.name, hp: m.hp, maxHp: m.maxHp, dead: !!m.dead, phase: m.phase || 0, posture: Math.round(g.posturePct?.(m) ?? 0), broken: g.time < (m.staggerUntil || 0), engaged: !!m.threat?.size })),
       checks: this.checks || null,
       log: this.lines.slice(-60),

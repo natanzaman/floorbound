@@ -184,6 +184,8 @@ const PRESETS = [
     ok: () => !!myChar, run: () => api('/api/admin/bots/team', { method: 'POST', body: { lvl: myChar.lvl, behaviour: 'follow', follow: myChar.name, skill: 4 } }) },
   { id: 'warden', icon: '<path d="M4 20 12 4l8 16M8 13h8"/>', name: 'Warden test team', desc: () => 'Tank, DPS, healer · Lv 10 · straight to the Warden · Skilled', ok: () => true,
     run: () => api('/api/admin/bots/team', { method: 'POST', body: { lvl: 10, behaviour: 'warden', skill: 4 } }) },
+  { id: 'colossus', icon: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>', name: 'Floor 3 team', desc: () => 'Tank, DPS, healer · Lv 30 · up to Floor 3 and the Storm Colossus · Skilled', ok: () => true,
+    run: () => api('/api/admin/bots/team', { method: 'POST', body: { lvl: 30, behaviour: 'floor3', skill: 4 } }) },
   { id: 'field', icon: '<path d="M4 20c4-8 12-8 16 0M12 4v8M8 8l4 4 4-4"/>', name: 'Field farmers', desc: () => `One of each class (${Math.min(3, CLASS_IDS.length)}) · Lv 3 · farm the field · Average`, ok: () => true,
     run: async () => { const out = []; for (const cls of [...CLASS_IDS].sort(() => Math.random() - 0.5).slice(0, 3)) out.push((await api('/api/admin/bots', { method: 'POST', body: { cls, lvl: 3, behaviour: 'field', skill: 3 } })).added); return { added: out }; } },
   { id: 'novice', icon: '<circle cx="12" cy="12" r="8"/><path d="M9 10h.01M15 10h.01M9 16c2-1.5 4-1.5 6 0"/>', name: 'Novice crowd', desc: () => '4 random new players · Lv 1 · field · Novice / Casual', ok: () => true,
@@ -297,7 +299,7 @@ function buildCard(b) {
     const v = q('tp').value; q('tp').value = '';
     if (!v) return;
     const [to, name] = v.split(':');
-    post('teleport', { to, name }, `${nm.dataset.v} teleported to ${to === 'player' ? name : to === 'gate' ? 'the Warden gate' : 'town'}.`);
+    post('teleport', { to, name }, `${nm.dataset.v} teleported to ${to === 'player' ? name : ({ gate: 'the Warden gate', camp2: 'Mirelight Camp', gate2: 'the Sunken Gate', camp3: 'Windbreak Camp', gate3: 'the Storm Gate' })[to] || 'town'}.`);
   };
   q('order').onchange = () => {
     const v = q('order').value; q('order').value = '';
@@ -362,7 +364,7 @@ function updateCard(el, b, force = false) {
   const tp = q('tp'), others = [...(botData?.players || []).map(p => p.name), ...(botData?.bots || []).filter(o => o.bid !== b.bid && o.status === 'online').map(o => o.name)];
   const tkey = others.join(',');
   if (!focused(tp) && tp.dataset.v !== tkey) {
-    tp.innerHTML = `<option value="">⇢ Teleport…</option><option value="town">Town</option><option value="gate">Warden gate</option>${others.length ? `<optgroup label="To a player">${others.map(n => `<option value="player:${esc(n)}">${esc(n)}</option>`).join('')}</optgroup>` : ''}`;
+    tp.innerHTML = `<option value="">⇢ Teleport…</option><option value="town">Town</option><option value="gate">Warden gate</option><option value="camp2">Mirelight Camp (F2)</option><option value="gate2">Sunken Gate (F2)</option><option value="camp3">Windbreak Camp (F3)</option><option value="gate3">Storm Gate (F3)</option>${others.length ? `<optgroup label="To a player">${others.map(n => `<option value="player:${esc(n)}">${esc(n)}</option>`).join('')}</optgroup>` : ''}`;
     tp.dataset.v = tkey;
   }
   tp.disabled = !!b.dead;
@@ -466,7 +468,7 @@ function renderEditor() {
       ${c.online ? `<span class="pill on">online · F${c.floor} · ${esc(c.area)}</span>` : '<span class="pill">offline</span>'}
       <span>account: ${esc(c.account.label)} (#${c.account.id})${c.account.admin ? ' <span class="pill adm">ADMIN</span>' : ''}</span>
       <span class="faint">created ${date(c.created_at)} · last seen ${c.online ? 'now' : ago(c.updated_at)}</span></div></div>
-    <span class="grow"></span><button id="e-max" class="primary" title="Max level, Floor 2, Mastery 5 + evolutions, all talents, a full boss set with top affixes, 20 of each consumable">⚡ Maxed preset</button><button id="e-reload" class="ghost">↻ Reload</button><button id="e-back">← Players</button></div>
+    <span class="grow"></span><button id="e-max" class="primary" title="Max level, Floors 2 and 3, Mastery 5 + evolutions, all talents, a full boss set with top affixes, 20 of each consumable">⚡ Maxed preset</button><button id="e-reload" class="ghost">↻ Reload</button><button id="e-back">← Players</button></div>
   <div class="secnav"><a href="#" data-go="e-sec-char">Character</a><a href="#" data-go="e-sec-cons">Consumables &amp; materials</a><a href="#" data-go="e-sec-titles">Titles &amp; stats</a><a href="#" data-go="e-sec-mastery">Skill mastery</a><a href="#" data-go="e-sec-items">Items</a><a href="#" data-go="e-sec-raw">Raw JSON</a><a href="#" data-go="e-sec-danger" style="color:#fca5a5">Delete</a></div>
   <div class="grid">
     <section class="card esec" id="e-sec-char"><h2>Character</h2>
@@ -477,7 +479,9 @@ function renderEditor() {
       <label class="f"><span>XP <span id="e-xpmax">(of ${xpNext})</span></span>${num('e-xp', c.xp)}</label>
       <label class="f">Gold${num('e-gold', c.gold)}</label>
       <div><label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="e-f2" ${st.floor2 ? 'checked' : ''} /> Floor 2 unlocked</label>
-      ${!st.floor2 && st.wardenKills > 0 ? '<span class="dim" style="font-size:12px"> (also unlocked by its Warden kills)</span>' : ''}</div>
+      ${!st.floor2 && st.wardenKills > 0 ? '<span class="dim" style="font-size:12px"> (also unlocked by its Warden kills)</span>' : ''}
+      <label style="display:inline-flex;gap:6px;align-items:center;margin-left:14px"><input type="checkbox" id="e-f3" ${st.floor3 ? 'checked' : ''} /> Floor 3 unlocked</label>
+      ${!st.floor3 && st.sovereignKills > 0 ? '<span class="dim" style="font-size:12px"> (also unlocked by its Sovereign kills)</span>' : ''}</div>
     </section>
     <section class="card esec" id="e-sec-cons"><h2>Consumables &amp; materials</h2>
       <div>${CONSUMABLE_IDS.map(k => `<label class="f">${esc(CONSUMABLES[k].name)}${num(`e-cons-${k}`, inv.cons?.[k] || 0, 0, 999)}</label>`).join('')}</div>
@@ -487,7 +491,7 @@ function renderEditor() {
       <div class="titles">${TITLES.map(t => `<label style="color:${t.color}"><input type="checkbox" data-title="${t.id}" ${st.titles.includes(t.id) ? 'checked' : ''} />${esc(t.name)}</label>`).join('')}</div>
       <label class="f" style="margin-top:6px">Active title<select id="e-active"><option value="">(none: Newcomer)</option>${TITLES.map(t => `<option value="${t.id}" ${st.activeTitle === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
       <h2 style="margin-top:8px">Lifetime stats</h2>
-      <div>${STAT_KEYS.filter(k => k !== 'floor2').map(k => `<label class="f">${k}${num(`e-st-${k}`, st[k] || 0)}</label>`).join('')}</div>
+      <div>${STAT_KEYS.filter(k => k !== 'floor2' && k !== 'floor3').map(k => `<label class="f">${k}${num(`e-st-${k}`, st[k] || 0)}</label>`).join('')}</div>
     </section>
   </div>
   <section class="card esec" id="e-sec-mastery"><h2>Skill mastery &amp; evolutions</h2>
@@ -527,7 +531,7 @@ function renderEditor() {
         <button id="s-add" style="margin-bottom:10px">Add to bag</button>
       </div>
       <div class="dim" style="font-size:12px" id="s-bonus"></div>
-      <div class="row"><button id="a-la1" style="color:${RARITY[4].color}">+ Horn of the Warden</button><button id="a-la2" style="color:${RARITY[4].color}">+ Sovereign's Tidecloak</button></div>
+      <div class="row"><button id="a-la1" style="color:${RARITY[4].color}">+ Horn of the Warden</button><button id="a-la2" style="color:${RARITY[4].color}">+ Sovereign's Tidecloak</button><button id="a-la3" style="color:${RARITY[4].color}">+ Stormheart</button></div>
     </section>
   </div>
   <section class="card esec" id="e-sec-raw"><h2>Advanced: raw JSON</h2>
@@ -539,7 +543,7 @@ function renderEditor() {
     <div class="row"><label class="f"><span>Type <b style="color:#fff">${esc(c.name)}</b> to confirm</span><input id="d-name" autocomplete="off" /></label><button class="danger" id="d-go" style="margin-bottom:10px">Delete forever</button></div>
   </section>
   <div class="body-pad"></div>
-  <div class="savebar"><button class="primary" id="e-save">Save changes</button><span class="dim" style="font-size:12px">Level, XP, gold, consumables, materials, titles, stats, mastery and the Floor 2 flag · <b style="color:var(--text)">${esc(c.name)}</b>${c.online ? ' (online: applied live)' : ''}</span></div>`;
+  <div class="savebar"><button class="primary" id="e-save">Save changes</button><span class="dim" style="font-size:12px">Level, XP, gold, consumables, materials, titles, stats, mastery and the Floor 2 / 3 flags · <b style="color:var(--text)">${esc(c.name)}</b>${c.online ? ' (online: applied live)' : ''}</span></div>`;
   $('r-inv').value = JSON.stringify(inv, null, 2);
   $('r-stats').value = JSON.stringify(st, null, 2);
   $('r-mastery').value = JSON.stringify(c.mastery, null, 2);
@@ -553,7 +557,7 @@ function wireEditor() {
   $('e-back').onclick = () => show('players');
   $('e-reload').onclick = () => openEditor(c.id);
   $('e-max').onclick = () => {
-    if (!confirm(`Max out ${c.name}?\n\nLevel ${MAX_LEVEL}, Floor 2 unlocked, every skill Mastery 5 with an evolution, all talent points spent (recommended path; current talents are replaced), an Epic weapon with top rolls (same style), a full ${SETS[bestSetFor(c.cls)].name} set with top rolls and 3 top affixes per piece (the weapon keeps its style), the two Last Attack items in the bag if missing, and 20 of each consumable. Worn gear goes to the bag if there's room.`)) return;
+    if (!confirm(`Max out ${c.name}?\n\nLevel ${MAX_LEVEL}, Floors 2 and 3 unlocked, every skill Mastery 5 with an evolution, all talent points spent (recommended path; current talents are replaced), an Epic weapon with top rolls (same style), a full ${SETS[bestSetFor(c.cls)].name} set with top rolls and 3 top affixes per piece (the weapon keeps its style), the three Last Attack items in the bag if missing, and 20 of each consumable. Worn gear goes to the bag if there's room.`)) return;
     patch({ preset: 'maxed' }, `${c.name} is maxed.`);
   };
   $('e-lvl').oninput = () => { const l = +$('e-lvl').value; $('e-xpmax').textContent = `(of ${l >= MAX_LEVEL ? 0 : xpToNext(l) || '?'})`; };
@@ -566,8 +570,8 @@ function wireEditor() {
       lvl: +$('e-lvl').value, xp: +$('e-xp').value, gold: +$('e-gold').value,
       cons: Object.fromEntries(CONSUMABLE_IDS.map(k => [k, +$(`e-cons-${k}`).value])),
       mats: Object.fromEntries(MAT_IDS.map(k => [k, +$(`e-mat-${k}`).value])),
-      stats: Object.fromEntries(STAT_KEYS.filter(k => k !== 'floor2').map(k => [k, +$(`e-st-${k}`).value])),
-      floor2: $('e-f2').checked, titles, activeTitle: titles.includes(active) ? active : null,
+      stats: Object.fromEntries(STAT_KEYS.filter(k => k !== 'floor2' && k !== 'floor3').map(k => [k, +$(`e-st-${k}`).value])),
+      floor2: $('e-f2').checked, floor3: $('e-f3').checked, titles, activeTitle: titles.includes(active) ? active : null,
       mastery: Object.fromEntries(Object.entries(c.mastery).map(([sk, e]) => {
         const lvl = +document.querySelector(`[data-mlvl="${sk}"]`).value, pts = +document.querySelector(`[data-mpts="${sk}"]`).value;
         const out = pts !== e.pts ? { pts } : { lvl }; // typed points win; otherwise the level picker
@@ -622,6 +626,7 @@ function wireEditor() {
   }
   $('a-la1').onclick = () => patch({ ops: [{ op: 'addLastAttack', which: 1 }] }, 'Item added.');
   $('a-la2').onclick = () => patch({ ops: [{ op: 'addLastAttack', which: 2 }] }, 'Item added.');
+  $('a-la3').onclick = () => patch({ ops: [{ op: 'addLastAttack', which: 3 }] }, 'Item added.');
   $('r-apply').onclick = () => {
     let rawInv, rawStats, rawMastery;
     try { rawInv = JSON.parse($('r-inv').value); } catch (e) { $('r-err').textContent = `inv: ${e.message}`; return; }

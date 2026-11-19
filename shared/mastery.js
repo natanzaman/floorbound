@@ -34,6 +34,7 @@ export const MASTERY = {
 export const SHRINES = [
   { floor: 1, x: -9, z: -6, name: 'Skill Shrine' },
   { floor: 2, x: 591, z: 2, name: 'Skill Shrine' },
+  { floor: 3, x: 1191, z: 2, name: 'Skill Shrine' }, // Windbreak Camp
 ];
 export const nearShrine = (x, z, pad = 0) => SHRINES.find(s => Math.hypot(x - s.x, z - s.z) < MASTERY.shrineUse + pad) || null;
 

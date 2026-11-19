@@ -184,11 +184,20 @@ export const SETS = {
       3: [{ stat: 'combo', v: 15 }, { stat: 'revive', v: 25 }, { key: 'undertow', desc: 'Undertow: your Switch hits heal you and allies within 12 m for 4% of their max health.' }],
     },
   },
+  stormforged: { // Floor 3 (docs/floor3.md 7.3): built around Break and Switch, the Colossus's Overload answer
+    name: 'Stormforged', from: 'the Storm Colossus', color: '#7dd3fc', floor: 3, roles: ['Tank', 'Damage'], mul: 1.15,
+    pieces: { weapon: {}, armor: { name: 'Stormforged Plate' }, charm: { name: 'Stormforged Sigil', charm: 'sw' } },
+    bonus: {
+      2: [{ stat: 'posture', v: 10 }, { stat: 'atk', v: 4 }],
+      3: [{ stat: 'sw', v: 10 }, { key: 'stormcall', desc: 'Stormcall: your Switch hits on a Broken boss deal +20% damage and take 2 s off your Break skill.' }],
+    },
+  },
 };
 // Tuning for the custom set rules (server/loot.js setKeyHooks).
 export const SET_KEYS = {
   rampart: { r: 12, dmg: 0.1, d: 6 },
   undertow: { r: 12, heal: 0.04, cd: 2 },
+  stormcall: { dmg: 0.2, refund: 2 },
 };
 export const setSlots = id => SLOTS.filter(s => SETS[id]?.pieces[s]);
 export const setSize = id => setSlots(id).length;
@@ -269,6 +278,14 @@ export const LOOT = {
   'rare:ghostfang': { sets: [{ id: 'hornbound', chance: 0.04 }] },
   'rare:thornmother': { sets: [{ id: 'hornbound', chance: 0.04 }] },
   'mob:matron': { sets: [{ id: 'tidebound', chance: 0.03 }] }, // the Mire Matron (Floor 2's elite)
+  // Floor 3 — The Gale Spires (docs/floor3.md). Rarity tables 'spire' / 'spireRare' / 'boss3' are in shared/items.js.
+  'mob:ram': { gold: [14, 22], item: 0.15, potion: 0.15, table: 'spire' },
+  'mob:harpy': { gold: [12, 20], item: 0.14, potion: 0.15, table: 'spire' },
+  'mob:acolyte': { gold: [13, 21], item: 0.15, potion: 0.15, table: 'spire' },
+  'mob:sentinel': { gold: [20, 30], item: 0.22, potion: 0.2, table: 'spire' },
+  'rare:skyrender': { gold: [90, 140], item: 1, potion: 1, table: 'spireRare', sets: [{ id: 'stormforged', chance: 0.05 }] },
+  'rare:bastion': { gold: [110, 160], item: 2, potion: 1, table: 'spireRare', sets: [{ id: 'stormforged', chance: 0.06 }] },
+  'boss:colossus': { gold: [420, 520], item: 2, potion: 2, table: 'boss3', sets: [{ id: 'stormforged', chance: 0.2, la: 0.5 }] },
 };
 export const sourceOf = m => `${m.def?.boss ? 'boss' : m.rare ? 'rare' : 'mob'}:${m.type}`;
 export function lootFor(src) {

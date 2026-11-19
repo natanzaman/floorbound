@@ -95,7 +95,8 @@ export const TREES = {
     ],
     // Bots (shared/teambots.js) spend in this order, one rank per entry.
     bot: ['sw_edge', 'sw_edge', 'sw_edge', 'sw_precision', 'sw_precision', 'sw_precision', 'sw_burst', 'sw_burst', 'sw_finale', 'sw_finale',
-      'sw_wide', 'sw_wide', 'sw_instinct', 'sw_instinct', 'sw_instinct', 'sw_exec', 'sw_switch', 'sw_switch', 'sw_switch'],
+      'sw_wide', 'sw_wide', 'sw_instinct', 'sw_instinct', 'sw_instinct', 'sw_exec', 'sw_switch', 'sw_switch', 'sw_switch',
+      'sw_pressure', 'sw_pressure', 'sw_pressure', 'sw_opening', 'sw_opening', 'sw_breaker', 'sw_breaker', 'sw_rhythm', 'sw_rhythm', 'sw_shared'], // levels 21-30 (Floor 3)
   },
 
   guardian: {
@@ -142,7 +143,8 @@ export const TREES = {
       },
     ],
     bot: ['gu_brace', 'gu_brace', 'gu_brace', 'gu_plate', 'gu_plate', 'gu_plate', 'gu_guard', 'gu_guard', 'gu_fortress', 'gu_fortress',
-      'gu_riposte', 'gu_riposte', 'gu_endure', 'gu_endure', 'gu_endure', 'gu_unbreak', 'gu_menace', 'gu_menace', 'gu_menace'],
+      'gu_riposte', 'gu_riposte', 'gu_endure', 'gu_endure', 'gu_endure', 'gu_unbreak', 'gu_menace', 'gu_menace', 'gu_menace',
+      'gu_crush', 'gu_crush', 'gu_crush', 'gu_provoke', 'gu_provoke', 'gu_quake', 'gu_quake', 'gu_heavy', 'gu_heavy', 'gu_monger'], // levels 21-30 (Floor 3)
   },
 
   cleric: {
@@ -189,7 +191,8 @@ export const TREES = {
       },
     ],
     bot: ['cl_hands', 'cl_hands', 'cl_hands', 'cl_vigor', 'cl_vigor', 'cl_vigor', 'cl_mend', 'cl_mend', 'cl_wide', 'cl_wide',
-      'cl_devotion', 'cl_devotion', 'cl_bloom', 'cl_bloom', 'cl_bloom', 'cl_overflow', 'cl_presence', 'cl_presence', 'cl_presence'],
+      'cl_devotion', 'cl_devotion', 'cl_bloom', 'cl_bloom', 'cl_bloom', 'cl_overflow', 'cl_presence', 'cl_presence', 'cl_presence',
+      'cl_inspire', 'cl_inspire', 'cl_inspire', 'cl_cleanse', 'cl_swift', 'cl_swift', 'cl_unity', 'cl_unity', 'cl_guiding', 'cl_guiding'], // levels 21-30 (Floor 3)
   },
 
   // ---------- the newer classes (shared/classes/): same shape, keystones in server/talents.js ----------
@@ -242,7 +245,8 @@ export const TREES = {
       },
     ],
     bot: ['rg_aim', 'rg_aim', 'rg_aim', 'rg_draw', 'rg_draw', 'rg_draw', 'rg_pierce', 'rg_pierce', 'rg_third', 'rg_third',
-      'rg_focus', 'rg_focus', 'rg_vital', 'rg_vital', 'rg_long', 'rg_long', 'rg_deadshot', 'rg_pack', 'rg_pack'],
+      'rg_focus', 'rg_focus', 'rg_vital', 'rg_vital', 'rg_long', 'rg_long', 'rg_deadshot', 'rg_pack', 'rg_pack',
+      'rg_pack', 'rg_prey', 'rg_prey', 'rg_prey', 'rg_exploit', 'rg_exploit', 'rg_quickmark', 'rg_quickmark', 'rg_howl', 'rg_howl'], // levels 21-30 (Floor 3)
   },
 
   berserker: {
@@ -295,7 +299,8 @@ export const TREES = {
       },
     ],
     bot: ['bz_brutal', 'bz_brutal', 'bz_brutal', 'bz_fury', 'bz_fury', 'bz_fury', 'bz_cleave', 'bz_cleave', 'bz_heavy', 'bz_heavy',
-      'bz_redmist', 'bz_redmist', 'bz_savage', 'bz_savage', 'bz_reaper', 'bz_reaper', 'bz_massacre', 'bz_thick', 'bz_thick'],
+      'bz_redmist', 'bz_redmist', 'bz_savage', 'bz_savage', 'bz_reaper', 'bz_reaper', 'bz_massacre', 'bz_thick', 'bz_thick',
+      'bz_thick', 'bz_leech', 'bz_leech', 'bz_leech', 'bz_scar', 'bz_scar', 'bz_price', 'bz_price', 'bz_wind', 'bz_wind'], // levels 21-30 (Floor 3)
   },
 
   lancer: {
@@ -345,7 +350,8 @@ export const TREES = {
       },
     ],
     bot: ['ln_wings', 'ln_wings', 'ln_wings', 'ln_point', 'ln_point', 'ln_point', 'ln_dive', 'ln_dive', 'ln_tip', 'ln_tip',
-      'ln_aerial', 'ln_aerial', 'ln_impale', 'ln_impale', 'ln_drake', 'ln_drake', 'ln_dragoon', 'ln_open', 'ln_open'],
+      'ln_aerial', 'ln_aerial', 'ln_impale', 'ln_impale', 'ln_drake', 'ln_drake', 'ln_dragoon', 'ln_open', 'ln_open',
+      'ln_open', 'ln_line', 'ln_line', 'ln_line', 'ln_sweep', 'ln_sweep', 'ln_ward', 'ln_ward', 'ln_trip', 'ln_trip'], // levels 21-30 (Floor 3)
   },
 
   bard: {
@@ -399,7 +405,8 @@ export const TREES = {
       },
     ],
     bot: ['bd_ward', 'bd_ward', 'bd_ward', 'bd_life', 'bd_life', 'bd_life', 'bd_bulwark', 'bd_bulwark', 'bd_allegro', 'bd_allegro',
-      'bd_unity', 'bd_unity', 'bd_mend', 'bd_mend', 'bd_swift', 'bd_swift', 'bd_symphony', 'bd_breath', 'bd_breath'],
+      'bd_unity', 'bd_unity', 'bd_mend', 'bd_mend', 'bd_swift', 'bd_swift', 'bd_symphony', 'bd_breath', 'bd_breath',
+      'bd_breath', 'bd_voice', 'bd_voice', 'bd_voice', 'bd_tempo', 'bd_tempo', 'bd_soothe', 'bd_soothe', 'bd_chorus', 'bd_chorus'], // levels 21-30 (Floor 3)
   },
 };
 
@@ -563,5 +570,7 @@ export const MILESTONES = [
   { lvl: 10, text: 'The Horned Warden (boss, Lv 10): beat it to unlock Floor 2' },
   { lvl: 11, text: 'Floor 2: the Glimmering Mire (Lv 11-18)' },
   { lvl: 15, text: 'The Drowned Sovereign (party Lv 15+)' },
+  { lvl: 21, text: 'Floor 3: the Gale Spires (Lv 21-28)' },
+  { lvl: 25, text: 'The Storm Colossus (party Lv 25+)' },
   { lvl: MAX_LEVEL, text: 'Max level' },
 ];

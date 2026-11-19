@@ -216,7 +216,7 @@ g.time = 100;
 
 // ---------- Berserker keystones ----------
 {
-  const p = mk('berserker', { alloc: full('berserker', 'carnage') });
+  const p = mk('berserker', { alloc: full('berserker', 'carnage'), lvl: 20 }); // (Lv 20: the numbers below were measured there)
   g.gainRageA(p, 10); near(p.rage, 13, 1e-9, 'Fury +30%');
   const m = wolf(p, 2);
   p.rage = 0; g.damageMob(m, p, 100, {}); const a0 = dealt(m, p); clear();

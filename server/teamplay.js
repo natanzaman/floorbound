@@ -16,6 +16,7 @@
 // handle ('burst' messages; TEST_HOOKS { type: 'test', tb } presets the gauge).
 import { inArena } from '../shared/data.js';
 import { inArena2 } from '../shared/floor2.js';
+import { inArena3 } from '../shared/floor3.js';
 import { COMBO, COMBOS, BURST, hitInfo, setupsOf, payoffFor, comboReady, nextChain, burstPower, burstBuff, burstFillScale } from '../shared/teamplay.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -28,6 +29,7 @@ const methods = {
   teamFightOf(p) {
     if (this.fight && (this.fight.ids.has(p.id) || inArena(p.x, p.z))) return this.fight;
     if (this.fight2 && (this.fight2.ids.has(p.id) || inArena2(p.x, p.z))) return this.fight2;
+    if (this.fight3 && (this.fight3.ids.has(p.id) || inArena3(p.x, p.z))) return this.fight3;
     return null;
   },
   teamStat(p, key, n = 1) {
@@ -138,7 +140,7 @@ const methods = {
     if (h && this.targetable(h)) return h;
     const lock = p.target && this.mobs.get(p.target);
     if (lock && this.targetable(lock) && dist(lock, p) <= BURST.range) return lock;
-    for (const b of [this.boss, this.sovereign]) { // a boss any joiner is fighting (or close to the starter)
+    for (const b of [this.boss, this.sovereign, this.colossus]) { // a boss any joiner is fighting (or close to the starter)
       if (b && this.targetable(b) && b.threat.size && (ids.some(id => b.threat.has(id)) || dist(b, p) <= BURST.targetR * 2)) return b;
     }
     let best = null, bd = BURST.targetR;
