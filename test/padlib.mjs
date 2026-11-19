@@ -15,10 +15,13 @@ export async function startServer(port, env = {}) {
     env: { ...process.env, PORT: String(port), DATABASE_URL: '', START_LEVEL: '10', SPAWN_AT: '0,150', TEST_HOOKS: '1', NAMED_ENABLED: '0', QUAKE_STATS: '1', ...env },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  let log = '';
+  let log = '', exited = null;
   srv.stdout.on('data', d => { log += d; }); srv.stderr.on('data', d => { log += d; });
-  for (let k = 0; k < 150 && !/running on|listening|localhost:\d+/i.test(log); k++) await sleep(100);
-  return { srv, port, base: `http://localhost:${port}`, log: () => log, stop: () => srv.kill() };
+  const gone = new Promise(r => srv.once('exit', (code, sig) => { exited = `code ${code} signal ${sig}`; r(); }));
+  const handle = { srv, port, base: `http://localhost:${port}`, log: () => log, stop: async () => { if (exited === null) srv.kill(); await gone; } };
+  for (let k = 0; k < 150 && exited === null && !/running on/i.test(log); k++) await sleep(100); // (polling the child's stdout)
+  if (exited !== null || !/running on/i.test(log)) { await handle.stop(); throw new Error(`server on port ${port} did not start (${exited ?? 'no "running on" line in 15 s'}): ${log.trim().slice(-400)}`); }
+  return handle;
 }
 
 // A page with the fake pad and message capture. Returns the helper bundle P.
@@ -52,6 +55,10 @@ export async function openPad(browser, base, { onError } = {}) {
   P.btn = (name, down, value = 1) => S(([i, d, v]) => { const b = window.__pad.pad.buttons[i]; b.pressed = d; b.value = d ? v : 0; }, [BTN[name], down, value]);
   P.axes = a => S(a => { window.__pad.pad.axes = a; }, a);
   P.press = async (names, k = 2) => { for (const nm of names) await P.btn(nm, true); await P.frames(k); for (const nm of [...names].reverse()) await P.btn(nm, false); await P.frames(2); };
+  // watch: a page-side frame loop that records whether state-expression `expr` (a function of the game state) was ever true
+  // within 8 s, so a short-lived state (a roll, a jump) can't fall between the script's polls. saw(k) reads it.
+  P.watch = (k, expr) => S(([k, src]) => { const f = new Function('s', `return (${src})`); window[`__w_${k}`] = false; const t0 = performance.now(); const loop = () => { if (f(window.__fb.state)) window[`__w_${k}`] = true; if (performance.now() - t0 < 8000) requestAnimationFrame(loop); }; loop(); }, [k, expr]);
+  P.saw = k => S(k => window[`__w_${k}`], k);
   P.cur = () => S(() => window.__fb.nav.current());
   P.isOpen = id => S(id => window.__fb.panels.isOpen(id), id);
   P.visible = id => S(id => { const el = document.getElementById(id); return !!el && !el.classList.contains('hidden'); }, id);
@@ -89,10 +96,15 @@ export async function openPad(browser, base, { onError } = {}) {
   };
   // player-owned server bots (the Players panel's Bots tab is mouse-only): added by message, in your party, in a mode
   P.addBots = async (roles, mode = 'follow', skill = 5) => {
-    for (const cls of roles) { await S(c => window.__fb.send({ type: 'pbot', op: 'add', cls: c.cls, skill: c.skill }), { cls, skill }); await sleep(400); }
-    await p.waitForFunction(n => window.__pbot?.list?.mine >= n, roles.length, { timeout: 30000 });
+    for (const [i, cls] of roles.entries()) {
+      await S(c => window.__fb.send({ type: 'pbot', op: 'add', cls: c.cls, skill: c.skill }), { cls, skill });
+      await p.waitForFunction(n => window.__pbot?.list?.mine >= n, i + 1, { timeout: 30000 });
+    }
     const mine = await S(() => window.__pbot.list.bots.filter(b => b.mine).map(b => b.bid));
-    if (mode !== 'follow') for (const bid of mine) { await S(([b, m]) => window.__fb.send({ type: 'pbot', op: 'edit', bid: b, mode: m }), [bid, mode]); await sleep(200); }
+    if (mode !== 'follow') for (const bid of mine) {
+      await S(([b, m]) => window.__fb.send({ type: 'pbot', op: 'edit', bid: b, mode: m }), [bid, mode]);
+      await p.waitForFunction(([b, m]) => window.__pbot?.list?.bots?.find(x => x.bid === b)?.mode === m, [bid, mode], { timeout: 15000 });
+    }
     await p.waitForFunction(n => window.__fb.state.party && [...window.__fb.players.values()].filter(q => q.party === window.__fb.state.party && q.id !== window.__fb.state.myId).length >= n, roles.length, { timeout: 60000 });
     return mine;
   };

@@ -25,7 +25,9 @@ const cov = new Coverage();
 const errors = [];
 let browser;
 const servers = [];
-const stopAll = async () => { await browser?.close(); for (const s of servers) s.stop(); };
+const stopAll = async () => { // (every server is stopped and awaited even when closing the browser throws)
+  try { await browser?.close(); } finally { await Promise.allSettled(servers.map(s => s.stop())); }
+};
 
 // ---------------------------------------------------------------------------------------------------------------
 // Sections 1 and 2: the main flow. `tag` names the layout ('default' / 'rebound'); buttons come from the bindings.
@@ -45,7 +47,6 @@ async function mainFlow(tag, port, rebind) {
   await P.join(`Pad${tag[0]}`, 'guardian');
   assert.equal(await S(() => window.__fb.state.cls), 'guardian');
   ok(tag, 'joined by pad (character select: d-pad, A picks the class, A on Enter)');
-  C('menu', 'Start opens / closes the Game Menu');
 
   // ---- rebound layout: Jump -> X goes through the Controls screen with pad presses only ----
   if (rebind) {
@@ -63,17 +64,15 @@ async function mainFlow(tag, port, rebind) {
     assert.ok(!(await S(() => window.__fb.input.capturing)), 'X ends the capture');
     assert.ok(await S(() => !!document.getElementById('cu-prompt')), 'X is Skill 1\'s: the conflict prompt asks');
     assert.equal(await S(() => window.__fb.input.bindings('pad').jump[0]), 'A', 'nothing changed before the answer');
-    // (focus restarts at the top after the capture; the prompt sits just above Reset, Swap left of Unbind)
-    await P.goTo('cu-reset-pad', 'Down', 60);
-    await P.goTo('cu-p-unbind', 'Up', 6);
-    await P.goTo('cu-p-swap', 'Left', 4);
-    assert.equal((await P.cur()).key, 'cu-p-swap', 'the pad reaches Swap');
+    assert.equal((await P.cur()).key, 'cu-p-swap', 'focus lands on Swap (the first prompt button), not the top of the screen');
     await P.press(['A']); await P.frames(2);
     assert.ok(await S(() => !document.getElementById('cu-prompt')), `Swap answers the prompt (${await S(() => document.getElementById('cu-msg-pad')?.textContent)})`);
     assert.deepEqual(await S(() => { const b = window.__fb.input.bindings('pad'); return [b.jump[0], b.skill1[0]]; }), ['X', 'A'], 'Jump is on X, Skill 1 took A (swap)');
+    assert.equal((await P.cur()).key, 'cu-rb-pad-jump:0', 'after the swap focus is back on the Jump row\'s Rebind button');
     await P.press(['B']);
     assert.ok(!(await P.isOpen('controlsui')) && await P.isOpen('gamemenu'), 'B back to the Game Menu');
-    await P.p.waitForTimeout(450); await P.press(['Start'], 2);
+    await P.p.waitForFunction(() => window.__fb.nav.current().layer === 'gamemenu', null, { timeout: 5000 });
+  await P.p.waitForTimeout(450); /* a Start right after B is swallowed for a moment (a real-time guard; nothing to poll) */ await P.press(['Start'], 2);
     assert.ok(!(await P.isOpen('gamemenu')), 'Start closes it');
     ok(tag, 'Controls screen by pad: Jump rebound A -> X (capture, Swap prompt), back to play');
     C('jump', 'rebound through the Controls screen by pad (A -> X, Swap)');
@@ -143,8 +142,12 @@ async function mainFlow(tag, port, rebind) {
   const stopAtk = await hold('attack'); await frames(4);
   assert.ok((await sent(m, 'skill')).some(o => o.slot === 0), 'holding attack swings');
   await stopAtk();
-  await sleep(900); m = await mark(); await frames(3);
-  assert.equal((await sent(m, 'skill')).length, 0, 'releasing stops');
+  assert.ok(!(await S(a => (window.__fb.input.bindings('pad')[a][0] || '').split('+').some(n => window.__fb.input.padHeld(n)), 'attack')), 'the attack button reads as released');
+  await frames(3); m = await mark(); // (the swing in flight is over; now watch 1.5 s of real time AND of frames: nothing new may be sent)
+  const f0 = await S(() => window.__fb.input.frames);
+  await sleep(1500); // (no state to poll: the point is that nothing happens during this window)
+  assert.ok(await S(f => window.__fb.input.frames - f, f0) >= 5, 'frames kept polling during the window');
+  assert.equal((await sent(m, 'skill')).length, 0, 'releasing stops (no skill message in 1.5 s)');
   ok(tag, 'attack while held, stops on release');
   C('attack', 'hold sends basic attacks, release stops');
 
@@ -160,15 +163,20 @@ async function mainFlow(tag, port, rebind) {
 
   // ---- dodge, jump ----
   await p_clear(P);
+  await P.watch('roll', 's.roll');
   m = await mark(); await tap('dodge', 1);
   assert.equal((await sent(m, 'dodge')).length, 1, 'dodge sent');
+  await P.p.waitForFunction(() => window.__w_roll === true, null, { timeout: 5000 }).catch(() => { throw new Error('dodge: no roll started (state.roll never set)'); });
   await P.p.waitForFunction(() => !window.__fb.state.roll, null, { timeout: 5000 });
-  C('dodge', 'sends dodge, roll state');
+  C('dodge', 'sends dodge; the roll starts, then ends');
   await P.p.waitForFunction(() => performance.now() > window.__fb.state.jumpReady, null, { timeout: 5000 });
+  await P.watch('air', 's.air');
   m = await mark(); await tap('jump', 1);
   assert.equal((await sent(m, 'jump')).length, 1, 'jump sent');
-  assert.ok(await S(() => window.__fb.state.jumpPress > performance.now() - 400), 'jump state');
-  C('jump', 'sends jump, airborne state');
+  assert.ok(await S(() => window.__fb.state.jumpPress > performance.now() - 1500), 'jump state: jumpPress set');
+  // (the airborne state read here is the client's own state.air: the server has no jump state a client can read)
+  await P.p.waitForFunction(() => window.__w_air === true, null, { timeout: 5000 }).catch(() => { throw new Error('jump: never airborne (state.air never set)'); });
+  C('jump', 'sends jump; client goes airborne (state.air)');
   ok(tag, 'dodge and jump');
 
   if (rebind) { // the modifier layer survives a rebind: LB+X is still Team Burst although X is Jump now
@@ -190,14 +198,20 @@ async function mainFlow(tag, port, rebind) {
   // ---- items ----
   await S(() => window.__fb.send({ type: 'test', hurt: 0.5 }));
   await P.p.waitForFunction(() => window.__fb.state.hp < window.__fb.state.maxHp, null, { timeout: 5000 });
+  const hpBefore = await S(() => window.__fb.state.hp);
   m = await mark(); await tap('item1');
   assert.deepEqual((await sent(m, 'use')).map(o => o.id), ['potion'], 'potion');
+  await P.p.waitForFunction(h => window.__fb.state.hp > h, hpBefore, { timeout: 5000 }).catch(async () => { throw new Error(`potion: hp did not rise (${hpBefore} -> ${await S(() => window.__fb.state.hp)})`); });
   C('item1', 'drinks a potion');
   const inv = await S(() => window.__fb.state.inv.cons);
   for (const [a, id, name] of [['item2', 'tonic', 'Tonic'], ['item3', 'draught', 'Draught']]) {
+    await S(() => { window.__logBefore = new Set(document.getElementById('log').children); });
     m = await mark(); await tap(a);
     if (inv[id] > 0) assert.deepEqual((await sent(m, 'use')).map(o => o.id), [id], `${a} uses ${id}`);
-    else assert.match(await S(() => document.getElementById('log').lastElementChild?.textContent || ''), new RegExp(name, 'i'), `${a} tries the ${id}`);
+    else {
+      await P.p.waitForFunction(n => [...document.getElementById('log').children].some(c => !window.__logBefore.has(c) && new RegExp(n, 'i').test(c.textContent)), name, { timeout: 5000 })
+        .catch(async () => { throw new Error(`${a}: no new log line about the ${id} (new lines: ${JSON.stringify(await S(() => [...document.getElementById('log').children].filter(c => !window.__logBefore.has(c)).map(c => c.textContent)))})`); });
+    }
     C(a, inv[id] > 0 ? `uses the ${id}` : `tries the ${id} (none left: log line)`);
   }
   ok(tag, 'items: potion, tonic, draught');
@@ -206,7 +220,9 @@ async function mainFlow(tag, port, rebind) {
   assert.ok(await S(() => !window.__fb.state.gateOpen && Math.abs(window.__fb.state.x) < 12 && window.__fb.state.z > 138 && window.__fb.state.z < 158), 'in the gate zone');
   m = await mark(); await tap('interact');
   assert.equal((await sent(m, 'ready')).length, 1, 'interact readies at the gate');
+  await P.p.waitForFunction(() => window.__fb.state.meReady, null, { timeout: 5000 }).catch(() => { throw new Error('interact: the server never marked me ready'); });
   await tap('interact'); // (un-ready)
+  await P.p.waitForFunction(() => !window.__fb.state.meReady, null, { timeout: 5000 }).catch(() => { throw new Error('interact again: still ready (the un-ready did not take effect)'); });
   ok(tag, 'interact readies at the raid gate');
   C('interact', 'ready / un-ready at the raid gate');
 
@@ -224,8 +240,10 @@ async function mainFlow(tag, port, rebind) {
   await press(['Left']);
   await press(['B']);
   assert.ok(!(await P.isOpen('settings')) && await P.isOpen('gamemenu'), 'B backs out to the Game Menu');
-  await P.p.waitForTimeout(450); await press(['Start'], 2);
+  await P.p.waitForFunction(() => window.__fb.nav.current().layer === 'gamemenu', null, { timeout: 5000 });
+  await P.p.waitForTimeout(450); /* a Start right after B is swallowed for a moment (a real-time guard; nothing to poll) */ await press(['Start'], 2);
   assert.ok(!(await P.isOpen('gamemenu')), 'Start closes it');
+  C('menu', 'Start opens and closes the Game Menu (asserted)');
   ok(tag, 'Game Menu and Settings: open, navigate, change a slider, back out, close');
   await tap('bag');
   assert.ok(await P.isOpen('bag'), 'the Bag opens'); assert.equal((await P.cur()).layer, 'bag');
@@ -263,7 +281,7 @@ async function mainFlow(tag, port, rebind) {
   ok(tag, 'revive resolves on the pad when the downed-ally context is on');
 
   assert.deepEqual(errors.filter(e => e.startsWith(tag)), [], `${tag}: no page errors`);
-  await P.p.close(); srv.stop();
+  await P.p.close(); await srv.stop();
 }
 const p_waitMob = P => P.p.waitForFunction(() => [...window.__fb.mobs.values()].some(e => !e.dying && !e.hidden && Math.hypot(e.x - window.__fb.state.x, e.z - window.__fb.state.z) < 22), null, { timeout: 30000 });
 const p_clear = async P => { await P.clearTarget(); await P.keepAlive(); };
@@ -319,8 +337,8 @@ async function chords(port) {
     await P.btn('LB', true); await P.btn('Y', true); await frames(2);
     assert.ok(await P.visible('botwheel'), 'LB+Y (held) opens the bot wheel');
     assert.equal((await sent(m, 'skill')).length, 0, 'and is not skill 2');
-    await P.p.waitForTimeout(400);
     await P.axes([0, 0, 0, -1]); await frames(3); // right stick up
+    await P.p.waitForFunction(() => !!document.querySelector('#botwheel .wcmd.pick'), null, { timeout: 5000 }).catch(() => {});
     const pick = await S(() => document.querySelector('#botwheel .wcmd.pick')?.dataset.c || null);
     assert.ok(pick, 'the right stick points at an order');
     await P.axes([0, 0, 0, 0]); await frames(1);
@@ -331,13 +349,13 @@ async function chords(port) {
     C('botWheel', `LB+Y hold, right stick picks "${pick}", release sends botcmd`);
     // held and released on nothing: cancels
     m = await mark();
-    await P.btn('LB', true); await P.btn('Y', true); await frames(2); await P.p.waitForTimeout(450);
+    await P.btn('LB', true); await P.btn('Y', true); await frames(2); await P.p.waitForTimeout(450); // (the wheel cancels only after being open 350 ms of real time: no state to poll)
     await P.btn('Y', false); await P.btn('LB', false); await frames(3);
     assert.ok(!(await P.visible('botwheel')) && (await sent(m, 'botcmd')).length === 0, 'released on nothing: closed, no order');
     ok(tag, 'LB+Y holds the bot wheel, the right stick picks, release gives the order (or cancels)');
 
     // LB+B: select what you aim at (B alone is skill 3)
-    await p_waitMob(P).catch(() => {});
+    await p_waitMob(P).catch(() => { throw new Error('LB+B: no mob within 22 m to aim at'); });
     await clearTarget();
     {
       let got = 0; const mB = await mark();
@@ -374,7 +392,7 @@ async function chords(port) {
     ok(tag, 'LB+Up Skill Tree, LB+Right Players, bare Up is the potion');
     assert.deepEqual(errors.filter(e => e.startsWith(tag)), [], `${tag}: no page errors`);
   } finally { /* the bots go with the page */ }
-  await P.p.close(); srv.stop();
+  await P.p.close(); await srv.stop();
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -392,9 +410,9 @@ async function warden(port) {
     ok(tag, 'in a party with three bots');
     // ready at the gate by pad; the bots ready themselves
     await keepAlive();
-    for (let i = 0; i < 40 && !(await S(() => window.__fb.state.gateOpen)); i++) {
-      if (!(await S(() => window.__fb.state.meReady))) await P.tap('interact');
-      await P.p.waitForTimeout(500);
+    for (let i = 0; i < 10 && !(await S(() => window.__fb.state.meReady || window.__fb.state.gateOpen)); i++) {
+      await P.tap('interact');
+      await P.p.waitForFunction(() => window.__fb.state.meReady || window.__fb.state.gateOpen, null, { timeout: 4000 }).catch(() => {});
     }
     await P.p.waitForFunction(() => window.__fb.state.gateOpen, null, { timeout: 60000 });
     ok(tag, 'the raid gate opened (readied by pad)');
@@ -427,16 +445,20 @@ async function warden(port) {
 
     // the fight
     const hp0 = (await boss()).hp;
-    let attempts = 0, jumped = 0, hits0 = 0;
+    let attempts = 0, jumped = 0, hits0 = 0, lastB = null;
     const stopAtk = await P.hold('attack');
     const t0 = Date.now(), LIMIT = +(process.env.FIGHT_SECS || 240) * 1000;
     let seenQuakes = 0, nextSkill = 1;
     const jumpAction = (await P.keys('jump'))[0];
-    const floatJumped = () => S(() => window.__fb.floatLog.filter(f => /Jumped!/.test(f.text)).length);
+    // count "Jumped!" in the page as it is shown: floatLog keeps only the last 150 lines and could evict it
+    await S(() => { window.__jumped = 0; const fl = window.__fb.floatLog, push = fl.push.bind(fl); fl.push = (...a) => { for (const f of a) if (/Jumped!/.test(f.text)) window.__jumped++; return push(...a); }; });
+    const floatJumped = () => S(() => window.__jumped);
+    const tapped = new Set(), mFight = await P.mark(), jumpLog = [];
     while (Date.now() - t0 < LIMIT) {
       const s = await P.st(), b = await boss();
-      if (!b || b.dead) break;
-      if (s.dead) { await P.p.waitForTimeout(1000); continue; }
+      if (b) lastB = b;
+      if (!b || b.dead) break; // (a killed Warden leaves the mob list: lastB keeps its final reading)
+      if (s.dead) { await P.p.waitForFunction(() => !window.__fb.state.dead, null, { timeout: 15000 }).catch(() => {}); continue; }
       if (s.hp < s.maxHp * 0.5) await keepAlive(); // (test aid: stay up so the ring can be jumped)
       const d = Math.hypot(b.x - s.x, b.z - s.z);
       if (s.lock !== b.id) await P.tap('lockNext', 1);
@@ -453,31 +475,44 @@ async function warden(port) {
         if (wait < -150) continue;
         attempts++;
         await P.btn(jumpAction, false);
-        await S(([ms, i]) => new Promise(r => setTimeout(() => { const b = window.__pad.pad.buttons[i]; b.pressed = true; b.value = 1; setTimeout(() => { b.pressed = false; b.value = 0; r(); }, 120); }, Math.max(0, ms))), [wait, BTN[jumpAction]]);
+        // hold the button until the game has polled at least 2 frames with it down (a fixed time could fall between frames)
+        const r = await S(([ms, i]) => new Promise(res => setTimeout(() => {
+          const b = window.__pad.pad.buttons[i], f0 = window.__fb.input.frames, t0 = performance.now();
+          b.pressed = true; b.value = 1;
+          const fin = () => { if (window.__fb.input.frames >= f0 + 2 || performance.now() - t0 > 3000) { b.pressed = false; b.value = 0; res({ frames: window.__fb.input.frames - f0, ms: Math.round(performance.now() - t0) }); } else requestAnimationFrame(fin); };
+          requestAnimationFrame(fin);
+        }, Math.max(0, ms))), [wait, BTN[jumpAction]]);
+        jumpLog.push(r);
+        console.log(`  warden: jump attempt ${attempts}: held ${r.frames} frames in ${r.ms} ms (${(r.ms / Math.max(1, r.frames)).toFixed(0)} ms/frame)`);
       }
-      if (qs.length) { await P.p.waitForTimeout(1500); jumped = await floatJumped(); }
+      if (qs.length) { await P.p.waitForFunction(() => window.__jumped >= 1, null, { timeout: 1500 }).catch(() => {}); jumped = await floatJumped(); } // (the result shows within a moment of the ring: poll, give up after 1.5 s)
       if (jumped >= 1 && Date.now() - t0 > 20000 && attempts >= 1) break;
       // skills when they are ready
       const sk = await S(() => window.__fb.state.ready.map(r => performance.now() > r));
-      for (const k of [1, 2, 3]) if (sk[k]) { await P.tap(`skill${k}`, 1); break; }
+      for (const k of [1, 2, 3]) if (sk[k]) { await P.tap(`skill${k}`, 1); tapped.add(k); break; }
       await frames(2);
     }
     await stopAtk();
-    const bAfter = await boss();
-    const hpNow = bAfter ? bAfter.hp : 0;
-    assert.ok(!bAfter || bAfter.dead || hpNow < hp0, `the pad did damage (${hp0} -> ${hpNow})`);
+    const bAfter = (await boss()) || lastB; // (gone from the list = killed: the last reading before it left stands in)
+    assert.ok(bAfter, 'the Warden was read during the fight');
+    const hpNow = (await boss()) ? bAfter.hp : 0;
+    assert.ok(bAfter.dead || hpNow < hp0, `the pad did damage (${hp0} -> ${hpNow})`);
+    const skillMsgs = (await P.sent(mFight, 'skill')).map(o => o.slot);
+    for (const k of tapped) assert.ok(skillMsgs.includes(k), `the pad sent skill ${k} (slots sent: ${[...new Set(skillMsgs)]})`);
+    assert.ok(skillMsgs.includes(0), 'and the held attack sent basic attacks (slot 0)');
     assert.ok(seenQuakes >= 1, `the Warden threw a Quake Ring (${seenQuakes} seen)`);
     jumped = await floatJumped();
     const log = srv.log();
     const qlog = k => (log.match(new RegExp(`\\[quake\\] ${k}`, 'g')) || []).length;
+    assert.ok(attempts >= 1, `a timed jump was attempted (none made: rings seen ${seenQuakes}, none in reach or in time)`);
     assert.ok(jumped >= 1, `a jump registered during a Quake Ring ("Jumped!" shown to me ${jumped}x, ${attempts} timed jumps, rings: ${qlog('evade jump')} jumped / ${qlog('evade roll')} rolled / ${qlog('hit')} hit by anyone)`);
     C('attack', 'RT held on the Warden: boss HP down'); C('jump', 'Quake Ring: "Jumped!" registered'); C('lockNext', 'R3 locks the Warden');
-    C('skill1', 'used in the fight'); C('skill2', 'used in the fight'); C('skill3', 'used in the fight');
+    for (const k of tapped) C(`skill${k}`, 'tapped in the fight, skill message sent');
     console.log(`  warden: boss HP ${hp0} -> ${hpNow}, rings seen ${seenQuakes}, timed jumps ${attempts}, "Jumped!" ${jumped}, server: ${qlog('evade jump')} jumped / ${qlog('evade roll')} rolled / ${qlog('hit')} hit (all players)`);
     ok(tag, `fought the Warden on the pad with bots; a jump registered during a Quake Ring (${jumped}x)`);
     assert.deepEqual(errors.filter(e => e.startsWith(tag)), [], `${tag}: no page errors`);
   } finally { /* the bots go with the page */ }
-  await P.p.close(); srv.stop();
+  await P.p.close(); await srv.stop();
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -491,7 +526,7 @@ try {
 
   // ---- coverage ----
   console.log('\nCoverage: each action of shared/controls.js, verified on the pad');
-  console.log('action'.padEnd(14) + 'default'.padEnd(10) + 'rebound'.padEnd(10) + 'chords'.padEnd(9) + 'warden'.padEnd(9) + 'note');
+  console.log('action'.padEnd(14) + 'default'.padEnd(14) + 'rebound'.padEnd(14) + 'chords'.padEnd(9) + 'warden'.padEnd(9) + 'note');
   const unverified = [];
   for (const a of ACTIONS) {
     const m = cov.by.get(a.id);
@@ -499,11 +534,9 @@ try {
     let note = '';
     if (a.kbmOnly) note = 'keyboard & mouse only (no pad binding)';
     else if (a.id === 'revive') note = m?.get('default') || '';
-    else if (a.id === 'menu') note = 'Start: Game Menu / closes panels (default, rebound)';
-    if (a.id === 'menu') for (const t of ['default', 'rebound']) cov.mark(t, 'menu', 'Start');
     const mm = cov.by.get(a.id);
-    const c = t => (mm?.has(t) ? 'yes' : '-');
-    console.log(a.id.padEnd(14) + c('default').padEnd(10) + c('rebound').padEnd(10) + c('chords').padEnd(9) + c('warden').padEnd(9) + note);
+    const c = t => (mm?.has(t) ? (a.id === 'revive' ? 'resolve only' : 'yes') : '-');
+    console.log(a.id.padEnd(14) + c('default').padEnd(14) + c('rebound').padEnd(14) + c('chords').padEnd(9) + c('warden').padEnd(9) + note);
     if (!a.kbmOnly && !mm) unverified.push(a.id);
   }
   if (ONLY.length === 4) assert.deepEqual(unverified, [], 'every pad action verified');

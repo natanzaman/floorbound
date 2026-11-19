@@ -115,6 +115,8 @@ export function createFocusNav({ input, panels, order = ['*'], hooks = {} }) {
       dpad.dir = NAV_DIRS.find(n => input.padHeld(n)) || null; stick.dir = stickDir(input.stick('LS')); dpad.next = stick.next = Infinity;
     }
     if (el && el.isConnected && t.root.contains(el) && usable(el)) return t;
+    const dflt = t.root.querySelector('[data-nav-default]'); // (a screen that re-renders names where focus goes back to)
+    if (dflt && usable(dflt)) { setFocus(dflt); return t; }
     const list = items(t.root), want = memory.get(t.id);
     const found = (want != null && list.find(e => navKey(e) === want)) || null;
     setFocus(found || pickNext(null, list.map(rect), 'Down')?.e || null);
