@@ -332,7 +332,53 @@ Same rules as F/G/H (flock lock, push with `--force-with-lease`).
 | I1 Named characters + friendship (code) | `feat/named` | in progress | agent named | |
 | I2 The loner's look | `feat/lonerlook` | in progress | agent lonerlook | |
 | I3 Personalities, talk, memory, nudges (AI) | `feat/namedai` | todo (after I1) | | |
-| I4 Requests and invitations | `feat/namedquests` | todo (after I1, I3) | | |
+| I4 Requests and invitations | `feat/namedquests` | todo (after I1; AI phrasing optional) | | |
+
+### Shared contracts for I (from the Fable plan review, 2026-11-18: these override the task text below where they differ)
+- **Humans first.**
+  - A Named never lands a boss's killing blow while a human contributor is alive (reuse `lastAttackHeld`).
+  - A field mob a human damaged gives that human full XP and loot.
+  - MVP titles go to humans first.
+- **Clears.** A clear with no human contributor:
+  - is never "first", rings no bell and gives no `floorClearsFirst`;
+  - is listed apart (a "Heroes' record"), not in the fastest or recent lists.
+- **Bosses.**
+  - The Named start a boss only when no human is in or near the arena.
+  - They never enter a human's fight unless partied with that human.
+  - "Helped their fight" needs at least 10% of the damage or healing.
+- **Presence.** The free Render plan sleeps when idle, so:
+  - the Named are simulated only while at least 1 human is online, and only on a floor a human is on;
+  - away time is summarised in code ("while you were away…");
+  - there are no database writes with no humans online.
+- **A separate bot kind** (`e.named`). The Named:
+  - have reserved slots outside `MAX_BOTS`;
+  - don't appear in the Bots tab and aren't removed by admin "remove all";
+  - accept invites (`onInvite`) only by the tier rules;
+  - are parked during director shows;
+  - are flagged `named` in tracking, and Named-only fights are not written.
+- **Identity.** Friendship and memories are keyed by `charId`; anonymous players get session-only friendship. The Named's names are reserved against character names.
+- **Kill switch:** `NAMED_ENABLED=0` leaves the game identical to today.
+
+### Amendments to I1–I4 (from the review)
+- **I1.2:** persist level and friendship only; gear is premade by level (`loadoutFor`). No schedules in v1.
+- **I1.3:** level is the top-3 average of non-admin characters active in the last 14 days, +2, capped. It never drops.
+- **I1.4 friendship:**
+  - **Gains:** fighting within 25 m of them on a shared target, reviving them, healing or Covering them, and real help in their boss fight.
+  - **Not in v1:** trade and gifts.
+  - **The only loss:** leaving them downed within 40 m. A tier, once reached, is never lost.
+  - **Daily cap:** per Named, resetting at 10:00 UTC.
+  - **Pacing targets:** a Hero at Ally in about 2 sessions and Friend in about 5; the loner at Friend in about 8–10.
+- **I1.5 invites and summons:**
+  - An invited Hero leaves the Heroes for your party, and returns on disband or after 10 min idle.
+  - One Named per human party.
+  - Sworn summons are first-come, with a 10 min cooldown.
+- **I1.5b (new):** at Friend, the loner whispers you an invite (a canned line) when he heads for a boss and you're online. At most 1 per hour, and none after a decline in that session.
+- **I1.8 also accept when:**
+  - tick p95 is under 25 ms with 2 humans + 6 player bots + 5 Named;
+  - a director show runs with the Named parked.
+- **I1/I2 split:** I1 lands a `shared/named.js` stub first; I2 only fills `look`.
+- **I3:** a separate talk path and schema (`say`, `sentiment`, `remember`), not the party companion's intent, and it works outside a party. Each player can make at most 30 talk calls to the Named per day. Friendship from chat is capped at +3 per day and can't cross a tier by itself.
+- **I4:** no dependency on I3: templates with canned text, AI phrasing optional. v1 templates are kill N, bring N materials, and help in a boss fight. Escort, spar and the keepsake are cut.
 
 ### I1. Named characters + friendship (`feat/named`)
 1. **Data:** `shared/named.js` defines each Named: id, name, class, style, look (I2), group (`heroes` or `loner`), personality numbers (how fast friendship grows from each source, what lowers it, the threshold to accept invites), home zone, and a short persona text for I3.
