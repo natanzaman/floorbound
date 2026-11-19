@@ -3,7 +3,7 @@
 // open. Leaving (change character / log out) is main.js's leave(kind); it asks first when you're downed, partied or
 // in a boss fight.
 export function initGameMenu({ state, isTouch, guide, controls, steps, openSettings, lockCursor, leave, accounts, checkAdmin, sfx }) {
-  const back = document.createElement('div'); back.id = 'gamemenu'; back.className = 'hidden';
+  const back = document.createElement('div'); back.id = 'gamemenu'; back.className = 'hidden'; back.dataset.nav = 'gamemenu'; // (data-nav: the controller can drive it, public/focusnav.js)
   back.innerHTML = '<div class="gm-box panel" role="dialog" aria-label="Game Menu"></div>';
   document.body.appendChild(back);
   const box = back.firstChild;

@@ -48,6 +48,7 @@ import { initGameMenu } from '/gamemenu.js'; // the Game Menu (Esc / ☰)
 import { createInput } from '/input.js'; // keys, mouse buttons (and pads, K1b) -> actions, by the bindings in shared/controls.js
 import { createPanels } from '/panels.js'; // the panels that free the cursor / close on Esc
 import { cue } from '/palette.js'; // sound cue for telegraphs
+import { createFocusNav } from '/focusnav.js'; // controller menu navigation (d-pad / stick, A, B)
 import { loadSettings, saveSettings as storeSettings, initSettingsPanel, applyAccess } from '/settings.js'; // fb_settings + fb_controls, the Settings panel
 
 const sfx = new Sound();
@@ -242,7 +243,7 @@ function renderChars() {
     : `<span class="who">Guest account: saved in this browser</span>${acct.cfg.discord ? '<button id="link-discord" class="link">Link Discord</button>' : ''}<button id="signout">Sign out</button>`;
   $('char-list').innerHTML = characters.map(c => {
     const k = CLASSES[c.cls], hex = '#' + k.color.toString(16).padStart(6, '0');
-    return `<div class="char"><span class="dot" style="background:${hex}"></span><div class="info"><b>${esc(c.name)}</b><small>Lv ${c.lvl} ${k.name} · ${k.role}</small></div><button class="play" data-id="${c.id}">Play</button><button class="del" data-id="${c.id}" title="Delete">✕</button></div>`;
+    return `<div class="char"><span class="dot" style="background:${hex}"></span><div class="info"><b>${esc(c.name)}</b><small>Lv ${c.lvl} ${k.name} · ${k.role}</small></div><button class="play" data-id="${c.id}" data-nav="play-${c.id}">Play</button><button class="del" data-id="${c.id}" data-nav="del-${c.id}" title="Delete">✕</button></div>`;
   }).join('');
   $('new-char').classList.toggle('hidden', characters.length >= (acct.cfg.maxCharacters || 8));
   for (const b of $('char-list').querySelectorAll('.play')) b.onclick = () => {
@@ -901,8 +902,21 @@ function removeEntity(e) {
 // Keys and mouse buttons arrive as actions (public/input.js, bindings in shared/controls.js, by key code).
 // The gate: nothing but the overlay before you join; under the Game Menu only Esc (no moving, attacking or hotkeys;
 // the game itself keeps running).
-const input = createInput({ isTouch, settings, save: saveSettings, notify: t => log(t, 'sys'),
+const input = createInput({ isTouch, settings, save: saveSettings, notify: t => { log(t, 'sys'); padToast(t); }, ask: (t, answer) => padToast(t, answer),
   gate: a => a === 'perfOverlay' || (state.joined && (a === 'menu' || !gmenu.isOpen())) });
+// Controller toasts (input.js): a short note, or the one-time "Controller detected" question (A / B answer it too).
+function padToast(text, answer) {
+  let el = $('padtoast');
+  if (!el) { el = document.createElement('div'); el.id = 'padtoast'; el.className = 'panel hidden'; document.body.appendChild(el); }
+  el.innerHTML = `<span>${esc(text)}</span>${answer ? '<button data-a="1">Switch (A)</button><button data-a="0">Not now (B)</button>' : ''}`;
+  el.onclick = e => { const b = e.target.closest('[data-a]'); if (b) answer?.(b.dataset.a === '1'); };
+  el.classList.remove('hidden');
+  const close = () => { clearTimeout(el.timer); el.classList.add('hidden'); };
+  clearTimeout(el.timer); el.timer = setTimeout(() => { answer?.(false); close(); }, answer ? 15000 : 4000);
+  return close;
+}
+// Under Controller: no pointer lock, and the touch HUD (stick, lock button) hides while the pad drives play.
+input.onDevice(d => { document.body.classList.toggle('pad', d === 'pad'); if (d === 'pad') freeCursor(); });
 // The old key set, now a view of the input layer (revive.js and rescue.js read keys.has('e'): the revive action).
 const LEGACY_KEYS = { e: 'revive', q: 'turnLeft', j: 'attack', r: 'guard', v: 'botWheel' };
 const keys = { has: k => (LEGACY_KEYS[k] ? input.held(LEGACY_KEYS[k]) : input.key(k.length === 1 ? `Key${k.toUpperCase()}` : k)), clear: () => input.reset() };
@@ -914,9 +928,10 @@ let attackHeld = false;
 
 const onPress = (action, fn) => input.on(action, e => { if (e.down) fn(e); });
 onPress('perfOverlay', () => { perf.toggle(); settingsUi.refresh(); }); // the diagnostics overlay
-onPress('menu', () => { // Esc: close what's open, else clear the target, else the Game Menu
+onPress('menu', e => { // Esc / Start: close what's open, else clear the target, else the Game Menu
   if (gmenu.isOpen()) { if (!gmenu.justOpened()) gmenu.close(); return; }
-  if (escBusy) { panels.close(); if (wheel.isOpen()) wheel.close(); return; }
+  if (e.source === 'pad') escBusy = cursorPanelOpen() || wheel.isOpen() || talents.isOpen() || !!document.getElementById('mvp'); // (Start: no keydown to look at)
+  if (escBusy) { panels.close(); if (wheel.isOpen()) wheel.close(); if (e.source === 'pad') { if (talents.isOpen()) talents.toggle(false); mvp.close(); } return; } // (the keyboard's Esc: they close themselves)
   if (state.lock || state.focus) { state.lock = 0; state.focus = 0; return; }
   menuOpen();
 });
@@ -949,7 +964,7 @@ onPress('bag', () => toggleBag());
 onPress('interact', () => interact());
 onPress('cover', e => { if (!e.repeat) threat.cover(); }); // Guardian Cover
 ['item1', 'item2', 'item3'].forEach((a, i) => onPress(a, () => useItem(CONSUMABLE_IDS[i])));
-onPress('selectAimed', e => { if (locked()) selectAim(); else selectAt(e.event?.clientX ?? mouse.x, e.event?.clientY ?? mouse.y); }); // Ctrl+click: select (mouse look: what the crosshair is aimed at)
+onPress('selectAimed', e => { if (locked() || e.source === 'pad') selectAim(); else selectAt(e.event?.clientX ?? mouse.x, e.event?.clientY ?? mouse.y); }); // Ctrl+click: select (mouse look: what the crosshair is aimed at)
 onPress('clearTarget', () => clearSelection()); // Ctrl+right-click: deselect
 // Was something open when Esc went down? (Capture phase: before the panels' own Esc handlers close them.)
 let escBusy = false;
@@ -992,6 +1007,14 @@ addEventListener('resize', layoutChips);
 setTimeout(layoutChips, 0); setTimeout(layoutChips, 1500);
 
 const settingsUi = initSettingsPanel({ el: $('settings'), settings, save: saveSettings, Q, PRESETS, perf, applyQuality, freeCursor, bubbles, sfx }); // public/settings.js
+// Controller menu navigation over the window on top (public/focusnav.js): the MVP card, else the top panel, else
+// character select, else the death card; only windows marked data-nav. B: back (Settings opened from the Game Menu
+// goes back to it); the Game Menu's Controls page backs out to the menu first.
+const nav = createFocusNav({ input, panels, order: ['mvp', '*', 'login', 'dead'], hooks: {
+  gamemenu: { back: () => { const b = $('gamemenu').querySelector('[data-a=back]'); if (b) b.click(); else gmenu.close(); }, open: () => menuOpen() },
+  talentsp: { back: () => talents.toggle(false) },
+  mvp: { back: () => mvp.close() },
+} });
 $('menu-btn').onclick = () => menuOpen(); // phones: the Game Menu
 $('settings-btn').onclick = () => settingsUi.toggle();
 
@@ -2014,7 +2037,11 @@ function frame(now) {
   frameNo++; entStats.interp = entStats.extrap = entStats.hold = 0;
   frustum.setFromProjectionMatrix(frM4.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); // (last frame's camera)
   corr.step(dt * 1000);
-  input.tick(); input.setContext('downedAlly', !!state.joined && (revive.usesE() || rescue.usesE())); // (pads polled here from K1b; E revives / cuts free instead of turning)
+  input.tick(); nav.tick(now); input.setContext('downedAlly', !!state.joined && (revive.usesE() || rescue.usesE())); // (pads polled here; E / D-pad down revives / cuts free instead of turning)
+  if (input.device === 'pad' && state.joined && !state.spectator && !gmenu.isOpen() && !nav.active()) { // the right stick: camera, or picks on the bot wheel (not while a window is navigated)
+    if (wheel.isOpen()) { const s = input.stick(input.bindings('pad').look?.[0]); wheel.point(s.x, s.y); }
+    else { const lk = input.axis('look'); state.yaw -= lk.x * dt * 2.6; state.pitch = Math.min(1.25, Math.max(0.12, state.pitch - lk.y * dt * 1.5)); }
+  }
   const lm = state.joined && !state.spectator ? lockedMob() : null;
   const la = !lm && state.joined && !state.spectator ? focusedAlly() : null;
   const sel = lm || la;
@@ -2052,7 +2079,7 @@ function frame(now) {
   if (state.joined && !state.dead && !state.spectator && !arenas.frozen()) { // (frozen: falling / landing in a boss arena)
     // movement input
     let ix = 0, iz = 0;
-    const typing = document.activeElement === $('chat-input') || gmenu.isOpen(); // (the Game Menu blocks movement too)
+    const typing = document.activeElement === $('chat-input') || gmenu.isOpen() || nav.active(); // (the Game Menu blocks movement too; so does a window the left stick is navigating)
     if (!typing) {
       const mv = input.axis('move'); ix += mv.x; iz += mv.y;
       if (input.held('turnLeft')) state.yaw += dt * 2;
@@ -2187,4 +2214,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { settings, combat, wheel, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };
+window.__fb = { settings, combat, wheel, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };

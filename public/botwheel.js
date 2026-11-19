@@ -93,5 +93,13 @@ export function initBotWheel({ send, state, players, log }) {
       else if (performance.now() - openedAt > 350) close(); // held and released on nothing: cancel
     },
     hasBots: () => partyBots().length > 0,
+    point(x, y) { // a stick (x right, y down): highlight the order it points at; release the button to give it (K1b)
+      if (!isOpen() || Math.hypot(x, y) < 0.5) return;
+      const btns = [...el.querySelectorAll('.wcmd:not([disabled])')], want = Math.atan2(y, x);
+      const off = b => Math.abs(Math.atan2(Math.sin(Math.atan2(parseFloat(b.style.top), parseFloat(b.style.left)) - want), Math.cos(Math.atan2(parseFloat(b.style.top), parseFloat(b.style.left)) - want)));
+      const best = btns.sort((a, b) => off(a) - off(b))[0];
+      for (const b of btns) b.classList.toggle('pick', b === best);
+      hover = best ? best.dataset.c : null;
+    },
   };
 }

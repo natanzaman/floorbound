@@ -8,24 +8,35 @@
 //   device              'kbm' | 'pad' | 'touch' (one device drives play; setDevice)
 //   bindings(device)    the bindings in force; setBinding(device, action, slot, binding, mode) checks, swaps or unbinds, saves
 //   capture()           the next key, click or chord as a binding (Esc: null); swallows everything meanwhile
-//   readPads()          the connected standard pads (K1b; none yet)
+//   readPads()          the connected pads (navigator.getGamepads(); tick() polls the first standard one)
 //   frames              frames polled so far (tick() once per frame), for tests that hold a press for N frames
+//   pad                 { connected, id, recognised, family }; glyphs / setGlyphs('auto'|'xbox'|'sony'|'nintendo')
+//   onPad(fn)           fn(name, down) on every pad button edge, before actions (menus: return true to swallow it)
+//   onDevice(fn)        fn(device) after the active device changes; stick('LS'|'RS') a stick after the deadzone
+// The pad (K1b, shared/gamepad.js): polled every frame, buttons resolved against bindings('pad') with LB as the
+// modifier, triggers with hysteresis, sticks with a deadzone; the camera stick takes sens / invertY from
+// fb_controls.access. Under keyboard & mouse the pad keeps only Start (the Game Menu); a pad seen for the first time
+// asks once whether to switch to it. A pad that goes away lets go of its holds and falls back to keyboard & mouse.
 // Bound by KeyboardEvent.code, so Shift+1 is still 1 and other layouts keep the same physical keys. Typing fields
 // (input, textarea, select, IME composition) swallow game keys; preventDefault only on keys that did something.
 import { ACTION, merged, resolve, actionsOn, bindingHeld, bindingArmed, axisFromKeys, assign, diff, bindingLabel, modOfCode, isAxisBinding, tokens } from '/shared/controls.js';
+import { readButtons, readSticks, padEdges, pressAction, lookFrom, glyphFamily, padLabel, GLYPH_FAMILIES } from '/shared/gamepad.js';
 
 // fb_controls: the bindings (and, from K3, accessibility), versioned; synced to the account later (K2).
 const CONTROLS_KEY = 'fb_controls', CONTROLS_V = 1;
+let accessCache = null; // fb_controls.access, read once per change (the camera stick reads it every frame)
 export const controlsStore = {
+  access() { return accessCache ||= { sens: 1, invertY: false, ...(this.get().access || {}) }; },
   get() { try { const c = JSON.parse(localStorage.getItem(CONTROLS_KEY) || 'null'); return c && typeof c === 'object' ? c : { v: CONTROLS_V }; } catch { return { v: CONTROLS_V }; } },
-  set(patch) { const c = { ...this.get(), ...patch, v: CONTROLS_V }; try { localStorage.setItem(CONTROLS_KEY, JSON.stringify(c)); } catch {} return c; },
+  set(patch) { accessCache = null; const c = { ...this.get(), ...patch, v: CONTROLS_V }; try { localStorage.setItem(CONTROLS_KEY, JSON.stringify(c)); } catch {} return c; },
 };
 
 const KBM_ALWAYS = ['menu', 'chat', 'perfOverlay'];
 export const isTyping = el => !!el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
 
 // gate(action): may this action fire now (main.js: joined, the Game Menu not open, ...)
-export function createInput({ isTouch = false, gate = () => true, settings = {}, save = () => {}, notify = () => {} } = {}) {
+// notify(text): a short message (a toast). ask(text, answer): a yes / no prompt, answer(bool); returns close().
+export function createInput({ isTouch = false, gate = () => true, settings = {}, save = () => {}, notify = () => {}, ask = null } = {}) {
   const stored = controlsStore.get();
   const B = { kbm: merged('kbm', stored.kbm), pad: merged('pad', stored.pad) };
   const held = new Set();     // key codes, 'Mouse<n>', and 'Ctrl' 'Shift' 'Alt' 'Meta' while down
@@ -35,6 +46,10 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
   let device = isTouch ? 'touch' : 'kbm';
   if (settings.device === 'pad') settings.device = 'kbm'; // (no pad is connected at load: never start locked to one)
   let capturing = null;
+  // the pad: the one being read (index, id), its buttons down now, the hold actions they pressed, its sticks
+  const pad = { index: -1, id: null, recognised: true, family: 'xbox', held: new Set(), active: new Map(), sticks: { LS: { x: 0, y: 0 }, RS: { x: 0, y: 0 } } };
+  const padSubs = new Set(), deviceSubs = new Set();
+  let pendingAsk = null; // the "Controller detected" prompt's answer(), while it's up (A: yes, B: no)
 
   const fire = (action, ev) => { for (const fn of subs.get(action) || []) fn(ev); };
   const setMods = e => { for (const [m, on] of [['Ctrl', e.ctrlKey], ['Shift', e.shiftKey], ['Alt', e.altKey], ['Meta', e.metaKey]]) on ? held.add(m) : held.delete(m); };
@@ -80,7 +95,9 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     if (active.has(code)) release(code, e, 'kbm', false);
   });
   addEventListener('blur', () => reset());
-  function reset() { held.clear(); active.clear(); } // (quietly: callers clear their own holds)
+  // Keys and mouse let go quietly (callers clear their own holds); pad holds fire their up (the bot wheel closes) and
+  // the pad buttons still down stay down (no new press when they come back up).
+  function reset() { held.clear(); active.clear(); releasePad(); }
 
   // Mouse buttons on the game view: main.js asks what a click would do (peek), then lets it happen (mouseDown).
   const mouseCode = e => `Mouse${e.button}`;
@@ -88,19 +105,26 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
   function mouseDown(e) { setMods(e); held.add(mouseCode(e)); return press(mouseCode(e), e, 'kbm'); }
 
   // ---- reading ----
-  function suppressed(action, b) { // a context action that's on takes its keys from the others (E: revive, not turn)
+  const dev = () => (device === 'pad' ? 'pad' : 'kbm');
+  function suppressed(action, b, d) { // a context action that's on takes its keys from the others (E: revive, not turn)
     if (ACTION[action].context) return false;
-    return tokens(b).some(t => actionsOn(kb(), t).some(o => ACTION[o.action]?.context && ctx.has(ACTION[o.action].context)));
+    return tokens(b).some(t => actionsOn(B[d], t, d).some(o => ACTION[o.action]?.context && ctx.has(ACTION[o.action].context)));
   }
   function heldNow(action) {
     const a = ACTION[action];
-    if (!a || device === 'pad') return false; // (pad holds: K1b)
-    return (kb()[action] || []).some(b => b && (isAxisBinding(b) ? tokens(b).some(k => held.has(k)) : bindingHeld(b, held)) && !suppressed(action, b) && (!a.context || ctx.has(a.context)));
+    if (!a) return false;
+    const d = dev(), h = d === 'pad' ? pad.held : held;
+    return (B[d][action] || []).some(b => b && (isAxisBinding(b) ? tokens(b).some(k => h.has(k)) : bindingHeld(b, h)) && !suppressed(action, b, d) && (!a.context || ctx.has(a.context)));
   }
+  const stick = name => pad.sticks[name] || { x: 0, y: 0 };
   function axis(name) {
+    if (device === 'pad') { // the stick bound to it (move: y forward; look: sensitivity and invert-Y, y up)
+      const s = stick(B.pad[name]?.[0]);
+      return name === 'look' ? lookFrom(s, controlsStore.access()) : { x: s.x, y: -s.y };
+    }
     const v = { x: 0, y: 0 };
-    if (name === 'move' && device !== 'pad') for (const b of kb().move || []) { const a = axisFromKeys(b, held); v.x += a.x; v.y += a.y; }
-    return v; // (sticks: K1b; the mouse turns the camera through its own events)
+    if (name === 'move') for (const b of kb().move || []) { const a = axisFromKeys(b, held); v.x += a.x; v.y += a.y; }
+    return v; // (the mouse turns the camera through its own events)
   }
 
   // ---- capture (rebinding): the next key / click / chord ----
@@ -108,7 +132,7 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
   function capture() {
     if (capturing) capturing(null);
     return new Promise(res => {
-      capKeys = []; capMods = new Set();
+      capKeys = []; capMods = new Set(); capLB = false;
       capturing = b => { capturing = null; removeEventListener('pointerdown', capturePointer, true); res(b); };
       capDone = b => capturing?.(b);
       addEventListener('pointerdown', capturePointer, true);
@@ -136,32 +160,89 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     setMods(e); for (const m of ['Ctrl', 'Shift', 'Alt', 'Meta']) if (held.has(m)) capMods.add(m);
     capDone(`${modPrefix()}Mouse${e.button}`);
   }
+  // a pad button (on its press; LB is only a modifier: LB+X, or a lone LB on release, which check() refuses); Start cancels
+  let capLB = false;
+  function capturePad(name, down) {
+    if (name === 'LB') { if (down) capLB = true; else if (capLB) capDone('LB'); return; }
+    if (!down) return;
+    if (name === 'Start') return capDone(null);
+    capDone(pad.held.has('LB') ? `LB+${name}` : name);
+  }
 
   // ---- devices ----
-  function readPads() { return []; } // K1b: navigator.getGamepads(), standard mapping
-  const devSubs = new Set(); // onDevice(fn): called after every device switch (holds already released)
+  function readPads() {
+    let list = [];
+    try { list = [...(navigator.getGamepads?.() || [])]; } catch {}
+    return list.filter(p => p && p.connected !== false);
+  }
+  function releasePad() {
+    const ups = [...new Set(pad.active.values())];
+    pad.active.clear();
+    for (const a of ups) fire(a, { down: false, repeat: false, source: 'pad', event: null });
+  }
   function setDevice(d) {
     if (d === device) return true;
     if (d === 'pad' && !readPads().length) return false; // Controller only while one is connected
     for (const [code] of active) release(code, null, device, false); // let go of every hold
+    releasePad();
     device = d; settings.device = d === 'touch' ? undefined : d; save();
-    for (const fn of devSubs) fn(d);
+    for (const fn of deviceSubs) fn(d);
     return true;
   }
-  addEventListener('gamepaddisconnected', () => {
-    if (device !== 'pad' || readPads().length) return;
+  function padFound(gp) {
+    if (pad.index !== -1) releasePad(); // (the active pad left and another took over: let go of its holds)
+    pad.index = gp.index; pad.id = gp.id; pad.recognised = gp.mapping === 'standard'; pad.family = glyphFamily(gp.id);
+    pad.held = readButtons(gp); // (buttons already down, the press that woke it: no edge, so it can't answer the prompt below)
+    if (!pad.recognised) notify('Controller not recognised: its buttons are read by position. Rebind them in Controls if they feel wrong.');
+    if (device === 'pad' || settings.padAsked) return;
+    settings.padAsked = true; save(); // (asked once; the Controls screen switches later)
+    let close = () => {};
+    const answer = yes => { if (pendingAsk !== answer) return; pendingAsk = null; close?.(); if (yes && setDevice('pad')) notify('Controller on: Start opens the Game Menu.'); };
+    pendingAsk = answer;
+    close = ask ? ask('Controller detected. Switch to it?', answer) : (notify('Controller detected: choose it in the Game Menu → Controls.'), pendingAsk = null, () => {});
+  }
+  function padLost() {
+    releasePad();
+    pad.index = -1; pad.id = null; pad.held = new Set(); pad.sticks = { LS: { x: 0, y: 0 }, RS: { x: 0, y: 0 } };
+    pendingAsk = null;
+    if (device !== 'pad') return;
     setDevice(isTouch ? 'touch' : 'kbm'); notify('Controller disconnected: back to keyboard & mouse.');
-  });
+  }
+  function padEdge(name, down) {
+    if (capturing) return capturePad(name, down);
+    if (down && pendingAsk && (name === 'A' || name === 'B')) return pendingAsk(name === 'A');
+    if (!down) { const a = pad.active.get(name); pad.active.delete(name); if (a) fire(a, { down: false, repeat: false, source: 'pad', event: null }); }
+    for (const fn of padSubs) if (fn(name, down) === true) return; // menus (focus navigation) first
+    if (!down) return;
+    const hit = pressAction(B.pad, pad.held, name, ctx);
+    if (!hit || !gate(hit.action)) return;
+    if (device !== 'pad' && hit.action !== 'menu') return; // one device drives play (Start always opens the menu)
+    if (ACTION[hit.action].type === 'hold') pad.active.set(name, hit.action);
+    fire(hit.action, { down: true, repeat: false, source: 'pad', event: null });
+  }
+  function poll() {
+    const pads = readPads();
+    const gp = pads.find(p => p.index === pad.index && p.id === pad.id) || pads.find(p => p.mapping === 'standard') || pads[0] || null;
+    if (!gp) { if (pad.index !== -1) padLost(); return; }
+    if (gp.index !== pad.index || gp.id !== pad.id) padFound(gp);
+    const now = readButtons(gp, pad.held);
+    pad.sticks = readSticks(gp);
+    const edges = padEdges(pad.held, now);
+    pad.held = now;
+    for (const e of edges) padEdge(e.name, e.down);
+  }
+  addEventListener('gamepadconnected', () => poll());
+  addEventListener('gamepaddisconnected', () => { if (!readPads().length) padLost(); });
+  const glyphs = () => (GLYPH_FAMILIES.includes(settings.padGlyphs) ? settings.padGlyphs : pad.family);
 
   const api = {
     on(action, fn) { if (!subs.has(action)) subs.set(action, new Set()); subs.get(action).add(fn); return () => subs.get(action).delete(fn); },
     held: heldNow,
     armed: action => (kb()[action] || []).some(b => bindingArmed(b, held)),
     axis,
-    label: action => { const d = device === 'pad' ? 'pad' : 'kbm'; return bindingLabel(B[d][action]?.[0] || B[d][action]?.[1] || null); },
+    label: action => (device === 'pad' ? padLabel(B.pad[action]?.[0] || null, glyphs()) : bindingLabel(kb()[action]?.[0] || kb()[action]?.[1] || null)),
     get device() { return device; },
     setDevice,
-    onDevice(fn) { devSubs.add(fn); return () => devSubs.delete(fn); },
     bindings: (d = 'kbm') => B[d],
     setBinding(d, action, slot, binding, mode = 'unbind') {
       const r = assign(B[d], d, action, slot, binding, mode);
@@ -174,7 +255,14 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     setContext(name, on) { on ? ctx.add(name) : ctx.delete(name); },
     capture, readPads, peek, mouseDown, reset,
     frames: 0,
-    tick() { api.frames++; readPads(); },
+    tick() { api.frames++; poll(); },
+    get pad() { return { connected: pad.index !== -1, id: pad.id, recognised: pad.recognised, family: pad.family }; },
+    get glyphs() { return glyphs(); },
+    setGlyphs(f) { settings.padGlyphs = GLYPH_FAMILIES.includes(f) ? f : undefined; save(); },
+    onPad(fn) { padSubs.add(fn); return () => padSubs.delete(fn); },
+    onDevice(fn) { deviceSubs.add(fn); return () => deviceSubs.delete(fn); },
+    padHeld: name => pad.held.has(name),
+    stick,
     get capturing() { return !!capturing; },
     key: code => held.has(code), // a physical key (the old key set's shim)
   };
