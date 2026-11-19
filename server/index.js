@@ -21,7 +21,9 @@ import { installDirectorAdmin } from './director-admin.js';
 import { NamedManager, makeNamedStore, namedOn } from './named.js'; // the Named: the Hearthward and the loner (NAMED_ENABLED=0 turns them off)
 import { installNamedAdmin } from './named-admin.js';
 import { NamedQuests, makeQuestStore } from './namedquests.js'; // the Named's requests and invitations (I4)
-import { TICK_RATE } from '../shared/data.js';
+import { TICK_RATE, inArena } from '../shared/data.js';
+import { floorOf, inArena2 } from '../shared/floor2.js';
+import { inArena3 } from '../shared/floor3.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 3000;
@@ -209,15 +211,36 @@ function perfStats() {
 }
 const sendCounted = (ws, str) => { perf.bytesAll += str.length; ws.send(str); };
 
+// Bot think rate: a server bot with no human within THINK_NEAR m (on its floor) and not in a boss fight gets every other
+// snapshot (its brain runs at 10 Hz; the skipped tick's events come with the next one, and msg.dt tells it the step).
+// Near humans, in a boss room or fight, or while the director films, every snapshot (20 Hz). BOT_THINK=20: always 20 Hz.
+const halfRate = process.env.BOT_THINK !== '20';
+const THINK_NEAR = 60;
+let tickNo = 0;
+function thinksSlow(p, humans) {
+  if (p.dead || p.downed || game.director?.running) return false;
+  if (inArena(p.x, p.z) || inArena2(p.x, p.z) || inArena3(p.x, p.z) || game.activeFightOf?.(p)) return false;
+  const fl = floorOf(p.x);
+  for (const h of humans) if (floorOf(h.x) === fl && Math.abs(h.x - p.x) < THINK_NEAR && Math.abs(h.z - p.z) < THINK_NEAR && Math.hypot(h.x - p.x, h.z - p.z) < THINK_NEAR) return false;
+  return true;
+}
+
 function tick(dt) {
   const t0 = performance.now();
   game.update(dt);
   const world = game.snapshot();
   let shared = null; // the world part for in-process bots: parsed once a tick, shared by all of them (read-only)
+  const humans = halfRate ? [...game.players.values()].filter(p => !p.bot) : null;
+  tickNo++;
   for (const p of game.players.values()) {
     if (p.ws.readyState !== 1) continue;
-    if (p.ws.local) p.ws.deliver({ type: 'snap', me: game.meFor(p), w: (shared ||= localHub.freeze ? deepFreeze(JSON.parse(world)) : JSON.parse(world)) });
-    else sendCounted(p.ws, `{"type":"snap","me":${JSON.stringify(game.meFor(p))},"w":${world}}`);
+    if (p.ws.local) {
+      shared ||= localHub.freeze ? deepFreeze(JSON.parse(world)) : JSON.parse(world);
+      if (halfRate && (tickNo + p.id) % 2 && thinksSlow(p, humans)) { (p.evLater ||= []).push(shared.events); continue; } // 10 Hz: this tick's events wait for the next
+      const later = p.evLater; p.evLater = null;
+      const w = later ? { ...shared, events: [].concat(...later, shared.events) } : shared;
+      p.ws.deliver({ type: 'snap', me: game.meFor(p), w, ...(later ? { dt: (later.length + 1) / TICK_RATE } : {}) });
+    } else sendCounted(p.ws, `{"type":"snap","me":${JSON.stringify(game.meFor(p))},"w":${world}}`);
     if (p.invDirty) { p.invDirty = false; p.ws.send(JSON.stringify(game.invFor(p))); }
     if (p.talentsDirty) { p.talentsDirty = false; p.ws.send(JSON.stringify(game.talentsMsg(p))); } // talent tree: points, ranks
     if (p.masteryDirty && (p.masteryNow || game.time - (p.mSentT || 0) >= 1)) { // skill mastery: at most once a second, at once on a level-up/evolve
@@ -295,5 +318,11 @@ db.migrate()
   .then(() => { game.hadFirstClear = hall.hasFirst(); game.hadFirstClear2 = hall.hasFirst(2); game.hadFirstClear3 = hall.hasFirst(3); })
   .then(() => { if (db.enabled) aiMinds.useStore(aiStore(db.q)); }) // (async, never blocks or fails startup)
   .then(() => { if (db.enabled && named) { named.quests.useStore(makeQuestStore(db.q)); return named.useStore(makeNamedStore(db.q, { adminIds: (process.env.ADMIN_DISCORD_IDS || '').split(',').map(s => s.trim()).filter(Boolean) })); } })
-  .then(() => server.listen(PORT, () => console.log(`Floorbound running on http://localhost:${PORT}${db.enabled ? ' (accounts on' + (accounts.discordOn() ? ', Discord sign-in on' : '') + ')' : ''}`)))
+  .then(() => server.listen(PORT, () => {
+    console.log(`Floorbound running on http://localhost:${PORT}${db.enabled ? ' (accounts on' + (accounts.discordOn() ? ', Discord sign-in on' : '') + ')' : ''}`);
+    if (process.env.TEST_TEAM) { // testing aid: TEST_TEAM=guardian,swordsman,cleric:5:warden starts a server-run party (test/wardenskill.js LOCAL=1)
+      const [roles, skill, behaviour = 'warden'] = process.env.TEST_TEAM.split(':'), list = roles.split(',');
+      bots.start(list, list.map(c => bots.uniqueName()), { lvl: Number(process.env.START_LEVEL) || 1, behaviour, follow: '', skill: Number(skill) || 5 }, 1);
+    }
+  }))
   .catch(err => { console.error('Startup failed', err); process.exit(1); });

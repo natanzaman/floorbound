@@ -112,7 +112,7 @@ function evolve(b, m) {
 }
 
 function onSnap(b, msg) {
-  b.t += DT;
+  b.dt = msg.dt || DT; b.t += b.dt; // (msg.dt: the server thinks this bot at 10 Hz while it's far from humans and fights, server/index.js)
   b.me = msg.me;
   b.cds = msg.me.cds.map((c, k) => (b.t - (b.pressed?.[k] || -9) < 0.3 ? Math.max(c, 0.2) : c));
   if (b.t - (b.dodgePressed || -9) > 0.3) b.dodgeCd = msg.me.dodge || 0;
