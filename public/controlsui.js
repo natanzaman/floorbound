@@ -11,9 +11,14 @@
 //   Rebind: input.capture() takes the next key, click or chord (Esc cancels). shared/controls.js check() decides:
 //           refused keys get a reason; a key that's taken asks Swap / Unbind / Cancel (assign 'swap' | 'unbind').
 //   Reset to defaults per device. Every change saves to fb_controls (input.setBinding), which the account sync uploads.
+//   Combat (above the tabs, both devices): the targeting mode (Nearest | Locked or nearest | Cone | Aimed), Cleave and
+//           max targets per hit (fb_controls.combat via controlsStore.setCombat; shared/targeting.js). main.js sends
+//           them to the server whenever they change.
 import { ACTION, ACTIONS, DEFAULTS, GROUPS, PAD_BUTTONS, PAD_MODIFIERS, bindingLabel, canSwap, check, conflictText, isAxisBinding, keyName, modOfCode, tokens } from '/shared/controls.js';
 import { buttonGlyph, padLabel } from '/shared/gamepad.js';
 import * as xboxUsb from '/xboxusb.js';
+import { controlsStore } from '/input.js';
+import { TARGET_MODES, TARGET_MODE_INFO, MAX_TARGETS } from '/shared/targeting.js';
 
 export const DEVICE_NAMES = { kbm: 'Keyboard & Mouse', pad: 'Controller' };
 // Why a binding is refused (check() errors), in plain words.
@@ -183,7 +188,18 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
       <div class="cu-dev" role="radiogroup">${['kbm', 'pad'].map(d => `<label class="cu-opt ${d === 'pad' && !p.length ? 'off' : ''}"><input type="radio" name="cu-dev" value="${d}" data-nav="cu-dev-${d}" ${dev === d ? 'checked' : ''} ${d === 'pad' && !p.length && dev !== 'pad' ? 'disabled' : ''}> ${DEVICE_NAMES[d]}</label>`).join('')}</div>
       <small class="cu-status" id="cu-status">${p.length ? `Controller connected: ${esc(padName(p[0]))}` : 'No controller connected (press a button on one to wake it).'}</small>
       ${!p.length && xboxUsb.needed() ? '<small class="cu-usb">Wired Xbox controller with a blinking light (a Mac)? <button data-a="usb" data-nav="cu-usb">Connect it</button></small>' : ''}
+      ${combatBox()}
       <div class="cu-tabs" role="tablist">${['kbm', 'pad'].map(d => `<button role="tab" data-tab="${d}" data-nav="cu-tab-${d}" class="${tab === d ? 'on' : ''}" aria-selected="${tab === d}">${DEVICE_NAMES[d]}</button>`).join('')}</div>`;
+  }
+  // Controls → Combat: targeting mode, Cleave, max targets per hit.
+  function combatBox() {
+    const c = controlsStore.combat();
+    return `<h4>Combat</h4><div class="cu-combat" id="cu-combat">
+      <div class="cu-tmode" role="radiogroup" aria-label="Targeting">${TARGET_MODES.map(m => `<label class="cu-opt" title="${esc(TARGET_MODE_INFO[m].desc)}"><input type="radio" name="cu-tmode" value="${m}" data-nav="cu-tmode-${m}" ${c.mode === m ? 'checked' : ''}> ${esc(TARGET_MODE_INFO[m].label)}</label>`).join('')}</div>
+      <small class="cu-tdesc" id="cu-tdesc">${esc(TARGET_MODE_INFO[c.mode].desc)}</small>
+      <label class="cu-opt"><input type="checkbox" id="cu-cleave" data-nav="cu-cleave" ${c.cleave ? 'checked' : ''}> Cleave: one swing hits every enemy in its reach</label>
+      <div class="cu-max ${c.cleave ? '' : 'off'}">Max targets per hit <button data-max="-1" data-nav="cu-max-down" ${c.cleave && c.max > MAX_TARGETS.min ? '' : 'disabled'} aria-label="Fewer">−</button><b id="cu-max-v">${c.max}</b><button data-max="1" data-nav="cu-max-up" ${c.cleave && c.max < MAX_TARGETS.max ? '' : 'disabled'} aria-label="More">+</button><small>${c.cleave ? 'Some weapons and skills reach fewer.' : 'Cleave off: one enemy per hit (your target, else the nearest).'}</small></div>
+    </div>`;
   }
   function slotCell(device, a, slot) {
     const b = input.bindings(device)[a.id]?.[slot] ?? null, key = `${a.id}:${slot}`;
@@ -300,6 +316,7 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
     if (!t) { if (pop && !e.target.closest('.cu-pop')) { pop = null; render(); } return; }
     if (t.dataset.pop) { pop = t.dataset.pop === 'edit' ? { ...pop, mode: 'list', filter: '' } : null; return say(''); }
     if (t.dataset.pick) return pickFor(t.dataset.pick);
+    if (t.dataset.max) { const c = controlsStore.combat(); controlsStore.setCombat({ max: c.max + +t.dataset.max }); sfx?.play?.('ui'); restore = null; return say(`Max targets per hit: ${controlsStore.combat().max}.`); }
     if (t.dataset.a === 'close') return close();
     if (t.dataset.a === 'usb') {
       xboxUsb.connect().then(ok => { padCount = pads().length; say(ok ? 'Wired controller connected. Choose Controller above to play with it.' : 'No controller opened. Pick it in the browser’s list (it may be called just “Controller”).'); });
@@ -382,6 +399,8 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
   let choosing = false;
   input.onDevice?.(d => { tab = d === 'pad' ? 'pad' : 'kbm'; pop = null; if (!choosing) refresh(); });
   el.addEventListener('change', e => {
+    if (e.target.name === 'cu-tmode' && TARGET_MODES.includes(e.target.value)) { controlsStore.setCombat({ mode: e.target.value }); return say(`Targeting: ${TARGET_MODE_INFO[e.target.value].label}.`); }
+    if (e.target.id === 'cu-cleave') { controlsStore.setCombat({ cleave: !!e.target.checked }); return say(`Cleave ${e.target.checked ? 'on' : 'off'}.`); }
     if (e.target.name !== 'cu-dev') return;
     choosing = true; let ok; try { ok = input.setDevice(e.target.value); } finally { choosing = false; }
     say(ok ? `Playing with: ${DEVICE_NAMES[e.target.value]}.` : 'Connect a controller first.');

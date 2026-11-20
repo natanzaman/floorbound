@@ -23,6 +23,7 @@
 // (input, textarea, select, IME composition) swallow game keys; preventDefault only on keys that did something.
 import { ACTION, merged, loadBindings, resolve, actionsOn, bindingHeld, bindingArmed, axisFromKeys, assign, diff, bindingLabel, modOfCode, isAxisBinding, tokens } from '/shared/controls.js';
 import { normalizeAccess } from '/access.js';
+import { cleanPrefs } from '/shared/targeting.js';
 import { readButtons, readSticks, padEdges, pressAction, lookFrom, glyphFamily, padLabel, GLYPH_FAMILIES } from '/shared/gamepad.js';
 import { pads as usbPads } from '/xboxusb.js'; // wired third-party Xbox pads on a Mac (WebUSB)
 
@@ -38,6 +39,8 @@ export const controlsStore = {
     if (!raw || typeof raw !== 'object' || !Object.hasOwn(raw, 'padSens')) delete a.padSens;
     return (accessCache = a);
   },
+  combat() { return cleanPrefs(this.get().combat); }, // Controls → Combat: { mode, cleave, max } (shared/targeting.js)
+  setCombat(patch) { const c = cleanPrefs({ ...this.combat(), ...patch }); return this.set({ combat: { target: c.mode, cleave: c.cleave, max: c.max } }); },
   get() { try { const c = JSON.parse(localStorage.getItem(CONTROLS_KEY) || 'null'); return c && typeof c === 'object' ? c : { v: CONTROLS_V }; } catch { return { v: CONTROLS_V }; } },
   set(patch) { return this.replace({ ...this.get(), ...patch }); },
   replace(c) { accessCache = null; c = { ...c, v: CONTROLS_V }; try { localStorage.setItem(CONTROLS_KEY, JSON.stringify(c)); } catch {} for (const fn of storeListeners) fn(c); return c; },

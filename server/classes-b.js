@@ -36,13 +36,18 @@ const methods = {
   // ---------- Lancer helpers ----------
   // Enemies in a narrow line in front of p, up to `reach` from p to their near edge. The spear tip (near edge 2.4 m+
   // away) deals +30% (Glaive: 3.4 m+, +50%; Honed Tip talent: +10% per rank). Returns the ids hit at the tip.
-  spearLine(p, reach, width, amount, opts, L = LANCE) {
-    const dx = Math.sin(p.face), dz = Math.cos(p.face), tip = [];
+  // A: the attack's target limit (Cleave settings, server/targeting.js).
+  spearLine(p, reach, width, amount, opts, L = LANCE, A = null) {
+    const dx = Math.sin(p.face), dz = Math.cos(p.face), tip = [], inLine = [];
     const sweetMult = L.sweetMult + 0.1 * (p.tal?.keys.honedtip || 0);
-    for (const m of [...this.mobs.values()]) {
+    for (const m of this.mobs.values()) {
       if (!this.targetable(m)) continue;
       const vx = m.x - p.x, vz = m.z - p.z, along = vx * dx + vz * dz, perp = Math.abs(vx * dz - vz * dx);
       if (along < -0.3 || along - m.def.radius > reach || perp > width + m.def.radius) continue;
+      inLine.push(m);
+    }
+    for (const m of this.capHits ? this.capHits(p, inLine, A) : inLine) {
+      const vx = m.x - p.x, vz = m.z - p.z, along = vx * dx + vz * dz;
       const sweet = along - m.def.radius >= L.sweetFrom;
       if (sweet) tip.push(m.id);
       this.damageMob(m, p, amount * (sweet ? sweetMult : 1), opts);
@@ -224,7 +229,7 @@ const SKILLS = {
     p.combo = t - p.lastBasic < 1.0 ? (p.combo + 1) % 3 : 0;
     p.lastBasic = t;
     const fin = p.combo === 2, reach = fin ? L.finReach : L.reach;
-    const tip = this.spearLine(p, reach, L.width, c.atk * (fin ? L.finMult : L.mult), { knock: fin ? 1.2 : 0.3, heavy: fin }, L);
+    const tip = this.spearLine(p, reach, L.width, c.atk * (fin ? L.finMult : L.mult), { knock: fin ? 1.2 : 0.3, heavy: fin }, L, this.atkFov(p, fin ? 'lthrustFin' : 'lthrust'));
     this.cbFx(p, 'thrust', { s: 'lthrust', n: p.combo, r: reach, tip, sty: sty ? p.style : undefined });
   },
   lcharge(p, c) {
@@ -303,7 +308,7 @@ const SKILLS = {
   // ----- Bard -----
   sonic(p, c) {
     const sty = this.styleNum(p, 'bolt', null), B = sty ? { ...SONG.bolt, ...sty } : SONG.bolt, dx = Math.sin(p.face), dz = Math.cos(p.face); // Flute
-    const pr = { id: this.id(), by: p.id, x: p.x + dx * 0.7, z: p.z + dz * 0.7, vx: dx * B.speed, vz: dz * B.speed, ttl: B.range / B.speed, amount: c.atk * B.mult, rad: B.radius };
+    const pr = { id: this.id(), by: p.id, x: p.x + dx * 0.7, z: p.z + dz * 0.7, vx: dx * B.speed, vz: dz * B.speed, ttl: B.range / B.speed, amount: c.atk * B.mult, rad: B.radius + this.aimPad(p) }; // (aimed mode: a slightly bigger hitbox)
     (this.cbShots ||= []).push(pr);
     p.lastCombat = this.time;
     this.cbFx(p, 'sonic', { s: 'sonic', pid: pr.id, x: r2(pr.x), z: r2(pr.z), vx: r2(pr.vx), vz: r2(pr.vz), ttl: r2(pr.ttl), sty: sty ? p.style : undefined });

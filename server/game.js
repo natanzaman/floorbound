@@ -42,6 +42,7 @@ import { installTeamplay } from './teamplay.js'; // skill combos + Team Burst + 
 import { installMvp } from './mvp.js'; // post-fight MVP card (G5)
 import { installLoot } from './loot.js';
 import { installLooks } from './looks.js'; // character looks: setLook, w.looks (I2)
+import { installTargeting } from './targeting.js'; // targeting modes + cleave (player settings, Controls → Combat)
 import { rollGear } from '../shared/loot.js'; // affixes, boss sets, loadouts, drop tables (H2)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
@@ -190,6 +191,7 @@ export class Game {
         this.events.push({ t: 'chat', from: p.name, id: p.id, text, ...ch, ...(p.admin ? { adm: 1 } : {}) });
         return;
       }
+      case 'tprefs': return this.setTargetPrefs(p, msg); // targeting mode + cleave (Controls → Combat; server/targeting.js)
       case 'target': { // the mob a player has locked (party bots assist it)
         const id = msg.id | 0;
         if (id !== (p.target || 0)) { p.target = id; this.events.push({ t: 'ptgt', id: p.id, m: id }); }
@@ -591,9 +593,9 @@ export class Game {
       case 'bash': {
         p.combo = t - p.lastBasic < 1.0 ? (p.combo + 1) % 3 : 0;
         p.lastBasic = t;
-        const fin = p.combo === 2, threat = sk.id === 'bash' ? 2.5 : 1;
-        fx('arc', { r: fin ? 3.5 : 3, n: p.combo, c: fin || sk.id === 'bash' ? 'gold' : undefined, fin: fin ? 1 : 0 });
-        this.hitArc(p, fin ? 3.5 : 3, fin ? 1.3 : 1.05, atk * (fin ? 1.6 : 1), { threat, knock: fin ? 2 : 0.35, heavy: fin });
+        const fin = p.combo === 2, threat = sk.id === 'bash' ? 2.5 : 1, A = this.atkFov(p, fin ? 'slashFin' : 'slash'); // (shared/targeting.js ATTACKS)
+        fx('arc', { r: A.r, n: p.combo, c: fin || sk.id === 'bash' ? 'gold' : undefined, fin: fin ? 1 : 0 });
+        this.hitArc(p, A.r, A.half, atk * (fin ? 1.6 : 1), { threat, knock: fin ? 2 : 0.35, heavy: fin, atk: A });
         break;
       }
       case 'rush': {
@@ -613,8 +615,9 @@ export class Game {
         for (let i = 0, nb = this.styleNum(p, 'burstHits', 4); i < nb; i++) { // Dual Blades: +2 hits
           this.schedule(i * paced(0.2), () => {
             if (p.dead || !this.players.has(p.id)) return;
-            this.events.push({ t: 'fx', k: 'arc', s: 'burst', n: i, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), r: 3.2, c: i === nb - 1 ? 'gold' : undefined });
-            this.hitArc(p, 3.2, 0.9, p.atk * this.dmgMult(p) * pow * (i === nb - 1 ? 1.6 : 0.9), i === nb - 1 ? { brk: true, knock: 2.5, heavy: true, sk: S } : { knock: 0.3, sk: S });
+            const A = this.atkFov(p, i === nb - 1 ? 'burstFin' : 'burst');
+            this.events.push({ t: 'fx', k: 'arc', s: 'burst', n: i, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), r: A.r, c: i === nb - 1 ? 'gold' : undefined });
+            this.hitArc(p, A.r, A.half, p.atk * this.dmgMult(p) * pow * (i === nb - 1 ? 1.6 : 0.9), i === nb - 1 ? { brk: true, knock: 2.5, heavy: true, sk: S, atk: A } : { knock: 0.3, sk: S, atk: A });
           });
         }
         break;
@@ -633,14 +636,14 @@ export class Game {
       case 'wall': p.dr = { until: t + 4, v: Math.min(0.7, 0.6 * pow), by: p.id, sk: S }; this.events.push({ t: 'buff', id: p.id, k: 'wall', d: 4 }); fx('shield'); break;
       case 'gslam': { const R = 5 * this.styleNum(p, 'slamR', 1); fx('ring', { r: R, c: 'gold' }); this.hitCircle(p, p.x, p.z, R, atk * 1.3, { stun: 1.5, threat: 1.5, brk: true, knock: 2, heavy: true, sk: S }); break; } // Mace & Shield: +20% radius
       case 'smite': {
-        const range = 10, dx = Math.sin(p.face), dz = Math.cos(p.face);
+        const range = 10, dx = Math.sin(p.face), dz = Math.cos(p.face), pad = this.aimPad(p); // aimed mode: a slightly bigger bolt
         let best = null, bestT = range;
         for (const m of this.mobs.values()) {
           if (!this.targetable(m)) continue; // the bolt flies over burrowed lurkers
           const vx = m.x - p.x, vz = m.z - p.z, along = vx * dx + vz * dz;
           if (along < 0 || along > range + m.def.radius) continue;
           const perp = Math.abs(vx * dz - vz * dx);
-          if (perp < 1.2 + m.def.radius && along < bestT) { best = m; bestT = Math.max(0, along); }
+          if (perp < 1.2 + pad + m.def.radius && along < bestT) { best = m; bestT = Math.max(0, along); }
         }
         fx('bolt', { x2: r2(p.x + dx * bestT), z2: r2(p.z + dz * bestT) });
         if (best) this.damageMob(best, p, atk * 1.1, { interrupt: best.windupAt > 0 });
@@ -686,8 +689,9 @@ export class Game {
     return Math.abs(wrapAngle(angleTo(p.x, p.z, m.x, m.z) - p.face)) <= half;
   }
 
+  // opts.atk: the attack's shape and target limit (atkFov): with it, a player's Cleave settings cap who it hits.
   hitArc(p, range, half, amount, opts) {
-    for (const m of this.mobs.values()) if (this.targetable(m) && this.inArc(p, m, range, half)) this.damageMob(m, p, amount, opts);
+    for (const m of this.arcTargets(p, range, half, opts?.atk)) this.damageMob(m, p, amount, opts);
   }
 
   hitCircle(p, x, z, r, amount, opts) {
@@ -1438,6 +1442,7 @@ Object.assign(Game.prototype, GroundMethods); // items on the ground (server/gro
 Object.assign(Game.prototype, TwistMethods); // Warden twists (server/twists.js)
 Object.assign(Game.prototype, SovTwistMethods); // Sovereign twists (server/sovtwists.js)
 installCombat(Game); // posture, perfect dodge, guard/parry, Horn Sweep (server/combat.js)
+installTargeting(Game); // targeting modes, cleave caps, aimed projectiles (server/targeting.js)
 Object.assign(Game.prototype, MasteryMethods); // skill mastery + evolutions (server/mastery.js)
 Object.assign(Game.prototype, F2Methods); // Floor 2 (server/floor2.js)
 installFloor3(Game); // Floor 3 (server/floor3.js): its methods, plus travel / respawn / Sovereign-kill wrappers

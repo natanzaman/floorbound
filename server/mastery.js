@@ -83,8 +83,11 @@ export const MasteryMethods = {
     }
     return [tx, tz];
   },
-  // Nearest targetable enemy within range and within `half` radians of facing.
+  // Nearest targetable enemy within range and within `half` radians of facing. Targeting modes (server/targeting.js):
+  // Aimed: the first enemy along the aim line instead; Cone: never wider than the cone.
   pickFront(p, range, half) {
+    if (this.aimedMode?.(p)) return this.aimedPick(p, range);
+    if (this.frontHalf) half = this.frontHalf(p, half);
     let best = null, bd = Infinity;
     for (const m of this.mobs.values()) {
       if (!this.targetable(m)) continue;
@@ -179,9 +182,9 @@ export const MasteryMethods = {
         for (let i = 0; i < 6; i++) {
           this.schedule(i * paced(0.15), () => {
             if (!alive()) return;
-            const fin = i === 5;
-            this.events.push({ t: 'fx', k: 'evo', ev: 'starburst', s: S, n: i, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), r: 3.2 });
-            this.hitArc(p, 3.2, 0.9, p.atk * this.dmgMult(p) * pow * (fin ? 1.6 : 0.85), fin ? { sk: S, knock: 2.2, heavy: true } : { sk: S, knock: 0.2 });
+            const fin = i === 5, A = this.atkFov(p, fin ? 'starburstFin' : 'starburst');
+            this.events.push({ t: 'fx', k: 'evo', ev: 'starburst', s: S, n: i, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), r: A.r });
+            this.hitArc(p, A.r, A.half, p.atk * this.dmgMult(p) * pow * (fin ? 1.6 : 0.85), fin ? { sk: S, knock: 2.2, heavy: true, atk: A } : { sk: S, knock: 0.2, atk: A });
           });
         }
         break;
@@ -190,10 +193,9 @@ export const MasteryMethods = {
           this.schedule(i * paced(0.3), () => {
             if (!alive()) return;
             this.events.push({ t: 'fx', k: 'evo', ev: 'finisher', s: S, n: i, id: p.id, x: r2(p.x), z: r2(p.z), f: r2(p.face), r: 3.4 });
-            const A = p.atk * this.dmgMult(p) * pow;
-            if (i === 0) { this.hitArc(p, 3.2, 0.9, A, { sk: S, knock: 0.2 }); return; }
-            for (const m of [...this.mobs.values()]) {
-              if (!this.targetable(m) || !this.inArc(p, m, 3.4, 0.9)) continue;
+            const A = p.atk * this.dmgMult(p) * pow, F = this.atkFov(p, i ? 'finisher2' : 'finisher');
+            if (i === 0) { this.hitArc(p, F.r, F.half, A, { sk: S, knock: 0.2, atk: F }); return; }
+            for (const m of this.arcTargets(p, F.r, F.half, F)) {
               const high = m.hp / m.maxHp > 0.5;
               this.damageMob(m, p, A * 2, { sk: S, heavy: true, knock: 2, frac: high ? [1, 0.45] : null, brk: !high });
             }

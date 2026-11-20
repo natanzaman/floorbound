@@ -327,12 +327,12 @@ export function initCombat(ctx) {
     if (pct >= 50 && !boss.staggered && near(boss.x, boss.z, 25)) guide.tip('posture');
   }
 
-  // ---------- per-frame: keep facing the enemy while guarding; drop the guard when rolling or dead ----------
+  // ---------- per-frame: keep facing the enemy while guarding (by the targeting mode); drop the guard when rolling or dead ----------
   function frame() {
     if (!guarding) return;
     if (state.dead || state.roll) { guard(false); return; }
-    const t = ctx.lockedMob() || ctx.nearestMob(12);
-    if (t) state.face = Math.atan2(t.x - state.x, t.z - state.z);
+    const f = ctx.guardFace(); // by the targeting mode (main.js): the locked / nearest / in-cone enemy, or where you look (Aimed)
+    if (f !== null) state.face = f;
     const s = shields.get(state.myId);
     if (s) s.material.opacity = 0.26 + Math.sin(performance.now() / 120) * 0.06;
   }

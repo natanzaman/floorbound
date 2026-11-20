@@ -49,7 +49,8 @@ import { SnapClock, Track, Correction } from '/shared/netsmooth.js'; // interpol
 import { initPerf } from '/perf.js'; // the diagnostics overlay (F3), the ping chip, Auto quality
 import { makeNetsim } from '/netsim.js'; // test-only bad network (?netsim=120,60,2)
 import { initGameMenu } from '/gamemenu.js'; // the Game Menu (Esc / ☰)
-import { createInput } from '/input.js'; // keys, mouse buttons (and pads, K1b) -> actions, by the bindings in shared/controls.js
+import { pickTarget } from '/shared/targeting.js'; // targeting modes (Controls → Combat)
+import { createInput, controlsStore } from '/input.js'; // keys, mouse buttons (and pads, K1b) -> actions, by the bindings in shared/controls.js
 import { createPanels } from '/panels.js'; // the panels that free the cursor / close on Esc
 import { cue } from '/palette.js'; // sound cue for telegraphs
 import { createFocusNav } from '/focusnav.js'; // controller menu navigation (d-pad / stick, A, B)
@@ -364,7 +365,7 @@ const bubbles = initBubbles({ state, players, project, camera, layer: $('labels'
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
-const combat = initCombat({ state, players, mobs, fx, sfx, guide, send, floatNum, slowMotion, shake: a => shake(a), shakeNear: (...a) => shakeNear(...a), bossShot: (...a) => bossShot(...a), lockedMob: () => lockedMob(), nearestMob: r => nearestMob(r), callout: (a, b, c) => callout(a, b, c) });
+const combat = initCombat({ state, players, mobs, fx, sfx, guide, send, floatNum, slowMotion, shake: a => shake(a), shakeNear: (...a) => shakeNear(...a), bossShot: (...a) => bossShot(...a), lockedMob: () => lockedMob(), nearestMob: r => nearestMob(r), guardFace: () => guardFace(), callout: (a, b, c) => callout(a, b, c) });
 // threat you can see (target marker, boss-bar name, meter), Guardian Cover (C), flank / Pincer tags (public/threat.js)
 const threat = initThreat({ scene, state, players, mobs, fx, sfx, guide, send, floatNum, log: (a, b) => log(a, b), isTouch, $ });
 // skill mastery + evolutions: Skills panel (K), Skill Shrines, evolved skill visuals (public/mastery.js)
@@ -434,6 +435,7 @@ function onMessage(msg, arrival = performance.now()) {
     setTimeout(layoutChips, 50);
     $('login').classList.add('hidden'); $('hud').classList.remove('hidden');
     buildSkillBar();
+    sentPrefs = ''; sendPrefs(); // targeting mode + cleave (Controls → Combat)
     guide.start(msg.charId ? `c${msg.charId}` : `anon_${state.cls}`, msg.lvl);
     log('Welcome to Floorbound! Head north through the field and defeat the Horned Warden.', 'sys');
     log(controlsText(), 'sys');
@@ -1308,21 +1310,44 @@ function nearestMob(range) {
   return best;
 }
 
+// Targeting (Controls → Combat, shared/targeting.js): the mode, and which enemy an attack within `range` turns you to.
+// "In front of you" and "where you look" are the camera's look (the crosshair in mouse look, the right stick on a pad).
+const tMode = () => controlsStore.combat().mode;
+const autoTarget = range => pickTarget({ mode: tMode(), x: state.x, z: state.z, front: state.yaw, mobs: mobs.values(), lock: lockedMob(), range, canTarget });
+function guardFace() { // Guardian guard: keep facing the enemy (public/combat.js); Aimed: where you look
+  if (tMode() === 'aimed') return state.yaw;
+  const t = autoTarget(12);
+  return t ? angleTo(state.x, state.z, t.x, t.z) : null;
+}
+let sentPrefs = '';
+function sendPrefs() { // the server needs the mode (aimed projectiles, lock preference) and the cleave caps
+  if (!state.joined || state.spectator) return;
+  const c = controlsStore.combat(), key = JSON.stringify(c);
+  if (key === sentPrefs) return;
+  sentPrefs = key; send({ type: 'tprefs', mode: c.mode, cleave: c.cleave, max: c.max });
+}
+controlsStore.listen(() => sendPrefs()); // (changed here, or the account's copy arrived)
+// How far a skill looks for an enemy to turn you toward (0: it doesn't turn you: heals, songs, spins).
+function engageRange(slot, sk) {
+  const evo = mastery.evoId(slot);
+  const auto = ['slash', 'bash', 'rush', 'smite', 'burst'].includes(sk.id) || ['challenge', 'seismic'].includes(evo); // aimed evolutions too
+  const styAim = (slot === 0 && styles.aim()) || 0; // a weapon style's own reach (Twin Daggers, Flute, ...)
+  const aimA = slot === 0 && styles.ownsBasic() ? 0 : classesA.aimRange(sk.id, evo); // Ranger / Berserker aimed skills
+  return aimA || styAim || classesB.aimRange(sk.id) || (auto ? (sk.id === 'smite' ? 11 : sk.id === 'rush' ? 9 : 6) : 0); // (Lancer / Bard skills)
+}
+
 function useSkill(slot) {
   if (state.dead || revive.isDown() || rescue.encased() || !state.joined || arenas.frozen()) return;
   const sk = CLASSES[state.cls].skills[slot];
   const now = performance.now();
   if (!sk || state.lvl < sk.lvl || now < state.ready[slot] || combat.guarding) return;
-  const auto = ['slash', 'bash', 'rush', 'smite', 'burst'].includes(sk.id) || ['challenge', 'seismic'].includes(mastery.evoId(slot)); // aimed evolutions too
-  const styAim = slot === 0 && styles.aim(); // a weapon style's own reach (Twin Daggers, Flute, ...)
-  const aimA = slot === 0 && styles.ownsBasic() ? 0 : classesA.aimRange(sk.id, mastery.evoId(slot)); // Ranger / Berserker aimed skills
-  if (auto || aimA || styAim) {
-    const lm = lockedMob();
-    const t = lm && Math.hypot(lm.x - state.x, lm.z - state.z) < Math.max(14, aimA + 4) ? lm : aimA ? classesA.pick(aimA, canTarget, nearestMob) : nearestMob((slot === 0 && styles.aim()) || (sk.id === 'smite' ? 11 : sk.id === 'rush' ? 9 : 6)); // (Ranger/Berserker aim; weapon styles: reach)
+  const mode = tMode(), range = engageRange(slot, sk);
+  if (mode === 'aimed') state.face = state.yaw; // no auto-targeting: where you look
+  else if (range) {
+    const t = autoTarget(range);
     if (t) state.face = angleTo(state.x, state.z, t.x, t.z);
-    else if (aimA > 12) state.face = state.yaw; // nothing to aim at: shoot where the camera looks
+    else if (mode === 'cone' || range > 12) state.face = state.yaw; // nothing to turn to: strike / shoot where you look
   }
-  classesB.aim(sk.id, lockedMob, nearestMob); // Lancer / Bard skills
   state.ready[slot] = now + ((slot === 0 && styles.basicCd(mastery.cd(0))) || mastery.cd(slot)) * 1000; // mastery and branch cooldowns, weapon styles (the server corrects it)
   state.lastPress[slot] = now;
   send({ type: 'skill', slot, face: state.face });
