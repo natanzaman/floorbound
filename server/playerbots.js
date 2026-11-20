@@ -1,50 +1,63 @@
-// Player-owned bots: players add bots from the in-game Players panel (P → Bots tab), on top of the admin-managed
+// Player-made bots: players add bots from the in-game Players panel (P → Bots tab), on top of the admin-managed
 // BotManager (server/botmanager.js). This module only uses BotManager's API (add / edit / remove / list / view /
-// joinParty / livePlayer) plus two small hooks: index.js routes { type: 'pbot' } messages here, and roster entries of
-// owned bots get the owner's name.
+// joinParty / livePlayer / controlBlock / roam) plus small hooks: index.js routes { type: 'pbot' } messages here, and
+// roster entries of player-made bots get their creator's name. It also serves the Players list's Bots section: every
+// bot in the world and the Named (game.named), with invite / kick / despawn / respawn.
 //
 // Protocol (client → server):  { type: 'pbot', op: 'list' }
-//                               { type: 'pbot', op: 'add', cls, skill (1-5, default 4), name? }
+//                               { type: 'pbot', op: 'add', cls, skill (1-5, default 4), name?, party? (default true) }
 //                               { type: 'pbot', op: 'edit', bid, skill?, mode? ('follow'|'field'|'warden'|'stay'), name? }
 //                               { type: 'pbot', op: 'dismiss', bid }
+//                               { type: 'pbot', op: 'invite' | 'kick', bid } or { …, named: id }
+//                               { type: 'pbot', op: 'despawn' | 'respawn', named: id }
 // Replies (server → client):   { type: 'pbot', op, ok: true, msg?, list }  or  { type: 'pbot', op, ok: false, error, list? }
-//   list = { bots: [...], mine, max, total, cap, admin, partyMax }  (every bot in the world, your own first)
+//   list = { bots: [...], named: [...], mine, total, cap, admin, partyMax }  (every bot in the world, your own first)
 //
-// Rules: up to PLAYER_BOT_MAX bots per player (default 3), counted against the global MAX_BOTS; a new bot is made at
-// the owner's level with a premade loadout (shared/playerbots.js), joins the owner's party (made if needed, never past
-// PARTY_MAX) and follows them. It levels with its owner (no XP of its own: on join and whenever the owner levels it
-// takes the owner's level and that level's premade gear, mastery and talents). Only the owner (or an admin:
-// accounts.is_admin / ADMIN_DISCORD_IDS) can edit or dismiss it. When the owner leaves, their bots wait
-// PLAYER_BOT_GRACE seconds (default 60) for a reconnect, then go. A bot is linked to the party it serves: one that
-// leaves that party (a "leave" order) goes home, and the owner hears about any bot of theirs an admin removes.
-// Admin "Respawn as…" keeps the bot id (BotManager), so the owner link and slot survive it.
+// Rules (owner decisions 2026-11-20): no per-player cap, only the server's MAX_BOTS. A bot records its creator. Added
+// with "Join my party" (the default) it joins its creator's party (made if needed, never past PARTY_MAX) and follows
+// them, into any party they join; unticked it roams free of any party ("free"), doing its creator's chosen behaviour
+// (farming the field until they pick one). A bot that leaves a party (kicked, a /b leave order, invited away, the party
+// broke up) roams the same way; inviting it back puts it in your party. It levels with its creator (no XP of its own:
+// on join and whenever the creator levels it takes their level and that level's premade gear, mastery and talents).
+// Who may command, invite, kick it: shared/accesslevels.js canControlBot (creator, access 3+, its allow list, else
+// anyone at the action's minimum). Renaming, skill, behaviour and Dismiss: its creator, or access 3+ (admins are 5).
+// When the creator leaves, their bots wait PLAYER_BOT_GRACE seconds (default 60) for a reconnect, then go; the creator
+// hears about any bot of theirs an admin removes. Admin "Respawn as…" keeps the bot id (BotManager), so the creator link
+// survives it.
 import { CLASSES, MAX_LEVEL, PARTY_MAX } from '../shared/data.js';
 import { makeItem, SLOTS } from '../shared/items.js';
 import { botAffixes } from '../shared/loot.js';
 import { MASTERY, masteryLevel } from '../shared/mastery.js';
 import { clampSkill, skillName } from '../shared/botskill.js';
 import { MODES, loadoutFor, charmFor, defaultBranch, cleanBotName } from '../shared/playerbots.js';
+import { inArena } from '../shared/data.js';
+import { inArena2 } from '../shared/floor2.js';
+import { inArena3 } from '../shared/floor3.js';
+import { canManageBot, accessOf, minAccess } from '../shared/accesslevels.js';
 import * as db from './db.js';
 import { isAdmin } from './admin.js';
 
 class PbError extends Error {}
 const fail = msg => { throw new PbError(msg); };
+const inBossRoom = p => inArena(p.x, p.z) || inArena2(p.x, p.z) || inArena3(p.x, p.z);
 const OTHER_DOING = { follow: 'Following', field: 'Farming the field', warden: 'Heading for the Warden', floor2: 'On Floor 2', auto: 'Levelling up' };
 
 export class PlayerBots {
-  constructor(game, mgr, { max = Number(process.env.PLAYER_BOT_MAX) || 3, grace = Number(process.env.PLAYER_BOT_GRACE) || 60 } = {}) {
-    this.game = game; this.mgr = mgr; this.max = max; this.grace = grace;
-    this.owned = new Map(); // bid -> { bid, ownerId, charId, anonName, ownerName, name, mode, pid, wantParty, lastParty, seenIn, goneAt, goneT }
+  constructor(game, mgr, { grace = Number(process.env.PLAYER_BOT_GRACE) || 60 } = {}) {
+    this.game = game; this.mgr = mgr; this.grace = grace;
+    // bid -> { bid, ownerId, charId, accountId, anonName, ownerName (the creator), name, mode, partied (follows its creator's
+    //          party), inParty (the party it was last seen in), pid, wantParty, lastParty, seenIn, goneAt, goneT }
+    this.owned = new Map();
     mgr.ownedRec = bid => this.owned.get(bid) || null; // BotManager / admin edits know a bot was player-added
     // Player-added bots get no XP of their own: they level with their owner (syncLevel).
     const giveXp = game.giveXp.bind(game);
     game.giveXp = (p, amount) => (p?.bot && p.pbOwned ? undefined : giveXp(p, amount));
-    // Hook: owned bots carry their owner's name (and what they were told to do) in the roster.
+    // Hook: player-made bots carry their creator's name and player id (and what they were told to do) in the roster.
     const roster = game.roster.bind(game);
     game.roster = () => {
       const byId = new Map();
       for (const rec of this.owned.values()) { const e = this.entry(rec.bid), p = e && mgr.livePlayer(e); if (p) byId.set(p.id, rec); }
-      return roster().map(r => { const rec = r.bot && byId.get(r.id); return rec ? { ...r, owner: rec.ownerName, mode: rec.mode } : r; });
+      return roster().map(r => { const rec = r.bot && byId.get(r.id); return rec ? { ...r, owner: rec.ownerName, cid: rec.ownerId, mode: rec.mode } : r; }); // (cid: the creator's player id: the wheel lists your free bots)
     };
     this.timer = setInterval(() => this.upkeep(), 500);
     this.timer.unref?.();
@@ -52,6 +65,9 @@ export class PlayerBots {
 
   // ---------- lookups ----------
   entry(bid) { return this.mgr.bots.find(e => e.bid === bid && !e.b.closed) || null; }
+  // Access: managing (edit / dismiss) and controlling (shared/accesslevels.js). Admin status is cached on p (adminOf).
+  actor(p, admin) { return admin && !p.admin ? { ...p, admin: true } : p; }
+  canManage(p, e, admin) { return canManageBot(this.actor(p, admin), { creator: e?.creator }); }
   isMine(p, rec) { return !!rec && (rec.ownerId === p.id || (!!rec.charId && rec.charId === p.charId)); }
   mine(p) { return [...this.owned.values()].filter(rec => this.isMine(p, rec)); }
   ownerOf(rec) { // the owner, if online (and re-adopts a reconnected owner)
@@ -96,6 +112,9 @@ export class PlayerBots {
       if (op === 'add') out = this.add(p, msg);
       else if (op === 'edit') out = this.edit(p, msg, admin);
       else if (op === 'dismiss') out = this.dismiss(p, msg, admin);
+      else if (op === 'invite') out = msg.named ? this.namedOp(p, 'invite', msg.named, admin) : this.invite(p, msg, admin);
+      else if (op === 'kick') out = msg.named ? this.namedOp(p, 'kick', msg.named, admin) : this.kick(p, msg, admin);
+      else if (op === 'despawn' || op === 'respawn') out = this.namedOp(p, op, msg.named, admin);
       else fail('Unknown bot command.');
       this.reply(p, { op, ok: true, ...out, list: this.list(p, admin) });
     } catch (e) {
@@ -115,34 +134,37 @@ export class PlayerBots {
     if (msg.name && String(msg.name).trim() && name.length < 2) fail('Bot names are 2-16 letters, numbers, spaces, _ . -');
     if (this.mgr.nameReserved?.(name)) fail(`${name} is one of the Named: pick another name.`);
     if (p.dead) fail('Wait until you are back on your feet.');
-    const mine = this.mine(p);
-    if (mine.length >= this.max) fail(`You already have ${this.max} bots (the most you can have). Dismiss one first.`);
-    const party = g.partyOf(p);
-    const pending = mine.filter(rec => { const e = this.entry(rec.bid), b = e && this.mgr.livePlayer(e); return !b || !party || b.party !== party.id; }).length;
-    if ((party ? party.members.length : 1) + pending >= PARTY_MAX) fail(`Your party is full (${PARTY_MAX}/${PARTY_MAX}). Make room before adding a bot.`);
+    if (accessOf(p) < minAccess('botAdd')) fail(`You need access level ${minAccess('botAdd')} to add bots.`);
+    const partied = msg.party !== false; // "Join my party" (ticked by default); unticked: it roams free of any party
+    const mine = this.mine(p), party = g.partyOf(p);
+    if (partied) {
+      const pending = mine.filter(rec => { if (!rec.partied) return false; const e = this.entry(rec.bid), b = e && this.mgr.livePlayer(e); return !b || !party || b.party !== party.id; }).length;
+      if ((party ? party.members.length : 1) + pending >= PARTY_MAX) fail(`Your party is full (${PARTY_MAX}/${PARTY_MAX}). Make room, or add it without joining your party.`);
+    }
     if (this.mgr.count() >= this.mgr.max) fail(`The server's bot limit is reached (${this.mgr.max}). Try again later.`);
     const lvl = Math.min(MAX_LEVEL, Math.max(1, p.lvl | 0));
+    const mode = partied ? 'follow' : 'field', M = MODES[mode];
     let view;
-    try { view = this.mgr.add({ cls, name, lvl, behaviour: 'follow', follow: p.name, skill }); }
+    try { view = this.mgr.add({ cls, name, lvl, behaviour: M.behaviour, follow: M.follow ? p.name : '', skill, creator: { charId: p.charId || 0, accountId: p.accountId || 0, pid: p.id, name: p.name } }); }
     catch (e) { fail(e.message); }
     const e = this.entry(view.bid);
     if (e) e.partied = true; // party joining is ours (upkeep), not BotManager's
     this.owned.set(view.bid, {
-      bid: view.bid, ownerId: p.id, charId: p.charId || 0, anonName: p.charId ? '' : p.name.toLowerCase(), ownerName: p.name,
-      name: view.name, mode: 'follow', pid: 0, wantParty: true, lastParty: 0, seenIn: 0, goneAt: 0, goneT: 0,
+      bid: view.bid, ownerId: p.id, charId: p.charId || 0, accountId: p.accountId || 0, anonName: p.charId ? '' : p.name.toLowerCase(), ownerName: p.name,
+      name: view.name, mode, partied, inParty: 0, pid: 0, wantParty: partied, lastParty: 0, seenIn: 0, goneAt: 0, goneT: 0,
     });
     g.rosterDirty = true;
-    g.track(p, 'pbot_add', { cls, skill, lvl }); // stats dashboard: bot vs player share
-    return { msg: `${view.name} the ${CLASSES[cls].name} (Lv ${lvl}, ${skillName(skill)}) is on the way.`, bid: view.bid };
+    g.track(p, 'pbot_add', { cls, skill, lvl, party: partied }); // stats dashboard: bot vs player share
+    return { msg: `${view.name} the ${CLASSES[cls].name} (Lv ${lvl}, ${skillName(skill)}) ${partied ? 'is on the way.' : 'is out on its own (not in your party): farming the field until you give it a behaviour.'}`, bid: view.bid };
   }
 
   // ---------- edit / dismiss ----------
   manageable(p, bid, admin) {
     bid = Number(bid);
     const e = this.entry(bid);
-    if (!e) fail('That bot is gone.');
+    if (!e || e.named) fail('That bot is gone.');
     const rec = this.owned.get(bid);
-    if (!admin && !this.isMine(p, rec)) fail(rec ? `That's ${rec.ownerName}'s bot.` : 'Only admins can manage that bot.');
+    if (!this.isMine(p, rec) && !this.canManage(p, e, admin)) fail(rec ? `That's ${rec.ownerName}'s bot.` : 'Only admins can manage that bot.');
     return { e, rec };
   }
 
@@ -165,7 +187,7 @@ export class PlayerBots {
     if (mode !== undefined) {
       const owner = rec ? this.ownerOf(rec) : p; // a server bot follows the admin who told it to
       this.setMode(e, mode, owner?.name || rec?.ownerName || p.name, { by: owner || p, adm: !this.isMine(p, rec) });
-      if (rec) { rec.mode = mode; rec.wantParty = true; }
+      if (rec) { rec.mode = mode; rec.wantParty = rec.partied; }
       said.push(MODES[mode].name.toLowerCase());
     }
     g.rosterDirty = true;
@@ -200,29 +222,119 @@ export class PlayerBots {
     return { msg: `${name} was dismissed.` };
   }
 
+  // ---------- invite / kick (the Players list) ----------
+  // Into your party, straight from wherever it is (its old party, or roaming): the party-size rule, never out of a boss fight.
+  invite(p, msg, admin) {
+    const g = this.game, e = this.entry(Number(msg.bid));
+    if (!e || e.named) fail('That bot is gone.');
+    const b = this.mgr.livePlayer(e);
+    if (!b) fail('That bot is still joining.');
+    if (b.party && b.party === p.party) fail(`${b.name} is already in your party.`);
+    const why = this.mgr.controlBlock(this.actor(p, admin), e, 'botInvite');
+    if (why) fail(why);
+    if (b.dead) fail(`${b.name} is down right now.`);
+    if (inBossRoom(b) && g.activeFightOf?.(b)) fail(`${b.name} is in a boss fight.`);
+    if ((g.partyOf(p)?.members.length || 1) >= PARTY_MAX) fail(`Your party is full (${PARTY_MAX}/${PARTY_MAX}).`);
+    this.mgr.joinParty(b, p); // (leaves its old party)
+    if (!b.party || b.party !== p.party) fail(`${b.name} couldn't join your party.`);
+    const rec = this.owned.get(e.bid);
+    if (rec) {
+      if (this.isMine(p, rec)) { // back with its creator: it serves your party again
+        Object.assign(rec, { partied: true, mode: 'follow', wantParty: false, lastParty: b.party, seenIn: b.party });
+        this.setMode(e, 'follow', p.name, { by: p });
+      } else rec.partied = false; // someone else's party: it follows them there (its brain: a human in the party leads)
+      rec.inParty = b.party;
+      const o = this.ownerOf(rec);
+      if (o && o !== p) g.sys(`${p.name} invited your bot ${b.name} into their party.`, o.id);
+    }
+    g.rosterDirty = true;
+    return { msg: `${b.name} joined your party.` };
+  }
+  // Out of your party: it roams (farms the field) until someone invites it again.
+  kick(p, msg, admin) {
+    const g = this.game, e = this.entry(Number(msg.bid));
+    if (!e || e.named) fail('That bot is gone.');
+    const b = this.mgr.livePlayer(e);
+    if (!b || !p.party || b.party !== p.party) fail(`${b?.name || 'That bot'} isn't in your party.`);
+    const why = this.mgr.controlBlock(this.actor(p, admin), e, 'botKick');
+    if (why) fail(why);
+    this.freeBot(e, b);
+    g.rosterDirty = true;
+    return { msg: `${b.name} left your party and roams on its own.` };
+  }
+  freeBot(e, b) { // out of its party, roaming
+    const rec = this.owned.get(e.bid);
+    if (b.party) this.game.leaveParty(b);
+    if (rec) { Object.assign(rec, { partied: false, mode: 'field', inParty: 0, wantParty: false }); this.setMode(e, 'field', '', {}); }
+    else this.mgr.roam(e);
+  }
+  // The Named (server/named.js): invite (their own rules: one per party, busy; INVITE_NEEDS_TIER), kick, despawn, respawn.
+  namedOp(p, op, id, admin) {
+    const N = this.game.named;
+    if (!N) fail('The Named are not in this world.');
+    const st = N.chars.get(String(id || ''));
+    if (!st) fail('Nobody by that name.');
+    const who = this.actor(p, admin), name = st.def.name;
+    if (op === 'invite') {
+      const t = N.playerOf(st);
+      const why = N.inviteBlock(who, st);
+      if (why) fail(why);
+      if (!t) { N.wake(st, p, 'invite'); return { msg: `${name} is on the way: your invite goes out when they arrive.` }; }
+      this.game.invite(p, t.id); // (their own brain accepts)
+      return { msg: `Invited ${name}.` };
+    }
+    if (op === 'kick') {
+      const t = N.playerOf(st);
+      if (!t || !p.party || t.party !== p.party) fail(`${name} isn't in your party.`);
+      const why = N.ctlBlock(who, st, 'botKick');
+      if (why) fail(why);
+      this.game.leaveParty(t); // (back to their own: the Hearthward, or alone)
+      return { msg: `${name} left your party.` };
+    }
+    const why = op === 'despawn' ? N.despawnBy(who, id) : N.respawnBy(who, id);
+    if (why) fail(why);
+    return { msg: op === 'despawn' ? `${name} left the world. Respawn them from this list whenever you like.` : `${name} is coming back.` };
+  }
+
   // ---------- list ----------
+  // Where a bot is, for the Players list: your party, someone's party (its leader: the first human, else the first
+  // member), or roaming.
+  where(b) {
+    const g = this.game, party = b && g.partyOf(b);
+    if (!b) return { k: 'joining', text: 'Joining…' };
+    if (!party) return { k: 'roam', text: 'Roaming' };
+    const ids = party.members.filter(id => id !== b.id), lead = ids.map(id => g.players.get(id)).find(o => o && !o.bot) || g.players.get(ids[0]);
+    return { k: 'party', text: lead ? `In ${lead.name}'s party` : 'In a party', lead: lead?.name || '' };
+  }
+  // ok / why for one of the list's buttons
+  ctl(why) { return why ? { ok: false, why } : { ok: true }; }
+
   list(p, admin = false) {
-    const g = this.game, myParty = p.party || 0;
+    const g = this.game, myParty = p.party || 0, who = this.actor(p, admin);
     const bots = this.mgr.bots.filter(e => !e.b.closed && !e.named).map(e => { // (the Named have the Friends tab)
       const v = this.mgr.view(e), rec = this.owned.get(e.bid), b = this.mgr.livePlayer(e);
-      const mine = this.isMine(p, rec);
+      const mine = this.isMine(p, rec), inMine = !!(b && myParty && b.party === myParty);
+      const inv = !b ? 'Still joining.' : inMine ? 'Already in your party.' : this.mgr.controlBlock(who, e, 'botInvite') || (b.dead ? 'Down right now.' : '');
+      const kick = !inMine ? 'Not in your party.' : this.mgr.controlBlock(who, e, 'botKick');
       const owner = rec ? (this.ownerOf(rec)?.name || rec.ownerName) : '';
       let doing;
       if (v.status !== 'online') doing = 'Joining…';
       else if (v.dead) doing = 'Down';
-      else if (rec) doing = MODES[rec.mode].doing + (rec.mode === 'follow' ? ` ${owner}` : '');
+      else if (rec) doing = MODES[rec.mode].doing + (rec.mode === 'follow' ? ` ${rec.partied || b?.party ? owner : `${owner} (not in a party)`}` : '');
       else doing = (OTHER_DOING[e.behaviour] || e.behaviour) + (e.behaviour === 'follow' && e.follow ? ` ${e.follow}` : '');
       if (rec && rec.goneAt) doing = `Waiting for ${owner} (${Math.max(0, Math.ceil(this.grace - (Date.now() - rec.goneAt) / 1000))} s)`;
       return {
         bid: v.bid, id: v.id, name: v.name, cls: v.cls, lvl: v.lvl, hp: v.hp, maxHp: v.maxHp, dead: v.dead, area: v.area, floor: v.floor,
-        skill: v.skill, skillName: v.skillName, owner, mine, can: mine || admin, mode: rec?.mode || null, behaviour: e.behaviour, doing,
-        party: v.party, myParty: !!(b && myParty && b.party === myParty), loadout: rec?.loadout || null,
-        kit: (mine || admin) && b ? this.kit(b) : null,
+        skill: v.skill, skillName: v.skillName, owner, creator: e.creator?.name || owner, mine, can: mine || this.canManage(p, e, admin), mode: rec?.mode || null, behaviour: e.behaviour, doing,
+        party: v.party, myParty: inMine, loadout: rec?.loadout || null, partied: !!rec?.partied, where: this.where(b),
+        kit: (mine || this.canManage(p, e, admin)) && b ? this.kit(b) : null,
+        ctl: { invite: this.ctl(inv), kick: this.ctl(kick) },
       };
     });
     const rank = x => (x.mine ? 0 : x.owner ? 1 : 2);
     bots.sort((a, b) => rank(a) - rank(b) || a.bid - b.bid);
-    return { bots, mine: this.mine(p).length, max: this.max, total: this.mgr.count(), cap: this.mgr.max, admin: !!admin, partyMax: PARTY_MAX };
+    const named = g.named ? g.named.botRows(who) : [];
+    return { bots, named, mine: this.mine(p).length, total: this.mgr.count(), cap: this.mgr.max, admin: !!admin, partyMax: PARTY_MAX };
   }
 
   kit(b) { // what an owner sees: equipped gear and skill mastery
@@ -280,15 +392,22 @@ export class PlayerBots {
         continue;
       }
       if (rec.goneAt || owner.id !== rec.ownerId) { // the owner is back
-        rec.goneAt = 0; rec.ownerId = owner.id; rec.ownerName = owner.name; rec.wantParty = true; rec.lastParty = 0;
-        if (rec.mode === 'follow') this.setMode(e, 'follow', owner.name, { by: owner });
+        rec.goneAt = 0; rec.ownerId = owner.id; rec.ownerName = owner.name; rec.wantParty = rec.partied; rec.lastParty = 0;
+        if (rec.mode === 'follow' && (rec.partied || !b?.party)) this.setMode(e, 'follow', owner.name, { by: owner });
         g.rosterDirty = true;
       }
+      if (e.creator) { e.creator.pid = owner.id; e.creator.name = owner.name; } // (an anonymous creator who reconnected)
       if (!b) continue;
-      if (this.syncParty(b, owner, rec) === 'left') { // it left the party it served: it goes home (never wanders off detached)
-        this.mgr.remove(rec.bid); this.owned.delete(rec.bid); g.rosterDirty = true;
-        g.sys(`${b.name} left your party and went home (dismissed).`, owner.id);
-      }
+      if (rec.partied) {
+        if (this.syncParty(b, owner, rec) === 'left') { // it left the party it served (a /b leave order): it roams on its own
+          this.freeBot(e, b);
+          g.sys(`${b.name} left your party and roams on its own. Invite it back from the Players list (Bots).`, owner.id);
+        }
+      } else if (b.party && b.party === owner.party) { // invited back into its creator's party (a plain invite)
+        Object.assign(rec, { partied: true, mode: 'follow', wantParty: false, lastParty: b.party, seenIn: b.party });
+        this.setMode(e, 'follow', owner.name, { by: owner });
+      } else if (!b.party && rec.inParty) this.freeBot(e, b); // its party broke up, or it was sent off: back to roaming
+      rec.inParty = b.party || 0;
     }
   }
 

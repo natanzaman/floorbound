@@ -1,8 +1,8 @@
 // Player-owned bots end-to-end over the WebSocket ({ type: 'pbot' }): add (every setup, premade loadout at the
-// owner's level, joins the owner's party, follows), the per-player limit, the party-full check, ownership (others
-// can't edit/dismiss), owner edits (skill / behaviour / name), dismiss, reconnect within the grace period, and
-// removal after the owner leaves; bots level with their owner (gear / mastery follow), "/b name: leave" sends a bot
-// home (plain chat never orders). With DATABASE_URL set it also checks that an admin can manage anyone's bot, and
+// owner's level, joins the owner's party, follows), no per-player limit (a 4th, outside the party), the party-full
+// check, ownership (others can't edit/dismiss), owner edits (skill / behaviour / name), dismiss, reconnect within the
+// grace period, and removal after the owner leaves; bots level with their owner (gear / mastery follow), "/b name:
+// leave" sends a bot off to roam on its own (plain chat never orders). More on free bots: test/freebots.js. With DATABASE_URL set it also checks that an admin can manage anyone's bot, and
 // that admin Respawn as… / edit / remove never leave a player's bot detached (same bot id, party, owner link, orders).
 // Starts its own server on PORT (default 3641). Usage: node test/playerbots.js
 import { spawn } from 'node:child_process';
@@ -80,7 +80,7 @@ try {
 
   // ---------- list ----------
   let L = await A.list();
-  ok(Array.isArray(L.bots) && L.mine === 0 && L.max === 3 && L.cap === 12, 'list: no bots yet, limit 3 of 12');
+  ok(Array.isArray(L.bots) && L.mine === 0 && L.max === undefined && L.cap === 12, 'list: no bots yet, no per-player limit, 12 on the server');
 
   // ---------- add one bot per setup (the first three) ----------
   const picks = ['Tank', 'Healer', 'Damage'].map(role => setups().find(s => s.role === role));
@@ -91,8 +91,12 @@ try {
     ok(r.ok && r.bid, `add ${s.label}: ${r.msg || r.error}`);
     added.push(r.bid);
   }
-  const r4 = await A.pbot({ op: 'add', cls: picks[0].cls });
-  ok(!r4.ok && /already have 3/.test(r4.error), `4th add refused: "${r4.error}"`);
+  const r4 = await A.pbot({ op: 'add', cls: picks[0].cls, party: false });
+  ok(r4.ok && /on its own/.test(r4.msg), `no cap: a 4th bot, outside the party: "${r4.msg || r4.error}"`);
+  await sleep(1500);
+  const b4 = (await A.list()).bots.find(b => b.bid === r4.bid);
+  ok(b4 && b4.mine && !b4.myParty && !b4.partied && b4.where.k === 'roam' && /Farming/.test(b4.doing), `...it roams and farms (${b4?.where.text}, ${b4?.doing})`);
+  ok((await A.pbot({ op: 'dismiss', bid: r4.bid })).ok, '...and is dismissed again');
 
   // they join at Ann's level with the premade loadout, in Ann's party
   await until(() => A.me()?.party && A.roster.filter(r => r.bot && r.owner === A.name).length === 3, 8000, 'bots in roster');
@@ -170,10 +174,13 @@ try {
   ok((await A.list()).mine === 2, 'plain chat ("leave party", "<name> leave") gives no order');
   const s0 = A.sys.length;
   A.send({ type: 'chat', text: `/b ${leaver.name}: leave`, ch: 'p' });
-  await until(() => A.sys.slice(s0).some(t => /went home/.test(t)), 5000, 'bot went home');
+  await until(() => A.sys.slice(s0).some(t => /roams on its own/.test(t)), 5000, 'bot off on its own');
+  await sleep(600);
   L = await A.list();
-  ok(L.mine === 1 && !L.bots.some(b => b.bid === added[1]), `"/b ${leaver.name}: leave": it leaves and goes home (slot freed)`);
+  const left = L.bots.find(b => b.bid === added[1]);
+  ok(L.mine === 2 && left && !left.myParty && left.where.k === 'roam' && left.mode === 'field', `"/b ${leaver.name}: leave": it leaves the party and roams (still Ann's, farming)`);
   await sleep(5000); // (the order rate limit)
+  ok((await A.pbot({ op: 'dismiss', bid: added[1] })).ok, 'Ann dismisses it');
   r = await A.pbot({ op: 'add', cls: picks[1].cls, skill: 3 });
   ok(r.ok, 'Ann adds a bot again');
   added[1] = r.bid;
@@ -242,7 +249,7 @@ try {
     await sleep(1200);
     L = await A.list();
     const after = L.bots.find(b => b.bid === added[0]);
-    ok(L.mine === 2 && after.mine && after.mode === 'stay' && after.lvl === 10 && after.kit?.gear.every(g => g.r === loadoutFor(10).rarity), 'Ann still has 2 of 3 bots; it keeps its mode, her level and the premade setup');
+    ok(L.mine === 2 && after.mine && after.mode === 'stay' && after.lvl === 10 && after.kit?.gear.every(g => g.r === loadoutFor(10).rarity), 'Ann still has her 2 bots; it keeps its mode, her level and the premade setup');
     const adm = (await call('GET', '/api/admin/bots', tok)).bots.find(b => b.bid === added[0]);
     ok(adm.order?.cmd === 'stay' && adm.party.includes(A.name), 'it keeps its "stay" order (admin view) and its party');
     // other admin actions don't detach it either

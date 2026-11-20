@@ -5,8 +5,12 @@
 // (shared/bots/brain.js via shared/teambots.js): its own class role, behaviour, capability level and goal. "Add team"
 // adds three such bots put into one party; editing one bot never changes another. Party members command their bots
 // with /b chat orders or the command wheel; admins also through POST /api/admin/bots/:bid/command.
-// A bot is linked to the party it serves: no admin action leaves it detached (Respawn as… rejoins the same party with
-// the same id, owner link and orders; see reattach). Player-added bots (server/playerbots.js) set this.ownedRec.
+// Admin actions never detach a bot from its party (Respawn as… rejoins the same party with the same id, creator link
+// and orders; see reattach). Player-added bots (server/playerbots.js) set this.ownedRec; they may also roam free of any
+// party (owner decision 2026-11-20).
+// Every entry records its creator ({ charId, accountId, pid, name }, or null: the Named, test teams) and an allow list;
+// who may command, invite, kick, despawn or respawn a bot is shared/accesslevels.js canControlBot (controlBlock below;
+// the game asks through game.botControl).
 // Bots join with a secret key generated at startup, so only this module can create them: the server marks them
 // p.bot = true (shown in the roster, left out of the real-player lists), gives them their starting level, and never
 // saves them (they're anonymous players).
@@ -18,6 +22,7 @@ import { floorOf, inArena2 } from '../shared/floor2.js';
 import { inArena3 } from '../shared/floor3.js';
 import { clampSkill, skillName } from '../shared/botskill.js'; // capability levels 1-5
 import { BotEditMethods } from './botedit.js'; // live edits + actions (admin page)
+import { canControlBot, accessOf, ACCESS } from '../shared/accesslevels.js'; // who may control a bot
 
 export const BEHAVIOURS = {
   follow: 'Follow a player (fight alongside, join their party)',
@@ -46,6 +51,23 @@ export class BotManager {
     game.track = (p, kind, ...a) => (this.joining ? undefined : p?.bot ? (kind === 'death' ? track(p, 'bot_death', ...(p.named ? [{ ...a[0], named: p.named }] : a)) : undefined) : track(p, kind, ...a));
     this.timer = setInterval(() => this.upkeep(), 1000);
     this.timer.unref?.();
+    // Who may control a bot (shared/accesslevels.js): '' = allowed, else why not. game.botCommand and invites ask here.
+    game.botControl = (actor, bp, action) => { const e = this.entryOf(bp); return e ? this.controlBlock(actor, e, action) : ''; };
+    const invite = game.invite.bind(game);
+    game.invite = (p, targetId) => { // a plain party invite to a bot: the same rule
+      const t = game.players.get(targetId), why = t?.bot && !p?.bot && game.botControl(p, t, 'botInvite');
+      if (why) return game.sys(why, p.id);
+      return invite(p, targetId);
+    };
+  }
+
+  // The entry behind a bot player; the rule for one (e: an entry, or anything with { creator, allow, name }).
+  entryOf(p) { return p?.bot ? this.bots.find(e => e.b.id === p.id && !e.b.closed) || null : null; }
+  controlBlock(actor, e, action) {
+    if (!actor || actor.bot) return '';
+    if (e.director && accessOf(actor) < ACCESS.overrideBots) return `${e.b.name} is acting in a show.`; // (the scene director's cast)
+    const r = canControlBot(actor, { creator: e.creator || null, allow: e.allow || [], name: e.b?.name || e.def?.name || e.name }, action);
+    return r.ok ? '' : r.why;
   }
 
   // ---------- server side of a bot's join ----------
@@ -82,23 +104,28 @@ export class BotManager {
     for (let i = 2; ; i++) { const n = `${NAMES[i % NAMES.length]} ${i}`; if (!taken.has(n.toLowerCase())) return n; }
   }
 
-  // opts: { cls, name, lvl, behaviour, follow, skill (capability 1-5, default 4) }
-  add({ cls, name, lvl, behaviour = 'field', follow = '', skill } = {}) {
+  // opts: { cls, name, lvl, behaviour, follow, skill (capability 1-5, default 4), creator ({ charId, accountId, pid, name }) }
+  add({ cls, name, lvl, behaviour = 'field', follow = '', skill, creator = null } = {}) {
     if (!CLASSES[cls]) throw new Error('Pick a class.');
     if (!BEHAVIOURS[behaviour]) throw new Error('Unknown behaviour.');
     if (behaviour === 'follow' && !this.realPlayers().some(p => p.name.toLowerCase() === String(follow).toLowerCase())) throw new Error('Pick an online player to follow.');
     if (this.count() + 1 > this.max) throw new Error(`Bot limit reached (${this.max}).`);
     name = String(name || '').replace(/[^\w \-.]/g, '').trim().slice(0, 16);
     if (this.nameReserved?.(name)) throw new Error(`${name} is one of the Named: pick another name.`);
-    return this.start([cls], [this.uniqueName(name)], { lvl, behaviour, follow: String(follow || ''), skill })[0];
+    const [view] = this.start([cls], [this.uniqueName(name)], { lvl, behaviour, follow: String(follow || ''), skill });
+    const e = this.bots.find(x => x.bid === view.bid);
+    if (e && creator) e.creator = { charId: creator.charId || 0, accountId: creator.accountId || 0, pid: creator.pid || 0, name: String(creator.name || '') };
+    return creator ? this.view(e) : view;
   }
 
-  addTeam({ lvl, behaviour = 'auto', follow = '', skill } = {}) {
+  addTeam({ lvl, behaviour = 'auto', follow = '', skill, creator = null } = {}) {
     if (!BEHAVIOURS[behaviour]) throw new Error('Unknown behaviour.');
     if (behaviour === 'follow' && !this.realPlayers().some(p => p.name.toLowerCase() === String(follow).toLowerCase())) throw new Error('Pick an online player to follow.');
     if (this.count() + 3 > this.max) throw new Error(`Bot limit reached (${this.max}).`);
     const n = this.nextTeam++, suffix = n > 1 ? ` ${n}` : '';
-    return this.start(ROLES, ROLES.map(c => this.uniqueName(TEAM[c] + suffix)), { lvl, behaviour, follow: String(follow || ''), skill }, n);
+    const out = this.start(ROLES, ROLES.map(c => this.uniqueName(TEAM[c] + suffix)), { lvl, behaviour, follow: String(follow || ''), skill }, n);
+    if (creator) for (const e of this.bots) if (e.team === n) e.creator = { charId: 0, accountId: creator.accountId || 0, pid: 0, name: String(creator.name || '') };
+    return out;
   }
 
   // bid: reuse a bot id (Respawn as…: the same bot to its party, its owner and the admin page)
@@ -111,7 +138,7 @@ export class BotManager {
       url, WebSocket: this.local?.WebSocket || WebSocket, roles, names, behaviour, follow, skill,
       join: { bot: this.key, lvl, f2: behaviour === 'floor2' || behaviour === 'floor3' || behaviour === 'follow' ? 1 : 0, f3: behaviour === 'floor3' || behaviour === 'follow' ? 1 : 0, ...(join || {}) },
     });
-    const out = group.team.map(b => ({ bid: bid || this.nextBid++, b, group, behaviour, follow, team, lvl, at: Date.now() }));
+    const out = group.team.map(b => ({ bid: bid || this.nextBid++, b, group, behaviour, follow, team, lvl, at: Date.now(), creator: null, allow: [] }));
     this.bots.push(...out);
     return out.map(e => this.view(e));
   }
@@ -142,6 +169,7 @@ export class BotManager {
       party: party ? party.members.filter(id => id !== p.id).map(id => g.players.get(id)?.name).filter(Boolean) : [],
       behaviour: e.behaviour, follow: e.follow, team: e.team, owner: this.ownedRec?.(e.bid)?.ownerName || '', skill: e.b.skill, skillName: skillName(e.b.skill), status: e.b.closed ? 'gone' : p ? 'online' : 'joining', since: e.at,
       goal: p?.dead ? 'Down' : e.b.goal || '', role: e.b.role, order: e.b.cmd ? { cmd: e.b.cmd.k, by: e.b.cmd.byName || '' } : null, partyLead: e.b.anchor?.name || '', look: e.look || '',
+      creator: e.creator?.name || '', allow: e.allow || [],
     };
   }
 
@@ -166,6 +194,12 @@ export class BotManager {
       const busy = e.b.tgtId && (inArena(p.x, p.z) || inArena2(p.x, p.z) || inArena3(p.x, p.z)); // don't pull it out of a boss fight
       if (t && !t.dead && !busy && Date.now() - (e.caughtUp || 0) > 8000 && (floorOf(p.x) !== floorOf(t.x) || Math.hypot(p.x - t.x, p.z - t.z) > 45)) { e.caughtUp = Date.now(); this.catchUp(p, t); }
     }
+  }
+
+  // A bot out of a party: back to roaming the field (kicked, or its party broke up). Its orders are cleared.
+  roam(e) {
+    e.b.configure({ behaviour: 'field', follow: '' }); // (this bot only: a team shares one group)
+    e.behaviour = 'field'; e.follow = ''; e.partied = true; // (partied: never pulled into anyone's party by upkeep)
   }
 
   // Join the followed player's party (same as accepting an invite from them).

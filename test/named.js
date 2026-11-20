@@ -27,8 +27,10 @@ import { loadoutFor } from '../shared/playerbots.js';
 import { buildCard } from '../shared/mvp.js';
 import {
   NAMED, NAMED_BY_ID, TIERS, GAINS, RULES, GROUPS, tierIndex, tierOf, newFriendship, gainFriendship, loseFriendship, dailyLeft,
-  canInvite, canSummon, namedLevel, dayKey, isNamedName, awayLine, PRESENCE,
+  canInvite, canSummon, namedLevel, dayKey, isNamedName, awayLine, PRESENCE, INVITE_NEEDS_TIER, inviteGate,
 } from '../shared/named.js';
+// Invites need no tier now (owner decision 2026-11-20: INVITE_NEEDS_TIER = false); the in-process checks below run with
+// the old gate switched back on, so it stays one flag away and still works. test/freebots.js covers the default.
 
 const PORT = Number(process.env.PORT) || 5320;
 const DB_URL = process.env.DATABASE_URL || '';
@@ -81,7 +83,9 @@ console.log('# pure rules (shared/named.js)');
   ok(loseFriendship(l, hal).d === -4 && l.pts === 36 && loseFriendship(l, hal).d === -1 && l.pts === 35 && loseFriendship(l, hal).d === 0, 'leaving a Hero downed costs 4, never below the tier you hold');
   ok(loseFriendship({ ...newFriendship(), pts: 70 }, cairn).d === -6, 'the loner minds more (6)');
   // thresholds
-  ok(!canInvite(hal, 34.9) && canInvite(hal, 35) && !canInvite(cairn, 59) && canInvite(cairn, 60), 'a Hero joins an Ally; the loner only a Friend');
+  ok(INVITE_NEEDS_TIER === false && inviteGate.needsTier === false && canInvite(hal, 0) && canInvite(cairn, 0), 'the default: anyone may invite them (INVITE_NEEDS_TIER = false)');
+  inviteGate.needsTier = true; // (the old gate, for the checks below)
+  ok(!canInvite(hal, 34.9) && canInvite(hal, 35) && !canInvite(cairn, 59) && canInvite(cairn, 60), 'with the tier gate on: a Hero joins an Ally; the loner only a Friend');
   ok(!canSummon(hal, 84) && canSummon(hal, 85) && canSummon(cairn, 85), 'only a Sworn friend can call them');
   // level
   ok(namedLevel([20, 12, 8, 3]) === 15 && namedLevel([10]) === 12 && namedLevel([]) === 3, 'level: the top-3 average + 2');
@@ -767,16 +771,13 @@ function client(name, cls = 'swordsman', join = {}) {
   const pb = await a.ask({ type: 'pbot', op: 'add', cls: 'ranger', name: 'Cairn', skill: 3 });
   ok(!pb.ok && /one of the Named/.test(pb.error), 'review #5: a player-added bot can\'t be named after one of the Named');
   const list = (await a.ask({ type: 'named', op: 'list' })).list;
-  ok(list.rows.length === 5 && list.rows.every(r => r.online && r.tierName === 'Stranger' && !r.invite.ok && !r.call.ok), 'the Friends list over the wire: five Strangers');
+  ok(list.rows.length === 5 && list.rows.every(r => r.online && r.tierName === 'Stranger' && r.invite.ok && !r.call.ok), 'the Friends list over the wire: five Strangers, each one invitable (no tier needed now), none callable');
   const hal = a.named().find(r => r.named === 'halvard');
-  a.sys.length = 0; a.send({ type: 'invite', id: hal.id });
-  await until(() => a.sys.some(s => /only joins an Ally/.test(s)), 4000, 'the refusal');
-  await sleep(400);
-  ok(!a.pl.get(a.id).party, 'a Stranger\'s invite is refused');
   a.send({ type: 'test', friend: { id: 'halvard', pts: 40 } });
   await sleep(300);
   const inv = await a.ask({ type: 'named', op: 'invite', id: 'halvard' });
   await until(() => a.pl.get(a.id)?.party && a.pl.get(hal.id)?.party === a.pl.get(a.id).party, 6000, 'Halvard to join');
+  await until(() => a.chat.some(e => e.id === hal.id), 4000, 'his hello').catch(() => {});
   ok(!inv.error && a.chat.some(e => e.id === hal.id), 'an Ally invites him from the Friends tab: his own brain accepts, he joins and says so');
   a.send({ type: 'leave' });
   await until(() => { const p = a.pl.get(hal.id), m = a.pl.get(a.named().find(r => r.named === 'maribel').id); return p?.party && p.party === m?.party; }, 6000, 'Halvard to go back');

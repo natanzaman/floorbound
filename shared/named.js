@@ -211,7 +211,13 @@ export function loseFriendship(rec, def, kind = 'downed') {
   return { d: r2(d), pts: rec.pts, tier: was, up: false };
 }
 
-export const canInvite = (def, pts) => tierIndex(pts) >= tierAt(def.trust.invite);
+// Invites (owner decision 2026-11-20): anyone may invite any of the Named, from the Players list's Bots section or the
+// Friends tab; their other rules stay (one per party, busy, party full). INVITE_NEEDS_TIER = true brings back the old
+// gate (each one's trust.invite tier: a Hero from Ally, the loner from Friend). Friendship is otherwise unchanged, and a
+// Sworn call (canSummon) keeps its tier. (inviteGate: the live switch, which tests flip.)
+export const INVITE_NEEDS_TIER = false;
+export const inviteGate = { needsTier: INVITE_NEEDS_TIER };
+export const canInvite = (def, pts) => !inviteGate.needsTier || tierIndex(pts) >= tierAt(def.trust.invite);
 export const canSummon = (def, pts) => tierIndex(pts) >= tierAt(def.trust.summon);
 
 // ---------- level ----------
