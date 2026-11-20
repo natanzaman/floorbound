@@ -2,7 +2,9 @@
 // Floor 3 lives in the same coordinate space as Floors 1 and 2, 1200 units east (everything with x > F3.split is Floor 3).
 // Same skeleton as the floors below (camp in the south, field, corridor + raid gate at z≈161, boss plateau at z≈191),
 // so z-based heuristics (gate, boss bar, music) work on every floor. Design: docs/floor3.md.
-// This module imports nothing (shared/floor2.js and shared/data.js import it).
+// This module imports only the boss timing tables (shared/bosstiming.js, which imports only shared/pace.js); shared/floor2.js
+// and shared/data.js import it.
+import { TIMED, movesOf } from './bosstiming.js';
 
 export const F3 = {
   x: 1200, split: 900,
@@ -96,7 +98,7 @@ export const F3_MOBS = {
   // rare named elites (the rare-spawn system: one at a time, announced server-wide)
   skyrender: { name: 'Skyrender', hp: 5200, atk: 44, speed: 6.2, aggro: 18, range: 2.8, atkCd: 1.4, xp: 900, radius: 1.3, level: 26, f3: true, ai: 'f3Harpy', fly: true, dives: 3, elite: true, rare: true },
   bastion: { name: 'The Old Bastion', hp: 7500, atk: 52, speed: 2.8, aggro: 12, range: 3.2, atkCd: 2.2, xp: 1100, radius: 1.9, level: 27, f3: true, ai: 'f3Sentinel', armor: 0.65, calls: 2, elite: true, rare: true },
-  colossus: { name: 'The Storm Colossus', hp: 16000, atk: 150, speed: 3.8, aggro: 20, range: 5.0, atkCd: 2.3, xp: 5000, radius: 2.6, level: 28, f3: true, ai: 'f3Colossus', boss: true, f3boss: true },
+  colossus: { name: 'The Storm Colossus', hp: 16000, atk: 150, speed: 3.8, aggro: 20, range: 5.0, atkCd: TIMED.colossus.abilities.cleave.cd, xp: 5000, radius: 2.6, level: 28, f3: true, ai: 'f3Colossus', boss: true, f3boss: true },
 };
 export const F3_BITE = { ram: [3.2, 0.7], harpy: [2.8, 0.7], sentinel: [3.4, 0.8], skyrender: [3.4, 0.8], bastion: [4.2, 0.9], colossus: [6.4, 0.95] };
 
@@ -124,19 +126,16 @@ export const SENTINEL = { crack: 8, stompEvery: 9, stompFirst: 4, stompR: 4.5, s
 
 // The Storm Colossus. Each phase ADDS attacks. 100-66%: Hammerfall, Lightning Strikes, Gale Push. 66-33%: + OVERLOAD (a
 // team mechanic: Break it and Switch, or Team Burst, before the channel ends), Gale Harpies. Below 33%: + Tempest Beam
-// (jump it or roll through it), Overload more often. Wind-ups and repeats are paced by shared/data.js (paceMoves).
+// (jump it or roll through it), Overload more often. Wind-ups and repeats are paced in shared/bosstiming.js.
 export const COLOSSUS = {
   phases: [0.66, 0.33],
   // Health scales with the fighters who walk in (like the Warden): (hpBase + hpPer * weight^hpExp) * (1 + hpLvl * avg
-  // levels above 28); weight = the sum of role weights. Damage = atk * (1 + atkPer * fighters above 3).
-  hpBase: 8000, hpPer: 6300, hpExp: 1.9, hpLvl: 0.05, atkPer: 0.12,
+  // levels above 28); weight = the sum of role weights. Damage = atk * (1 + atkPer * fighters above 3). J3 review:
+  // hpBase / hpPer x ~0.72 (was 8000 / 6300) for a ~2 min fight at bot skill 5 (scripts/tuneboss.js).
+  hpBase: 5750, hpPer: 4550, hpExp: 1.9, hpLvl: 0.05, atkPer: 0.12,
   hpRole: { Tank: 0.7, Healer: 0.6, Support: 0.8, Damage: 1.2 },
-  cleave: { wind: 0.9, mult: 1.0 },
-  strike: { every: [7, 6, 5], first: 4, r: 3.2, wind: 1.7, mult: 2.2, extra: [2, 3, 4] },
-  gust: { every: [11, 10, 9], first: 7, wind: 1.5, r: 11, half: 0.75, mult: 2.2, shove: 7 },
-  overload: { every: [0, 30, 24], first: 5, channel: 8, posture: 0.5, clap: 0.55, charged: 15, chargedMult: 1.25, stun: 4, weakD: 8, weak: 1.3 },
-  harpies: { every: 26, n: 2, max: 3, first: 6 },
-  beam: { every: [0, 0, 12], first: 4, wind: 2.2, turn: 7, sweep: Math.PI * 2, len: 26, w: 0.8, mult: 2.5, from: 0.5 },
+  // Its moves (cleave, strike, gust, overload, harpies, beam), paced and knobbed: shared/bosstiming.js.
+  ...movesOf(TIMED.colossus),
 };
 export const PHASE_TEXT3 = ['PHASE 1 · HAMMERFALL · LIGHTNING · GALE PUSH', 'PHASE 2 · OVERLOAD · HARPIES', 'PHASE 3 · TEMPEST BEAM'];
 

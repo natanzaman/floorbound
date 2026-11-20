@@ -240,6 +240,27 @@ With a database, the server records play events (session start/end, first kill, 
 - **Healer threat:** healing builds threat too: half of what a heal actually restores (overheal counts for nothing; damage a shield soaks counts like healing for its caster), split across every enemy fighting the party. A Cleric who spams heals and Smites can pull the boss off a Guardian who isn't taunting; a Guardian who Taunts on cooldown keeps it.
 - **Cover (Guardian, C):** dash up to 8 m to an ally (the one you selected, else whoever an enemy is after, most hurt first) and take the next hit meant for them within 1.5 s, braced like a guard (70% less; a guarding Guardian takes it on the guard). 12 s cooldown. Perilous hits (Horn Sweep) can't be covered: dodge or parry those. Guardian bots Cover a partymate under half health that a big hit is coming for (a winding boss after them, or a telegraph under them).
 - **Flanking and Pincers:** a hit from an enemy's back 120° does +8% damage and +12% posture. If a party member is on the opposite side (at least 120° apart around it, both within ~6 m of its edge), both of you get a **Pincer**: +15% damage and +20% posture, with a small "Pincer" tag only the two of you see. Melee bots (Swordsman, Berserker, Lancer) take the side opposite the tank. Tuning: `shared/threat.js`; rules: `server/threat.js`; HUD: `public/threat.js`; bots: `shared/bots/threat.js`; tests: `node test/threat.js`.
+- **Boss combos and openings:** the Warden, the Sovereign and the Colossus now also run short combos (a slam then a Quake Ring; geysers then a Tidal Wave; strikes then a Gale Push or the Tempest Beam, and so on). After one the boss stops for a few seconds, **exposed** or **planted**: a glowing weak point and an **OPENING** tag show over it (and on the boss bar, with the seconds left) for everyone. Melee hits (within ~6 m of its edge) deal +25% damage and posture, added to any flank or Pincer bonus; not while it is Broken (a Switch) or Grounded. Close-range and all-around moves keep a gap between them, and its basic swing waits while its own area telegraph winds up. Melee bots move in for an opening and step out just before it ends; bots now get out of the Gale Push cone. None of this runs during a filmed director show. Tables: `shared/bosstiming.js` (`phases[].seqs`, `close`, `OPENING`); server `server/openings.js`; client `public/openings.js`; bots `shared/bots/openings.js`; tests: `node test/bosstiming.js`.
+
+## Tuning bosses
+Every timing of the Horned Warden, the Drowned Sovereign and the Storm Colossus lives in `shared/bosstiming.js` (`BOSS_TIMING`): per ability its wind-up, damage, shape, cooldown (`every`), how it is dodged and its `after` state; per phase the combos (`seqs`: `steps`, `gaps` between them, the `pause` after, its `state` and weight `w`, one every `every` s); `close` (the gap between close-range / all-around moves); and the boss's knobs. To tune a boss, change numbers there and re-run the bots with the harness:
+
+```
+node scripts/tuneboss.js --boss colossus --party 3,6 --skills 3,5 --runs 2 --jobs 2 --port 37400
+node scripts/tuneboss.js --boss warden --party 6 --skills 5 --sweep pauseMul=0.6:1.4:0.2
+node scripts/tuneboss.js --boss sovereign --set damageMul=1.1,cooldownMul=0.9 --json runs.json
+```
+
+It runs the bot boss runners (`test/wardenskill.js`, `test/floor3boss.js`) for every boss x party (3 = Guardian, Swordsman, Cleric; 6 = Guardian, Swordsman, Berserker, Ranger, Bard, Cleric) x skill, `--runs` fights each, `--jobs` at a time on ports from `--port`, and prints one table per boss: kill rate, kill time (range), downs, deaths and melee deaths per fight, damage on the boss by role (melee incl. the tank / ranged / healer), **opening used** (the share of half-second opening slices in which a melee fighter hit the boss, and the opening seconds per fight), the boss's own check (rings cleared, Tidal Waves, beam hits and Overloads stopped), and per ability the players it hit / its uses per fight (hits per use). `--help` lists the flags.
+
+The knobs (all 1 = the table as written; `knobs.party` in a boss's table overrides them by party size, e.g. `party: { 5: { pauseMul: 1.2 } }` for 5+ fighters):
+- `damageMul`: all the boss's damage;
+- `windupMul`: telegraph times (a repeat's cooldown grows by the extra wind-up);
+- `gapMul`: the gaps inside a combo and the close-range gap;
+- `pauseMul`: the pauses after a move or combo, i.e. the melee openings;
+- `cooldownMul`: ability, combo and team-mechanic timers.
+
+`--set knob=v,...` applies knobs on top of the table for one run, and `--sweep knob=from:to:step` reruns every cell for each value (one row per value). Under the hood the runners take `TUNE_JSON=file`, and the server `TUNE_STATS=1` (logs `[tune] use` / `[tune] hit`) and `BOSS_KNOBS='{"colossus":{"pauseMul":1.2}}'`. Fights run in real time, so keep `--runs` and `--jobs` modest; two runs per cell is noisy, read big changes only.
 
 ## Team combat: combos and the Team Burst
 

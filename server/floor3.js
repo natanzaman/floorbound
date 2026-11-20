@@ -17,6 +17,8 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 export const COLOSSUS_MOVES = ['hammerfall', 'lightning', 'gale_push', 'overload', 'tempest_beam']; // forceBossMove names (director boss_move)
 const r1 = v => Math.round(v * 10) / 10;
 const r2 = v => Math.round(v * 100) / 100;
+// The Colossus's own timer per move (a combo step pushes it back: server/openings.js bossCombo)
+const COL_TIMERS = { strike: 'strikeT', gust: 'gustT', beam: 'beamT' };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const F3STATS = !!process.env.F3_STATS; // test/floor3boss.js: count Overloads stopped / Thunderclaps, beam jumps / hits
 
@@ -113,7 +115,7 @@ export const F3Methods = {
     this.f3Move(m, m.wx, m.wz, m.def.speed * 0.35, dt, 0.3);
   },
 
-  f3Atk(m) { return m.def.atk * (this.time < m.chargedUntil ? COLOSSUS.overload.chargedMult : 1); },
+  f3Atk(m) { return m.def.atk * (this.time < m.chargedUntil ? (m.tm || COLOSSUS).overload.chargedMult : 1); },
 
   // A melee hit on the wedge in front of the mob (shown as a red wedge during the wind-up).
   f3Bite(m) {
@@ -124,7 +126,7 @@ export const F3Methods = {
       const d = dist(m, p);
       if (d > reach + 0.4) continue;
       if (d > m.def.radius + 0.6 && Math.abs(wrapAngle(angleTo(m.x, m.z, p.x, p.z) - m.face)) > half) continue;
-      this.damagePlayer(p, this.f3Atk(m), { src: m.def.boss ? 'colossus hammerfall' : `${m.type} strike`, mob: m });
+      this.damagePlayer(p, this.f3Atk(m) * (m.type === 'colossus' ? (m.tm || COLOSSUS).cleave.mult : 1), { src: m.def.boss ? 'colossus hammerfall' : `${m.type} strike`, mob: m });
     }
   },
 
@@ -172,7 +174,7 @@ export const F3Methods = {
     if (m.def.f3boss) {
       if (this.arenaHidden?.(m)) return 0; // falling / dropping into the Undercroft: out of reach
       if (m.ov && this._tbIn) m.ov.burst = true; // a Team Burst landed during Overload (server/teamplay.js)
-      if (t < m.groundedUntil) base *= COLOSSUS.overload.weak; // Grounded after a stopped Overload
+      if (t < m.groundedUntil) base *= (m.tm || COLOSSUS).overload.weak; // Grounded after a stopped Overload
       const tw = this.twist3Def();
       if (tw.taken && t >= m.staggerUntil && t >= m.groundedUntil) base *= tw.taken;
     }
@@ -352,7 +354,7 @@ export const F3Methods = {
   f3Colossus(m, dt) {
     const target = this.f3Pre(m);
     if (target === false) return;
-    const t = this.time, C = COLOSSUS, def = m.def;
+    const t = this.time, def = m.def;
     if (!target) {
       m.windupAt = 0;
       if (m.engaged || m.hp < m.maxHp) this.resetColossus(m);
@@ -360,15 +362,16 @@ export const F3Methods = {
       return;
     }
     if (!m.engaged) this.engageColossus(m);
+    const C = m.tm || COLOSSUS;
     this.colossusSpecials(m, target);
     if (t < m.busyUntil || m.ov) return;
     if (m.windupAt) { if (t >= m.windupAt) { m.windupAt = 0; this.f3Bite(m); } return; }
     m.face = angleTo(m.x, m.z, target.x, target.z);
     const d = dist(m, target);
     if (d > def.range + 0.4) this.f3Move(m, target.x, target.z, def.speed * (m.phase === 2 ? 1.15 : 1), dt, def.range);
-    else if (t >= m.atkT) {
+    else if (t >= m.atkT && this.swingReady(m)) {
       const [r, h] = BITE.colossus;
-      m.windupAt = t + C.cleave.wind; m.atkT = t + def.atkCd * (m.phase === 2 ? 0.85 : 1) + C.cleave.wind * (1 - 1 / PACE);
+      m.windupAt = t + C.cleave.wind; this.swingStart(m, C.cleave.wind); m.atkT = t + C.cleave.cd * (m.phase === 2 ? C.cleave.rage : 1) + C.cleave.wind * (1 - 1 / PACE); // the table's cd (cooldownMul); swingStart: no point-blank chaining (server/openings.js)
       this.events.push({ t: 'wind', id: m.id, d: C.cleave.wind, f: r2(m.face), r, h });
     }
   },
@@ -383,13 +386,14 @@ export const F3Methods = {
     m.maxHp = m.hp = Math.round((C.hpBase + C.hpPer * Math.pow(weight, C.hpExp)) * (1 + C.hpLvl * over));
     m.def = { ...MOBS.colossus, atk: Math.round(MOBS.colossus.atk * (1 + C.atkPer * Math.max(0, ps.length - 3)) * 10) / 10 };
     m.phase = 0; m.busyUntil = 0; m.ov = null; m.groundedUntil = 0; m.chargedUntil = 0;
+    this.bossTable(m, COLOSSUS, ps.length); // m.tm: party-size knobs, sequences (server/openings.js)
     m.strikeT = t + C.strike.first; m.gustT = t + C.gust.first - (tw.gustSooner || 0);
-    m.ovT = tw.from === 0 ? t + 14 : Infinity; m.harpyT = m.beamT = Infinity;
+    m.ovT = tw.from === 0 ? t + C.overload.firstStatic : Infinity; m.harpyT = m.beamT = Infinity;
     this.startFight3(m);
   },
 
   colossusSpecials(m, target) {
-    const t = this.time, C = COLOSSUS, f = m.hp / m.maxHp, tw = this.twist3Def();
+    const t = this.time, C = m.tm || COLOSSUS, f = m.hp / m.maxHp, tw = this.twist3Def();
     const want = f < C.phases[1] ? 2 : f < C.phases[0] ? 1 : 0;
     while (m.phase < want) {
       m.phase++;
@@ -400,7 +404,7 @@ export const F3Methods = {
         m.ovT = Math.min(m.ovT, t + C.overload.first); m.harpyT = t + C.harpies.first;
       } else {
         this.sys('The Tempest Beam! Jump over the lightning as it sweeps past you.');
-        m.beamT = t + C.beam.first; m.ovT = Math.min(m.ovT, t + C.overload.every[2] * 0.6);
+        m.beamT = t + C.beam.first; m.ovT = Math.min(m.ovT, t + C.overload.every[2] * C.overload.phase3);
       }
     }
     const fighters = [...this.players.values()].filter(p => !p.dead && inArena3(p.x, p.z));
@@ -409,13 +413,15 @@ export const F3Methods = {
     if (m.ov) return; // channelling Overload: nothing else (updateFloor3 resolves it)
     const hold = this.arenaHold?.(m) || 0; // the fall to the Undercroft (server/arenas.js): 1 pending (no new team mechanic), 2 running
     if (hold === 2) return;
+    // Combos (the table's sequences), and the after state that follows one: its own timers wait (server/openings.js)
+    if (this.bossCombo(m, k => this.colMove(m, k, target, fighters), COL_TIMERS)) return;
 
     // Overload: phase 2+ (phase 1 with Static)
     if (t >= m.ovT && free && !this.director?.running && !hold) { this.startOverload(m, fighters); return; }
     // Tempest Beam (phase 3)
     if (m.phase >= 2 && t >= m.beamT && free) { m.beamT = t + C.beam.every[2]; this.tempestBeam(m); return; }
     // Gale Push: a cone in front, then a shove
-    if (t >= m.gustT && free) { m.gustT = t + C.gust.every[m.phase] - (tw.gustSooner || 0); this.galePush(m, target); return; }
+    if (t >= m.gustT && free && this.closeReady(m, 'gust')) { m.gustT = t + C.gust.every[m.phase] - (tw.gustSooner || 0); this.galePush(m, target); return; }
     // Lightning Strikes: under fighters plus strays
     if (t >= m.strikeT && t >= m.busyUntil) this.lightningStrikes(m, fighters, target);
     // Gale Harpies drop in (phase 2+)
@@ -434,8 +440,16 @@ export const F3Methods = {
     if (!hold) this.bossTeam?.(m, fighters); // team mechanics: shared meteor, spread, tether (server/bossteam.js)
   },
 
+  /** One of the Colossus's moves as a combo step, now. Returns when it ends (absolute s). */
+  colMove(m, k, target, fighters) {
+    if (k === 'strike') return this.lightningStrikes(m, fighters, target);
+    if (k === 'gust') return this.galePush(m, target);
+    if (k === 'beam') return this.tempestBeam(m);
+    return this.time;
+  },
+
   lightningStrikes(m, fighters, target) {
-    const t = this.time, S = COLOSSUS.strike, tw = this.twist3Def(), ep = m.ep;
+    const t = this.time, S = (m.tm || COLOSSUS).strike, tw = this.twist3Def(), ep = m.ep;
     const pick = () => fighters[Math.floor(Math.random() * fighters.length)] || target;
     const rndSpot = (rmax = 20) => { const a = Math.random() * Math.PI * 2, d = 3 + Math.random() * (rmax - 3); return [F3.arena.x + Math.sin(a) * d, F3.arena.z + Math.cos(a) * d]; };
     m.strikeT = t + S.every[m.phase];
@@ -448,11 +462,14 @@ export const F3Methods = {
       this.f3Circle(m, x, z, S.r, S.wind, this.f3Atk(m) * S.mult, 'strike', 'colossus lightning');
       if (tw.chain) this.schedule(tw.chain, () => { if (!m.dead && m.engaged && m.ep === ep) this.f3Circle(m, x, z, S.r, S.wind * 0.6, this.f3Atk(m) * S.mult * 0.7, 'strike', 'colossus lightning'); });
     }
+    this.areaHold(m, t + S.wind);
+    return t + S.wind;
   },
 
   galePush(m, target) {
-    const G = COLOSSUS.gust, t = this.time, tw = this.twist3Def();
-    m.face = angleTo(m.x, m.z, target.x, target.z); m.busyUntil = t + G.wind + 0.45; m.windupAt = 0;
+    const G = (m.tm || COLOSSUS).gust, t = this.time, tw = this.twist3Def();
+    m.face = angleTo(m.x, m.z, target.x, target.z); m.windupAt = 0;
+    const end = this.bossAfter(m, G, t + G.wind); this.closeLanded(m, 'gust', t + G.wind); // + its after pause (shared/bosstiming.js)
     const face = m.face, ep = m.ep;
     this.events.push({ t: 'f3fx', k: 'gust', id: m.id, x: r2(m.x), z: r2(m.z), f: r2(face), r: G.r, h: G.half, d: G.wind });
     this.schedule(G.wind, () => {
@@ -467,12 +484,13 @@ export const F3Methods = {
         if (!iframed && !p.dead) { const a = angleTo(m.x, m.z, p.x, p.z); this.shove(p, Math.sin(a), Math.cos(a), G.shove * (tw.shove || 1), inArena3); }
       }
     });
+    return end;
   },
 
   // Overload: the Colossus kneels and channels; its guard is open (posture half full). Break it and land a Switch (or a
   // Team Burst; solo: a Break) before the channel ends, or Thunderclap hits everyone on the plateau.
   startOverload(m, fighters) {
-    const O = COLOSSUS.overload, t = this.time, tw = this.twist3Def();
+    const O = (m.tm || COLOSSUS).overload, t = this.time, tw = this.twist3Def();
     const secs = O.channel - (tw.shorter || 0);
     m.ovT = t + (O.every[m.phase] || O.every[1]) + secs;
     m.windupAt = 0; m.busyUntil = t + secs;
@@ -483,7 +501,7 @@ export const F3Methods = {
   },
 
   updateOverload(m) {
-    const ov = m.ov, t = this.time, O = COLOSSUS.overload;
+    const ov = m.ov, t = this.time, O = (m.tm || COLOSSUS).overload;
     if (!ov) return;
     if (m.dead || !m.engaged) { m.ov = null; return; }
     if (m.staggerUntil > ov.seen) { ov.seen = m.staggerUntil; ov.broke = true; }
@@ -499,7 +517,7 @@ export const F3Methods = {
       return;
     }
     if (t < ov.until) return;
-    m.ov = null; m.busyUntil = t + 0.6; m.chargedUntil = t + O.charged;
+    m.ov = null; m.busyUntil = t + O.after.pause; m.chargedUntil = t + O.charged;
     this.events.push({ t: 'f3ov', s: 'clap', id: m.id, x: r2(m.x), z: r2(m.z) });
     if (F3STATS) console.log(`[ov] clap (broke ${ov.broke ? 1 : 0})`);
     this.sys('THUNDERCLAP! The Colossus is Charged: it hits harder for a while.');
@@ -512,11 +530,12 @@ export const F3Methods = {
 
   // Tempest Beam: the sword planted, a beam of lightning sweeps a full turn around it. Jump it or roll through it.
   tempestBeam(m) {
-    const B = COLOSSUS.beam, t = this.time, dir = Math.random() < 0.5 ? 1 : -1;
-    m.busyUntil = t + B.wind + B.turn + 0.4; m.windupAt = 0;
+    const B = (m.tm || COLOSSUS).beam, t = this.time, dir = Math.random() < 0.5 ? 1 : -1;
+    m.windupAt = 0; const end = this.bossAfter(m, B, t + B.wind, B.turn); // + its after pause (shared/bosstiming.js)
     const b = { id: this.id(), m, x: m.x, z: m.z, a0: m.face, dir, start: t + B.wind, turn: B.turn, prev: m.face, hit: new Set(), atk: this.f3Atk(m) * B.mult };
     this.beams.push(b);
     this.events.push({ t: 'f3beam', id: b.id, by: m.id, x: r2(b.x), z: r2(b.z), a0: r2(b.a0), dir, d: B.wind, turn: B.turn, len: B.len, w: B.w, from: B.from });
+    return end;
   },
 
   resetColossus(m) {
@@ -687,8 +706,8 @@ export const F3Methods = {
     this.charges = this.charges.filter(c => c.done < c.len);
 
     // the Tempest Beam: a line from the Colossus sweeping round; anyone it crosses who isn't airborne or rolling is hit
-    const B = COLOSSUS.beam;
     for (const b of this.beams) {
+      const B = (b.m.tm || COLOSSUS).beam;
       if (t < b.start) continue;
       const k = Math.min(1, (t - b.start) / b.turn), a = b.a0 + b.dir * B.sweep * k;
       for (const p of this.players.values()) {

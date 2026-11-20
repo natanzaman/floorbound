@@ -32,6 +32,7 @@ import { installBell } from './bell.js';
 import { installStaging } from './staging.js';
 import { installCine } from './cine.js'; // cinematic camera state for filming (F4)
 import { installPoses } from './poses.js';
+import { installOpenings } from './openings.js'; // boss combos, after states, melee openings (J3)
 import { installThreat } from './threat.js'; // visible threat, healer threat, Cover, flanking (G3)
 import { installRevive } from './revive.js'; // downed + revive (G1)
 import { installRescue } from './rescue.js'; // rescue traps: vines, Drowning Pillar, storm crystal (J1)
@@ -47,6 +48,8 @@ import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
 const r2 = v => Math.round(v * 100) / 100;
+// The Warden's own timer per move (a combo step pushes it back: server/openings.js bossCombo)
+const WARDEN_TIMERS = { slam: 'slamT', quake: 'quakeT', charge: 'chargeT', spin: 'spinT', rock: 'rockT', hounds: 'houndT', sweep: 'sweepT' };
 
 export class Game {
   constructor() {
@@ -62,6 +65,7 @@ export class Game {
     this.floorClears = 0;
     this.gate = { open: false, ready: new Set(), countAt: 0, emptySince: 0 };
     this.fight = null;   // the current Warden attempt, for tracking
+    this.bossKnobs = process.env.BOSS_KNOBS ? JSON.parse(process.env.BOSS_KNOBS) : null; // testing aid (scripts/tuneboss.js): knob overrides per boss, e.g. {"colossus":{"pauseMul":1.2}}
     this.lfgT = 0;
     this.track = () => {}; // set by the server to record play events
     const rr = ([a, b]) => a + Math.random() * (b - a);
@@ -1036,8 +1040,9 @@ export class Game {
     if (def.boss && !m.engaged) { // scale the boss to the group that walks in
       m.engaged = true;
       this.scaleWarden(m);
-      m.phase = 0; m.slamT = t + 5; m.busyUntil = 0; m.houndT = m.chargeT = m.spinT = m.rockT = Infinity;
-      m.quakeT = t + (this.twistW || WARDEN).quake.first[0]; this.clearQuakes();
+      this.bossTable(m, this.twistW || WARDEN, [...this.players.values()].filter(p => !p.dead && inArena(p.x, p.z)).length); // m.tm (server/openings.js)
+      m.phase = 0; m.slamT = t + WARDEN.slam.first; m.busyUntil = 0; m.houndT = m.chargeT = m.spinT = m.rockT = Infinity;
+      m.quakeT = t + m.tm.quake.first[0]; this.clearQuakes();
       this.twistEngage(m); // Warden twist setup (before startFight records the fight's health)
       this.startFight(m);
     }
@@ -1052,7 +1057,7 @@ export class Game {
           for (const p of this.players.values()) {
             if (p.dead) continue;
             const d = dist(m, p);
-            if (d <= def.range + 1 && Math.abs(wrapAngle(angleTo(m.x, m.z, p.x, p.z) - m.face)) < 1.3) this.damagePlayer(p, def.atk, { src: 'warden cleave' });
+            if (d <= def.range + 1 && Math.abs(wrapAngle(angleTo(m.x, m.z, p.x, p.z) - m.face)) < 1.3) this.damagePlayer(p, def.atk * (m.tm || this.twistW || WARDEN).cleave.mult, { src: 'warden cleave' }); // x the table's mult (damageMul)
           }
           this.events.push({ t: 'fx', k: 'marc', id: m.id, x: r2(m.x), z: r2(m.z), f: r2(m.face), r: def.range + 1 });
         } else if (def.ranged) {
@@ -1070,10 +1075,12 @@ export class Game {
     if (m.type === 'alpha' || def.howl) this.alphaHowl(m);
     if (d > def.range + 0.4) {
       this.moveMob(m, target.x, target.z, def.speed * (enraged ? 1.25 : 1) * (frenzy ? 1.3 : 1), dt, def.range);
-    } else if (t >= m.atkT) {
-      const wind = def.boss ? (this.twistW || WARDEN).cleave.wind : def.ranged ? THORN.wind : 0.45;
+    } else if (t >= m.atkT && (!def.boss || this.swingReady(m))) {
+      const wind = def.boss ? (m.tm || this.twistW || WARDEN).cleave.wind : def.ranged ? THORN.wind : 0.45;
       m.windupAt = t + wind;
-      m.atkT = t + def.atkCd * (enraged ? 0.7 : 1) * (frenzy ? 0.7 : 1) + (def.boss ? wind - wind / PACE : 0); // the paced wind-up doesn't eat the rest
+      if (def.boss) this.swingStart(m, wind); // no point-blank chaining (server/openings.js)
+      const cd = def.boss ? (m.tm || this.twistW || WARDEN).cleave.cd * (enraged ? (m.tm || this.twistW || WARDEN).cleave.rage : 1) : def.atkCd; // the boss: its table's cd (cooldownMul)
+      m.atkT = t + cd * (frenzy ? 0.7 : 1) + (def.boss ? wind - wind / PACE : 0); // the paced wind-up doesn't eat the rest
       const ev = { t: 'wind', id: m.id, d: wind, f: r2(m.face) };
       if (def.ranged) { m.aimX = target.x; m.aimZ = target.z; ev.ax = r2(target.x); ev.az = r2(target.z); }
       else if (BITE[m.type]) { ev.r = BITE[m.type][0]; ev.h = BITE[m.type][1]; }
@@ -1220,79 +1227,89 @@ export class Game {
 
   // The Horned Warden: each phase ADDS attacks rather than just more health.
   bossSpecials(m, target) {
-    const t = this.time, W = this.twistW || WARDEN, f = m.hp / m.maxHp;
+    const t = this.time, W = m.tm || this.twistW || WARDEN, f = m.hp / m.maxHp;
     const want = f < W.phases[1] ? 2 : f < W.phases[0] ? 1 : 0;
     while (m.phase < want) {
       m.phase++;
       this.events.push({ t: 'phase', id: m.id, n: m.phase });
       if (m.phase === 1) {
         this.sys('The Horned Warden howls for its hounds!');
-        m.houndT = t + 1.5; m.chargeT = t + 5;
+        m.houndT = t + WARDEN.hounds.first; m.chargeT = t + WARDEN.charge.first; // (shared/bosstiming.js)
       } else {
         this.events.push({ t: 'enrage', id: m.id });
         this.sys('The Horned Warden is enraged! The ceiling is coming down.');
-        m.spinT = t + 3; m.rockT = t + 6;
+        m.spinT = t + WARDEN.spin.first; m.rockT = t + WARDEN.rock.first;
       }
       m.quakeT = Math.min(m.quakeT ?? Infinity, t + W.quake.first[m.phase]); // more rings, sooner
     }
     const fighters = [...this.players.values()].filter(p => !p.dead && inArena(p.x, p.z));
     const pick = () => fighters[Math.floor(Math.random() * fighters.length)] || target;
+    // Combos (the table's sequences), and the after state that follows one: its own timers wait (server/openings.js)
+    if (this.bossCombo(m, k => this.wardenMove(m, k, target, fighters, pick), WARDEN_TIMERS)) return;
 
     // Ground slam on a random fighter (jump or roll out); a bigger party gets one circle per W.slam.per fighters
-    if (t >= m.slamT && t >= m.busyUntil) {
-      m.slamT = t + W.slam.every[m.phase];
-      const { r, wind } = W.slam, n = Math.max(1, Math.ceil(fighters.length / (W.slam.per || 99)));
-      const vs = [...fighters].sort(() => Math.random() - 0.5).slice(0, n);
-      for (const v of vs.length ? vs : [target]) this.circleAttack(m, v.x, v.z, r, wind, m.def.atk * W.slam.mult, 'warden slam', true);
-    }
+    if (t >= m.slamT && t >= m.busyUntil) { m.slamT = t + W.slam.every[m.phase]; this.wardenMove(m, 'slam', target, fighters, pick); }
     // Quake Ring: shockwaves roll out from the Warden (jump the wavefront, roll through it, or be out of reach)
-    if (t >= m.quakeT && t >= m.busyUntil && !m.windupAt) {
-      m.quakeT = t + W.quake.every[m.phase];
-      this.quakeRing(m);
-    }
+    if (t >= m.quakeT && t >= m.busyUntil && !m.windupAt) { m.quakeT = t + W.quake.every[m.phase]; this.wardenMove(m, 'quake', target, fighters, pick); }
     if (m.phase >= 1) {
-      // Hounds join the fight
-      if (t >= m.houndT) {
-        m.houndT = t + W.hounds.every;
-        let alive = 0; for (const h of this.mobs.values()) if (h.temp && !h.totem && !h.dead) alive++; // (Thorn Totems don't count)
-        for (let i = 0; i < W.hounds.n && alive < W.hounds.max; i++, alive++) {
-          const a = Math.random() * Math.PI * 2;
-          const h = this.addMob('hound', WORLD.arena.x + Math.sin(a) * 18, WORLD.arena.z + Math.cos(a) * 18);
-          h.temp = true; h.sx = h.x; h.sz = h.z;
-          const v = pick(); if (v) h.threat.set(v.id, 5);
-          this.events.push({ t: 'fx', k: 'summon', x: r2(h.x), z: r2(h.z) });
-        }
-      }
+      if (t >= m.houndT) { m.houndT = t + W.hounds.every; this.wardenMove(m, 'hounds', target, fighters, pick); } // hounds join the fight
       // Horn charge: a long red lane, then the Warden barrels down it
-      if (t >= m.chargeT && t >= m.busyUntil && !m.windupAt) {
-        m.chargeT = t + W.charge.every;
-        this.hornCharge(m, pick());
-      }
+      if (t >= m.chargeT && t >= m.busyUntil && !m.windupAt) { m.chargeT = t + W.charge.every; this.wardenMove(m, 'charge', target, fighters, pick); }
     }
     if (m.phase >= 2) {
-      if (t >= m.spinT && t >= m.busyUntil) {
-        m.spinT = t + W.spin.every;
-        const { r, wind } = W.spin;
-        this.events.push({ t: 'tele', x: r2(m.x), z: r2(m.z), r, d: wind, follow: m.id });
-        this.schedule(wind, () => {
-          if (m.dead) return;
-          this.events.push({ t: 'fx', k: 'boom', x: r2(m.x), z: r2(m.z), r });
-          for (const p of this.players.values()) if (!p.dead && dist(p, m) <= r) this.damagePlayer(p, m.def.atk * W.spin.mult, { ground: true, src: 'warden spin' });
-        });
-      }
-      // Rockfall: a circle under every fighter, plus a few strays
-      if (t >= m.rockT) {
-        m.rockT = t + W.rock.every;
-        const spots = fighters.map(p => [p.x, p.z]);
-        for (let i = 0; i < W.rock.extra; i++) {
-          const a = Math.random() * Math.PI * 2, d = 4 + Math.random() * 16;
-          spots.push([WORLD.arena.x + Math.sin(a) * d, WORLD.arena.z + Math.cos(a) * d]);
-        }
-        for (const [x, z] of spots) this.circleAttack(m, x, z, W.rock.r, W.rock.wind, m.def.atk * W.rock.mult, 'rockfall', false, 'rock');
-      }
+      if (t >= m.spinT && t >= m.busyUntil && this.closeReady(m, 'spin')) { m.spinT = t + W.spin.every; this.wardenMove(m, 'spin', target, fighters, pick); }
+      if (t >= m.rockT) { m.rockT = t + W.rock.every; this.wardenMove(m, 'rock', target, fighters, pick); } // Rockfall: a circle under every fighter, plus strays
     }
     this.bossTeam?.(m, fighters); // team mechanics: shared meteor, spread, tether (server/bossteam.js)
     this.twistSpecials(m, pick); // Warden twist behaviour
+  }
+
+  /** One of the Warden's moves, now (its own timer or a combo step). Returns when it ends (absolute s). */
+  wardenMove(m, k, target, fighters, pick) {
+    const t = this.time, W = m.tm || this.twistW || WARDEN;
+    if (k === 'slam') {
+      const { r, wind } = W.slam, n = Math.max(1, Math.ceil(fighters.length / (W.slam.per || 99)));
+      const vs = [...fighters].sort(() => Math.random() - 0.5).slice(0, n);
+      for (const v of vs.length ? vs : [target]) this.circleAttack(m, v.x, v.z, r, wind, m.def.atk * W.slam.mult, 'warden slam', true);
+      this.areaHold(m, t + wind);
+      return t + wind;
+    }
+    if (k === 'quake') return this.quakeRing(m);
+    if (k === 'charge') return this.hornCharge(m, pick());
+    if (k === 'sweep') return this.hornSweep(m);
+    if (k === 'hounds') {
+      let alive = 0; for (const h of this.mobs.values()) if (h.temp && !h.totem && !h.dead) alive++; // (Thorn Totems don't count)
+      for (let i = 0; i < W.hounds.n && alive < W.hounds.max; i++, alive++) {
+        const a = Math.random() * Math.PI * 2;
+        const h = this.addMob('hound', WORLD.arena.x + Math.sin(a) * 18, WORLD.arena.z + Math.cos(a) * 18);
+        h.temp = true; h.sx = h.x; h.sz = h.z;
+        const v = pick(); if (v) h.threat.set(v.id, 5);
+        this.events.push({ t: 'fx', k: 'summon', x: r2(h.x), z: r2(h.z) });
+      }
+      return t;
+    }
+    if (k === 'spin') {
+      const { r, wind } = W.spin;
+      this.events.push({ t: 'tele', x: r2(m.x), z: r2(m.z), r, d: wind, follow: m.id });
+      this.closeLanded(m, 'spin', t + wind);
+      this.schedule(wind, () => {
+        if (m.dead) return;
+        this.events.push({ t: 'fx', k: 'boom', x: r2(m.x), z: r2(m.z), r });
+        for (const p of this.players.values()) if (!p.dead && dist(p, m) <= r) this.damagePlayer(p, m.def.atk * W.spin.mult, { ground: true, src: 'warden spin' });
+      });
+      return t + wind;
+    }
+    if (k === 'rock') {
+      const spots = fighters.map(p => [p.x, p.z]);
+      for (let i = 0; i < W.rock.extra; i++) {
+        const a = Math.random() * Math.PI * 2, d = 4 + Math.random() * 16;
+        spots.push([WORLD.arena.x + Math.sin(a) * d, WORLD.arena.z + Math.cos(a) * d]);
+      }
+      for (const [x, z] of spots) this.circleAttack(m, x, z, W.rock.r, W.rock.wind, m.def.atk * W.rock.mult, 'rockfall', false, 'rock');
+      this.areaHold(m, t + W.rock.wind);
+      return t + W.rock.wind;
+    }
+    return t;
   }
 
   // Health from the party's weight (fighters weighted by role, then raised to hpExp: a full party with three damage
@@ -1318,16 +1335,16 @@ export class Game {
   }
 
   hornCharge(m, v) {
-    const W = (this.twistW || WARDEN).charge, a = angleTo(m.x, m.z, v.x, v.z);
+    const W = (m.tm || this.twistW || WARDEN).charge, a = angleTo(m.x, m.z, v.x, v.z);
     let x2 = m.x + Math.sin(a) * W.len, z2 = m.z + Math.cos(a) * W.len;
     const ex = x2 - WORLD.arena.x, ez = z2 - WORLD.arena.z, ed = Math.hypot(ex, ez), maxR = WORLD.arena.r - 3;
     if (ed > maxR) { x2 = WORLD.arena.x + (ex / ed) * maxR; z2 = WORLD.arena.z + (ez / ed) * maxR; }
     const x0 = m.x, z0 = m.z;
-    m.face = a; m.busyUntil = this.time + W.wind + 0.45;
+    m.face = a; const end = this.bossAfter(m, W, this.time + W.wind); // + its after pause (shared/bosstiming.js)
     this.events.push({ t: 'tele', k: 'line', x: r2(x0), z: r2(z0), x2: r2(x2), z2: r2(z2), w: W.width, d: W.wind, id: m.id });
-    const steps = 3;
+    const steps = W.steps;
     for (let i = 1; i <= steps; i++) {
-      this.schedule(W.wind + i * paced(0.1), () => {
+      this.schedule(W.wind + i * paced(W.step), () => {
         if (m.dead) return;
         m.x = x0 + (x2 - x0) * (i / steps); m.z = z0 + (z2 - z0) * (i / steps); m.moving = true;
         if (i < steps) return;
@@ -1341,6 +1358,7 @@ export class Game {
       });
     }
     this.twistCharge(m, v); // Warden twist (Twin Horns)
+    return end;
   }
 
   moveMob(m, tx, tz, speed, dt, stopAt) {
@@ -1383,7 +1401,7 @@ export class Game {
     // (snapFor); spectators, the director's film view and the server's own bots get every floor (this string).
     const parts = [[], [], [], []];
     for (let i = 0; i < mobs.length; i++) parts[fl[i]].push(JSON.stringify(mobs[i]));
-    const pre = JSON.stringify({ players, mobs: 0, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
+    const pre = JSON.stringify({ players, mobs: 0, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.(), op: this.openSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
     const at = pre.indexOf('"mobs":0') + 7; // (the first "mobs" key: the players array before it holds only numbers)
     const head = pre.slice(0, at), tail = pre.slice(at + 1);
     this.snapParts = { head, tail, floors: parts.map(a => a.join(',')), byFloor: [] };
@@ -1430,6 +1448,7 @@ installCine(Game); // cine(op, data), cineState(): filming camera, titles, fades
 installPoses(Game); // kneel / sit / bow: setPose, /kneel chat, cleared by moving or acting (server/poses.js)
 installTracking(Game); // play-tracking hooks: boss fight rows, death / quit context (server/trackgame.js)
 installThreat(Game); // threat you can see, healer threat, Cover, flanking (server/threat.js)
+installOpenings(Game); // boss combos, after states, melee openings (server/openings.js); after the threat (wraps flankMult)
 installStaging(Game); // staging hooks for the scene director: boss moves, reserved Last Attack, scripted deaths (server/staging.js)
 installBossTeam(Game); // boss team mechanics (server/bossteam.js); after staging: adds meteor / spread / tether to forceBossMove
 installFloor3Moves(Game); // the Storm Colossus's moves in forceBossMove, Floor 3 testing aids (server/floor3.js); after boss team mechanics
@@ -1443,3 +1462,22 @@ installLooks(Game); // character looks: setLook(entity, id), listed in snapshots
 installNamed(Game); // the Named: humans-first rules, friendship, invites by tier (server/named.js); a no-op without a NamedManager
 installRescue(Game); // rescue traps (server/rescue.js); after the Named: its trap-object and crystal wrappers sit outside everyone's
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last
+if (process.env.TUNE_STATS) installTuneStats(Game); // testing aid (scripts/tuneboss.js): log boss moves used and hits taken; outermost
+
+// TUNE_STATS: `[tune] use <boss> <move>` when a boss starts a move (its table key; 'swing' = its basic swing), and
+// `[tune] hit <src>` when a damagePlayer call took HP (dodged / absorbed calls are not hits). scripts/tuneboss.js reads them.
+function installTuneStats(G) {
+  const P = G.prototype, use = (m, k) => console.log(`[tune] use ${m?.type} ${k}`);
+  const wrap = (name, key) => { const orig = P[name]; P[name] = function (m, ...a) { const k = key(m, ...a); if (k) use(m, k); return orig.call(this, m, ...a); }; };
+  wrap('swingStart', () => 'swing');
+  wrap('quakeRing', () => 'quake'); wrap('hornCharge', () => 'charge'); wrap('hornSweep', () => 'sweep');
+  wrap('wardenMove', (m, k) => (['slam', 'spin', 'rock'].includes(k) ? k : null)); // (quake, charge, sweep: counted above)
+  wrap('sovMove', (m, k) => (['geyser', 'volley', 'pools'].includes(k) ? k : null)); wrap('tidalWave', () => 'wave'); wrap('callDeluge', () => 'deluge');
+  wrap('lightningStrikes', () => 'strike'); wrap('galePush', () => 'gust'); wrap('tempestBeam', () => 'beam'); wrap('startOverload', () => 'overload');
+  const hurt = P.damagePlayer;
+  P.damagePlayer = function (p, base, opts = {}) {
+    const hp = p.hp, r = hurt.call(this, p, base, opts);
+    if (p.hp < hp) console.log(`[tune] hit ${opts.src || '?'}`);
+    return r;
+  };
+}
