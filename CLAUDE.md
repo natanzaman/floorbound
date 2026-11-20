@@ -5,11 +5,13 @@ Start every session by reading `docs/NEXT.md` (what to do next, local setup), th
 
 ## Stack
 - **Server:** Node 20, `ws`, authoritative at 20 Hz (`server/index.js` → `server/game.js`).
-  - Feature modules install themselves onto `Game.prototype`: combat, twists, floor2, mastery, talents, styles, classes-a, classes-b, smith, hall, ground, playerbots.
+  - Feature modules install themselves onto `Game.prototype`: combat, twists, floor2, floor3, arenas, bossteam, rescue, revive, threat, teamplay, mvp, poses, looks, openings (J3 combos, after states, melee openings), mastery, talents, styles, classes-a, classes-b, smith, hall, ground, playerbots.
+  - Boss timings live in tables (`shared/bosstiming.js`, `shared/pace.js`); `scripts/tuneboss.js` runs bot fights for tuning (README → Tuning bosses).
   - The Named (`shared/named.js`, `server/named.js`): NPC heroes (the Hearthward) and the loner Cairn, a separate bot kind (`e.named`), off with `NAMED_ENABLED=0`.
 - **Client:** Three.js ES modules with no build step (`public/`).
   - `main.js` wires everything together: HUD, input, prediction, snapshot handling.
-  - `world.js` and `floor2world.js` build the scenery.
+  - `world.js`, `floor2world.js` and `floor3world.js` build the scenery.
+  - Input: `shared/controls.js` (actions, bindings, rules) → `public/input.js` (keys, mouse, pad; `__fb.input`), `shared/gamepad.js`, `public/focusnav.js` (pad menus), `public/controlsui.js` (Controls screen), `public/controlsync.js` (account copy), `public/keyname.js` (prompts name the active device's key), `public/xboxusb.js` (WebUSB wired pads on Mac).
   - Feature modules mirror the server ones.
 - **Shared** (`shared/`): data and tuning, item, talent, style, mastery and twist tables, and the bot code.
   - `shared/bots/`: brain, motor, registry, social, classes, style.

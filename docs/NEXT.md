@@ -28,4 +28,5 @@ Start here, then use `docs/ROADMAP.md` for full specs and owner decisions. Every
   Production is Neon: never point tests at it.
 - **Browser tests:** Python Playwright (`pip install playwright && playwright install chromium`). The Node Playwright version for `.mjs` tests is `npm i --no-save playwright`.
 - **Avoid these test ports:** 6665–6669 and 6679, which Node's fetch refuses.
-- **Pushing:** use `git push --force-with-lease origin main`, which auto-deploys to Render (a free plan that the owner wants to stay on).
+- **Pushing:** `git push --force-with-lease --force-if-includes origin HEAD:main`, which auto-deploys to Render (a free plan that the owner wants to stay on). On this Mac git has no GitHub login in the keychain: add `-c credential.helper= -c credential.helper='!gh auth git-credential'` (gh is signed in). The global pre-push hook refuses a merge on main's first-parent line whose merged branch doesn't contain its first parent: when an integration branch holds its own merges, merge it with `--no-ff` onto a detached `origin/main` and push that (as e2fb80c did).
+- **Live site check:** the Render connector needs Natan to pick a workspace first; ask him.

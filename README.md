@@ -441,7 +441,9 @@ public/input.js  the input layer: keys and mouse buttons -> actions by key code 
 public/panels.js  the panel registry (open, close, top, isOpen): which windows free the cursor and close on Esc
 public/settings.js  the Settings panel; fb_settings (this browser) vs fb_controls (bindings, sensitivity, invert-Y)
 public/controlsui.js  the Controls screen (Game Menu → Controls): input device, Keyboard & Mouse | Controller tabs with an SVG keyboard + mouse / controller picture (hover tooltip, ★, click popover → Edit → filter list, live light-up), every control with Rebind (conflicts: swap / unbind), Reset to defaults; test/controlsui.mjs
-public/controlsync.js  fb_controls follows the account (accounts.settings, GET / PUT /api/settings, 8 KB): on sign-in the account copy wins, else this browser's uploads; test/controlsync.js (DB)
+public/controlsync.js  fb_controls follows the account (accounts.settings, GET / PUT /api/settings, 8 KB): on sign-in the account copy wins, else this browser's uploads; a change the server never got (fb_controls_unsynced, owned by one account) uploads instead; test/controlsync.js (DB)
+public/access.js, public/palette.js  accessibility options (fb_controls.access) and the colour-blind telegraph palettes; test/access.js, test/access.mjs
+shared/bosstiming.js, shared/pace.js, server/openings.js, public/openings.js  J3: boss timing tables per fight (party knobs), combos, after states, melee openings (weak point, OPENING tag); test/bosstiming.js, test/j3combo.js, test/j3knobs.js; scripts/tuneboss.js the tuning harness
 test/keys.mjs    every default key and mouse action in a real browser, checked by what it sends or changes (needs Playwright for Node)
 public/keyname.js  the key a prompt names for an action on the active device (input.label at draw time), {key:action} tokens in server text
 public/xboxusb.js  WebUSB driver for wired third-party Xbox pads on a Mac (GIP: reset, power on, read; listed by input.readPads); shared/gip.js the packet parser, test/gip.js

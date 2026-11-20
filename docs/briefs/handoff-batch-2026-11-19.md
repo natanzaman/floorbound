@@ -1,5 +1,7 @@
 # Handoff: batch 2026-11-19 (K1b, K2, K3, J3, small items, K4) chat 5
 
+**STATE 2026-11-20: DONE.** Everything is merged and live on main (e2fb80c), worktrees, branches and test DBs are cleaned up, the controller session is archived. Nothing pending. For new work start from docs/NEXT.md; the rest of this file is history.
+
 ## Purpose
 The owner asked (2026-11-19): "Read docs/NEXT.md and run the ready tasks in parallel worktrees, soft review after each task and hard review completed when they converge please". Later: "Yeah, go please. Any bugs or the fixes that you found, please fix them and review and then redeploy." and "No need to run Fable reviews, please." All tasks are merged into the integration branch and the hard review (code-reviewer Opus high, two slices) is done. What is left: the hard-review fixes (3 implementers running), fix re-check, full test sweep, push to main (Render auto-deploys), cleanup, roadmap/NEXT update, final report to Natan.
 Specs: docs/ROADMAP.md sections J (463-620) and K (619-870); batch brief docs/briefs/batch-2026-11-19.md. Running log: docs/briefs/progress-batch-2026-11-19.md (append-only; its last entries are the truth).

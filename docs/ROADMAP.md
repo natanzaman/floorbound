@@ -1,10 +1,10 @@
 # Floorbound roadmap
 
-Last updated 2026-11-17. Owner: Natan. Players: Natan and friends (play-testing, not public).
+Last updated 2026-11-20. Owner: Natan. Players: Natan and friends (play-testing, not public).
 
 ## Where things stand
 Done and live:
-- **Floor 1** (town, fields, the Horned Warden raid) and **Floor 2** (Glimmering Mire, the Drowned Sovereign; level cap 20).
+- **Floor 1** (town, fields, the Horned Warden raid), **Floor 2** (Glimmering Mire, the Drowned Sovereign; level cap 20) and **Floor 3** (the Gale Spires, the Colossus, a two-area fight with the Undercroft).
 - **Classes:** 7 (Swordsman, Guardian, Cleric, Ranger, Berserker, Lancer, Bard), each with 3 weapon styles and a 3-branch talent tree (Skill Tree window, K).
 - **Skill mastery** with evolutions.
 - **Combat:** posture/Break, perfect dodge, Guardian parry, Switch, Last Attack bonus.
@@ -19,7 +19,10 @@ Done and live:
   - players add up to 3 bots each (P → Bots tab);
   - orders come from a bot's party frame, the "All bots" button or the V wheel.
 - **Admin page:** players, characters, bots, a "Maxed" preset.
-- **Controls:** mouse-look camera with Settings.
+- **Controls (K, live 2026-11-20):** every control rebindable on the Controls screen (keyboard & mouse and controller pictures), synced to the account; controller play with an LB layer and pad menu navigation (wired Xbox pads on a Mac via WebUSB); accessibility options (toggles, sensitivity, reduce motion, UI scale, high contrast, colour-blind telegraphs, telegraph sound cue); scripted pad tests (`test/padtest.mjs`).
+- **Boss fights (J, live):** rescue traps, multi-area fights, threat rules, and J3 timing tables per fight (`shared/bosstiming.js`), boss combos with after states, melee openings, `scripts/tuneboss.js` for tuning runs.
+- **The Named:** the Hearthward NPC heroes and the loner Cairn.
+- **Filming:** scene director with cue sheets (F; F7 paused).
 - **Reconnect:** automatic after a server restart.
 
 ## Owner decisions (2026-11-17)
@@ -33,7 +36,7 @@ Done and live:
 - **Hit-stop (freeze frame) only when a boss's big hit lands on *you*.** It's local to the victim and never shown to the whole party, never on player hits.
 
 ## Tasks
-**Status 2026-11-17: A–E are done and merged** (specs kept below for reference). **Now: section F, "Season 1: filming"**: the game features the story in `docs/story/STORY.md` needs. Tracker at the top of F.
+**Status 2026-11-20: A–K are done and merged** (specs kept below for reference), except F7 (film work, paused by the owner). What to do next and the owner calls waiting: `docs/NEXT.md`.
 
 Each task has its own branch and worktree. Specs below; acceptance criteria are what "done" means.
 
