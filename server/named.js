@@ -52,7 +52,7 @@ import {
   tierIndex, tierAt, tierProgress, lookColor, isNamedName, namedLine, newFriendship, gainFriendship, loseFriendship,
   dailyLeft, canInvite, canSummon, namedLevel, awayLine, nextReset, PRESENCE,
 } from '../shared/named.js';
-import { cleanAllow } from '../shared/accesslevels.js'; // who may control them besides access 3+ (st.allow)
+import { cleanAllow, accessOf, ACCESS } from '../shared/accesslevels.js'; // who may control them besides access 3+ (st.allow)
 
 export const namedOn = () => process.env.NAMED_ENABLED !== '0';
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -470,9 +470,17 @@ export class NamedManager {
     if (why) return why;
     if (!st.enabled) return `${st.def.name} is already out of the world.`;
     const p = this.playerOf(st);
+    const other = this.othersParty(h, p);
+    if (other) return other;
     if (p && inBossRoom(p) && this.game.activeFightOf?.(p)) return `${st.def.name} is in a boss fight.`;
     this.setEnabled(id, false);
     return '';
+  }
+  // Despawning one who is in someone else's party: only access 3+ (no griefing another player's party). '' = fine.
+  othersParty(h, p) {
+    const host = p && this.hostOf(p);
+    if (!host || host.id === h.id || (h.party && p.party === h.party) || accessOf(h) >= ACCESS.overrideBots) return '';
+    return `${p.name} is in ${host.name}'s party.`;
   }
   respawnBy(h, id) {
     const st = this.chars.get(id);
@@ -505,7 +513,7 @@ export class NamedManager {
       const c = why => (why ? { ok: false, why } : { ok: true });
       const ib = mine ? 'Already in your party.' : this.inviteBlock(h, st);
       const kb = !mine ? 'Not in your party.' : this.ctlBlock(h, st, 'botKick');
-      const db = !st.enabled ? 'Already out of the world.' : this.ctlBlock(h, st, 'botDespawn') || (p && inBossRoom(p) && g.activeFightOf?.(p) ? `${def.name} is in a boss fight.` : '');
+      const db = !st.enabled ? 'Already out of the world.' : this.ctlBlock(h, st, 'botDespawn') || this.othersParty(h, p) || (p && inBossRoom(p) && g.activeFightOf?.(p) ? `${def.name} is in a boss fight.` : '');
       const rb = st.enabled ? 'Already in the world.' : this.ctlBlock(h, st, 'botRespawn') || (this.parked ? 'A show is being filmed.' : '');
       return {
         id: def.id, name: def.name, cls: def.cls, role: def.role, group: def.group, gname: GROUPS[def.group].name, color: lookColor(def),

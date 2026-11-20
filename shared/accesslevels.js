@@ -34,19 +34,26 @@ export const accessOf = p => (p?.admin ? ACCESS_ADMIN : clampAccess(p?.access ??
 // An unknown action is locked to the top level (a typo never opens anything up).
 export const minAccess = action => ACTION_MIN[action] ?? ACCESS_MAX;
 
-// An allow list: lower-case player names (2-16 letters, numbers, spaces, _ . -) or character ids, at most 20.
-// Accepts an array or a comma / newline separated string.
+// An allow list: saved characters, as { id (the character id, a string), name (for display) }, at most 20. Names are
+// resolved to character ids when a list is saved (server/accounts.js resolveAllow: an unknown name is refused), and only
+// a saved character ever matches (by character id): a display name proves nothing, and anonymous or guest-less players
+// never match. ALLOW_CREATOR ({ id: 'creator' }) alone is "Just me": nobody else matches, so only the creator (and
+// access 3+) may control the bot. cleanAllow keeps well-formed entries (stored lists, client input after resolving).
 export const ALLOW_MAX = 20;
+export const ALLOW_CREATOR = 'creator';
 export function cleanAllow(list) {
-  const raw = Array.isArray(list) ? list : String(list ?? '').split(/[,\n]/);
   const out = [];
-  for (const v of raw) {
-    const s = String(v ?? '').replace(/[^\w \-.]/g, '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 16);
-    if (s && (s.length >= 2 || /^\d+$/.test(s)) && !out.includes(s)) out.push(s);
+  for (const v of Array.isArray(list) ? list : []) {
+    const id = String(typeof v === 'object' && v ? v.id : v ?? '').trim();
+    if (!(/^[1-9]\d{0,9}$/.test(id) || id === ALLOW_CREATOR) || out.some(a => a.id === id)) continue;
+    const name = String((typeof v === 'object' && v?.name) || (id === ALLOW_CREATOR ? 'just the creator' : `#${id}`)).replace(/[^\w \-.#]/g, '').slice(0, 24);
+    out.push({ id, name });
     if (out.length >= ALLOW_MAX) break;
   }
   return out;
 }
+// "anyone", "just the creator", or the names.
+export const allowLabel = allow => (!allow?.length ? 'anyone' : allow.map(a => a.name).join(', '));
 
 // Is `actor` (a player: { id, name, charId, accountId }) the bot's creator ({ charId, accountId, pid, name })?
 // A saved character matches by character id; an anonymous creator by player id (re-adopted on reconnect by
@@ -57,11 +64,12 @@ export function isCreator(actor, creator) {
   if (creator.pid && actor.id === creator.pid) return true;
   return !!creator.accountId && actor.accountId === creator.accountId;
 }
-export const onAllowList = (actor, allow) => !!actor && Array.isArray(allow) && allow.some(a => a === String(actor.name || '').toLowerCase() || (!!actor.charId && a === String(actor.charId)));
+// Only a saved character matches, by character id (never by name).
+export const onAllowList = (actor, allow) => !!actor?.charId && Array.isArray(allow) && allow.some(a => a?.id === String(actor.charId));
 
 // The rule, in order: the creator always can; access >= ACCESS.overrideBots always can; below the action's minimum
 // never; with an allow list, only those on it; with none (empty), anyone at the minimum.
-// actor: a player ({ id, name, charId, accountId, access, admin }); bot: { creator (or null), allow (array) }.
+// actor: a player ({ id, name, charId, accountId, access, admin }); bot: { creator (or null), allow (cleanAllow entries) }.
 // Returns { ok, why } (why: a sentence for the player when refused).
 export function canControlBot(actor, bot, action) {
   if (!actor) return { ok: false, why: 'Nobody to ask.' };

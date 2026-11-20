@@ -60,7 +60,8 @@ async function until(fn, ms = 5000, what = 'condition') {
   const reply = p => p.sent.filter(m => m.type === 'pbot').at(-1);
   const tick = (k = 1) => { for (let i = 0; i < k; i++) { clock.t += 1000; nm.tick(); pb.upkeep(); } };
 
-  const ann = human('Ann', { charId: 0 }), bob = human('Bob'), cy = human('Cy');
+  const ann = human('Ann', { charId: 0 }), bob = human('Bob', { charId: 21 }), cy = human('Cy', { charId: 22 }); // (Ann anonymous; Bob and Cy saved characters)
+  const AL = (...ps) => ps.map(p => ({ id: String(p.charId), name: p.name })); // an allow list (resolved: character ids)
   tick(2);
   // Ann adds a free bot and a partied one
   pb.add(ann, { cls: 'guardian', name: 'Rook', party: false });
@@ -74,11 +75,15 @@ async function until(fn, ms = 5000, what = 'condition') {
   // orders by name to a free bot
   g.events = [];
   ok(g.botCommand(bob, { cmd: 'stay', name: 'rook' }) === 'Rook' && cmds()[0]?.free === 1 && cmds()[0].name === 'Rook', 'anyone (empty allow list) orders a free bot by name: the event carries free');
-  eRook.allow = ['cy'];
+  eRook.allow = AL(cy);
   g.events = [];
   ok(g.botCommand(bob, { cmd: 'stay', name: 'Rook' }) === false && !cmds().length && /only takes orders/.test(sys(bob).join()), 'with an allow list, Bob is refused');
   g.events = [];
   ok(g.botCommand(cy, { cmd: 'stay', name: 'Rook' }) === 'Rook' && g.botCommand(ann, { cmd: 'follow', name: 'Rook' }) === 'Rook', 'Cy (listed) and Ann (its creator) may');
+  const fakeCy = human('Cy'), num = human('22'); // an anonymous "Cy", and a player named after Cy's character id
+  g.events = [];
+  ok(g.botCommand(fakeCy, { cmd: 'stay', name: 'Rook' }) === false && g.botCommand(num, { cmd: 'stay', name: 'Rook' }) === false, 'an anonymous player named "Cy", or one named "22", does not pass Cy\'s entry');
+  g.removePlayer(fakeCy); g.removePlayer(num);
   bob.access = 3; g.events = [];
   ok(g.botCommand(bob, { cmd: 'stay', name: 'Rook' }) === 'Rook', 'access 3 overrides the list');
   bob.access = 1;
@@ -87,15 +92,15 @@ async function until(fn, ms = 5000, what = 'condition') {
   ok(g.botCommand(bob, { cmd: 'stay' }) === false && /Invite some bots/.test(sys(bob).join()), 'no party and no name: told how');
   // party orders skip the bots you may not order
   g.invite(ann, bob.id); g.accept(bob, ann.id);
-  eLyra.allow = ['ann'];
+  eLyra.allow = AL(cy);
   g.events = [];
-  ok(g.botCommand(bob, { cmd: 'follow' }) === false && /only takes orders/.test(sys(bob).join()), 'Bob\'s party order: Lyra (allow: Ann) is his only bot, so it\'s refused');
+  ok(g.botCommand(bob, { cmd: 'follow' }) === false && /only takes orders/.test(sys(bob).join()), 'Bob\'s party order: Lyra (allow: Cy) is his only bot, so it\'s refused');
   pb.add(ann, { cls: 'ranger', name: 'Tamsin' }); tick(1);
   const tam = [...g.players.values()].find(p => p.name === 'Tamsin');
   g.events = [];
   ok(tam.party === ann.party && g.botCommand(bob, { cmd: 'follow' }) === true && JSON.stringify(cmds()[0].no) === JSON.stringify([lyra.id]), 'with Tamsin too: the order goes, skipping Lyra (no: [Lyra])');
   // a plain invite to a bot: the same rule
-  eRook.allow = ['ann'];
+  eRook.allow = AL(bob);
   g.events = []; g.invite(cy, rook.id);
   ok(!rook.invite && /only takes orders/.test(sys(cy).join()), 'a plain party invite to an allow-listed bot is refused too');
   eRook.allow = [];
@@ -126,8 +131,10 @@ async function until(fn, ms = 5000, what = 'condition') {
   ok(cairn().invite?.from === cy.id, 'a Stranger invites Cairn from the list (no tier needed)');
   g.accept(cairn(), cy.id); tick(1);
   ok(cairn().party && cairn().party === cy.party, 'he joins Cy\'s party');
-  nm.chars.get('cairn').allow = ['ann'];
-  ok(/only takes orders/.test(nm.despawnBy(bob, 'cairn')), 'his allow list (Ann): Bob may not despawn him');
+  ok(/in Cy's party/.test(nm.despawnBy(bob, 'cairn')) && !pb.list(bob).named.find(r => r.id === 'cairn').ctl.despawn.ok, 'Bob may not despawn him out of Cy\'s party (no griefing)');
+  ok(nm.othersParty({ ...bob, access: 3 }, cairn()) === '', '...access 3+ may');
+  nm.chars.get('cairn').allow = AL(bob);
+  ok(/only takes orders/.test(nm.despawnBy(cy, 'cairn')), 'his allow list (Bob): Cy may not despawn him');
   nm.chars.get('cairn').allow = [];
   const party = cy.party;
   ok(nm.despawnBy(cy, 'cairn') === '' && !cairn() && !nm.chars.get('cairn').enabled && nm.chars.get('cairn').rejoin?.host === cy.id && !g.parties.get(party), 'Cy despawns him: out of the world, remembering her party');
@@ -156,6 +163,42 @@ async function until(fn, ms = 5000, what = 'condition') {
   g.invite(cy, cairn().id); g.accept(cairn(), cy.id); tick(1);
   pb.namedOp(cy, 'kick', 'cairn', false); tick(1);
   ok(!cairn().party, 'kick him from the party: back on his own');
+
+  // kick: never out of a boss fight
+  const { inArena } = await import('../shared/data.js');
+  let az = 0; for (let z = 120; z < 300 && !az; z++) if (inArena(0, z)) az = z;
+  g.invite(cy, rook.id); g.accept(rook, cy.id);
+  const keep = [rook.x, rook.z]; rook.x = 0; rook.z = az; g.activeFightOf = p => (p === rook ? { ids: new Set([rook.id]) } : null);
+  threw = ''; try { pb.kick(cy, { bid: eRook.bid }, false); } catch (e) { threw = e.message; }
+  ok(az && /boss fight/.test(threw) && rook.party === cy.party, 'kick in a boss fight: refused');
+  delete g.activeFightOf; [rook.x, rook.z] = keep;
+
+  // the allow list from the Players list: creator (or access 3+) only
+  threw = ''; try { await pb.allow(bob, { bid: eRook.bid, set: 'me' }, false); } catch (e) { threw = e.message; }
+  ok(/Only its creator/.test(threw), 'Bob can\'t change who may control Ann\'s bot');
+  let out = await pb.allow(ann, { bid: eRook.bid, set: 'me' }, false);
+  ok(/only you/.test(out.msg) && eRook.allow.length === 1 && eRook.allow[0].id === 'creator' && /only takes orders/.test(mgr.controlBlock(cy, eRook, 'botKick')) && !mgr.controlBlock(ann, eRook, 'botKick'), '"Just me": Cy may no longer kick it, Ann still can');
+  threw = ''; try { await pb.allow(ann, { bid: eRook.bid, add: 'Cy' }, false); } catch (e) { threw = e.message; }
+  ok(/no accounts|No saved character/.test(threw), `adding a name needs a saved character ("${threw}")`);
+  out = await pb.allow(ann, { bid: eRook.bid, set: 'open' }, false);
+  ok(eRook.allow.length === 0 && /anyone/.test(out.msg), '"Anyone" opens it again');
+  // the slim rows for the Players tab
+  const R = pb.rows(ann);
+  const rr = R.bots.find(b => b.bid === eRook.bid);
+  ok(rr && rr.canAllow && rr.allow === 'anyone' && !('kit' in rr) && !('loadout' in rr) && R.named.length === 5 && !('canAllow' in pb.rows(cy).bots.find(b => b.bid === eRook.bid)), 'rows: only what a row shows (no kit), the allow controls for the creator only');
+
+  // the creator leaves: a bot lent to someone's party stays until it's free, then goes
+  pb.grace = 0;
+  g.removePlayer(ann); tick(1);
+  ok(pb.owned.has(eRook.bid) && rook.party === cy.party, 'Ann leaves: Rook, in Cy\'s party, stays');
+  g.leaveParty(rook); tick(1);
+  ok(!pb.owned.has(eRook.bid), 'free again: it goes');
+  // an admin bot edit on a Named entry sets their own list: it survives a despawn / respawn
+  const ce = mgr.entryOf(nm.playerOf(nm.chars.get('cairn')));
+  mgr.edit(ce.bid, { allow: AL(bob) });
+  nm.despawnBy(bob, 'cairn'); nm.respawnBy(bob, 'cairn'); tick(3);
+  const ce2 = mgr.entryOf(nm.playerOf(nm.chars.get('cairn')));
+  ok(ce2 && ce2 !== ce && ce2.allow[0]?.id === '21' && nm.chars.get('cairn').allow[0]?.id === '21', 'admin edit of a Named\'s allow list is theirs: kept across a respawn');
   for (const t of [pb.timer, mgr.timer]) clearInterval(t);
 }
 
@@ -275,9 +318,12 @@ try {
     await until(() => D.id, 5000, 'Dan joined');
     let pl = (await call('GET', '/api/admin/players', adm.tok)).body.players;
     ok(pl.find(p => p.id === dan.ch.id)?.access === 1 && pl.find(p => p.id === adm.ch.id)?.admin, 'admin players list: Dan at 1, the admin flagged');
-    // an allow list on Ann's free bot (Lyra-style): Dan is refused until his level is 3
-    let res = await call('PATCH', `/api/admin/bots/${bids[4]}`, adm.tok, { allow: `Ann${tag}` });
-    ok(res.status === 200 && res.body.bot.allow.join() === `ann${tag}` && res.body.bot.creator === A.name, 'admin sets an allow list (Ann); the bot view shows its creator');
+    // an allow list on Ann's free bot: Dan is refused until his level is 3
+    let res = await call('PATCH', `/api/admin/bots/${bids[4]}`, adm.tok, { allow: `Nobody${tag}` });
+    ok(res.status === 400 && /No saved character/.test(res.body.error), `an unknown name is refused: "${res.body.error}"`);
+    res = await call('PATCH', `/api/admin/bots/${bids[4]}`, adm.tok, { allow: `adm${tag}` });
+    ok(res.status === 200 && res.body.bot.allow.length === 1 && res.body.bot.allow[0].id === String(adm.ch.id) && res.body.bot.allow[0].name === `Adm${tag}` && res.body.bot.creator === A.name, 'admin sets an allow list by name: stored as the character id; the admin view shows the creator');
+    ok((await C.list()).bots.find(b => b.bid === bids[4]).creator === A.name, 'players see the creator of a player-made bot');
     await A.pbot({ op: 'kick', bid: bids[4] }); await sleep(800);
     s0 = D.sys.length;
     D.send({ type: 'chat', text: `/b F4${tag}: stay` });
@@ -294,8 +340,15 @@ try {
     await until(() => D.sys.slice(s0).some(t => /Order to F4/.test(t)), 3000, 'Dan allowed');
     ok(true, '...and at once (online) he may order it: access 3 overrides the list');
     // the Named's allow list over the admin API
-    res = await call('POST', '/api/admin/named/cairn/allow', adm.tok, { allow: 'nobody1' });
-    ok(res.status === 200 && res.body.chars.find(c => c.id === 'cairn').allow.join() === 'nobody1', 'admin sets Cairn\'s allow list');
+    res = await call('POST', '/api/admin/named/cairn/allow', adm.tok, { allow: `Dan${tag}` });
+    ok(res.status === 200 && res.body.chars.find(c => c.id === 'cairn').allow[0]?.id === String(dan.ch.id), 'admin sets Cairn\'s allow list (Dan, by character id)');
+    // Ann (the creator) adds Dan by name from the Players list, then "Just me"
+    let ar = await A.pbot({ op: 'allow', bid: bids[4], add: `dan${tag}`, view: 'rows' });
+    ok(ar.ok && ar.rows.bots.find(b => b.bid === bids[4]).allowList.includes(`Dan${tag}`), `in game: Ann adds Dan by name ("${ar.msg || ar.error}")`);
+    ar = await A.pbot({ op: 'allow', bid: bids[4], add: `Ghost${tag}`, view: 'rows' });
+    ok(!ar.ok && /No saved character/.test(ar.error), 'an unknown name is refused in game too');
+    ar = await B.pbot({ op: 'allow', bid: bids[4], set: 'open', view: 'rows' });
+    ok(!ar.ok && /Only its creator/.test(ar.error), 'Bob may not change it');
     L = await C.list();
     ok(!L.named.find(x => x.id === 'cairn').ctl.despawn.ok, 'Cy (not on it) may no longer despawn him');
     await call('POST', '/api/admin/named/cairn/allow', adm.tok, { allow: [] });

@@ -57,3 +57,11 @@ Editing / dismissing a player bot (Bots tab) stays creator / admin, plus access 
 orders and allow lists, Named despawn / respawn rejoin, `INVITE_NEEDS_TIER`; with `DATABASE_URL` the access-level
 migration, admin set, effective level and that a despawned Named stays so after a restart). Existing: playerbots,
 adminbots, named, bots, admin.
+
+## Security review fixes (2026-11-20)
+Allow lists are `{ id, name }` entries of saved characters (`server/accounts.js` `resolveAllow`, unknown names refused;
+`'creator'` = "Just me"); only `actor.charId` matches. Anonymous creators are never re-adopted by name. Creator-only
+`pbot allow` op and row controls. Named despawn only unpartied or from your own party (access 3+ excepted). Grace removal
+waits while a bot is in a human's party or a boss fight. Slim `rows` op (3 s poll). Kick refuses mid boss fight.
+Admin-made bots show as server bots to players. `effective` access counts `ADMIN_DISCORD_IDS`. Bot PATCH on a Named
+sets `st.allow`.

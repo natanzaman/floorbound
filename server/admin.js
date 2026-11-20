@@ -436,10 +436,10 @@ export async function handle(req, res, url) {
     if ((mm = path.match(/^\/api\/admin\/accounts\/(\d+)\/access$/)) && m === 'POST') { // { level }: the account's access level
       const body = await readBody(req);
       const level = int(body?.level, ACCESS_MIN, ACCESS_MAX, 'Access level');
-      const rows = await q('UPDATE accounts SET access_level = $2 WHERE id = $1 RETURNING id, is_admin', [+mm[1], level]);
+      const rows = await q('UPDATE accounts SET access_level = $2 WHERE id = $1 RETURNING id, is_admin, discord_id', [+mm[1], level]);
       if (!rows.length) throw new Bad('No such account.', 404);
       for (const p of livePlayers()) if (p.accountId === +mm[1] && !p.bot) { p.access = level; game.rosterDirty = true; } // (online: at once)
-      return json(res, 200, { id: +mm[1], level, effective: rows[0].is_admin ? ACCESS_ADMIN : level }), true;
+      return json(res, 200, { id: +mm[1], level, effective: rows[0].is_admin || ADMIN_IDS.has(String(rows[0].discord_id)) ? ACCESS_ADMIN : level }), true;
     }
 
     if ((mm = path.match(/^\/api\/admin\/characters\/(\d+)$/))) {
@@ -483,6 +483,7 @@ export async function handle(req, res, url) {
     if ((mm = path.match(/^\/api\/admin\/bots\/(\d+)$/)) && m === 'PATCH') { // live edit: name, lvl, skill, behaviour, follow, allow
       const b = await readBody(req);
       if (!b) return json(res, 400, { error: 'Bad JSON.' }), true;
+      if (b.allow !== undefined) b.allow = await accounts.resolveAllow(b.allow); // names -> character ids (unknown: 400)
       return json(res, 200, { bot: bots.edit(+mm[1], b) }), true;
     }
     if ((mm = path.match(/^\/api\/admin\/bots\/(\d+)\/(teleport|kill|revive|heal|respawn|command|look)$/)) && m === 'POST') {
@@ -491,7 +492,7 @@ export async function handle(req, res, url) {
     }
     return json(res, 404, { error: 'Unknown admin route.' }), true;
   } catch (e) {
-    if (e instanceof Bad || e.name === 'BotError') return json(res, e.code, { error: e.message }), true;
+    if (e instanceof Bad || e.name === 'BotError' || e instanceof accounts.AllowError) return json(res, e.code, { error: e.message }), true;
     if (e.message && /^(Pick|Unknown behaviour|Bot limit)/.test(e.message)) return json(res, 400, { error: e.message }), true;
     console.error('admin error', e);
     json(res, 500, { error: 'Server error' });

@@ -85,7 +85,14 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender, re
     ui.at = Date.now();
     send({ type: 'pbot', op: 'list' });
   }
-  setInterval(() => { if (visible() || listVisible()) poll(); }, 1500);
+  setInterval(() => { if (visible()) poll(); }, 1500);
+  setInterval(() => { if (listVisible()) pollRows(); }, 3000); // the Players tab's Bots section: the slim rows op
+  function pollRows(force) {
+    if (!state.joined || state.spectator) return;
+    if (!force && Date.now() - (ui.rowsAt || 0) < 2800) return;
+    ui.rowsAt = Date.now();
+    send({ type: 'pbot', op: 'rows' });
+  }
   const visible = () => ui.tab === 'bots' && !$('players').classList.contains('hidden');
   const listVisible = () => ui.tab === 'players' && !$('players').classList.contains('hidden'); // the Players tab's Bots section
 
@@ -163,9 +170,11 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender, re
   function listRow(b) {
     const tag = b.mine ? '<span class="pb-own">yours</span>' : b.creator ? `<span class="pb-own">${esc(b.creator)}'s</span>` : '<span class="pb-own adm">server bot</span>';
     const where = b.where?.k === 'party' && b.myParty ? 'In your party' : b.where?.text || '';
-    const key = `data-bid="${b.bid}"`;
+    const key = `data-bid="${b.bid}"`, ok = { ok: true };
     const right = b.myParty ? btn('kick', 'Kick', b.ctl.kick, key, 'danger') : btn('invite', 'Invite to party', b.ctl.invite, key);
-    return `<div class="p pl-bot" style="--c:${hex(b.cls)}"><span><span class="pb-dot"></span> ${esc(b.name)} <small style="opacity:.6">Lv ${b.lvl} ${esc(clsName(b.cls))}</small><span class="tag">BOT</span>${tag}<br><small class="pl-where">${esc(where)}${b.dead ? ' · down' : ''}</small></span><span class="pl-btns">${right}</span></div>`;
+    // who may order / invite / kick it (its creator, or access 3+): Just me, Anyone, + name, - name (saved characters)
+    const allow = b.canAllow ? `<small class="pl-where">Who may order it: ${esc(b.allow)}</small><span class="pl-btns pl-allow">${b.allow === 'just the creator' ? btn('allow', 'Anyone', ok, `${key} data-set="open"`) : btn('allow', 'Just me', ok, `${key} data-set="me"`)}${btn('allow', '+ Name', ok, `${key} data-set="add"`)}${b.allowList?.length ? btn('allow', '− Name', ok, `${key} data-set="remove"`) : ''}</span>` : '';
+    return `<div class="p pl-bot" style="--c:${hex(b.cls)}"><span><span class="pb-dot"></span> ${esc(b.name)} <small style="opacity:.6">Lv ${b.lvl} ${esc(clsName(b.cls))}</small><span class="tag">BOT</span>${tag}<br><small class="pl-where">${esc(where)}${b.dead ? ' · down' : ''}</small></span><span class="pl-btns">${right}</span>${allow}</div>`;
   }
   function namedRow(n) {
     const key = `data-named="${n.id}"`, c = `#${(n.color >>> 0).toString(16).padStart(6, '0').slice(-6)}`;
@@ -174,8 +183,8 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender, re
     return `<div class="p pl-bot ${n.state === 'online' ? '' : 'off'}" style="--c:${c}"><span><span class="pb-dot"></span> ${esc(n.name)} <small style="opacity:.6">Lv ${n.lvl} ${esc(clsName(n.cls))}</small><span class="tag nmtag">${esc(n.group === 'loner' ? 'LONE SOLDIER' : n.gname.toUpperCase())}</span><br><small class="pl-where">${esc(n.where)}${n.dead ? ' · down' : ''}</small></span><span class="pl-btns">${btns}</span></div>`;
   }
   function listHtml() {
-    poll(); // (at most every 1.4 s)
-    const d = ui.data;
+    pollRows(); // (at most every 2.8 s)
+    const d = ui.rows;
     if (!d) return `<details class="sect" open data-sect="bots"><summary><b>Bots</b></summary><div class="pb-empty">Loading…</div></details>`;
     const rows = [...(d.named || []).map(namedRow), ...d.bots.map(listRow)];
     return `<details class="sect" ${ui.listOpen !== false ? 'open' : ''} data-sect="bots"><summary><b>Bots (${rows.length})</b> <small style="opacity:.6">invite to your party</small></summary>${rows.join('') || '<div class="pb-empty">No bots in the world. Add one on the Bots tab.</div>'}</details>`;
@@ -189,7 +198,16 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender, re
       const op = b.dataset.pl;
       if (op === 'despawn' && ui.confirmNm !== b.dataset.named) { ui.confirmNm = b.dataset.named; b.textContent = 'Sure?'; setTimeout(() => { ui.confirmNm = null; }, 3000); return; }
       ui.confirmNm = null;
-      send({ type: 'pbot', op, ...(b.dataset.named ? { named: b.dataset.named } : { bid: +b.dataset.bid }) });
+      let extra = {};
+      if (op === 'allow') {
+        const set = b.dataset.set;
+        if (set === 'add' || set === 'remove') {
+          const nm = prompt(set === 'add' ? 'Let which character order this bot? (a saved character\'s name)' : 'Take whom off the list?', '');
+          if (!nm || !nm.trim()) return;
+          extra = { [set]: nm.trim() };
+        } else extra = { set };
+      }
+      send({ type: 'pbot', op, view: 'rows', ...extra, ...(b.dataset.named ? { named: b.dataset.named } : { bid: +b.dataset.bid }) });
       sfx?.play('ui');
       b.disabled = true; b.textContent = op === 'invite' ? 'Sent' : '…';
     };
@@ -238,6 +256,7 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender, re
     onMessage(msg) {
       if (msg.type !== 'pbot') return false;
       if (msg.list) ui.data = msg.list;
+      if (msg.rows) ui.rows = msg.rows;
       if (msg.op !== 'list') {
         const text = msg.ok ? msg.msg : msg.error;
         if (text) { ui.note = { text, err: !msg.ok, at: Date.now() }; log(text, 'sys'); }
@@ -245,7 +264,7 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender, re
         ui.sig = '';
       }
       if (visible()) draw();
-      else if (listVisible()) (msg.op === 'list' ? refresh : rerender)(); // (a reply: rebuild, so a "Sent" button comes back)
+      else if (listVisible()) (msg.op === 'list' || msg.op === 'rows' ? refresh : rerender)(); // (a reply: rebuild, so a "Sent" button comes back)
       return true;
     },
   };

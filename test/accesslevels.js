@@ -4,7 +4,7 @@
 //   the allow list, else anyone; canManageBot (creator or access 3+).
 // Usage: node test/accesslevels.js
 import {
-  ACCESS, ACTION_MIN, ACCESS_MIN, ACCESS_MAX, ACCESS_ADMIN, clampAccess, accessOf, minAccess, cleanAllow, isCreator, onAllowList,
+  ACCESS, ACTION_MIN, ACCESS_MIN, ACCESS_MAX, ACCESS_ADMIN, ALLOW_CREATOR, clampAccess, accessOf, minAccess, cleanAllow, isCreator, onAllowList,
   canControlBot, canManageBot,
 } from '../shared/accesslevels.js';
 
@@ -18,10 +18,12 @@ ok(minAccess('nope') === ACCESS_MAX, 'an unknown action is locked to the top lev
 ok(clampAccess(0) === 1 && clampAccess(9) === 5 && clampAccess('3') === 3 && clampAccess(undefined) === 1 && clampAccess('x') === 1, 'clamped to 1-5 (junk: 1)');
 ok(accessOf({}) === 1 && accessOf({ access: 4 }) === 4 && accessOf({ access: 1, admin: true }) === 5 && accessOf(null) === 1, 'a player: their account\'s level, anonymous 1, admins 5');
 
-// allow lists
-ok(JSON.stringify(cleanAllow(' Ann, bob ,ann,<x>, 12 ,a')) === '["ann","bob","12"]', 'cleanAllow: a comma list, lower case, no repeats, no one-letter names (ids kept)');
-ok(cleanAllow(Array.from({ length: 40 }, (_, i) => `p${i}`)).length === 20 && cleanAllow(null).length === 0, 'at most 20; nothing is empty');
-ok(onAllowList({ name: 'Ann' }, ['ann']) && onAllowList({ name: 'Zed', charId: 12 }, ['12']) && !onAllowList({ name: 'Zed', charId: 0 }, ['0']) && !onAllowList({ name: 'Bob' }, ['ann']), 'on the list by name or character id');
+// allow lists: saved characters by id only (names are resolved server-side when a list is saved)
+const A = (id, name) => ({ id: String(id), name });
+ok(JSON.stringify(cleanAllow([A(12, 'Ann'), { id: '12' }, 'ann', { id: '0' }, { id: '-3' }, { id: ALLOW_CREATOR }, 40])) === JSON.stringify([A(12, 'Ann'), { id: ALLOW_CREATOR, name: 'just the creator' }, A(40, '#40')]), 'cleanAllow: character ids and "just the creator" only; names, 0 and junk dropped; no repeats');
+ok(cleanAllow(Array.from({ length: 40 }, (_, i) => i + 1)).length === 20 && cleanAllow(null).length === 0 && cleanAllow('ann, bob').length === 0, 'at most 20; nothing or a plain string is empty');
+ok(onAllowList({ name: 'Zed', charId: 12 }, [A(12, 'Ann')]) && !onAllowList({ name: 'Ann', charId: 0 }, [A(12, 'Ann')]) && !onAllowList({ name: 'Ann', charId: 13 }, [A(12, 'Ann')]), 'on the list by character id only: "Ann" by name (anonymous or another character) never matches');
+ok(!onAllowList({ name: '12', charId: 0 }, [A(12, 'Ann')]) && !onAllowList({ name: 'x', charId: 0 }, [{ id: ALLOW_CREATOR }]), 'a player named "12" is not character 12; nobody matches "just the creator"');
 
 // creators
 const ann = { id: 7, name: 'Ann', charId: 40, accountId: 3, access: 1 }, bob = { id: 8, name: 'Bob', charId: 41, accountId: 4, access: 1 };
@@ -31,18 +33,20 @@ ok(isCreator(anon, { charId: 0, pid: 9 }) && !isCreator(bob, { charId: 0, pid: 9
 ok(isCreator({ ...bob, charId: 0 }, { accountId: 4 }) && !isCreator(ann, { accountId: 4 }) && !isCreator(ann, null), 'an admin page bot by account; no creator: nobody');
 
 // the rule, in order
-const open = { creator: { charId: 40 }, allow: [], name: 'Rook' }, closed = { creator: { charId: 40 }, allow: ['zed'], name: 'Rook' };
+const zed = { id: 10, name: 'Zed', charId: 77, accountId: 5, access: 1 };
+const open = { creator: { charId: 40 }, allow: [], name: 'Rook' }, closed = { creator: { charId: 40 }, allow: [A(77, 'Zed')], name: 'Rook' }, mine = { creator: { charId: 40 }, allow: [{ id: ALLOW_CREATOR }], name: 'Rook' };
 ok(canControlBot(ann, closed, 'botCommand').ok, '1. the creator always can (even off their own allow list)');
 ok(canControlBot({ ...bob, access: 3 }, closed, 'botKick').ok && canControlBot({ ...bob, admin: true }, closed, 'botDespawn').ok, '2. access 3+ (admins: 5) always can');
 ok(!canControlBot({ ...bob, access: 2 }, closed, 'botCommand').ok && /only takes orders/.test(canControlBot(bob, closed, 'botCommand').why), '4. with an allow list, others are refused (with a reason)');
-ok(canControlBot({ ...bob, name: 'Zed' }, closed, 'botInvite').ok, '4. …and the listed are let in');
+ok(canControlBot(zed, closed, 'botInvite').ok && !canControlBot({ ...bob, name: 'Zed' }, closed, 'botInvite').ok && !canControlBot({ ...zed, charId: 0 }, closed, 'botInvite').ok, '4. …and the listed character is let in (not someone else named Zed, not an anonymous Zed)');
+ok(canControlBot(ann, mine, 'botKick').ok && !canControlBot(zed, mine, 'botKick').ok && canControlBot({ ...zed, access: 3 }, mine, 'botKick').ok, '"Just me": the creator (and access 3+) only');
 ok(['botCommand', 'botInvite', 'botKick', 'botDespawn', 'botRespawn'].every(a => canControlBot(bob, open, a).ok), '5. an empty list: anyone at the action\'s minimum (1 now)');
-ok(canControlBot(bob, { creator: null, allow: [] }, 'botDespawn').ok && !canControlBot(bob, { creator: null, allow: ['ann'] }, 'botDespawn').ok, 'the Named (no creator): the same rule');
+ok(canControlBot(bob, { creator: null, allow: [] }, 'botDespawn').ok && !canControlBot(bob, { creator: null, allow: [A(40, 'Ann')] }, 'botDespawn').ok && canControlBot(ann, { creator: null, allow: [A(40, 'Ann')] }, 'botDespawn').ok, 'the Named (no creator): the same rule');
 // 3. raising a minimum is a one-line change
 ACTION_MIN.botDespawn = 2;
 const r = canControlBot(bob, open, 'botDespawn');
 ok(!r.ok && /access level 2/.test(r.why) && canControlBot({ ...bob, access: 2 }, open, 'botDespawn').ok && canControlBot(ann, open, 'botDespawn').ok, '3. below the minimum: refused (the creator and higher levels still can)');
-ok(!canControlBot({ ...bob, name: 'Zed' }, { ...closed, allow: ['zed'] }, 'botDespawn').ok, '3. the minimum holds for the allow list too');
+ok(!canControlBot(zed, closed, 'botDespawn').ok, '3. the minimum holds for the allow list too');
 ACTION_MIN.botDespawn = 1;
 ok(!canControlBot(null, open, 'botCommand').ok, 'nobody: no');
 

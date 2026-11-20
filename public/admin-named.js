@@ -47,7 +47,7 @@ function render(s, err) {
     <td><b>${esc(c.name)}</b> <span class="dim">${esc(c.cls)}</span></td><td class="dim">${esc(c.gname)}</td><td>${c.lvl}</td>
     <td>${c.online ? esc(c.area) : `<span class="faint">${c.enabled ? 'not in the world' : 'sent home'}</span>`}</td>
     <td>${c.online ? `${esc(c.doing)}${c.host ? ` <span class="pill team">with ${esc(c.host)}</span>` : ''}` : ''}</td>
-    <td><input data-allow="${c.id}" value="${esc((c.allow || []).join(', '))}" placeholder="anyone" style="width:120px" spellcheck="false" /></td>
+    <td><input data-allow="${c.id}" value="${esc((c.allow || []).map(a => a.name).join(', '))}" placeholder="anyone" style="width:120px" spellcheck="false" /></td>
     <td style="text-align:right">${c.enabled ? `<button class="small danger" data-nm="${c.id}/despawn">Despawn</button>` : `<button class="small" data-nm="${c.id}/spawn">Spawn</button>`}</td></tr>`).join('')}</tbody></table>`;
   $('nm-fr-n').textContent = `(${s.friends.length} character${s.friends.length === 1 ? '' : 's'})`;
   if (!el.querySelector('#nm-friends input:focus')) {

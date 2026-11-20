@@ -5,12 +5,13 @@
 //   POST  /api/admin/named/<id>/despawn      a player is online. Despawn sends one home until spawned again.
 //                                            (back, one rejoins the player's party they were in when despawned, if it's
 //                                            still there with room; the switch survives a restart)
-//   POST  /api/admin/named/<id>/allow        { allow: [names or character ids] | 'a, b' }  who may control them
+//   POST  /api/admin/named/<id>/allow        { allow: [names or character ids] | 'a, b' }  who may control them (saved characters only)
 //                                            besides access 3+ (shared/accesslevels.js); [] = anyone
 //   POST  /api/admin/named/offset            { off, reset? }  levels above the top players (reset: work it out afresh)
 //   POST  /api/admin/named/friendship        { charId, id, pts }  set one character's friendship (0-100)
 // Admins only (the same check as the Director: a server without accounts answers the same machine).
 import { directorAuth } from './director-admin.js';
+import { resolveAllow } from './accounts.js';
 import { NAMED_BY_ID, TIERS, tierIndex } from '../shared/named.js';
 
 const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
@@ -59,7 +60,7 @@ export function installNamedAdmin({ server, named }, { auth = directorAuth } = {
       }
       if ((mm = p.match(/^\/api\/admin\/named\/([a-z]+)\/allow$/))) {
         if (!NAMED_BY_ID[mm[1]]) return json(res, 404, { error: 'Nobody by that name.' });
-        named.setAllow(mm[1], body.allow ?? []);
+        named.setAllow(mm[1], await resolveAllow(body.allow ?? [])); // names -> character ids (unknown: 400)
         return json(res, 200, named.adminView());
       }
       if (p === '/api/admin/named/offset') {

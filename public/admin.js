@@ -261,7 +261,7 @@ function buildCard(b) {
       <select data-k="respawn" title="Re-add as another class: same bot, name, level, capability, behaviour, party and orders"></select>
       <select data-k="order" title="Give this bot an order, as its party would"></select>
       <select data-k="look" title="Wear a look (shared/looks.js): preview a Named character's appearance on this bot"></select>
-      <input data-k="allow" placeholder="Allow: anyone" title="Who may command, invite or kick this bot besides its creator and access ${ACCESS.overrideBots}+: player names or character ids, comma-separated (empty: anyone). Enter to save." style="width:140px" spellcheck="false" />
+      <input data-k="allow" placeholder="Allow: anyone" title="Who may command, invite or kick this bot besides its creator and access ${ACCESS.overrideBots}+: saved characters' names (or ids), comma-separated; 'me' for just the creator; empty: anyone. Enter to save." style="width:140px" spellcheck="false" />
       <span class="grow"></span>
       <button class="small danger icon" data-a="remove" title="Remove this bot"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>`;
@@ -311,7 +311,7 @@ function buildCard(b) {
   };
   const al = q('allow');
   al.onkeydown = e => { if (e.key === 'Enter') al.blur(); if (e.key === 'Escape') { al.value = al.dataset.v; al.blur(); } };
-  al.onblur = () => { if (al.value.trim() !== al.dataset.v) patch({ allow: al.value }, r => (r.bot.allow.length ? `${r.bot.name}: allowed ${r.bot.allow.join(', ')}.` : `${r.bot.name}: open to anyone.`)); };
+  al.onblur = () => { if (al.value.trim() !== al.dataset.v) patch({ allow: al.value }, r => (r.bot.allow.length ? `${r.bot.name}: allowed ${r.bot.allow.map(a => a.name).join(', ')}.` : `${r.bot.name}: open to anyone.`)); };
   q('look').onchange = () => {
     const v = q('look').value;
     post('look', { look: v }, v ? `${nm.dataset.v} wears ${LOOKS[v].name || v}.` : `${nm.dataset.v}: look removed.`);
@@ -335,7 +335,7 @@ function updateCard(el, b, force = false) {
   if (q('seg').dataset.v !== String(b.skill)) { q('seg').innerHTML = segHtml(b.skill); q('seg').dataset.v = b.skill; }
   q('where').textContent = b.status === 'online' ? `${b.floor ? `F${b.floor} · ` : ''}${b.area}` : b.status;
   q('party').innerHTML = (b.party.length ? `<span class="sep">·</span> party: ${esc(b.party.join(', '))}` : '') + (b.owner ? ` <span class="sep">·</span> added by ${esc(b.owner)} (levels with them)` : b.creator ? ` <span class="sep">·</span> made by ${esc(b.creator)}` : '');
-  const al = q('allow'), av = (b.allow || []).join(', ');
+  const al = q('allow'), av = (b.allow || []).map(a => a.name).join(', ');
   if (!focused(al) && al.dataset.v !== av) { al.value = av; al.dataset.v = av; }
   const pct = b.maxHp ? Math.round((b.hp / b.maxHp) * 100) : 0;
   q('hpbar').style.width = `${pct}%`;

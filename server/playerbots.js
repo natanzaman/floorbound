@@ -10,6 +10,9 @@
 //                               { type: 'pbot', op: 'dismiss', bid }
 //                               { type: 'pbot', op: 'invite' | 'kick', bid } or { …, named: id }
 //                               { type: 'pbot', op: 'despawn' | 'respawn', named: id }
+//                               { type: 'pbot', op: 'allow', bid, set: 'me' | 'open' } or { …, add | remove: name }
+//                               { type: 'pbot', op: 'rows' }  the slim list for the Players tab's Bots section
+//                               (any op may carry view: 'rows': the reply then carries rows, not list)
 // Replies (server → client):   { type: 'pbot', op, ok: true, msg?, list }  or  { type: 'pbot', op, ok: false, error, list? }
 //   list = { bots: [...], named: [...], mine, total, cap, admin, partyMax }  (every bot in the world, your own first)
 //
@@ -21,7 +24,8 @@
 // on join and whenever the creator levels it takes their level and that level's premade gear, mastery and talents).
 // Who may command, invite, kick it: shared/accesslevels.js canControlBot (creator, access 3+, its allow list, else
 // anyone at the action's minimum). Renaming, skill, behaviour and Dismiss: its creator, or access 3+ (admins are 5).
-// When the creator leaves, their bots wait PLAYER_BOT_GRACE seconds (default 60) for a reconnect, then go; the creator
+// When the creator leaves, their bots wait PLAYER_BOT_GRACE seconds (default 60) for a reconnect (the same saved character;
+// an anonymous creator's session can't come back), then go once free (not in a party with a human, not in a boss fight); the creator
 // hears about any bot of theirs an admin removes. Admin "Respawn as…" keeps the bot id (BotManager), so the creator link
 // survives it.
 import { CLASSES, MAX_LEVEL, PARTY_MAX } from '../shared/data.js';
@@ -33,9 +37,10 @@ import { MODES, loadoutFor, charmFor, defaultBranch, cleanBotName } from '../sha
 import { inArena } from '../shared/data.js';
 import { inArena2 } from '../shared/floor2.js';
 import { inArena3 } from '../shared/floor3.js';
-import { canManageBot, accessOf, minAccess } from '../shared/accesslevels.js';
+import { canManageBot, accessOf, minAccess, cleanAllow, allowLabel, ALLOW_CREATOR } from '../shared/accesslevels.js';
 import * as db from './db.js';
 import { isAdmin } from './admin.js';
+import { resolveAllow } from './accounts.js';
 
 class PbError extends Error {}
 const fail = msg => { throw new PbError(msg); };
@@ -70,14 +75,15 @@ export class PlayerBots {
   canManage(p, e, admin) { return canManageBot(this.actor(p, admin), { creator: e?.creator }); }
   isMine(p, rec) { return !!rec && (rec.ownerId === p.id || (!!rec.charId && rec.charId === p.charId)); }
   mine(p) { return [...this.owned.values()].filter(rec => this.isMine(p, rec)); }
-  ownerOf(rec) { // the owner, if online (and re-adopts a reconnected owner)
+  // The creator, if online. A saved character who reconnects is re-adopted (same character id); an anonymous creator
+  // only while the very same session is on (a name proves nothing: anyone can join as "Ann"), so their bots go after
+  // the grace period.
+  ownerOf(rec) {
     const g = this.game;
     const o = g.players.get(rec.ownerId);
-    if (o && !o.bot && (rec.charId ? o.charId === rec.charId : !o.charId && o.name.toLowerCase() === rec.anonName)) return o;
-    for (const q of g.players.values()) {
-      if (q.bot) continue;
-      if (rec.charId ? q.charId === rec.charId : !q.charId && q.name.toLowerCase() === rec.anonName && rec.goneAt && q.joinedAt >= rec.goneT) return q;
-    }
+    if (o && !o.bot && (rec.charId ? o.charId === rec.charId : !o.charId && !rec.goneAt)) return o;
+    if (!rec.charId) return null;
+    for (const q of g.players.values()) if (!q.bot && q.charId === rec.charId) return q;
     return null;
   }
 
@@ -98,10 +104,11 @@ export class PlayerBots {
     if (!p || p.bot) return;
     const op = String(msg.op || '');
     const now = Date.now();
-    if (op === 'list') { // polled while the Bots tab is open
+    if (op === 'list' || op === 'rows') { // polled while the Bots tab is open (list), or the Players tab's Bots section (rows: slim)
       if (now - (p.pbListAt || 0) < 250) return;
       p.pbListAt = now;
-      return this.reply(p, { op, ok: true, list: this.list(p, await this.adminOf(p)) });
+      const admin = await this.adminOf(p);
+      return this.reply(p, op === 'rows' ? { op, ok: true, rows: this.rows(p, admin) } : { op, ok: true, list: this.list(p, admin) });
     }
     const r = (p.pbRate ||= { n: 0, at: now });
     if (now - r.at > 5000) { r.n = 0; r.at = now; }
@@ -115,11 +122,12 @@ export class PlayerBots {
       else if (op === 'invite') out = msg.named ? this.namedOp(p, 'invite', msg.named, admin) : this.invite(p, msg, admin);
       else if (op === 'kick') out = msg.named ? this.namedOp(p, 'kick', msg.named, admin) : this.kick(p, msg, admin);
       else if (op === 'despawn' || op === 'respawn') out = this.namedOp(p, op, msg.named, admin);
+      else if (op === 'allow') out = await this.allow(p, msg, admin);
       else fail('Unknown bot command.');
-      this.reply(p, { op, ok: true, ...out, list: this.list(p, admin) });
+      this.reply(p, { op, ok: true, ...out, ...this.after(p, msg, admin) });
     } catch (e) {
       if (!(e instanceof PbError) && !e.code) console.error('pbot', e);
-      this.reply(p, { op, ok: false, error: e.message || 'Something went wrong.', list: this.list(p, admin) });
+      this.reply(p, { op, ok: false, error: e.message || 'Something went wrong.', ...this.after(p, msg, admin) });
     }
   }
 
@@ -222,6 +230,35 @@ export class PlayerBots {
     return { msg: `${name} was dismissed.` };
   }
 
+  after(p, msg, admin) { return msg.view === 'rows' ? { rows: this.rows(p, admin) } : { list: this.list(p, admin) }; } // (the list the sender looks at)
+
+  // ---------- allow list (the Players list: creator or access 3+) ----------
+  // { bid, set: 'me' | 'open' } or { bid, add: name } / { bid, remove: name }. Names must be saved characters (resolved to
+  // character ids: server/accounts.js resolveAllow); "Just me" leaves only the creator (and access 3+).
+  async allow(p, msg, admin) {
+    const e = this.entry(Number(msg.bid));
+    if (!e || e.named) fail('That bot is gone.');
+    if (!this.canManage(p, e, admin)) fail('Only its creator can change who may control it.');
+    const cur = (e.allow || []).filter(a => a.id !== ALLOW_CREATOR);
+    let next;
+    if (msg.set === 'me') next = [{ id: ALLOW_CREATOR }];
+    else if (msg.set === 'open') next = [];
+    else if (msg.add) {
+      let add;
+      try { add = await resolveAllow([String(msg.add).slice(0, 24)]); } catch (err) { fail(err.message); }
+      next = [...cur, ...add];
+    } else if (msg.remove) {
+      const lower = String(msg.remove).trim().toLowerCase();
+      next = cur.filter(a => a.name.toLowerCase() !== lower && a.id !== lower.replace('#', ''));
+      if (next.length === cur.length) fail(`${String(msg.remove).slice(0, 20)} isn't on the list.`);
+      if (!next.length && e.allow?.length) next = [{ id: ALLOW_CREATOR }]; // (the last name off a closed list: still closed)
+    } else fail('Say who.');
+    if (!this.entry(e.bid)) fail('That bot is gone.'); // (gone while the names were looked up)
+    e.allow = cleanAllow(next);
+    const names = e.allow.filter(a => a.id !== ALLOW_CREATOR).map(a => a.name);
+    return { msg: `${e.b.name}: ${!e.allow.length ? 'anyone' : names.length ? `only you and ${names.join(', ')}` : 'only you'} may order, invite or kick it.` };
+  }
+
   // ---------- invite / kick (the Players list) ----------
   // Into your party, straight from wherever it is (its old party, or roaming): the party-size rule, never out of a boss fight.
   invite(p, msg, admin) {
@@ -258,9 +295,16 @@ export class PlayerBots {
     if (!b || !p.party || b.party !== p.party) fail(`${b?.name || 'That bot'} isn't in your party.`);
     const why = this.mgr.controlBlock(this.actor(p, admin), e, 'botKick');
     if (why) fail(why);
+    if (inBossRoom(b) && g.activeFightOf?.(b)) fail(`${b.name} is in a boss fight.`);
     this.freeBot(e, b);
     g.rosterDirty = true;
     return { msg: `${b.name} left your party and roams on its own.` };
+  }
+  // A bot whose creator left stays while it's useful to someone: in a party with a human, or in a boss fight.
+  busy(b) {
+    if (!b) return false;
+    const party = this.game.partyOf(b);
+    return !!(party?.members.some(id => { const o = this.game.players.get(id); return o && !o.bot; }) || (inBossRoom(b) && this.game.activeFightOf?.(b)));
   }
   freeBot(e, b) { // out of its party, roaming
     const rec = this.owned.get(e.bid);
@@ -288,6 +332,7 @@ export class PlayerBots {
       if (!t || !p.party || t.party !== p.party) fail(`${name} isn't in your party.`);
       const why = N.ctlBlock(who, st, 'botKick');
       if (why) fail(why);
+      if (inBossRoom(t) && this.game.activeFightOf?.(t)) fail(`${name} is in a boss fight.`);
       this.game.leaveParty(t); // (back to their own: the Hearthward, or alone)
       return { msg: `${name} left your party.` };
     }
@@ -325,7 +370,7 @@ export class PlayerBots {
       if (rec && rec.goneAt) doing = `Waiting for ${owner} (${Math.max(0, Math.ceil(this.grace - (Date.now() - rec.goneAt) / 1000))} s)`;
       return {
         bid: v.bid, id: v.id, name: v.name, cls: v.cls, lvl: v.lvl, hp: v.hp, maxHp: v.maxHp, dead: v.dead, area: v.area, floor: v.floor,
-        skill: v.skill, skillName: v.skillName, owner, creator: e.creator?.name || owner, mine, can: mine || this.canManage(p, e, admin), mode: rec?.mode || null, behaviour: e.behaviour, doing,
+        skill: v.skill, skillName: v.skillName, owner, creator: owner, mine, can: mine || this.canManage(p, e, admin), mode: rec?.mode || null, behaviour: e.behaviour, doing, // (creator: '' for an admin-made bot, a server bot to players; its creator stays for the rules)
         party: v.party, myParty: inMine, loadout: rec?.loadout || null, partied: !!rec?.partied, where: this.where(b),
         kit: (mine || this.canManage(p, e, admin)) && b ? this.kit(b) : null,
         ctl: { invite: this.ctl(inv), kick: this.ctl(kick) },
@@ -335,6 +380,24 @@ export class PlayerBots {
     bots.sort((a, b) => rank(a) - rank(b) || a.bid - b.bid);
     const named = g.named ? g.named.botRows(who) : [];
     return { bots, named, mine: this.mine(p).length, total: this.mgr.count(), cap: this.mgr.max, admin: !!admin, partyMax: PARTY_MAX };
+  }
+
+  // The Players tab's Bots section: only what a row shows (polled every 3 s), the Named too.
+  rows(p, admin = false) {
+    const myParty = p.party || 0, who = this.actor(p, admin);
+    const bots = this.mgr.bots.filter(e => !e.b.closed && !e.named).map(e => {
+      const rec = this.owned.get(e.bid), b = this.mgr.livePlayer(e), mine = this.isMine(p, rec), inMine = !!(b && myParty && b.party === myParty);
+      const inv = !b ? 'Still joining.' : inMine ? 'Already in your party.' : this.mgr.controlBlock(who, e, 'botInvite') || (b.dead ? 'Down right now.' : '');
+      const kick = !inMine ? 'Not in your party.' : this.mgr.controlBlock(who, e, 'botKick');
+      return {
+        bid: e.bid, name: b?.name || e.b.name, cls: e.b.cls, lvl: b?.lvl ?? e.lvl, dead: !!b?.dead, mine, creator: rec ? (this.ownerOf(rec)?.name || rec.ownerName) : '',
+        myParty: inMine, where: this.where(b), ctl: { invite: this.ctl(inv), kick: this.ctl(kick) },
+        ...(rec && this.canManage(p, e, admin) ? { allow: !e.allow?.length ? 'anyone' : e.allow.every(a => a.id === ALLOW_CREATOR) ? 'just the creator' : allowLabel(e.allow.filter(a => a.id !== ALLOW_CREATOR)), allowList: (e.allow || []).filter(a => a.id !== ALLOW_CREATOR).map(a => a.name), canAllow: true } : {}),
+      };
+    });
+    const rank = x => (x.mine ? 0 : x.creator ? 1 : 2);
+    bots.sort((a, b) => rank(a) - rank(b) || a.bid - b.bid);
+    return { bots, named: this.game.named ? this.game.named.botRows(who) : [] };
   }
 
   kit(b) { // what an owner sees: equipped gear and skill mastery
@@ -388,8 +451,8 @@ export class PlayerBots {
       }
       if (!owner) {
         if (!rec.goneAt) { rec.goneAt = now; rec.goneT = g.time; }
-        if (now - rec.goneAt >= this.grace * 1000) { this.mgr.remove(rec.bid); this.owned.delete(rec.bid); g.rosterDirty = true; }
-        continue;
+        if (now - rec.goneAt >= this.grace * 1000 && !this.busy(b)) { this.mgr.remove(rec.bid); this.owned.delete(rec.bid); g.rosterDirty = true; }
+        continue; // (busy: lent to someone's party, or in a boss fight: it goes once it's free)
       }
       if (rec.goneAt || owner.id !== rec.ownerId) { // the owner is back
         rec.goneAt = 0; rec.ownerId = owner.id; rec.ownerName = owner.name; rec.wantParty = rec.partied; rec.lastParty = 0;

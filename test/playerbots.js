@@ -1,7 +1,7 @@
 // Player-owned bots end-to-end over the WebSocket ({ type: 'pbot' }): add (every setup, premade loadout at the
 // owner's level, joins the owner's party, follows), no per-player limit (a 4th, outside the party), the party-full
 // check, ownership (others can't edit/dismiss), owner edits (skill / behaviour / name), dismiss, reconnect within the
-// grace period, and removal after the owner leaves; bots level with their owner (gear / mastery follow), "/b name:
+// grace period (saved characters only), and removal after the owner leaves; bots level with their owner (gear / mastery follow), "/b name:
 // leave" sends a bot off to roam on its own (plain chat never orders). More on free bots: test/freebots.js. With DATABASE_URL set it also checks that an admin can manage anyone's bot, and
 // that admin Respawn as… / edit / remove never leave a player's bot detached (same bot id, party, owner link, orders).
 // Starts its own server on PORT (default 3641). Usage: node test/playerbots.js
@@ -198,10 +198,10 @@ try {
   for (const c of extra) c.ws.close();
   await sleep(300);
 
-  // ---------- Bob's bot: listed after Ann's, reconnect within the grace period ----------
+  // ---------- Bob's bot: listed after Ann's; an anonymous creator can't be re-adopted by name (a name proves nothing) ----------
   r = await B.pbot({ op: 'add', cls: picks[1].cls });
   ok(r.ok, 'Bob adds a bot');
-  const bobBid = r.bid;
+  let bobBid = r.bid;
   L = await A.list();
   ok(L.bots.findIndex(b => b.bid === bobBid) > L.bots.findIndex(b => b.mine) && L.bots.find(b => b.bid === bobBid).owner === B.name, 'Ann sees Bob\'s bot after her own, with Bob as owner');
   await until(() => A.roster.some(x => x.bot && x.owner === B.name), 5000, 'Bob\'s bot joined');
@@ -211,9 +211,11 @@ try {
   await until(() => B2.id, 4000, 'Bob reconnects');
   await sleep(2500); // past the grace period
   L = await B2.list();
-  ok(L.mine === 1 && L.bots.some(b => b.bid === bobBid && b.mine), 'Bob reconnected within the grace period: his bot is still his');
-  await until(() => { const id = B2.roster.find(x => x.bot && x.owner === B.name)?.id; return id && B2.pl.get(id)?.party && B2.pl.get(id).party === B2.me()?.party; }, 5000, 'Bob\'s bot back in his party');
-  ok(true, 'and it rejoined his party');
+  ok(L.mine === 0 && !L.bots.some(b => b.bid === bobBid), 'anonymous "Bob" joining again by name does not get the bot: it goes after the grace period (a saved character would be re-adopted)');
+  r = await B2.pbot({ op: 'add', cls: picks[1].cls });
+  bobBid = r.bid;
+  await until(() => { const id = B2.roster.find(x => x.bot && x.owner === B.name)?.id; return id && B2.pl.get(id)?.party && B2.pl.get(id).party === B2.me()?.party; }, 5000, 'Bob\'s new bot in his party');
+  ok(r.ok, 'Bob adds a new one: it joins his party');
 
   // ---------- admin (needs accounts) ----------
   if (DB) {
