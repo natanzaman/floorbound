@@ -16,9 +16,11 @@ Done and live:
 - **Social:** party finder, guide, titles, Hall of Clearers, rare spawns.
 - **Bots:**
   - each bot has its own brain, capability levels 1–5 and party teamwork;
-  - players add up to 3 bots each (P → Bots tab);
-  - orders come from a bot's party frame, the "All bots" button or the V wheel.
-- **Admin page:** players, characters, bots, a "Maxed" preset.
+  - players add as many bots as they like (P → Bots tab; only the server's `MAX_BOTS` caps them), in their party or roaming free;
+  - every bot and the Named are in the Players list (invite, kick, despawn / respawn the Named);
+  - orders come from a bot's party frame, the "All bots" button or the V wheel (your free bots by name too);
+  - who may control a bot: its creator, access level 3+, its allow list, else anyone (`shared/accesslevels.js`).
+- **Admin page:** players (with each account's access level), characters, bots (creator, allow list), a "Maxed" preset.
 - **Controls (K, live 2026-11-20):** every control rebindable on the Controls screen (keyboard & mouse and controller pictures), synced to the account; controller play with an LB layer and pad menu navigation (wired Xbox pads on a Mac via WebUSB); accessibility options (toggles, sensitivity, reduce motion, UI scale, high contrast, colour-blind telegraphs, telegraph sound cue); scripted pad tests (`test/padtest.mjs`).
 - **Boss fights (J, live):** rescue traps, multi-area fights, threat rules, and J3 timing tables per fight (`shared/bosstiming.js`), boss combos with after states, melee openings, `scripts/tuneboss.js` for tuning runs.
 - **The Named:** the Hearthward NPC heroes and the loner Cairn.
@@ -31,9 +33,17 @@ Done and live:
   - achievements, dailies/weekly board, cosmetics, deeper loot (affixes, sets, armor builds);
   - Floor 3 (Floor 2 is untested);
   - a paid Render plan (stay on free).
-- **Bots aren't "owned" as such.** A bot is linked to the party it serves. A player can add up to 3, but no admin or game action should leave a bot detached from its party or unaccounted for.
+- ~~**Bots aren't "owned" as such.** A bot is linked to the party it serves. A player can add up to 3, but no admin or game action should leave a bot detached from its party or unaccounted for.~~ Replaced on 2026-11-20 (below).
 - **Bot orders only via chat `/b <command>`** (and the clickable menus or V wheel). Ordinary chat must never trigger bot orders.
 - **Hit-stop (freeze frame) only when a boss's big hit lands on *you*.** It's local to the victim and never shown to the whole party, never on player hits.
+
+## Owner decisions (2026-11-20): bots and access levels (`feat/bots`, brief `docs/briefs/bots-access.md`)
+- **Bots record their creator** (account / character, or player for anonymous ones). A bot may be **free**: out of any party, still tracked to its creator, doing the behaviour its creator set (farming the field until one is set). "Join my party" on the Add form (ticked by default) keeps today's behaviour. A bot that leaves a party (kicked, `/b leave`, the party broke up) roams instead of being dismissed. Admin actions still never detach a bot from its party.
+- **No per-player cap** on bots; the server-wide `MAX_BOTS` (30, the Named outside it) stays.
+- **Every bot is in the Players list** (Players tab → Bots), the Named included, with Invite to party and where it is; Kick out of your party; Despawn / Respawn for the Named (each one of a kind; back, they rejoin the party they left, or the same player when a party of two broke up; else they roam). Despawned survives a restart.
+- **Access levels** 1-5 per account (`accounts.access_level`, set by devs on the admin page; never the character level). Everyone 1, admins count as 5. `shared/accesslevels.js` `ACTION_MIN` gives each gated action a minimum (all 1 now; raising one is one line); `ACCESS.overrideBots` = 3.
+- **Who may control a bot** (command, invite, kick, despawn / respawn): the creator; else access 3+; else, if the bot has an allow list, only those on it; else anyone at the action's minimum. One pure function (`canControlBot`), unit-tested. Renaming / skill / behaviour / Dismiss stay with the creator (or access 3+).
+- **The Named's invites need no tier** (`INVITE_NEEDS_TIER = false` in `shared/named.js`; the old gate is one flag away); friendship is otherwise unchanged, Sworn calls keep their tier, and one Named per party stays.
 
 ## Tasks
 **Status 2026-11-20: A–K are done and merged** (specs kept below for reference), except F7 (film work, paused by the owner). What to do next and the owner calls waiting: `docs/NEXT.md`.
@@ -359,7 +369,7 @@ Same rules as F/G/H (flock lock, push with `--force-with-lease`).
 - **A separate bot kind** (`e.named`). The Named:
   - have reserved slots outside `MAX_BOTS`;
   - don't appear in the Bots tab and aren't removed by admin "remove all";
-  - accept invites (`onInvite`) only by the tier rules;
+  - accept invites (`onInvite`) only by the tier rules (2026-11-20: off, `INVITE_NEEDS_TIER`; they are in the Players list's Bots section, not the Bots tab);
   - are parked during director shows;
   - are flagged `named` in tracking, and Named-only fights are not written.
 - **Identity.** Friendship and memories are keyed by `charId`; anonymous players get session-only friendship. The Named's names are reserved against character names.

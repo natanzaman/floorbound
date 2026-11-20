@@ -381,7 +381,7 @@ const classesA = initClassesA({ scene, state, players, mobs, fx, sfx, floatNum, 
 const styles = initStyles({ state, players, fx, sfx, shake: a => shake(a), floatNum, rebuildBar: () => { if (state.joined && !state.spectator) buildSkillBar(); } });
 const looks = initLooks({ players, mobs }); // character looks: the Named's own appearance, on any entity (public/looks.js)
 // Players panel tabs + player-owned bots (public/playerbots.js)
-const pbots = initPlayerBots({ $, send, state, players, log: (a, b) => log(a, b), sfx, rerender: () => { lobby.html = ''; renderPlayers(); } });
+const pbots = initPlayerBots({ $, send, state, players, log: (a, b) => log(a, b), sfx, rerender: () => { lobby.html = ''; renderPlayers(); }, refresh: () => renderPlayers() });
 const friends = initNamed({ $, send, state, log: (a, b) => log(a, b), sfx, banner: (a, b) => banner(a, b) }); // public/named.js
 // (the Friends tab is added on welcome, only when the server runs the Named: msg.named)
 // talent trees + the Skill Tree window (K): progression track, talents, abilities (public/talents.js)
@@ -1582,19 +1582,10 @@ function renderPlayers() {
   const nNamed = [...state.roster.values()].filter(r => r.named).length; // the Named have the Friends tab (public/named.js)
   const nBots = [...state.roster.values()].filter(r => r.bot && !r.named).length, nReal = state.roster.size - nBots - nNamed;
   if (pbots.tab !== 'players') return pbots.render($('players'), nReal, nBots); // Bots / Friends tab (public/playerbots.js)
-  const rows = [], botRows = [];
+  const rows = [];
   let online = 0;
-  // A bot that's in a party with a real player declines invites, so say so instead of offering a button.
-  const humanParty = pid => pid && [...state.roster].some(([i, x]) => !x.bot && players.get(i)?.party === pid);
   for (const [id, r] of state.roster) {
-    if (r.named) continue;
-    if (r.bot) { // bots get their own section (managing them is on the Bots tab)
-      const p = players.get(id);
-      const inParty = state.party && p?.party === state.party;
-      const right = inParty ? '<small>Party</small>' : humanParty(p?.party) ? '<small style="opacity:.6">In a party</small>' : `<button data-inv="${id}">Invite</button>`;
-      botRows.push(`<div class="p"><span>${looks.swatch(id)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small><span class="tag">BOT</span></span>${right}</div>`);
-      continue;
-    }
+    if (r.bot) continue; // bots and the Named: the Bots section (public/playerbots.js listHtml)
     online++;
     if (id === state.myId) continue;
     const p = players.get(id);
@@ -1610,12 +1601,13 @@ function renderPlayers() {
   const onlineNames = new Set([...state.roster.values()].map(r => r.name.toLowerCase()));
   const offline = (lobby.offline || []).filter(o => !onlineNames.has(o.name.toLowerCase()));
   const offHtml = offline.length ? `<details class="sect" ${lobby.offOpen !== false ? 'open' : ''} data-sect="off"><summary><b>Offline (${offline.length})</b> <small style="opacity:.6">last 30 days</small></summary>${offline.map(o => `<div class="p off"><span>${esc(o.name)} <small style="opacity:.6">Lv ${o.lvl} ${CLASSES[o.cls]?.name || ''}</small></span><small style="opacity:.55">${seenAgo(o.seen)}</small></div>`).join('')}</details>` : '';
-  const botHtml = botRows.length ? `<details class="sect" ${lobby.botOpen !== false ? 'open' : ''} data-sect="bots"><summary><b>Bots (${botRows.length})</b> <small style="opacity:.6">invite to your party</small></summary>${botRows.join('')}</details>` : '';
+  const botHtml = state.spectator ? '' : pbots.listHtml(); // every bot and the Named: invite, kick, despawn / respawn
   const html = `${pbots.tabsHtml(nReal, nBots)}${lfgBtn}<b>Online (${online})</b>${rows.join('') || '<div style="opacity:.6;font-size:13px;padding:6px 0">Nobody else yet. Share the link with friends!</div>'}${botHtml}${offHtml}${state.party ? '<button class="leave">Leave party</button>' : ''}`;
   if (html === lobby.html) return; // unchanged: keep the DOM (buttons stay clickable)
   $('players').innerHTML = lobby.html = html;
   pbots.bindTabs($('players'));
-  for (const d of $('players').querySelectorAll('details[data-sect]')) d.ontoggle = () => { if (d.dataset.sect === 'bots') lobby.botOpen = d.open; else lobby.offOpen = d.open; };
+  for (const d of $('players').querySelectorAll('details[data-sect="off"]')) d.ontoggle = () => { lobby.offOpen = d.open; };
+  pbots.bindList($('players'));
   $('players').querySelector('.lfg').onclick = () => { send({ type: 'lfg' }); sfx.play('ui'); setTimeout(renderPlayers, 150); };
   for (const b of $('players').querySelectorAll('[data-inv]')) b.onclick = () => { send({ type: 'invite', id: +b.dataset.inv }); b.textContent = 'Sent'; b.disabled = true; };
   const lv = $('players').querySelector('.leave'); if (lv) lv.onclick = () => send({ type: 'leave' });
