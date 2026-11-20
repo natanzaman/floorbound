@@ -19,12 +19,22 @@ export function initOpenings({ state, mobs, guide, callout }) {
   document.getElementById('boss')?.appendChild(line);
   const open = new Map(); // boss id -> { state, end (performance.now s), total }
   const glows = new Map(); // boss id -> weak-point mesh
+  const starts = new Map(); // boss id -> when its last opening started (s): a blink in w.op is not a new opening
   const now = () => performance.now() / 1000;
+
+  // Free a weak point (its boss left, or its model was rebuilt).
+  function drop(id) {
+    const g = glows.get(id);
+    if (!g) return;
+    g.parent?.remove(g); g.geometry.dispose(); g.material.dispose();
+    glows.delete(id);
+  }
 
   // The weak point: an unlit, additive orb on the boss's chest (no new lights: shader warm-up holds).
   function glowFor(e) {
     let g = glows.get(e.id);
     if (g && g.parent === e.model.group) return g;
+    if (g) drop(e.id); // the model was rebuilt
     const mat = new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
     g = new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 12), mat);
     g.position.set(0, (e.model.height || 4) * 0.62, 0.35 * (e.def?.radius || 2));
@@ -38,13 +48,15 @@ export function initOpenings({ state, mobs, guide, callout }) {
     const seen = new Set();
     for (const [id, si, left, total] of op || []) {
       seen.add(id);
-      const was = open.get(id), st = AFTER_STATES[si];
+      const was = open.get(id), st = AFTER_STATES[si], from = now() + left - total;
       open.set(id, { state: st, end: now() + left, total });
       const e = mobs.get(id);
       if (e) e.opening = st;
-      if (!was) started(id, e);
+      if (!was && !(Math.abs((starts.get(id) ?? -1e9) - from) < 0.5)) started(id, e); // (the same opening back after a blink: no new callout)
+      starts.set(id, from);
     }
     for (const id of [...open.keys()]) if (!seen.has(id)) { open.delete(id); const e = mobs.get(id); if (e) e.opening = null; }
+    for (const id of [...starts.keys()]) if (!mobs.has(id)) starts.delete(id);
   }
 
   function started(id, e) {
@@ -72,7 +84,10 @@ export function initOpenings({ state, mobs, guide, callout }) {
   /** Every frame: the weak points pulse while open, hide otherwise. */
   function frame() {
     const t = now();
-    for (const [id, g] of glows) if (!open.has(id) || !mobs.get(id)) g.visible = false;
+    for (const [id, g] of [...glows]) {
+      if (!mobs.get(id)) drop(id); // the boss left
+      else if (!open.has(id)) g.visible = false;
+    }
     for (const [id, o] of open) {
       const e = mobs.get(id);
       if (!e?.model?.group) continue;

@@ -124,7 +124,8 @@ export const BOSS_TIMING = {
       gust: { every: [13, 12, 11], first: 7, wind: 1.5, active: 0, r: 11, half: 0.75, mult: 2.2, shove: 7, shape: 'cone', avoid: AVOID(HIT), posture: 0, after: idle(0.45) },
       // Overload: a team mechanic (Break it, then Switch or Team Burst). after: the Thunderclap's pause; stopped, it is
       // stunned for `stun` s, then Grounded (takes `weak` x damage) for `weakD` s. firstStatic: s after the engage with
-      // the Static twist; phase3: the next one comes within every[2] x this when phase 3 starts.
+      // the Static twist; phase3: the next one comes within every[2] x this when phase 3 starts. stopped: doc-only (the
+      // server never reads it: a stopped Overload stuns through stunUntil in server/floor3.js, not an after state).
       overload: { every: [0, 30, 24], first: 5, firstStatic: 14, phase3: 0.6, channel: 8, posture: 0.5, clap: 0.55, charged: 15, chargedMult: 1.25, stun: 4, weakD: 8, weak: 1.3, shape: 'room', avoid: AVOID(['none'], 'zone'), after: idle(0.6), stopped: { state: 'stunned' } },
       harpies: { every: 26, n: 2, max: 3, first: 6, shape: 'summon', avoid: AVOID(['none']), posture: 0, after: idle() },
       // Tempest Beam: the sword planted, a beam sweeps `sweep` rad around it in `turn` s (its active time)

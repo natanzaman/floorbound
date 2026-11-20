@@ -5,7 +5,7 @@
 //    cone's side when there is time, roll out when it is close, or roll through it as it lands (the i-frames cover the
 //    safe window). Capability delays or misses the telegraph, like any other.
 import { DODGE, PLAYER_SPEED, wrapAngle } from '../data.js';
-import { COLOSSUS } from '../floor3.js';
+import { COLOSSUS, F3 } from '../floor3.js';
 import { AFTER_STATES, safeWindow } from '../bosstiming.js';
 import { BOT_SKILLS, reaction } from '../botskill.js';
 import { registerBotHook } from './registry.js';
@@ -37,6 +37,12 @@ export function openingOn(b, tgt) {
   return o && b.t >= o.seeAt && b.t < o.end ? o : null;
 }
 
+// A spot pulled inside the Eye of the Storm (the arena radius - 1): never run out of the fight.
+function inArena(x, z) {
+  const A = F3.arena, d = d2(x, z, A.x, A.z), max = A.r - 1;
+  return d <= max ? [x, z] : [A.x + ((x - A.x) / d) * max, A.z + ((z - A.z) / d) * max];
+}
+
 // Is this bot standing in a Gale Push cone?
 function inGust(b, g, radius) {
   const d = d2(b.x, b.z, g.x, g.z);
@@ -53,11 +59,13 @@ export function gustDodge(b) {
     if (b.t < g.seeAt || left < -0.05) continue;
     const radius = b.mobs.find(m => m.id === g.id)?.def.radius ?? 2.6;
     if (!inGust(b, g, radius)) continue;
-    // outrange: off the cone's nearer side (at least clear of its core), or straight out past its reach
+    // outrange: off the cone's nearer side (at least clear of its core), or straight out past its reach; both kept
+    // inside the arena. Near the wall, straight out can end up still in the cone: then the side.
     const a = Math.atan2(b.x - g.x, b.z - g.z), side = wrapAngle(a - g.f) >= 0 ? 1 : -1, d = d2(b.x, b.z, g.x, g.z);
     const ea = g.f + side * (g.h + 0.5), er = Math.max(d, radius + 2.4);
-    const off = [g.x + Math.sin(ea) * er, g.z + Math.cos(ea) * er], out = [g.x + Math.sin(a) * (g.r + 2), g.z + Math.cos(a) * (g.r + 2)];
-    const spot = d2(b.x, b.z, ...off) <= d2(b.x, b.z, ...out) ? off : out, far = d2(b.x, b.z, ...spot);
+    const off = inArena(g.x + Math.sin(ea) * er, g.z + Math.cos(ea) * er), out = inArena(g.x + Math.sin(a) * (g.r + 2), g.z + Math.cos(a) * (g.r + 2));
+    const outSafe = !inGust({ x: out[0], z: out[1] }, g, radius);
+    const spot = !outSafe || d2(b.x, b.z, ...off) <= d2(b.x, b.z, ...out) ? off : out, far = d2(b.x, b.z, ...spot);
     const roll = g.avoid.includes('roll') && b.dodgeCd <= 0 && !b.roll;
     if (g.avoid.includes('outrange') && far / PLAYER_SPEED < left - 0.15) { moveToward(b, spot[0], spot[1], 0.2); return true; }
     if (roll && far <= DODGE.dist) { evade(b, spot[0], spot[1]); return true; } // a roll carries us out

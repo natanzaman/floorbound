@@ -81,7 +81,8 @@ const methods = {
   // (Quake Rings and basic swings go on: you can jump or take a swing where you stand.)
   btChannel(m, secs) {
     const until = this.time + secs + BOSSTEAM.channel;
-    for (const k of ['slamT', 'chargeT', 'spinT', 'rockT', 'sweepT', 'geyserT', 'waveT', 'volleyT', 'strikeT', 'gustT', 'beamT', 'ovT']) if (typeof m[k] === 'number' && m[k] < until) m[k] = until;
+    for (const k of ['slamT', 'chargeT', 'spinT', 'rockT', 'sweepT', 'geyserT', 'waveT', 'volleyT', 'strikeT', 'gustT', 'beamT', 'ovT', 'comboT']) if (typeof m[k] === 'number' && m[k] < until) m[k] = until;
+    m.comboWait = Math.max(m.comboWait || 0, until); // combos too: no start, no next step until then (server/openings.js)
   },
 
   btAdd(a) { (this.btActive ||= []).push(a); return a; },

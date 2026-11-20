@@ -371,7 +371,7 @@ export const F3Methods = {
     if (d > def.range + 0.4) this.f3Move(m, target.x, target.z, def.speed * (m.phase === 2 ? 1.15 : 1), dt, def.range);
     else if (t >= m.atkT && this.swingReady(m)) {
       const [r, h] = BITE.colossus;
-      m.windupAt = t + C.cleave.wind; this.swingStart(m, C.cleave.wind); m.atkT = t + def.atkCd * (m.phase === 2 ? C.cleave.rage : 1) + C.cleave.wind * (1 - 1 / PACE); // swingStart: no point-blank chaining (server/openings.js)
+      m.windupAt = t + C.cleave.wind; this.swingStart(m, C.cleave.wind); m.atkT = t + C.cleave.cd * (m.phase === 2 ? C.cleave.rage : 1) + C.cleave.wind * (1 - 1 / PACE); // the table's cd (cooldownMul); swingStart: no point-blank chaining (server/openings.js)
       this.events.push({ t: 'wind', id: m.id, d: C.cleave.wind, f: r2(m.face), r, h });
     }
   },

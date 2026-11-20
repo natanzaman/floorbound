@@ -4,7 +4,10 @@
 //  - bossTable(m, base, n) at the engage: the fight's table m.tm (the twist copy + party-size knobs + sequences).
 //  - bossCombo(m, run, timers) at the top of its specials: runs the phase's combos step by step (a step starts `gap` s
 //    after the previous one ended), then holds the combo's after state for its pause. True while a combo or an after
-//    state holds the boss: its own timers wait (summons, rockfall, pools and team mechanics included).
+//    state holds the boss: its own timers wait (summons, rockfall, pools and team mechanics included). A combo waits
+//    like a single move: for m.busyUntil (another move holding the boss: a Twin Horns second charge, the Deluge call),
+//    for m.comboWait (a team mechanic's channel, server/bossteam.js; the fall, server/arenas.js) and, at its start, for
+//    closeReady of its first step. A phase change drops the combo in flight and the after state.
 //  - bossAfter(m, mv, at): after a single move landing at `at`, its table `after` { state, pause }.
 //  - closeReady / closeLanded / areaHold / swingReady: no point-blank chaining (the table's `close`).
 // While the boss is in an opening (exposed / stunned / planted, not Grounded, not Broken, no director show), melee hits
@@ -23,7 +26,7 @@ const methods = {
   /** The fight's table at the engage, for `n` fighters (party-size knobs; this.bossKnobs[type]: live overrides). */
   bossTable(m, base, n) {
     m.tm = fightTable(m.type, base, n, this.bossKnobs?.[m.type] || null);
-    m.seq = null; m.after = null; m.comboPh = -1; m.comboT = Infinity; m.closeAt = -99; m.holdUntil = 0;
+    m.seq = null; m.after = null; m.comboPh = -1; m.comboT = Infinity; m.comboPick = null; m.comboWait = 0; m.closeAt = -99; m.holdUntil = 0;
     return m.tm;
   },
 
@@ -71,19 +74,25 @@ const methods = {
     const tm = m.tm, t = this.time;
     if (!tm?.seqs || this.showOn()) { m.seq = null; return false; }
     const P = tm.seqs[m.phase] || {};
-    if (m.comboPh !== m.phase) { m.comboPh = m.phase; m.comboT = P.every ? t + (P.first ?? P.every) : Infinity; }
+    if (m.comboPh !== m.phase) { // a new phase: the last phase's combo and after state end with it (the Deluge call, ...)
+      if (m.comboPh >= 0) { if (STATS && m.after) this.logOpening(m); m.seq = null; m.after = null; }
+      m.comboPh = m.phase; m.comboT = P.every ? t + (P.first ?? P.every) : Infinity; m.comboPick = null;
+    }
     if (m.seq && m.staggerUntil > m.seq.stag) m.seq = null; // a Break interrupts it
     if (!m.seq) {
       const a = this.afterOf(m);
       if (a) return a.state !== 'idle';
-      if (t < m.comboT || t < (m.busyUntil || 0) || m.windupAt || t < (m.stunUntil || 0)) return false;
-      const s = pickCombo(tm, m.phase);
+      if (t < m.comboT || t < (m.busyUntil || 0) || t < (m.comboWait || 0) || m.windupAt || t < (m.stunUntil || 0)) return false;
+      if (this.arenaHold?.(m)) return false; // a fall is pending (server/arenas.js): a combo + after state would starve it
+      const s = m.comboPick || pickCombo(tm, m.phase);
       if (!s) { m.comboT = Infinity; return false; }
-      m.comboT = t + P.every;
+      if (!this.closeReady(m, s.steps[0])) { m.comboPick = s; return false; } // no point-blank chaining (it keeps its pick)
+      m.comboPick = null; m.comboT = t + P.every;
       m.seq = { s, i: 0, next: t, stag: m.staggerUntil || 0 };
       m.windupAt = 0;
     }
-    const q = m.seq;
+    const q = m.seq, wait = Math.max(m.busyUntil || 0, m.comboWait || 0);
+    if (t >= q.next && t < wait) q.next = wait; // something else holds the boss now: the next step waits for it
     if (t < q.next) { m.busyUntil = Math.max(m.busyUntil || 0, q.next); return true; }
     const k = q.s.steps[q.i], mv = tm[k];
     const end = Math.max(t, run(k) ?? t);

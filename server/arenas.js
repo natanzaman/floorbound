@@ -22,7 +22,7 @@ import { SPRINT_SPEED } from '../shared/data.js';
 
 const r2 = v => Math.round(v * 100) / 100;
 const FROZEN = new Set(['input', 'skill', 'dodge', 'jump', 'guard', 'use']); // what a falling / landing player can't do
-const TIMERS = ['strikeT', 'gustT', 'beamT', 'harpyT', 'slamT', 'chargeT', 'spinT', 'rockT', 'sweepT', 'geyserT', 'waveT', 'volleyT']; // the boss's own moves
+const TIMERS = ['strikeT', 'gustT', 'beamT', 'harpyT', 'slamT', 'chargeT', 'spinT', 'rockT', 'sweepT', 'geyserT', 'waveT', 'volleyT', 'comboT']; // the boss's own moves and combos (server/openings.js)
 const TEAM_TIMERS = ['ovT', 'btT']; // team-scale mechanics: `gap` s after the fight resumes
 const STATS = !!process.env.F3_STATS;
 const SLOW = Math.max(1, Number(process.env.ARENA_SLOW) || 1); // testing aid (screenshot tours): the fall's stages last this many times longer
@@ -94,6 +94,7 @@ const methods = {
     if (this.beams) this.beams = this.beams.filter(b => b.m !== m); // the Tempest Beam
     const resume = m.busyUntil;
     for (const k of TIMERS) if (typeof m[k] === 'number' && m[k] < resume + T.resume) m[k] = resume + T.resume + Math.random() * T.resumeJitter;
+    m.seq = null; m.comboWait = Math.max(m.comboWait || 0, resume + T.resume); // the fall ends a combo in flight; the next waits (server/openings.js)
     for (const k of TEAM_TIMERS) if (typeof m[k] === 'number' && m[k] < resume + T.gap) m[k] = resume + T.gap;
     R.fire = null;
     this.events.push({ t: 'arena', k: key, s: 'crack', id: m.id, a: to, d: T.crack, x: r2(m.x), z: r2(m.z) });

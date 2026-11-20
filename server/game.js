@@ -1057,7 +1057,7 @@ export class Game {
           for (const p of this.players.values()) {
             if (p.dead) continue;
             const d = dist(m, p);
-            if (d <= def.range + 1 && Math.abs(wrapAngle(angleTo(m.x, m.z, p.x, p.z) - m.face)) < 1.3) this.damagePlayer(p, def.atk, { src: 'warden cleave' });
+            if (d <= def.range + 1 && Math.abs(wrapAngle(angleTo(m.x, m.z, p.x, p.z) - m.face)) < 1.3) this.damagePlayer(p, def.atk * (m.tm || this.twistW || WARDEN).cleave.mult, { src: 'warden cleave' }); // x the table's mult (damageMul)
           }
           this.events.push({ t: 'fx', k: 'marc', id: m.id, x: r2(m.x), z: r2(m.z), f: r2(m.face), r: def.range + 1 });
         } else if (def.ranged) {
@@ -1079,7 +1079,8 @@ export class Game {
       const wind = def.boss ? (m.tm || this.twistW || WARDEN).cleave.wind : def.ranged ? THORN.wind : 0.45;
       m.windupAt = t + wind;
       if (def.boss) this.swingStart(m, wind); // no point-blank chaining (server/openings.js)
-      m.atkT = t + def.atkCd * (enraged ? WARDEN.cleave.rage : 1) * (frenzy ? 0.7 : 1) + (def.boss ? wind - wind / PACE : 0); // the paced wind-up doesn't eat the rest
+      const cd = def.boss ? (m.tm || this.twistW || WARDEN).cleave.cd * (enraged ? (m.tm || this.twistW || WARDEN).cleave.rage : 1) : def.atkCd; // the boss: its table's cd (cooldownMul)
+      m.atkT = t + cd * (frenzy ? 0.7 : 1) + (def.boss ? wind - wind / PACE : 0); // the paced wind-up doesn't eat the rest
       const ev = { t: 'wind', id: m.id, d: wind, f: r2(m.face) };
       if (def.ranged) { m.aimX = target.x; m.aimZ = target.z; ev.ax = r2(target.x); ev.az = r2(target.z); }
       else if (BITE[m.type]) { ev.r = BITE[m.type][0]; ev.h = BITE[m.type][1]; }
@@ -1091,7 +1092,6 @@ export class Game {
   bite(m) {
     const [reach, half] = BITE[m.type] || [m.def.range + 1, 0.6];
     let atk = m.def.atk;
-    if (m.type === 'warden') atk *= (m.tm || this.twistW || WARDEN).cleave.mult; // its axe swing (shared/bosstiming.js)
     if (m.type === 'wolf' && this.alphaNear(m)) atk *= 1 + PACK.auraAtk; // the pack hits harder with its Alpha around
     let nx = m.x + Math.sin(m.face) * 1.0, nz = m.z + Math.cos(m.face) * 1.0;
     [nx, nz] = resolveCollision(nx, nz, m.def.radius * 0.8);

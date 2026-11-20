@@ -292,7 +292,7 @@ export const F2Methods = {
     if (d > def.range + 0.4) this.f2Move(m, target.x, target.z, def.speed * (m.phase === 2 ? 1.15 : 1), dt, def.range);
     else if (t >= m.atkT && this.swingReady(m)) {
       const [r, h] = BITE.sovereign;
-      m.windupAt = t + S.sweep.wind; this.swingStart(m, S.sweep.wind); m.atkT = t + def.atkCd * (m.phase === 2 ? SOVEREIGN.sweep.rage : 1) + S.sweep.wind * (1 - 1 / PACE); // + the paced extra wind-up; swingStart: no point-blank chaining (server/openings.js)
+      m.windupAt = t + S.sweep.wind; this.swingStart(m, S.sweep.wind); m.atkT = t + S.sweep.cd * (m.phase === 2 ? S.sweep.rage : 1) + S.sweep.wind * (1 - 1 / PACE); // the table's cd (cooldownMul) + the paced extra wind-up; swingStart: no point-blank chaining (server/openings.js)
       this.events.push({ t: 'wind', id: m.id, d: S.sweep.wind, f: r2(m.face), r, h });
     }
   },
