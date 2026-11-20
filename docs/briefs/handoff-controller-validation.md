@@ -38,10 +38,15 @@ docs/briefs/progress-controller-validation.md.
 
 ## Next steps
 1-3 DONE (Natan 2026-11-20: "All passed, items ok"; wheel cancel + scripted revive/Cover in 8eab057, reviewed).
-4. Merge: blocked until the base 0bb37d8 is in origin/main (the hub's K1b-K4 integration), or the hub takes this branch
-   into its integration branch. Asked the hub (local_dbcc11fe-310c-4091-b93a-d3725051310e) which. If main: `git fetch &&
-   git merge-base --is-ancestor 0bb37d8 origin/main`, `git rebase --rebase-merges origin/main`, rerun tests, merge into
-   main, `git push --force-with-lease --force-if-includes origin HEAD:main`.
+4. Merge (hub said 2026-11-20: WAIT; keep the branch as is; it messages the hash once its batch is on origin/main; then
+   merge into main yourself). Then: `git fetch`, check the hash is in origin/main, `git rebase --rebase-merges origin/main`.
+   EXPECT CONFLICTS from the hub's feat/hardfix-input: releasePad() already fires {down:false, cancel:true}, setDevice/reload
+   kbd releases pass cancel; main.js botWheel handler closes with no order on e.cancel, wheel.toggle() in toggle mode,
+   createControlSync `account` option, logout nulls acct.token; botwheel.js toggle() + toggleMode hint; controlsync.js
+   rewritten; panels.register onClose; padsmoke ready() 60 s; padtest chord checks (pad toggle wheel, blur closes, no order).
+   Keep ONE cancel mechanism (theirs + our wheel.cancel()/blur for kbd holds and the "key under Controller" fix if still
+   needed). Rerun padtest (1-5), padsmoke, controlsui, padnav, access, controlsync, keys + unit tests; then merge --no-ff into
+   main, `git push --force-with-lease --force-if-includes origin HEAD:main`; report once to the hub (3-5 lines).
 5. Follow-up: keys.mjs flaky ready(0) timeout in the classic-camera check (keys.mjs:285), fails on 2096215 too.
 
 ## Local server for Natan

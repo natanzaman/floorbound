@@ -25,3 +25,5 @@
   talents 17. keys.mjs 26/26 in 3 of 6 runs: the misses time out at ready(0) in the classic-camera check (keys.mjs:285),
   and unchanged HEAD 2096215 fails there 3/3 too: an existing flaky wait, not this change (follow-up).
   Merge: base 0bb37d8 still NOT in origin/main (checked 2026-11-20); waiting for the K1b-K4 integration to land.
+- 2026-11-20T07:20Z chat 4: reported to hub. Hub: wait for its hash on origin/main, then rebase (conflicts expected: its
+  hardfix-input already has cancel releases) and merge into main myself. Handoff Next step 4 holds the details. Idle until then.
