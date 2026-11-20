@@ -348,7 +348,7 @@ async function leaveGame(kind) {
   }
   const ws = state.ws; state.ws = null; state.joined = false; // (no reconnect: ws.onclose ignores a replaced socket)
   try { sessionStorage.removeItem('fb_rejoin'); } catch {}
-  if (kind === 'logout') { try { await api('/api/logout', { method: 'POST' }); } catch {} localStorage.removeItem('fb_session'); }
+  if (kind === 'logout') { try { await api('/api/logout', { method: 'POST' }); } catch {} localStorage.removeItem('fb_session'); acct.token = null; }
   ws?.close();
   location.href = location.pathname; // (drops ?spectate and friends)
 }
@@ -1036,7 +1036,7 @@ function controlsChanged() { if (state.joined && !state.spectator) buildSkillBar
 const controlsUi = initControlsUi({ input, sfx, onChange: controlsChanged });
 panels.register('controlsui', { esc: true, onClose: () => controlsUi.close() }); // (closed by the registry: stop a capture too)
 const controlSync = createControlSync({
-  api, signedIn: () => !!(acct.cfg.accounts && acct.token),
+  api, signedIn: () => !!(acct.cfg.accounts && acct.token), account: () => acct.me?.account?.id,
   onApply: () => { input.reload(); Object.assign(settings, loadSettings(), { device: settings.device }); applyAccess(settings); settingsUi.refresh(); controlsUi.refresh(); controlsChanged(); },
 });
 

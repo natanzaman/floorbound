@@ -76,12 +76,12 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     fire(hit.action, { down: true, repeat: !!e.repeat, source, event: e });
     return hit;
   }
-  function release(code, e, source, always) {
+  function release(code, e, source, always, cancel) { // (cancel: a let-go the player did not make: blur, device switch, reload)
     const a = active.get(code);
     active.delete(code);
     const ups = new Set(a ? [a] : []);
     if (always) for (const o of actionsOn(kb(), code)) if (ACTION[o.action]?.type === 'hold' && !ACTION[o.action].context) ups.add(o.action);
-    for (const u of ups) fire(u, { down: false, repeat: false, source, event: e });
+    for (const u of ups) fire(u, { down: false, repeat: false, source, event: e, ...(cancel ? { cancel: true } : {}) });
   }
 
   // rebinding: capture swallows every key first (window, capture phase), Esc cancels
@@ -197,7 +197,7 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
   function setDevice(d) {
     if (d === device) return true;
     if (d === 'pad' && !readPads().length) return false; // Controller only while one is connected
-    for (const [code] of active) release(code, null, device, false); // let go of every hold
+    for (const [code] of active) release(code, null, device, false, true); // let go of every hold
     releasePad();
     device = d; settings.device = d === 'touch' ? undefined : d; save();
     for (const fn of deviceSubs) fn(d);
@@ -268,7 +268,7 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     },
     resetBindings(d) { B[d] = merged(d, {}); controlsStore.set({ [d]: {} }); },
     reload() { // (K2: the account's copy replaced fb_controls) let go of every hold, then take the saved bindings
-      for (const [code] of active) release(code, null, device, false);
+      for (const [code] of active) release(code, null, device, false, true);
       const c = controlsStore.get(); B.kbm = loadBindings('kbm', c.kbm); B.pad = loadBindings('pad', c.pad);
     },
     setContext(name, on) { on ? ctx.add(name) : ctx.delete(name); },
