@@ -377,9 +377,13 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
     raf = requestAnimationFrame(padLoop);
   }
 
+  // The bindings tab follows the device in play, however it changed (here, the "Controller detected" question, or the
+  // pad going away). From the radio above, say() draws the screen once with the message.
+  let choosing = false;
+  input.onDevice?.(d => { tab = d === 'pad' ? 'pad' : 'kbm'; pop = null; if (!choosing) refresh(); });
   el.addEventListener('change', e => {
     if (e.target.name !== 'cu-dev') return;
-    const ok = input.setDevice(e.target.value);
+    choosing = true; let ok; try { ok = input.setDevice(e.target.value); } finally { choosing = false; }
     say(ok ? `Playing with: ${DEVICE_NAMES[e.target.value]}.` : 'Connect a controller first.');
     if (ok) changed();
   });
@@ -395,5 +399,6 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
     clearInterval(poll); poll = setInterval(() => (isOpen() ? live() : clearInterval(poll)), 500);
   }
   function close() { el.classList.add('hidden'); prompt = null; restore = null; pop = null; if (busy) input.cancelCapture?.(); busy = null; clearInterval(poll); }
-  return { el, open, close, isOpen, render, refresh: () => { if (isOpen() && !busy) render(); }, get tab() { return tab; } };
+  function refresh() { if (isOpen() && !busy) render(); }
+  return { el, open, close, isOpen, render, refresh, get tab() { return tab; } };
 }

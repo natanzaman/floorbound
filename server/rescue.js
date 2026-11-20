@@ -93,7 +93,7 @@ const methods = {
     this.btChannel(m, RESCUE.channel); // the boss's big telegraphed attacks wait a moment: time to react
     this.events.push({ t: 'trapon', k, id: p.id, prop: prop.id, x: r2(p.x), z: r2(p.z), sx: r2(sx), sz: r2(sz), d: secs, boss: m.id });
     const name = p.name;
-    this.sys(k === 'vines' ? `${name} is caught in Thornbind! Cut the vines or hold E next to them.`
+    this.sys(k === 'vines' ? `${name} is caught in Thornbind! Cut the vines or hold {key:revive} next to them.`
       : k === 'pillar' ? `${name} is pinned in a Drowning Pillar! Break the orb that feeds it, or a Guardian can block it.`
       : `${name} is sealed in a storm crystal! Break it within ${T.fuse} s or it explodes on everyone.`);
   },

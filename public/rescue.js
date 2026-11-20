@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { RESCUE, readTraps } from '/shared/rescue.js';
 import { col, patterned, cue } from '/palette.js'; // telegraph colours, pattern cue, sound cue (Settings → Accessibility)
+import { keyName } from '/keyname.js'; // prompts name the player's key on the active device
 
 const PROMPTS = 3;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -181,7 +182,7 @@ export function initRescue({ state, players, mobs, send, project, layer, guide, 
       sfx.play('warn', posOf(e.id) || undefined, 1);
       if (e.id === me()) cue(sfx, undefined, 1.2); // a trap targeting you
       const you = e.id === me(), who = name(e.id);
-      if (e.k === 'vines') tell('vines', you ? 'THORNBIND ON YOU' : 'THORNBIND', you ? 'Vines will root you: your party cuts you free.' : `${who} is about to be rooted: hit the vines or hold E next to them.`, e.d + 1);
+      if (e.k === 'vines') tell('vines', you ? 'THORNBIND ON YOU' : 'THORNBIND', you ? 'Vines will root you: your party cuts you free.' : `${who} is about to be rooted: hit the vines or hold ${keyName('revive')} next to them.`, e.d + 1);
       else if (e.k === 'pillar') tell('pillar', you ? 'DROWNING PILLAR ON YOU' : 'DROWNING PILLAR', you ? 'You will be pinned: your party breaks the glowing orb that feeds it.' : `Break the orb feeding ${who}'s pillar (a Guardian can block the beam).`, e.d + 1);
       else tell('crystal', you ? 'STORM CRYSTAL ON YOU' : 'STORM CRYSTAL', you ? 'You will be sealed in: your party has 8 s to break the crystal.' : `Break ${who}'s crystal in 8 s or it explodes on everyone!`, e.d + 1);
       return true;

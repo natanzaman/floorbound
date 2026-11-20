@@ -38,6 +38,7 @@ import { initThreat } from '/threat.js'; // who bosses target, threat meter, Cov
 import { initRevive } from '/revive.js'; // downed + revive (G1)
 import { initControlsUi } from '/controlsui.js'; // the Controls screen: device, bindings, rebind (K2)
 import { createControlSync } from '/controlsync.js'; // fb_controls follows the account (K2)
+import { setKeySource, keyText, keyHtml, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 import { initBossTeam } from '/bossteam.js'; // boss team mechanics: STACK, SPREAD, tether (G4)
 import { initRescue } from '/rescue.js'; // rescue traps: vines, Drowning Pillar, storm crystal (J1)
 import { initTeamplay } from '/teamplay.js'; // combo counters, the Team Burst bar and sync window (G2)
@@ -826,7 +827,7 @@ function handleEvent(e) {
       if (e.ch === 'p') { if (state.party && e.party === state.party) log(`[Party] ${e.from}: ${e.text}`, e.id === me ? 'me party' : 'party'); break; }
       if (e.ch === 's') { if (state.spectator || Math.hypot(e.x - state.x, e.z - state.z) < 40) log(`${e.from} says: ${e.text}`, e.id === me ? 'me' : 'say'); break; }
       log(`${e.from}: ${e.text}`, e.id === me ? 'me' : ''); break;
-    case 'sys': if (!e.to || e.to === me) log(e.text, 'sys'); break;
+    case 'sys': if (!e.to || e.to === me) log(keyText(e.text), 'sys'); break; // ({key:revive} → the player's key)
     case 'emote': { const p = players.get(e.id), x = EMOTES[e.a]; if (p?.model.anim && x && !p.model.anim.dead) p.model.anim.shot(x[0], x[1], { clamp: !!x[2] }); break; } // scene director (server/director.js)
   }
 }
@@ -913,6 +914,7 @@ function removeEntity(e) {
 // the game itself keeps running).
 const input = createInput({ isTouch, settings, save: saveSettings, notify: t => { log(t, 'sys'); padToast(t); }, ask: (t, answer) => padToast(t, answer),
   gate: a => a === 'perfOverlay' || (state.joined && (a === 'menu' || !gmenu.isOpen())) });
+setKeySource(input); // (public/keyname.js: every prompt reads the active device's bindings when drawn)
 // Controller toasts (input.js): a short note, or the one-time "Controller detected" question (A / B answer it too).
 function padToast(text, answer) {
   let el = $('padtoast');
@@ -926,6 +928,7 @@ function padToast(text, answer) {
 }
 // Under Controller: no pointer lock, and the touch HUD (stick, lock button) hides while the pad drives play.
 input.onDevice(d => { document.body.classList.toggle('pad', d === 'pad'); if (d === 'pad') freeCursor(); });
+input.onLabels(() => labelBar()); // (device, pad kind, picture or bindings changed: the bar's key chips follow; prompts read keyname.js when drawn)
 // The old key set, now a view of the input layer (revive.js and rescue.js read keys.has('e'): the revive action).
 const LEGACY_KEYS = { e: 'revive', q: 'turnLeft', j: 'attack', r: 'guard', v: 'botWheel' };
 const keys = { has: k => (LEGACY_KEYS[k] ? input.held(LEGACY_KEYS[k]) : input.key(k.length === 1 ? `Key${k.toUpperCase()}` : k)), clear: () => input.reset() };
@@ -1027,13 +1030,12 @@ const nav = createFocusNav({ input, panels, order: ['mvp', '*', 'login', 'dead']
 $('menu-btn').onclick = () => menuOpen(); // phones: the Game Menu
 $('settings-btn').onclick = () => settingsUi.toggle();
 // The Controls screen (public/controlsui.js) and the account copy of fb_controls (public/controlsync.js). A change of
-// bindings (or the account's copy arriving) relabels the HUD.
-function controlsChanged() { if (state.joined && !state.spectator) buildSkillBar(); }
-const controlsUi = initControlsUi({ input, sfx, onChange: controlsChanged });
+// bindings (or the account's copy arriving) relabels the HUD through input.onLabels.
+const controlsUi = initControlsUi({ input, sfx });
 panels.register('controlsui', { esc: true });
 const controlSync = createControlSync({
   api, signedIn: () => !!(acct.cfg.accounts && acct.token),
-  onApply: () => { input.reload(); Object.assign(settings, loadSettings(), { device: settings.device }); applyAccess(settings); settingsUi.refresh(); controlsUi.refresh(); controlsChanged(); },
+  onApply: () => { input.reload(); Object.assign(settings, loadSettings(), { device: settings.device }); applyAccess(settings); settingsUi.refresh(); controlsUi.refresh(); },
 });
 
 const drag = { id: null, x: 0, y: 0 };
@@ -1091,6 +1093,15 @@ stickEl.addEventListener('pointercancel', endStick);
 
 // skill bar
 const BAR_ACTIONS = { 0: 'attack', 1: 'skill1', 2: 'skill2', 3: 'skill3', dodge: 'dodge', jump: 'jump', guard: 'guard', cover: 'cover', ...Object.fromEntries(CONSUMABLE_IDS.map((id, i) => [id, `item${i + 1}`])) };
+// The bar's key chips name the bindings on the active device (none under touch play). Only the chips' text changes, so a
+// device switch or a rebind relabels in place instead of rebuilding the bar.
+function labelBar() {
+  const touch = input.device === 'touch';
+  for (const b of $('skills').children) {
+    const a = BAR_ACTIONS[b.dataset.slot] || BAR_ACTIONS[b.dataset.item], k = a && b.querySelector('.key');
+    if (k) k.textContent = touch ? '' : keyLabel(a).toUpperCase();
+  }
+}
 function buildSkillBar(lvl = state.lvl) {
   const skills = CLASSES[state.cls].skills;
   mastery.barChanged(); // remember the names/pips this bar was built with
@@ -1106,10 +1117,7 @@ function buildSkillBar(lvl = state.lvl) {
     + threat.coverButton(state.cls, isTouch)
     + CONSUMABLE_IDS.map(id => `<button class="sk it2 ${id}" data-item="${id}" title="${CONSUMABLES[id].name}: ${CONSUMABLES[id].desc}"><span class="key">${isTouch ? '' : CONSUMABLES[id].key}</span>${CONSUMABLES[id].name.split(' ').pop()}<span class="cnt"></span><span class="cd"></span></button>`).join('')
     + `<button class="sk act" data-slot="act">Ready</button>`;
-  if (!isTouch || input.device === 'pad') for (const b of $('skills').children) { // key names from the bindings
-    const a = BAR_ACTIONS[b.dataset.slot] || BAR_ACTIONS[b.dataset.item], k = a && b.querySelector('.key');
-    if (k) k.textContent = keyLabel(a).toUpperCase();
-  }
+  labelBar();
   for (const b of $('skills').children) {
     if (b.dataset.item || b.dataset.slot === 'act') {
       b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('pressed'); if (b.dataset.item) useItem(b.dataset.item); else interact(); });
@@ -1389,7 +1397,7 @@ $('hall').addEventListener('click', e => { if (e.target.closest('[data-a="close"
 // The board's floating label (called every frame), and close the panel when walking away.
 function updateHallLabel() {
   const hl = $('hall-lbl'), hp = project(HALL.x, 5.4, HALL.z), hd = Math.hypot(state.x - HALL.x, state.z - HALL.z);
-  if (hp && hd < 22) { hl.style.display = ''; hl.style.left = `${hp[0]}px`; hl.style.top = `${hp[1]}px`; const html = `Hall of Clearers${hd < HALL.r + 1 ? `<br><small>${isTouch ? 'tap Read' : 'press F to read'}</small>` : ''}`; if (hl.innerHTML !== html) hl.innerHTML = html; }
+  if (hp && hd < 22) { hl.style.display = ''; hl.style.left = `${hp[0]}px`; hl.style.top = `${hp[1]}px`; const html = `Hall of Clearers${hd < HALL.r + 1 ? `<br><small>${tapping() ? 'tap Read' : `press ${keyHtml('interact')} to read`}</small>` : ''}`; if (hl.innerHTML !== html) hl.innerHTML = html; }
   else hl.style.display = 'none';
   if (hd > HALL.r + 7 && !$('hall').classList.contains('hidden')) toggleHall(false);
 }
@@ -2183,7 +2191,7 @@ function frame(now) {
     const ml = $('merchant-lbl'), mp = project(MERCHANT.x, 3.6, MERCHANT.z), md = Math.hypot(state.x - MERCHANT.x, state.z - MERCHANT.z);
     if (mp && md < 20) {
       ml.style.display = ''; ml.style.left = `${mp[0]}px`; ml.style.top = `${mp[1]}px`;
-      const html = `Merchant${md < MERCHANT.r + 1 ? `<br><small>${isTouch ? 'tap Trade' : 'press F to trade'}</small>` : ''}`;
+      const html = `Merchant${md < MERCHANT.r + 1 ? `<br><small>${tapping() ? 'tap Trade' : `press ${keyHtml('interact')} to trade`}</small>` : ''}`;
       if (ml.innerHTML !== html) ml.innerHTML = html;
     } else if (ml.style.display !== 'none') ml.style.display = 'none';
     updateHallLabel();
@@ -2237,4 +2245,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { settings, combat, wheel, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };
+window.__fb = { settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };

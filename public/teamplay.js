@@ -4,6 +4,7 @@
 //  - the Team Burst bar at the top of the party frames, the sync window prompt (T to join), the finisher's burst
 // main.js wiring: event(e), snap(w), frame(), partyBar() (prepended to the party frames), press() (T key / tap the bar).
 import { COMBOS, canPay, combosOf, BURST } from '/shared/teamplay.js';
+import { keyHtml, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 
 const CSS = `
 .tbar { padding: 5px 8px 6px; font-size: 11px; font-weight: 800; letter-spacing: .06em; border-radius: 8px; background: rgba(15,23,42,.72); color: #e2e8f0; }
@@ -63,9 +64,9 @@ export function initTeamplay({ state, players, mobs, fx, sfx, floatNum, project,
     if (!r) return '';
     const [key, g, left, ids] = r, open = left > 0, full = g >= BURST.max;
     const c = teamColors(key), solo = !state.party;
-    const key1 = isTouch ? 'Tap' : '<kbd>T</kbd>';
+    const key1 = tapping() ? 'Tap' : `<kbd>${keyHtml('teamBurst')}</kbd>`;
     const right = open ? (ids.includes(state.myId) ? `IN ${ids.length}` : `${key1} JOIN`) : full ? `${key1} READY` : `${g}%`;
-    return `<div class="tbar ${open ? 'sync' : full ? 'full' : ''}" style="--tb1:${c.c1};--tb2:${c.c2}" title="${solo ? 'Burst' : 'Team Burst'}: combos, Switches, Breaks, parries and revives fill it. Full: press T, partners press T to join."><div class="row"><span>${solo ? 'BURST' : 'TEAM BURST'}</span><span>${right}</span></div><div class="tb-track"><div class="tb-fill" style="width:${open ? 100 : g}%"></div></div></div>`;
+    return `<div class="tbar ${open ? 'sync' : full ? 'full' : ''}" style="--tb1:${c.c1};--tb2:${c.c2}" title="${solo ? 'Burst' : 'Team Burst'}: combos, Switches, Breaks, parries and revives fill it. Full: press ${keyHtml('teamBurst')}, partners press theirs to join."><div class="row"><span>${solo ? 'BURST' : 'TEAM BURST'}</span><span>${right}</span></div><div class="tb-track"><div class="tb-fill" style="width:${open ? 100 : g}%"></div></div></div>`;
   }
 
   function snap(w) {
@@ -79,7 +80,7 @@ export function initTeamplay({ state, players, mobs, fx, sfx, floatNum, project,
     if (open) {
       setColors(sync, r[0]);
       const inMe = r[3].includes(state.myId), names = r[3].map(id => players.get(id)?.name || state.roster.get(id)?.name || '?').join(' · ');
-      sync.innerHTML = `${inMe ? `SYNCED ×${r[3].length}` : `TEAM BURST! ${isTouch ? 'TAP' : 'PRESS T'}`}<small>${names}</small><div class="tb-time"><div style="width:${Math.min(100, (r[2] / BURST.sync) * 100)}%"></div></div>`;
+      sync.innerHTML = `${inMe ? `SYNCED ×${r[3].length}` : `TEAM BURST! ${tapping() ? 'TAP' : `PRESS ${keyHtml('teamBurst')}`}`}<small>${names}</small><div class="tb-time"><div style="width:${Math.min(100, (r[2] / BURST.sync) * 100)}%"></div></div>`;
     }
   }
 

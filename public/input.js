@@ -13,6 +13,7 @@
 //   pad                 { connected, id, recognised, family }; glyphs / setGlyphs('auto'|'xbox'|'sony'|'nintendo')
 //   onPad(fn)           fn(name, down) on every pad button edge, before actions (menus: return true to swallow it)
 //   onDevice(fn)        fn(device) after the active device changes; stick('LS'|'RS') a stick after the deadzone
+//   onLabels(fn)        fn() after what label() says may have changed: device, pad family / chosen picture, bindings
 // The pad (K1b, shared/gamepad.js): polled every frame, buttons resolved against bindings('pad') with LB as the
 // modifier, triggers with hysteresis, sticks with a deadzone; the camera stick takes sens / invertY from
 // fb_controls.access. Under keyboard & mouse the pad keeps only Start (the Game Menu); a pad seen for the first time
@@ -53,7 +54,8 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
   let capturing = null;
   // the pad: the one being read (index, id), its buttons down now, the hold actions they pressed, its sticks
   const pad = { index: -1, id: null, recognised: true, family: 'xbox', held: new Set(), active: new Map(), sticks: { LS: { x: 0, y: 0 }, RS: { x: 0, y: 0 } } };
-  const padSubs = new Set(), deviceSubs = new Set();
+  const padSubs = new Set(), deviceSubs = new Set(), labelSubs = new Set();
+  const relabel = () => { for (const fn of labelSubs) try { fn(); } catch (e) { console.error(e); } }; // (HUD key names: public/keyname.js, the skill bar)
   let pendingAsk = null; // the "Controller detected" prompt's answer(), while it's up (A: yes, B: no)
 
   const fire = (action, ev) => { for (const fn of subs.get(action) || []) fn(ev); };
@@ -194,11 +196,14 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     releasePad();
     device = d; settings.device = d === 'touch' ? undefined : d; save();
     for (const fn of deviceSubs) fn(d);
+    relabel();
     return true;
   }
   function padFound(gp) {
     if (pad.index !== -1) releasePad(); // (the active pad left and another took over: let go of its holds)
+    const fam = pad.family;
     pad.index = gp.index; pad.id = gp.id; pad.recognised = gp.mapping === 'standard'; pad.family = glyphFamily(gp.id);
+    if (pad.family !== fam && device === 'pad') relabel(); // (another kind of pad took over: Xbox ↔ PlayStation names)
     pad.held = readButtons(gp); // (buttons already down, the press that woke it: no edge, so it can't answer the prompt below)
     if (!pad.recognised) notify('Controller not recognised: its buttons are read by position. Rebind them in Controls if they feel wrong.');
     if (device === 'pad' || settings.padAsked) return;
@@ -256,12 +261,14 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
       if (r.result.error) return r.result;
       B[d] = r.bindings;
       controlsStore.set({ [d]: diff(d, B[d]) });
+      relabel();
       return r.result;
     },
-    resetBindings(d) { B[d] = merged(d, {}); controlsStore.set({ [d]: {} }); },
+    resetBindings(d) { B[d] = merged(d, {}); controlsStore.set({ [d]: {} }); relabel(); },
     reload() { // (K2: the account's copy replaced fb_controls) let go of every hold, then take the saved bindings
       for (const [code] of active) release(code, null, device, false);
       const c = controlsStore.get(); B.kbm = loadBindings('kbm', c.kbm); B.pad = loadBindings('pad', c.pad);
+      relabel();
     },
     setContext(name, on) { on ? ctx.add(name) : ctx.delete(name); },
     capture, readPads, peek, mouseDown, reset,
@@ -271,9 +278,10 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     get pad() { return { connected: pad.index !== -1, id: pad.id, recognised: pad.recognised, family: pad.family }; },
     get glyphs() { return glyphs(); },
     get glyphPick() { return GLYPH_FAMILIES.includes(settings.padGlyphs) ? settings.padGlyphs : 'auto'; }, // (the Controls screen's Xbox / PlayStation choice)
-    setGlyphs(f) { settings.padGlyphs = GLYPH_FAMILIES.includes(f) ? f : undefined; save(); },
+    setGlyphs(f) { settings.padGlyphs = GLYPH_FAMILIES.includes(f) ? f : undefined; save(); relabel(); },
     onPad(fn) { padSubs.add(fn); return () => padSubs.delete(fn); },
     onDevice(fn) { deviceSubs.add(fn); return () => deviceSubs.delete(fn); },
+    onLabels(fn) { labelSubs.add(fn); return () => labelSubs.delete(fn); },
     padHeld: name => pad.held.has(name),
     stick,
     get capturing() { return !!capturing; },

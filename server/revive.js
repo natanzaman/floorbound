@@ -52,7 +52,7 @@ const methods = {
       if ((m.def.boss || m.temp) && m.threat.has(p.id)) m.threat.set(p.id, m.threat.get(p.id) * DOWNED.bossThreat);
     }
     this.events.push({ t: 'down', id: p.id, src, d: DOWNED.secs, x: r2(p.x), z: r2(p.z) });
-    this.sys(`${p.name} is down! Hold E next to them to revive.`);
+    this.sys(`${p.name} is down! Hold {key:revive} next to them to revive.`);
     return true;
   },
 

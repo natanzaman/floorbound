@@ -1,6 +1,7 @@
 // Items lying on the ground: a small glowing gem per item, with a "F to pick up" label for the nearest one.
 import * as THREE from 'three';
 import { RARITY } from '/shared/items.js';
+import { keyHtml, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 
 const REACH = 2.4;
 
@@ -52,7 +53,7 @@ export function initGround({ scene, state, project, $ }) {
       const e = id && items.get(id), p = e && project(e.x, 1.4, e.z);
       if (!p) { lbl.style.display = 'none'; return; }
       lbl.style.display = ''; lbl.style.left = `${p[0]}px`; lbl.style.top = `${p[1]}px`;
-      const html = `<span style="color:${RARITY[e.r]?.color}">${e.name.replace(/</g, '&lt;')}</span><br><small>${isTouch ? 'tap Pick up' : 'press F to pick up'}</small>`;
+      const html = `<span style="color:${RARITY[e.r]?.color}">${e.name.replace(/</g, '&lt;')}</span><br><small>${tapping() ? 'tap Pick up' : `press ${keyHtml('interact')} to pick up`}</small>`;
       if (lbl.innerHTML !== html) lbl.innerHTML = html;
     },
   };

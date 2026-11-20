@@ -176,6 +176,35 @@ try {
   assert.ok(!(await wheelOpen()), 'the wheel is not left open after a blur');
   ok('a blur lets go of pad holds: the bot wheel closes');
 
+  // ---- prompts follow the device: the bar's key chips, world prompts, server text; the Controls tab follows too ----
+  const chips = () => S(() => [...document.querySelectorAll('#skills .key')].filter(k => k.closest('[data-slot],[data-item]')).map(k => k.textContent));
+  const want = () => S(() => { const I = window.__fb.input, A = { 0: 'attack', 1: 'skill1', 2: 'skill2', 3: 'skill3', dodge: 'dodge', jump: 'jump', guard: 'guard', cover: 'cover' };
+    return [...document.querySelectorAll('#skills .key')].filter(k => k.closest('[data-slot],[data-item]')).map(k => { const b = k.closest('button'), a = A[b.dataset.slot] || (b.dataset.item ? `item${[...document.querySelectorAll('#skills [data-item]')].indexOf(b) + 1}` : null); return a ? I.label(a).toUpperCase() : k.textContent; }); });
+  const kn = () => S(async () => { const m = await import('/keyname.js'); return [m.keyName('interact'), m.keyText('Hold {key:revive} next to them'), m.tapping()]; });
+  assert.equal(await S(() => window.__fb.input.device), 'pad');
+  assert.deepEqual(await chips(), await want(), 'under Controller the bar names pad buttons (pad 2 took over: its own kind)');
+  assert.ok((await chips()).includes('□') && (await chips()).includes('R1'), 'pad 2 reads as PlayStation: Skill 1 on □, Dodge on R1');
+  await S(() => window.__fb.input.setGlyphs('xbox'));
+  assert.ok((await chips()).includes('X') && (await chips()).includes('RB'), 'the Xbox picture chosen: Skill 1 on X, Dodge on RB');
+  assert.deepEqual(await kn(), [await S(() => window.__fb.input.label('interact')), `Hold ${await S(() => window.__fb.input.label('revive'))} next to them`, false], 'prompts and server text name the pad button');
+  await S(() => window.__fb.controlsUi.open());
+  assert.equal(await S(() => window.__fb.controlsUi.tab), 'pad', 'Controls opens on the Controller tab');
+  await S(() => window.__fb.input.setDevice('kbm')); await frames(1);
+  assert.ok((await chips()).includes('1') && !(await chips()).includes('RB'), 'back on keyboard the bar names keys again, no rebuild needed');
+  assert.deepEqual(await chips(), await want());
+  assert.equal((await kn())[0], 'F', 'world prompts say F again');
+  assert.equal(await S(() => window.__fb.controlsUi.tab), 'kbm', 'the open Controls screen follows to the Keyboard tab');
+  assert.ok(await S(() => !document.getElementById('cu-tab-kbm').classList.contains('hidden') && document.getElementById('cu-tab-pad').classList.contains('hidden')));
+  await p.click('#controlsui input[name=cu-dev][value=pad]'); await frames(1);
+  assert.equal(await S(() => window.__fb.input.device), 'pad', 'the radio switches to Controller');
+  assert.equal(await S(() => window.__fb.controlsUi.tab), 'pad', 'and the tab follows it at once');
+  assert.ok(await S(() => !document.getElementById('cu-tab-pad').classList.contains('hidden')) && /Playing with/.test(await S(() => document.getElementById('cu-msg-pad').textContent)));
+  assert.ok((await chips()).includes('X'), 'and the bar names pad buttons again');
+  await S(() => window.__fb.controlsUi.close());
+  await S(() => window.__fb.input.setGlyphs('auto'));
+  assert.ok((await chips()).includes('□'), 'back to auto: PlayStation names');
+  ok('key hints follow the device (bar, prompts, server text); the Controls tab follows a device switch');
+
   assert.deepEqual(errors, [], 'no page errors');
   console.log(`padsmoke: all ${n} checks passed`);
 } finally {

@@ -5,6 +5,7 @@ import { F2, GATE2, WAYSTONES, STAIRWAY, PHASE_TEXT2, inArena2, inGateZone2, nea
 import { FLOOR_NAMES, onFloor3 } from '/shared/floor3.js';
 import { createFloor2 } from '/floor2world.js';
 import { PACE } from '/shared/data.js';
+import { keyName, keyHtml, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 
 // ctx: { scene, sun, occluders, fx, sfx, state, mobs, players, send, banner, callout, floatNum, log, shake, project, isTouch, hallOpen }
 export function initFloor2Client(ctx) {
@@ -151,7 +152,7 @@ export function initFloor2Client(ctx) {
         break;
       case 'stair':
         fx.rareBeam(e.x, e.z, 5); sfx.play('rare', { x: e.x, z: e.z }, 1);
-        if (!onFloor2(state.x) && state.z > 120) setTimeout(() => ctx.banner('THE STAIRWAY APPEARS', `Step into it and press ${ctx.isTouch ? 'Warp' : 'F'} to climb to Floor 2 (${e.d} s)`), 6500);
+        if (!onFloor2(state.x) && state.z > 120) setTimeout(() => ctx.banner('THE STAIRWAY APPEARS', `Step into it and press ${tapping() ? 'Warp' : keyName('interact')} to climb to Floor 2 (${e.d} s)`), 6500);
         break;
       case 'warp': {
         fx.beam(e.x0, e.z0, 0x5eead4, 1.6); fx.beam(e.x, e.z, 0x5eead4, 2.2); fx.ring(e.x, e.z, 3, 0x99f6e4, 0.8);
@@ -186,7 +187,7 @@ export function initFloor2Client(ctx) {
     if (e.n !== 2) mobs.get(e.by)?.model.anim?.windup?.('wave', e.d);
     sfx.play('warn', { x: e.x, z: e.z }, e.n === 2 ? 1 : 1.5);
     if (e.n === 2) { if (inArena2(state.x, state.z) && !state.spectator) ctx.callout('RIPTIDE', 'A second wave right behind: roll again', e.d + 0.4); }
-    else if (inArena2(state.x, state.z) && !state.spectator) ctx.callout('TIDAL WAVE', `Roll (${ctx.isTouch ? 'Dodge' : 'Shift'}) THROUGH it as it reaches you`, e.d + 0.6);
+    else if (inArena2(state.x, state.z) && !state.spectator) ctx.callout('TIDAL WAVE', `Roll (${tapping() ? 'Dodge' : keyName('dodge')}) THROUGH it as it reaches you`, e.d + 0.6);
     else if (state.spectator && near(e.x, e.z, 60)) ctx.callout('TIDAL WAVE', 'Roll through it as it reaches you', e.d + 0.6);
     setTimeout(() => { sfx.play('boom', { x: e.x, z: e.z }, 1.4); if (inArena2(state.x, state.z)) ctx.shake(0.35); }, e.d * 1000);
   }
@@ -256,8 +257,8 @@ export function initFloor2Client(ctx) {
       if (inner) { inner.position.y = 1.7 + Math.sin(t * 2.2 + m.id) * 0.25; if (inner.userData.motes) inner.userData.motes.rotation.y += dt * 2.5; }
     }
     if (!state.spectator) {
-      WAYSTONES.forEach((w, i) => place(wsLabels[i], w.x, 5.2, w.z, `Waystone${Math.hypot(state.x - w.x, state.z - w.z) < 3.2 ? `<br><small>${ctx.isTouch ? 'tap Warp' : 'press F to travel'}</small>` : ''}`, 24));
-      if (data.stair) place(stairLabel, data.stair[0], 6.2, data.stair[1], `The Stairway · Floor 2 <small>${Math.ceil(data.stair[2])} s</small>${Math.hypot(state.x - data.stair[0], state.z - data.stair[1]) < STAIRWAY.use ? `<br><small>${ctx.isTouch ? 'tap Warp' : 'press F to climb'}</small>` : ''}`, 40);
+      WAYSTONES.forEach((w, i) => place(wsLabels[i], w.x, 5.2, w.z, `Waystone${Math.hypot(state.x - w.x, state.z - w.z) < 3.2 ? `<br><small>${tapping() ? 'tap Warp' : `press ${keyHtml('interact')} to travel`}</small>` : ''}`, 24));
+      if (data.stair) place(stairLabel, data.stair[0], 6.2, data.stair[1], `The Stairway · Floor 2 <small>${Math.ceil(data.stair[2])} s</small>${Math.hypot(state.x - data.stair[0], state.z - data.stair[1]) < STAIRWAY.use ? `<br><small>${tapping() ? 'tap Warp' : `press ${keyHtml('interact')} to climb`}</small>` : ''}`, 40);
       else stairLabel.style.display = 'none';
       if (!panel.classList.contains('hidden') && !nearWaystone(state.x, state.z)) panel.classList.add('hidden');
     }
