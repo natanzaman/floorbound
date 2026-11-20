@@ -474,7 +474,7 @@ Same rules as F–I: flock lock, push with `--force-with-lease`.
 |---|---|---|---|---|
 | J1 Rescue mechanics | `feat/rescue` | done | agent rescue | db4a5a7 |
 | J2 Multi-area boss fights (Floor 3 first) | `feat/arenas` | done | agent arenas | f0fdc9c |
-| J3 Boss timing tables + melee openings + tuning harness | `feat/openings` | todo (after J1 and J2) | | |
+| J3 Boss timing tables + melee openings + tuning harness | `feat/openings` | done (hard-review fixes 3a4c448) | batch 2026-11-19 | f9ece59 |
 | J4 Threat rules | `feat/threatrules` | done | agent threatrules | 2e52b29 |
 
 ### Shared contracts for J
@@ -636,10 +636,10 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
 | Task | Branch | Status | Owner | Merge |
 |---|---|---|---|---|
 | K1a Input contract + keyboard rewire + keys test | `feat/input` | done | agent input | 9103a86 |
-| K1b Gamepad + focus navigation | `feat/gamepad` | todo (after K1a) | | |
-| K2 Controls screen (pictures, lists, editing) | `feat/controlsui` | todo (after K1's action/binding contract lands) | | |
-| K3 Accessibility options | `feat/access` | todo (with K2) | | |
-| K4 Controller verification (scripted gamepad "bots") | `feat/padtest` | todo (after K1) | | |
+| K1b Gamepad + focus navigation | `feat/gamepad` | done (real-pad check a0df2b8) | batch 2026-11-19 | 0fffadd |
+| K2 Controls screen (pictures, lists, editing) | `feat/controlsui` | done (hard-review fixes 2a2fc9a) | batch 2026-11-19 | eb1a318 |
+| K3 Accessibility options | `feat/access` | done | batch 2026-11-19 | b9b1607 |
+| K4 Controller verification (scripted gamepad "bots") | `feat/padtest` | done | batch 2026-11-19 | 0bb37d8 |
 
 ### Shared contracts for K
 - **Action list** (`shared/controls.js`): every game control has an id, label, group (Move, Camera, Combat, Skills, Items, Social, Menus) and type (`button`, `hold`, `axis`, `toggle`).
@@ -688,7 +688,7 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
 - **Account sync:**
   - `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS settings JSONB`, capped at 8 KB, with a `v` field;
   - only bindings and accessibility sync; graphics, camera mode and active device stay local;
-  - on login the server copy wins if present, otherwise local uploads;
+  - on login the server copy wins if present, otherwise local uploads; exception (hard review 2026-11-20): when this browser has changes for this account the server never got (`fb_controls_unsynced`), those go up instead; a pending change of another account is dropped, never uploaded;
   - unknown ids are dropped, and new actions get their defaults unless the key is taken.
 - **K3 cuts:** "sprint" (sprinting is automatic) and "aim assist strength" (attacks already auto-aim). Reduce-motion is checked inside `shake()` and `slowMotion()`, exempting `cine.js`. The colour-blind telegraph palette and sound cues wait until J merges (telegraph colours are spread across files J is editing).
 - **Touch** is a third, automatic device on the same action bus. The touch HUD hides while a pad is active.
