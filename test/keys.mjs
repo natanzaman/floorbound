@@ -208,7 +208,25 @@ try {
   assert.ok(await visible('botwheel'), 'a quick tap keeps it open');
   await tap('KeyV');
   assert.ok(!(await visible('botwheel')), 'V again closes it');
-  ok('V: hold for the bot wheel, tap to keep it open, tap again to close');
+  let mw = await mark();
+  await p.keyboard.down('KeyV'); await frames(2);
+  assert.ok(await visible('botwheel'), 'holding V opens the wheel again');
+  await S(() => { const b = document.querySelector('#botwheel .wcmd'); b.disabled = false; window.__fb.wheel.point(Math.cos(Math.atan2(parseFloat(b.style.top), parseFloat(b.style.left))), Math.sin(Math.atan2(parseFloat(b.style.top), parseFloat(b.style.left)))); }); // (no bots here: enable one order and point at it)
+  assert.ok(await S(() => !!document.querySelector('#botwheel .wcmd.pick')), 'pointing at an order');
+  await S(() => dispatchEvent(new Event('blur'))); await frames(2);
+  assert.ok(!(await visible('botwheel')), 'losing focus while V is held closes the wheel (no order)');
+  await p.keyboard.up('KeyV'); await frames(2);
+  assert.ok(!(await visible('botwheel')), 'and letting go of V afterwards opens nothing');
+  assert.equal((await sent(mw, 'botcmd')).length, 0, 'focus lost while pointing: no order sent');
+  // the account's controls arriving (input.reload, after sign-in) also cancels a held wheel
+  mw = await mark();
+  await p.keyboard.down('KeyV'); await frames(2);
+  await S(() => { const b = document.querySelector('#botwheel .wcmd'); b.disabled = false; window.__fb.wheel.point(Math.cos(Math.atan2(parseFloat(b.style.top), parseFloat(b.style.left))), Math.sin(Math.atan2(parseFloat(b.style.top), parseFloat(b.style.left)))); });
+  await S(() => window.__fb.input.reload()); await frames(2);
+  await p.keyboard.up('KeyV'); await frames(2);
+  assert.equal((await sent(mw, 'botcmd')).length, 0, 'controls reloaded while pointing: no order sent');
+  await S(() => window.__fb.wheel.close());
+  ok('V: hold for the bot wheel, tap to keep it open, tap again to close; focus lost cancels a held wheel');
 
   // ---- chat: Enter focuses, keys type instead of playing, Enter sends, Esc leaves ----
   await tap('Enter');

@@ -7,6 +7,7 @@
 //    walls: a red cross in a bleed-out ring, the name, and the revive progress.
 //  - Downed: you crawl (crawlCap) and can't attack, roll or jump (isDown); the rig slumps (the `downed` pose, world.js).
 import { DOWNED } from '/shared/revive.js';
+import { tapping } from '/keyname.js'; // touch devices tap unless playing with a pad
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const RING = 2 * Math.PI * 16; // svg circle r=16
@@ -87,7 +88,7 @@ export function initRevive({ state, players, send, project, layer, guide, sfx, f
     if (held) { // (pressed again if the channel broke: a hit, a step too far)
       if (sent !== t.id || (t.downed.by !== state.myId && now - sentAt > 400)) { send({ type: 'revive', on: 1, id: t.id }); sent = t.id; sentAt = now; }
     } else if (sent) { send({ type: 'revive', on: 0 }); sent = 0; }
-    const html = t ? `<div>${t.downed.by === state.myId ? 'Reviving' : isTouch ? 'Hold here to revive' : `Hold <b>${esc(keyLabel('revive'))}</b> to revive`} ${esc(name(t.id))}</div><div class="rp-bar"><div style="width:${Math.round((t.downed.by === state.myId ? t.downed.prog : 0) * 100)}%"></div></div>` : '';
+    const html = t ? `<div>${t.downed.by === state.myId ? 'Reviving' : tapping() ? 'Hold here to revive' : `Hold <b>${esc(keyLabel('revive'))}</b> to revive`} ${esc(name(t.id))}</div><div class="rp-bar"><div style="width:${Math.round((t.downed.by === state.myId ? t.downed.prog : 0) * 100)}%"></div></div>` : '';
     if (html !== lastPrompt) { lastPrompt = html; prompt.innerHTML = html; prompt.classList.toggle('hidden', !t); }
     // markers over downed partymates (all of them for spectators), through walls
     const seen = new Set();

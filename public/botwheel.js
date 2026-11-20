@@ -99,6 +99,10 @@ export function initBotWheel({ send, state, players, log, keyLabel = () => 'V', 
       if (hover) issue(hover);
       if (isOpen()) close(); // (nothing pointed at, or no bots to give it to)
     },
+    cancel() { // the hold was cut off (focus lost, device switch, pad gone): close a held wheel without giving an order
+      if (!key) return;
+      key = false; close();
+    },
     hasBots: () => partyBots().length > 0,
     point(x, y) { // a stick (x right, y down): highlight the order it points at; release the button (toggle: press it again) to give it (K1b)
       if (!isOpen() || Math.hypot(x, y) < 0.5) return;

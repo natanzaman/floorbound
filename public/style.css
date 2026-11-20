@@ -638,6 +638,14 @@ body.pad #talentsp .tn.nav-focus .core { stroke: #facc15 !important; stroke-widt
 #controlsui .cu-tabs { display: flex; gap: 6px; border-bottom: 1px solid rgba(160,200,255,.2); margin-top: 6px; }
 #controlsui .cu-tabs button { padding: 7px 14px; border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0; background: transparent; opacity: .7; }
 #controlsui .cu-tabs button.on { background: rgba(255,255,255,.08); border-color: rgba(160,200,255,.25); opacity: 1; font-weight: 600; }
+#controlsui .cu-style { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 2px; }
+#controlsui .cu-style > button { padding: 5px 14px; border-radius: 999px; border: 1px solid rgba(160,200,255,.25); background: transparent; opacity: .7; }
+#controlsui .cu-style > button.on { background: rgba(120,170,255,.22); border-color: rgba(160,200,255,.6); opacity: 1; font-weight: 600; }
+#controlsui .cu-style small { opacity: .75; margin-left: 4px; }
+#controlsui .cu-style small button { padding: 2px 10px; font-size: inherit; color: inherit; background: transparent; border: 1px solid rgba(160,200,255,.45); border-radius: 999px; cursor: pointer; }
+#controlsui .cu-usb { display: block; margin-top: 4px; opacity: .85; }
+#controlsui .cu-usb button { padding: 2px 10px; margin-left: 4px; }
+#controlsui .cu-touch { fill: rgba(255,255,255,.04); stroke: rgba(160,200,255,.3); stroke-width: 1.5; }
 #controlsui .cu-pic:empty { display: none; }
 /* the device pictures (K2 part 2): keys press down on hover, light up while held; ★ = bound; tooltip and popover */
 #controlsui .cu-pic { position: relative; margin: 10px 0 4px; }

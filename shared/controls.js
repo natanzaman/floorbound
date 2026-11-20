@@ -238,15 +238,15 @@ export function assign(bindings, device, action, slot, binding, mode = 'unbind')
 }
 // The conflict prompt's text for check()'s conflicts (plain text: the caller escapes it). A key inside another
 // action's axis names the whole axis ("W is part of WASD on Move"): unbinding it clears every key of that axis.
-export function conflictText(bindings, device, binding, conflicts) {
+export function conflictText(bindings, device, binding, conflicts, name = bindingLabel) { // name(b): how a binding is shown (the pad's button names)
   const b = normalize(binding, device), same = [], parts = [];
   for (const c of conflicts || []) {
     const o = normalize(bindings[c.action]?.[c.slot], device), label = ACTION[c.action]?.label || c.action;
     if (o === b) same.push(label);
-    else if (isAxisBinding(o) && !isAxisBinding(b)) parts.push(`${bindingLabel(b)} is part of ${bindingLabel(o)} on ${label}: unbinding it clears all of ${bindingLabel(o)}.`);
-    else parts.push(`${bindingLabel(isAxisBinding(o) ? tokens(o).filter(k => tokens(b).includes(k)).join(',') : o)} is already on ${label}.`);
+    else if (isAxisBinding(o) && !isAxisBinding(b)) parts.push(`${name(b)} is part of ${name(o)} on ${label}: unbinding it clears all of ${name(o)}.`);
+    else parts.push(`${name(isAxisBinding(o) ? tokens(o).filter(k => tokens(b).includes(k)).join(',') : o)} is already on ${label}.`);
   }
-  return [...(same.length ? [`${bindingLabel(b)} is already on ${same.join(', ')}.`] : []), ...parts].join(' ');
+  return [...(same.length ? [`${name(b)} is already on ${same.join(', ')}.`] : []), ...parts].join(' ');
 }
 // Would a swap give every conflicting action the old binding? (The conflict prompt offers Swap only then.)
 export function canSwap(bindings, device, action, slot, binding) {

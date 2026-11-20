@@ -47,7 +47,7 @@ export const MasteryMethods = {
     p.masteryNow = true; // send the panel data right away
     this.events.push({ t: 'mlvl', to: p.id, id: p.id, sk: skId, lvl, evo: evo ? 1 : 0 });
     const name = this.skillOf(p, skId)?.name || skId;
-    this.sys(evo ? `${name} reached Mastery ${lvl}: it can EVOLVE! Press K to choose.` : `${name} reached Mastery ${lvl}.`, p.id);
+    this.sys(evo ? `${name} reached Mastery ${lvl}: it can EVOLVE! Press {key:skillTree} to choose.` : `${name} reached Mastery ${lvl}.`, p.id);
     this.track(p, 'mastery', { skill: skId, lvl });
   },
   creditBy(who, skId, amount, kind) {

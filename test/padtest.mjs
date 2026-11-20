@@ -7,10 +7,12 @@
 //   3. the modifier layer and chords: LB+X Team Burst, LB+Y bot wheel (hold) + right-stick pick, LB+A cover, LB+B select
 //      aimed, LB+R3 clear, LB+Up / LB+Right panels, and LB alone does nothing
 //   4. the Warden in a party with bots, fought on the pad, with a jump registered during a Quake Ring
+//   5. a real revive and a real Cover in a party with a bot: the bot is downed (TEST_HOOKS), the pad walks over and holds
+//      revive until the server stands it up; LB+A covers the bot (the server's cover event names it)
 // Then it prints a coverage table: each action of shared/controls.js and where it was verified on the pad.
 // Section 2 rebinds Jump (A -> X, with the Swap prompt) through the Controls screen by pad presses only; the other
 // rebinds of that layout use input.setBinding (one UI rebind keeps the run short). Needs Playwright for Node (see test/keys.mjs).
-// Usage: PORT=376xx node test/padtest.mjs      (uses PORT .. PORT+3; ONLY=1,2,3,4 picks sections)
+// Usage: PORT=376xx node test/padtest.mjs      (uses PORT .. PORT+4; ONLY=1,2,3,4,5 picks sections)
 import assert from 'node:assert/strict';
 import { ACTIONS } from '../shared/controls.js';
 import { openPad, startServer, Coverage, sleep, angDiff, BTN } from './padlib.mjs';
@@ -18,7 +20,7 @@ const { chromium } = await loadPW();
 async function loadPW() { return import(process.env.PLAYWRIGHT || 'playwright'); }
 
 const PORT = +(process.env.PORT || 37600);
-const ONLY = (process.env.ONLY || '1,2,3,4').split(',').map(Number);
+const ONLY = (process.env.ONLY || '1,2,3,4,5').split(',').map(Number);
 let n = 0;
 const ok = (tag, name) => console.log(`  ok ${++n} - [${tag}] ${name}`);
 const cov = new Coverage();
@@ -352,8 +354,18 @@ async function chords(port) {
     await P.btn('LB', true); await P.btn('Y', true); await frames(2); await P.p.waitForTimeout(450); // (the wheel cancels only after being open 350 ms of real time: no state to poll)
     await P.btn('Y', false); await P.btn('LB', false); await frames(3);
     assert.ok(!(await P.visible('botwheel')) && (await sent(m, 'botcmd')).length === 0, 'released on nothing: closed, no order');
-    ok(tag, 'LB+Y holds the bot wheel, the right stick picks, release gives the order (or cancels)');
-    // the window loses focus with the wheel held open and an order picked: the wheel closes, no order (no unconfirmed order on alt-tab)
+    // focus lost while held and pointing at an order: cancelled, no order (nor when the buttons come up afterwards)
+    m = await mark();
+    await P.btn('LB', true); await P.btn('Y', true); await frames(2);
+    await P.axes([0, 0, 0, -1]); await frames(3);
+    await P.p.waitForFunction(() => !!document.querySelector('#botwheel .wcmd.pick'), null, { timeout: 5000 });
+    await P.p.keyboard.down('KeyV'); await frames(1); await P.p.keyboard.up('KeyV'); await frames(2); // (V is the keyboard's wheel key)
+    assert.ok(await P.visible('botwheel') && (await sent(m, 'botcmd')).length === 0, 'under Controller, tapping V on the keyboard neither gives the order nor closes the wheel');
+    await S(() => dispatchEvent(new Event('blur'))); await frames(2);
+    assert.ok(!(await P.visible('botwheel')), 'focus lost: the held wheel closes');
+    await P.axes([0, 0, 0, 0]); await P.btn('Y', false); await P.btn('LB', false); await frames(3);
+    assert.equal((await sent(m, 'botcmd')).length, 0, 'focus lost while pointing: no order sent');
+    ok(tag, 'LB+Y holds the bot wheel, the right stick picks, release gives the order (or cancels; focus lost cancels)');
     const pointUp = async () => {
       await P.axes([0, 0, 0, -1]); await frames(3);
       await P.p.waitForFunction(() => !!document.querySelector('#botwheel .wcmd.pick'), null, { timeout: 5000 }).catch(() => {});
@@ -361,14 +373,6 @@ async function chords(port) {
       await P.axes([0, 0, 0, 0]); await frames(1);
       return c;
     };
-    m = await mark();
-    await P.btn('LB', true); await P.btn('Y', true); await frames(2);
-    assert.ok(await P.visible('botwheel') && await pointUp(), 'held open, an order picked');
-    await S(() => dispatchEvent(new Event('blur'))); await frames(2);
-    assert.ok(!(await P.visible('botwheel')), 'a blur closes the wheel');
-    await P.btn('Y', false); await P.btn('LB', false); await frames(3);
-    assert.equal((await sent(m, 'botcmd')).length, 0, 'and gives no order');
-    ok(tag, 'a blur with the wheel held closes it without an order');
     // Settings → Toggle the bot wheel: LB+Y opens it, the right stick picks, LB+Y again gives the picked order
     await S(() => { window.__fb.settings.wheelToggle = true; });
     try {
@@ -548,6 +552,69 @@ async function warden(port) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// Section 5: a real revive and a real Cover on the pad, in a party with one bot (it stays put).
+// ---------------------------------------------------------------------------------------------------------------
+async function party(port) {
+  const tag = 'party';
+  const srv = await startServer(port); servers.push(srv);
+  const P = await openPad(browser, srv.base, { onError: m => errors.push(`${tag}: ${m}`) });
+  const { S, frames, mark, sent, keepAlive } = P;
+  const C = (action, how) => cov.mark(tag, action, how);
+  await P.join('Partypad', 'guardian');
+  try {
+    await P.addBots(['swordsman'], 'stay', 3);
+    const mate = () => S(() => { const s = window.__fb.state, q = [...window.__fb.players.values()].find(o => o.party === s.party && o.id !== s.myId); return q && { id: q.id, x: q.x, z: q.z, downed: q.downed ? { by: q.downed.by } : null, dead: !!q.dead, d: Math.hypot(q.x - s.x, q.z - s.z) }; });
+    const ev = (m, t) => S(([m, t]) => window.__ev.slice(m).filter(e => e.t === t), [m, t]);
+    const evMark = () => S(() => window.__ev.length);
+    const faceTo = async (x, z) => {
+      for (let i = 0; i < 12; i++) {
+        const s = await P.st(); const want = Math.atan2(x - s.x, z - s.z);
+        const diff = Math.atan2(Math.sin(want - s.yaw), Math.cos(want - s.yaw));
+        if (Math.abs(diff) < 0.2) return;
+        await P.axes([0, 0, diff > 0 ? -1 : 1, 0]); await frames(Math.abs(diff) > 1 ? 4 : 1); await P.axes([0, 0, 0, 0]); await frames(1);
+      }
+    };
+    const walkTo = async (near) => { // left stick toward the bot until within `near` m
+      for (let i = 0; i < 40; i++) {
+        const q = await mate(); if (!q || q.d < near) return q;
+        await keepAlive(); await faceTo(q.x, q.z);
+        await P.axes([0, -1, 0, 0]); await frames(q.d > 4 ? 4 : 1); await P.axes([0, 0, 0, 0]); await frames(2);
+      }
+      return mate();
+    };
+    const myId = await S(() => window.__fb.state.myId);
+
+    // Cover: LB+A (Guardian) dashes to the bot; the server's cover event names it as the one covered
+    { const q = await walkTo(5); assert.ok(q && q.d < 8, `the bot is within Cover range (${q?.d?.toFixed(1)} m)`); }
+    await keepAlive();
+    let e0 = await evMark(), m = await mark();
+    await P.tap('cover');
+    assert.equal((await sent(m, 'cover')).length, 1, 'the cover button sends cover');
+    await P.p.waitForFunction(([e0, me]) => window.__ev.slice(e0).some(e => e.t === 'cover' && e.id === me), [e0, myId], { timeout: 5000 });
+    const cv = (await ev(e0, 'cover')).find(e => e.id === myId);
+    assert.ok(!cv.fail && cv.w === (await mate()).id, `the server covered the bot (${JSON.stringify(cv)})`);
+    C('cover', 'LB+A: the server covered the bot (cover event names it)');
+    ok(tag, 'Cover on the pad: the server covers the bot');
+
+    // Revive: the bot goes down (test hook, long bleed-out); walk over, hold revive until the server stands it up
+    e0 = await evMark();
+    await S(id => window.__fb.send({ type: 'test', down: 1, id, secs: 120 }), (await mate()).id);
+    await P.p.waitForFunction(() => { const s = window.__fb.state; return [...window.__fb.players.values()].some(o => o.party === s.party && o.id !== s.myId && o.downed); }, null, { timeout: 5000 });
+    { const q = await walkTo(1.8); assert.ok(q?.downed && q.d < 2.6, `next to the downed bot (${q?.d?.toFixed(1)} m)`); }
+    m = await mark();
+    const letGo = await P.hold('revive');
+    await P.p.waitForFunction(([e0, me]) => window.__ev.slice(e0).some(e => e.t === 'revived' && e.by === me), [e0, myId], { timeout: 15000 })
+      .catch(async () => { throw new Error(`no revive: ${JSON.stringify({ mate: await mate(), sent: await sent(m, 'revive'), ev: await S(e0 => window.__ev.slice(e0), e0) })}`); });
+    await letGo();
+    assert.ok((await sent(m, 'revive')).some(o => o.on), 'holding the revive button sent revive on');
+    { const q = await mate(); assert.ok(q && !q.downed && !q.dead, 'the bot is standing again'); }
+    C('revive', 'held next to a downed bot: the server revived it');
+    ok(tag, `revive on the pad (${(await P.keys('revive')).join('+')} held): the server stands the bot up`);
+  } finally { /* the bot goes with the page */ }
+  await P.p.close(); await srv.stop();
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 try {
   browser = await chromium.launch({ headless: true, args: ['--enable-unsafe-swiftshader'] });
   if (ONLY.includes(1)) await mainFlow('default', PORT);
@@ -555,23 +622,22 @@ try {
   if (ONLY.includes(2)) await mainFlow('rebound', PORT + 1, [['attack', 'LT'], ['dodge', 'B'], ['item1', 'Left']]);
   if (ONLY.includes(3)) await chords(PORT + 2);
   if (ONLY.includes(4)) await warden(PORT + 3);
+  if (ONLY.includes(5)) await party(PORT + 4);
 
   // ---- coverage ----
   console.log('\nCoverage: each action of shared/controls.js, verified on the pad');
-  console.log('action'.padEnd(14) + 'default'.padEnd(14) + 'rebound'.padEnd(14) + 'chords'.padEnd(9) + 'warden'.padEnd(9) + 'note');
+  console.log('action'.padEnd(14) + 'default'.padEnd(14) + 'rebound'.padEnd(14) + 'chords'.padEnd(9) + 'warden'.padEnd(9) + 'party'.padEnd(7) + 'note');
   const unverified = [];
   for (const a of ACTIONS) {
-    const m = cov.by.get(a.id);
-    const col = t => (m?.has(t) ? 'yes' : '-');
+    const mm = cov.by.get(a.id);
     let note = '';
     if (a.kbmOnly) note = 'keyboard & mouse only (no pad binding)';
-    else if (a.id === 'revive') note = m?.get('default') || '';
-    const mm = cov.by.get(a.id);
-    const c = t => (mm?.has(t) ? (a.id === 'revive' ? 'resolve only' : 'yes') : '-');
-    console.log(a.id.padEnd(14) + c('default').padEnd(14) + c('rebound').padEnd(14) + c('chords').padEnd(9) + c('warden').padEnd(9) + note);
+    else if (a.id === 'revive') note = mm?.get('party') || mm?.get('default') || '';
+    const c = t => (mm?.has(t) ? (a.id === 'revive' && t !== 'party' ? 'resolve only' : 'yes') : '-'); // (sections 1-2 only resolve revive; 5 revives for real)
+    console.log(a.id.padEnd(14) + c('default').padEnd(14) + c('rebound').padEnd(14) + c('chords').padEnd(9) + c('warden').padEnd(9) + c('party').padEnd(7) + note);
     if (!a.kbmOnly && !mm) unverified.push(a.id);
   }
-  if (ONLY.length === 4) assert.deepEqual(unverified, [], 'every pad action verified');
+  if ([1, 2, 3, 4].every(k => ONLY.includes(k))) assert.deepEqual(unverified, [], 'every pad action verified');
   assert.deepEqual(errors, [], 'no page errors');
   console.log(`\npadtest: all ${n} checks passed (sections ${ONLY.join(',')})`);
 } finally { await stopAll(); }

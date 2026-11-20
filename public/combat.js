@@ -338,7 +338,7 @@ export function initCombat(ctx) {
   }
 
   const guardButton = (cls, touch) => cls === 'guardian' && !touch
-    ? `<button class="sk sg" data-slot="guard" title="Guard (hold R): frontal hits take 70% less damage; you can't attack. Press it just before a hit lands to PARRY."><span class="key">R</span>Guard<span class="cd"></span><span class="cdt"></span></button>` : '';
+    ? `<button class="sk sg" data-slot="guard" title="Guard (hold): frontal hits take 70% less damage; you can't attack. Press it just before a hit lands to PARRY."><span class="key">R</span>Guard<span class="cd"></span><span class="cdt"></span></button>` : '';
   function bindGuardButton(b) {
     b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('pressed'); guard(true); });
     const up = () => { b.classList.remove('pressed'); guard(false); };

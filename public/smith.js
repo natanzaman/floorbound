@@ -9,6 +9,7 @@ import {
 import { STYLES } from '/shared/styles.js';
 import { rerollCost, affixText, isTeamAffix } from '/shared/loot.js';
 import { axHtml, setTagHtml } from '/loot.js';
+import { keyHtml, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
 const TABS = [['refine', 'Refine'], ['craft', 'Craft'], ['salvage', 'Salvage'], ['reforge', 'Reforge'], ['reroll', 'Affixes']];
@@ -228,7 +229,7 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
     const sp = project(SMITH.x, 4.2, SMITH.z);
     if (sp && d < 22) {
       lbl.style.display = ''; lbl.style.left = `${sp[0]}px`; lbl.style.top = `${sp[1]}px`;
-      const html = `Smith${d < SMITH.r + 1 ? `<br><small>${isTouch ? 'tap Forge' : 'press F to forge'}</small>` : ''}`;
+      const html = `Smith${d < SMITH.r + 1 ? `<br><small>${tapping() ? 'tap Forge' : `press ${keyHtml('interact')} to forge`}</small>` : ''}`;
       if (lbl.innerHTML !== html) lbl.innerHTML = html;
     } else lbl.style.display = 'none';
     if (isOpen() && (d > SMITH.r + 6 || state.dead)) toggle(false);

@@ -12,6 +12,7 @@ import {
   TALENTS, TREES, MILESTONES, pointsAt, levelForPoint, nodeDef, nodesOf, spentOf, branchSpent, spentAbove, spendBlock, refundBlock,
   talentTotals, nodeLines, effectText, nodesForSkill, STAT_TEXT,
 } from '/shared/talents.js';
+import { keyName, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const hex = n => `#${n.toString(16).padStart(6, '0')}`;
@@ -230,7 +231,7 @@ export function initTalents(ctx) {
     guide.seen.add('talent');
     try { localStorage.setItem('fb_tips', JSON.stringify([...guide.seen])); } catch {}
     const el = guide.tipEl; if (!el) return;
-    el.textContent = `You earned a talent point! ${isTouch ? 'Tap Skills' : 'Press K'} to open your Skill Tree.`;
+    el.textContent = `You earned a talent point! ${tapping() ? 'Tap Skills' : `Press ${keyName('skillTree')}`} to open your Skill Tree.`;
     el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
     clearTimeout(firstTip.t); firstTip.t = setTimeout(() => el.classList.remove('show'), 7000);
   }
