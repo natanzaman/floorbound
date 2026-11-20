@@ -153,7 +153,7 @@ Plays a cue sheet (YAML, format below) with bot actors inside the server, for fi
    - Scene: `id`, `place` (`town`, `raid_gate`, `warden_arena`, `fields`, `mire`, `mire_camp`, `drowned_wood`, `sunken_gate`, `sovereign_lair`), `light` (`day` | `eclipse`), `marks: { actorId: landmark | [x, z] }` (actors are teleported there when the scene starts, in a small fan so they don't stack), `absent: [ids]` (left out of the scene: hidden or parked out of view), `cues: [...]`.
    - Cue: `who` (actor id, `all`, a list, or a boss/mob: `warden`, `sovereign`, a `spawn` label), `do`, verb arguments, optional `id` (label), `after` (`prev` or a label), `delay` (s), `hold` (s).
    - **Timing:** a cue starts together with the previous cue; `after: prev` starts it when the previous cue finishes, `after: <label>` when that cue finishes; `delay` waits after the trigger. A cue finishes when its action is done: movement arrived, `say` after its hold (default from length, 2–5 s), `fight`/`skill`/`wait` when `until` is true, instant verbs at once. A scene ends when all its cues have finished; then the next scene starts.
-   - **Landmarks:** `town_square`, `fountain`, `merchant`, `smith`, `skill_shrine`, `hall_of_clearers`, `waystone`, `north_road`, `raid_gate`, `arena_edge`, `arena_center`, `mire_camp`, `mire_shrine`, `drowned_wood`, `sunken_gate`, `sovereign_court`; or an actor id, a boss/spawn label, or `[x, z]`. Take coordinates from `shared/data.js`, `shared/floor2.js`, `shared/items.js`, `shared/crafting.js`, `shared/mastery.js`, `shared/titles.js`.
+   - **Landmarks:** `town_square`, `fountain`, `merchant`, `smith`, `skill_shrine`, `hall_of_clearers`, `waypoint` (old name `waystone`: the fountain), `north_road`, `raid_gate`, `arena_edge`, `arena_center`, `mire_camp`, `mire_shrine`, `drowned_wood`, `sunken_gate`, `sovereign_court`; or an actor id, a boss/spawn label, or `[x, z]`. Take coordinates from `shared/data.js`, `shared/floor2.js`, `shared/items.js`, `shared/crafting.js`, `shared/mastery.js`, `shared/titles.js`.
    - **Conditions** (`until`): `<target>_hp < N%`, `<target>_dead`, `<target>_broken`, `gate_open`, `t > N` (seconds into the scene). Targets: `warden`, `sovereign`, actor ids, spawn labels.
    - **Verbs.** Movement: `walk_to`, `run_to`, `follow`, `face`, `hold`, `dodge`, `jump`, `teleport`. Combat: `fight` (target, until: the bot's own brain fights, focused on the target), `skill` (`skill`: a skill id like `taunt`, `wall`, `burst`, `sanct`, or slot 1–3; `target`; optional `until`, re-pressed when ready), `guard`, `parry`, `use_item`, `ready`. Body: `say` (`text`, `ch`: `say` default, or `party`), `emote` (`cheer`, `block`, `cast`, `hit`, `die`), `pose` (F5: `kneel`, `sit`, `bow`, `none`). Lifecycle: `die` (`respawn: false`), `revive`, `wait` (`secs` or `until`). Staging (F3): `boss_move`, `reserve_last_attack`, `twists`, `spawn`, `give_item`, `protect`. Picture (F4): `camera` (`shot`: `close_up`, `medium`, `wide`, `over_shoulder` (+ `from`), `follow`, `orbit`, `crane`, `free`; `target`; `secs`), `slowmo`, `title`, `fade`, `letterbox`, `clean`, `light`. World (F6): `bell`.
 2. **Actors:** each cast member is a server bot (`BotManager`) with that exact name, class, level, weapon style, capability, all in one party. A **script layer** on the bot brain (`b.script`, checked first in `think`) runs the current scripted action (walk, face, hold, say, skill, pose…); when it's empty or a `fight` cue is running, the normal brain plays (focused on the cue's target). Scripted bots never wander, never chatter on their own (`quiet`), never ready up unless told, and the brain's dodging still works in fights.
@@ -653,6 +653,7 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
 | K2 Controls screen (pictures, lists, editing) | `feat/controlsui` | done (hard-review fixes 2a2fc9a) | batch 2026-11-19 | eb1a318 |
 | K3 Accessibility options | `feat/access` | done | batch 2026-11-19 | b9b1607 |
 | K4 Controller verification (scripted gamepad "bots") | `feat/padtest` | done | batch 2026-11-19 | 0bb37d8 |
+| K5 Targeting modes + Cleave (Controls → Combat) | `feat/targeting` | built, awaiting merge | agent targeting | — |
 
 ### Shared contracts for K
 - **Action list** (`shared/controls.js`): every game control has an id, label, group (Move, Camera, Combat, Skills, Items, Social, Menus) and type (`button`, `hold`, `axis`, `toggle`).
@@ -843,6 +844,27 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
 3. It checks **game state** (positions, cooldowns, HP, server events), not frame timing, and runs in CI-like mode (`node test/padtest.mjs` or Python).
 4. A second scripted pad checks the **modifier layer** and **chords**.
 5. **Accept when:** the harness passes on the default controller layout and on a rebound layout. Report coverage: which actions were verified on the pad.
+
+### K5. Targeting modes and Cleave (`feat/targeting`, owner request 2026-11-20)
+Owner: "attacks always go to the nearest enemy even when I'm facing or locked on another". Plan and per-class notes:
+`docs/briefs/targeting.md`. Amends the K3 cut "aim assist strength (attacks already auto-aim)": targeting is now a choice.
+- **Controls → Combat** (fb_controls.combat `{ target, cleave, max }`, synced with the account; `shared/targeting.js`):
+  - **Nearest**; **Locked or nearest** (default: the lock within max(14, skill range + 4) m, else the crosshair pick
+    for bows and bolts, else the nearest: the old behaviour); **Cone** (nearest in a 120° cone where the camera looks,
+    a lock inside the cone first; the server drops arc and line hits outside the cone, using the look sent with each
+    skill); **Aimed** (no
+    auto-targeting or homing: attacks go where the camera looks; projectiles fly straight with a 0.35 m wider hitbox
+    and hit whatever is on the line; marks / pounces / leaps take the first enemy on the aim line).
+  - **Cleave** on/off (default on) and **Max targets per hit** 1–8 (default 8). On: min(attack limit, max) enemies in
+    the field of view (lock first, then nearest); off: one (the lock if inside, else the nearest). Area attacks (Bard
+    chords, Hamstring, the Berserker's Cleave skill, ring basics) keep only their own limit.
+- **Data:** `ATTACKS` (base field of view = the old hitArc half-angles; target limit `n`; `aoe` for crowd-control cones),
+  weapon styles' `mods.fov` (x the half-angle; all 1 for now, so balance is unchanged), style steps may carry `n`.
+- **Server:** `{ type: 'tprefs' }` on join and on change, validated; bots never send it and keep the old behaviour.
+  The Ranger's server aim now keeps the locked target when it's in range and in the skill's cone.
+- **Not affected:** spins, slams, ground circles, dashes and projectiles (single-target or piercing by design).
+- **Open for the owner:** per-weapon `fov` values (wider-but-slower weapons), the target limits, whether bots should use
+  the limits too, whether Cleave should also cover spins and slams.
 
 ### K validation with the owner (2026-11-19/20, branch `claude/floorbound-controller-validation-3256da`)
 - **Played by the owner** on a wired SCUF (Xbox One protocol) on a Mac in Chrome: the whole play checklist passed (sticks, combat buttons, D-pad items and revive hold, LB layer, menu focus, rebinds kept across reload and account, unplug/replug, switching device mid-play).

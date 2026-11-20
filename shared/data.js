@@ -88,7 +88,7 @@ export const OBSTACLES = (() => {
   const out = [];
   const houses = [[-16, -12], [16, -12], [-18, 8], [18, 8], [-8, -20], [8, -20]];
   for (const [x, z] of houses) out.push({ kind: 'house', x, z, r: 3.4, rot: Math.atan2(-x, -z) });
-  out.push({ kind: 'fountain', x: 0, z: 0, r: 3 });
+  out.push({ kind: 'fountain', x: 0, z: 0, r: 3 }); // the town's waypoint (shared/floor2.js WAYPOINTS)
   let n = 0, tries = 0;
   while (n < 110 && tries < 8000) {
     tries++;
@@ -103,7 +103,7 @@ export const OBSTACLES = (() => {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
     out.push({ kind: 'pillar', x: WORLD.arena.x + Math.cos(a) * 21, z: WORLD.arena.z + Math.sin(a) * 21, r: 1.6 });
   }
-  out.push(...floor2Obstacles()); // waystones + Floor 2 (see shared/floor2.js)
+  out.push(...floor2Obstacles()); // Floor 2 (see shared/floor2.js)
   out.push(...floor3Obstacles()); // Floor 3 (see shared/floor3.js)
   return out;
 })();

@@ -3,7 +3,7 @@
 // buff tags, Anthem's speed / haste on your own character, and auto-aim for their skills.
 // Server side: server/classes-b.js. Data: shared/classes/lancer.js, shared/classes/bard.js.
 //
-// main.js calls initClassesB(ctx) once and classesB.aim(...) in useSkill. Everything else hooks in by wrapping a few
+// main.js calls initClassesB(ctx) once and classesB.aimRange(...) in useSkill. Everything else hooks in by wrapping a few
 // methods of the mastery / combat / sound objects it is given (the same way public/mastery.js extends the sounds):
 //  mastery.event (this module sees events first), mastery.cd (Anthem's haste), mastery.buffTags (HUD tags),
 //  combat.speedMult (Anthem's speed), sfx.play (extra sounds).
@@ -361,14 +361,8 @@ export function initClassesB(ctx) {
     return html;
   };
 
-  // Auto-aim for Lancer / Bard skills (main.js useSkill): face the locked enemy, or the nearest one in range.
-  function aim(skId, lockedMob, nearestMob) {
-    const range = AIM[skId];
-    if (!range) return;
-    const lm = lockedMob();
-    const t = lm && Math.hypot(lm.x - state.x, lm.z - state.z) < 14 ? lm : nearestMob(range);
-    if (t) state.face = Math.atan2(t.x - state.x, t.z - state.z);
-  }
+  // Engage range of a Lancer / Bard skill (main.js useSkill turns you by the targeting mode within it), or 0.
+  const aimRange = skId => AIM[skId] || 0;
 
-  return { aim, event, buffOn, reach: LANCE.reach };
+  return { aimRange, event, buffOn, reach: LANCE.reach };
 }

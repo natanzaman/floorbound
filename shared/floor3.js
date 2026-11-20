@@ -40,9 +40,10 @@ export function areaName3(x, z) {
   return 'Floor 3 — The Windswept Steps';
 }
 
-// Travel: Windbreak Camp's waystone (shared/floor2.js WAYSTONES lists every floor's), and the Stairway that opens in the
-// Drowned Sovereign's court for a while after a kill. Floor 3 unlocks once a character has helped kill the Sovereign.
-export const WAYSTONE3 = { floor: 3, x: 1200, z: -9, r: 1.4, name: 'Windbreak Camp' };
+// Travel: Windbreak Camp's brazier is its waypoint (shared/floor2.js WAYPOINTS lists every floor's), and the Stairway
+// opens in the Drowned Sovereign's court for a while after a kill. Floor 3 unlocks once a character has helped kill the Sovereign.
+export const WAYPOINT3 = { floor: 3, x: F3.camp.x, z: F3.camp.z, r: 1.2, use: 3.2, kind: 'brazier', name: 'Windbreak Camp' };
+export const WAYSTONE3 = WAYPOINT3; // (old name)
 export const STAIRWAY3 = { x: 600, z: 207, r: 2.2, use: 3.6, secs: 60, floor: 3 };
 export const FLOOR_NAMES = { 1: 'Floor 1 — Verdant Field', 2: 'Floor 2 — The Glimmering Mire', 3: 'Floor 3 — The Gale Spires' };
 export const FLOOR_BOSS = { 1: 'warden', 2: 'sovereign', 3: 'colossus' }; // the boss type per floor
@@ -53,11 +54,11 @@ function rng(seed) {
   return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
 }
 
-// Static obstacles for Floor 3 (deterministic): appended to OBSTACLES in data.js. (Its waystone comes with WAYSTONES.)
+// Static obstacles for Floor 3 (deterministic): appended to OBSTACLES in data.js.
 export function floor3Obstacles() {
   const out = [];
   const { camp, arena } = F3;
-  out.push({ kind: 'brazier', x: camp.x, z: camp.z, r: 1.2 });
+  out.push({ kind: 'brazier', x: camp.x, z: camp.z, r: WAYPOINT3.r }); // Windbreak Camp's waypoint
   for (const [dx, dz] of [[-11, -6], [11, -6], [-12, 7], [12, 7]]) out.push({ kind: 'tent3', x: camp.x + dx, z: camp.z + dz, r: 2.2, rot: Math.atan2(-dx, -dz) });
   // windbreak walls: low stacked-stone arcs on the camp's west and east (wind) sides
   for (const side of [-1, 1]) for (let i = -2; i <= 2; i++) {

@@ -30,20 +30,20 @@ z 161   =  The Storm Gate            raid gate, same 5 s ready check
 z 150  |  corridor (x 1195-1205)
 z 98-148   The Broken Aqueduct       acolytes, sentinels, harpies; aqueduct arches
 z 26-98    The Windswept Steps        rams, harpies; standing stones and torn banners
-z 0    (*) Windbreak Camp            safe zone, r 18: waystone, campfire, windbreak walls, Skill Shrine, Hall stone
+z 0    (*) Windbreak Camp            safe zone, r 18: brazier (the waypoint), windbreak walls, Skill Shrine, Hall stone
 ```
 - Field rect x 1132-1268, z -30..158; a flagstone road runs north up the middle (x 1200).
 - Obstacles: standing stones and broken columns in the field, aqueduct piers in the upper field, pylons around the arena.
 
 ## 3. The camp: Windbreak Camp
-A ring of stacked-stone windbreak walls around a brazier. Safe zone (no damage, fast regen) like Mirelight Camp: the waystone
-(south of the brazier), tents in the lee of the walls, a Skill Shrine and a small Hall stone (latest Floor 3 clear, F6).
+A ring of stacked-stone windbreak walls around a brazier. Safe zone (no damage, fast regen) like Mirelight Camp: the brazier is
+the camp's waypoint, tents in the lee of the walls, a Skill Shrine and a small Hall stone (latest Floor 3 clear, F6).
 Deaths on Floor 3 respawn here.
 
 ## 4. Unlock and travel
 - Floor 3 unlocks for a character who helped kill the Drowned Sovereign (`stats.sovereignKills > 0`, or the `floor3` flag).
 - **Stairway:** for 60 s after a Sovereign kill a Stairway opens at the back of the Sunken Court (600, 207): step in, press F.
-- **Waystones:** every town waystone lists Floors 1-3; Windbreak Camp gets its own (1200, -9).
+- **Waypoints:** each town's centrepiece is its waypoint (the fountain, Mirelight Camp's fire, Windbreak Camp's brazier at 1200, 0); every one lists Floors 1-3. (Until 2026-11-20 these were separate waystone crystals.)
 - Recommended level 21+ for the field, 25+ for the Colossus. `SPAWN_AT=1200,150` spawns at the Storm Gate (and unlocks it).
 
 ## 5. Field enemies (one new mechanic each)

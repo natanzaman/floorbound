@@ -60,9 +60,11 @@ export const StyleMethods = {
     const opts = m => ({ threat: B.threat, knock: st.knock || 0, heavy: !!st.heavy, frac: st.frac || null, interrupt: !!st.interrupt && m.windupAt > 0 });
     const amount = atk * st.mult, hit = [];
     const fx2 = Math.sin(p.face), fz = Math.cos(p.face);
+    // the step's shape and target limit (shared/targeting.js ATTACKS by shape; a step's own n wins; mods.fov widens arcs)
+    const A = this.atkFov(p, st.shape === 'arc' ? (st.fin ? 'styleFin' : 'styleArc') : st.shape === 'line' ? 'styleLine' : 'styleRing', st.shape === 'arc' ? { r: st.r, half: st.half, ...(st.n ? { n: st.n } : {}) } : st.n ? { n: st.n } : null);
     if (st.shape === 'arc') {
-      fx.r = st.r; fx.h = st.half;
-      for (const m of this.mobs.values()) if (this.targetable(m) && this.inArc(p, m, st.r, st.half)) hit.push(m);
+      fx.r = st.r; fx.h = r2(A.half);
+      for (const m of this.mobs.values()) if (this.targetable(m) && this.inArc(p, m, st.r, A.half)) hit.push(m);
     } else if (st.shape === 'line') {
       fx.r = st.len; fx.w = st.w;
       for (const m of this.mobs.values()) {
@@ -74,17 +76,19 @@ export const StyleMethods = {
     } else if (st.shape === 'ring') {
       fx.r = st.r;
       for (const m of this.mobs.values()) if (this.targetable(m) && dist(m, p) <= st.r + m.def.radius) hit.push(m);
-    } else if (st.shape === 'bolt') { // like Smite: the first enemy along the ray
+    } else if (st.shape === 'bolt') { // like Smite: the first enemy along the ray (aimed mode: a slightly bigger bolt)
       let best = null, bestT = st.len;
+      const pad = this.aimPad?.(p) || 0;
       for (const m of this.mobs.values()) {
         if (!this.targetable(m)) continue;
         const vx = m.x - p.x, vz = m.z - p.z, along = vx * fx2 + vz * fz;
         if (along < 0 || along > st.len + m.def.radius) continue;
-        if (Math.abs(vx * fz - vz * fx2) < st.w + m.def.radius && along < bestT) { best = m; bestT = Math.max(0, along); }
+        if (Math.abs(vx * fz - vz * fx2) < st.w + pad + m.def.radius && along < bestT) { best = m; bestT = Math.max(0, along); }
       }
       fx.x2 = r2(p.x + fx2 * bestT); fx.z2 = r2(p.z + fz * bestT);
       if (best) hit.push(best);
     }
+    if (st.shape !== 'bolt' && this.capHits) hit.splice(0, hit.length, ...this.capHits(p, hit, A)); // Cleave settings
     this.events.push(fx);
     const aid = []; // Wand: enemies a teammate has Broken (checked before the hit)
     for (const m of hit) {

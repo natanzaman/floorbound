@@ -1,13 +1,14 @@
 // Floor 2 — The Glimmering Mire: client runtime. Snapshot state (gate 2, orbs, pools, burrowed lurkers, the Deluge,
-// the Stairway), Floor 2 events and effects, waystone travel UI, and atmosphere. main.js wires it in with a few calls.
+// the Stairway), Floor 2 events and effects, waypoint travel UI, and atmosphere. main.js wires it in with a few calls.
 import * as THREE from 'three';
-import { F2, GATE2, WAYSTONES, STAIRWAY, PHASE_TEXT2, inArena2, inGateZone2, nearWaystone, floorUnlocked, onFloor2, floorOf } from '/shared/floor2.js';
+import { F2, GATE2, WAYPOINTS, STAIRWAY, PHASE_TEXT2, inArena2, inGateZone2, nearWaypoint, floorUnlocked, onFloor2, floorOf } from '/shared/floor2.js';
 import { FLOOR_NAMES, onFloor3 } from '/shared/floor3.js';
 import { createFloor2 } from '/floor2world.js';
 import { PACE } from '/shared/data.js';
 import { keyName, keyHtml, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 
-// ctx: { scene, sun, occluders, fx, sfx, state, mobs, players, send, banner, callout, floatNum, log, shake, project, isTouch, hallOpen }
+// ctx: { scene, sun, occluders, fx, sfx, state, mobs, players, send, banner, callout, floatNum, log, shake, project, isTouch, hallOpen,
+//        calm (Reduce motion), tip (one-time guide tips) }
 export function initFloor2Client(ctx) {
   const { scene, fx, sfx, state, mobs, players } = ctx;
   const world = createFloor2(scene, { sun: ctx.sun, occluders: ctx.occluders });
@@ -18,10 +19,11 @@ export function initFloor2Client(ctx) {
   const near = (x, z, d) => Math.hypot(x - state.x, z - state.z) < d;
   const lastBlock = new Map();
 
-  // ---------- labels for the waystones and the Stairway ----------
+  // ---------- labels for the waypoints and the Stairway ----------
   const labels = document.getElementById('labels');
   const mkLabel = () => { const el = document.createElement('div'); el.className = 'lbl npc'; el.style.display = 'none'; labels.appendChild(el); return el; };
-  const wsLabels = WAYSTONES.map(mkLabel), stairLabel = mkLabel();
+  const wpLabels = WAYPOINTS.map(mkLabel), stairLabel = mkLabel();
+  const LABEL_Y = { fountain: 5.4, campfire: 2.8, brazier: 3.4 }; // above each centrepiece
   function place(el, x, y, z, html, maxD) {
     const p = ctx.project(x, y, z), d = Math.hypot(state.x - x, state.z - z);
     if (!p || d > maxD || !state.joined) { el.style.display = 'none'; return; }
@@ -29,7 +31,7 @@ export function initFloor2Client(ctx) {
     if (el.innerHTML !== html) el.innerHTML = html;
   }
 
-  // ---------- waystone panel ----------
+  // ---------- waypoint panel (the floor picker) ----------
   const panel = document.createElement('div');
   panel.id = 'warp'; panel.className = 'panel hidden';
   panel.style.cssText = 'position:absolute;top:30%;left:50%;transform:translateX(-50%);min-width:280px;padding:12px 16px;border-color:rgba(94,234,212,.5);z-index:4';
@@ -43,7 +45,7 @@ export function initFloor2Client(ctx) {
       const sub = open ? w.name : `Help defeat ${w.floor === 3 ? 'the Drowned Sovereign' : 'the Horned Warden'} to open it`;
       return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.07)"><span><b>${FLOOR_NAMES[w.floor]}</b><br><small style="opacity:.7">${sub}</small></span>${btn}</div>`;
     };
-    panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;font-weight:800;letter-spacing:.12em;color:#99f6e4">WAYSTONE<button data-a="close" style="padding:2px 9px;border-radius:6px;border:1px solid rgba(160,200,255,.3);background:transparent">✕</button></div>${WAYSTONES.map(row).join('')}`;
+    panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;font-weight:800;letter-spacing:.12em;color:#99f6e4">WAYPOINT<button data-a="close" style="padding:2px 9px;border-radius:6px;border:1px solid rgba(160,200,255,.3);background:transparent">✕</button></div>${WAYPOINTS.map(row).join('')}`;
   }
   panel.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
@@ -216,7 +218,7 @@ export function initFloor2Client(ctx) {
   // ---------- interaction (F) ----------
   function interactKind() {
     if (state.dead || !state.joined || state.spectator) return null;
-    if (nearWaystone(state.x, state.z)) return 'warp';
+    if (nearWaypoint(state.x, state.z)) return 'warp'; // a town's centrepiece (the fountain, a camp's fire)
     if (data.stair && Math.hypot(state.x - data.stair[0], state.z - data.stair[1]) < STAIRWAY.use) return 'stair';
     return null;
   }
@@ -235,7 +237,9 @@ export function initFloor2Client(ctx) {
   function update(dt) {
     t += dt;
     const on2 = onFloor2(state.x);
-    world.update(dt, on2, !!data.del, onFloor3(state.x));
+    const wp = !state.spectator && state.joined && !state.dead ? nearWaypoint(state.x, state.z) : null;
+    world.update(dt, on2, !!data.del, onFloor3(state.x), { near: wp?.floor ?? 0, calm: !!ctx.calm?.() });
+    if (wp && unlocked(2)) ctx.tip?.('waypoint'); // (once: how travel works, when there's somewhere to go)
     for (const o of orbs.values()) { const p = o.g.position; p.x += (o.x - p.x) * Math.min(1, dt * 14); p.z += (o.z - p.z) * Math.min(1, dt * 14); p.y = 1.2 + Math.sin(t * 8 + o.x) * 0.1; o.g.rotation.y += dt * 3; }
     for (const p of pools.values()) { p.t += dt; p.disc.material.opacity = p.armed ? 0.42 + Math.sin(p.t * 4) * 0.08 : 0.15 + 0.2 * Math.min(1, p.t); p.edge.material.color.setHex(p.armed ? 0xe879f9 : 0xc084fc); }
     for (const m of ripples) if (m.visible) { const k = (t * (m.userData.hot ? 3 : 1.2)) % 1; m.scale.setScalar(0.6 + k * (m.userData.hot ? 2.4 : 1.4)); m.material.opacity = 0.65 * (1 - k); }
@@ -257,10 +261,10 @@ export function initFloor2Client(ctx) {
       if (inner) { inner.position.y = 1.7 + Math.sin(t * 2.2 + m.id) * 0.25; if (inner.userData.motes) inner.userData.motes.rotation.y += dt * 2.5; }
     }
     if (!state.spectator) {
-      WAYSTONES.forEach((w, i) => place(wsLabels[i], w.x, 5.2, w.z, `Waystone${Math.hypot(state.x - w.x, state.z - w.z) < 3.2 ? `<br><small>${tapping() ? 'tap Warp' : `press ${keyHtml('interact')} to travel`}</small>` : ''}`, 24));
+      WAYPOINTS.forEach((w, i) => place(wpLabels[i], w.x, LABEL_Y[w.kind] ?? 4, w.z, `Waypoint${wp === w ? `<br><small>${tapping() ? 'tap Warp to open the waypoint' : `Press ${keyHtml('interact')} to open the waypoint`}</small>` : ''}`, 16));
       if (data.stair) place(stairLabel, data.stair[0], 6.2, data.stair[1], `The Stairway · Floor 2 <small>${Math.ceil(data.stair[2])} s</small>${Math.hypot(state.x - data.stair[0], state.z - data.stair[1]) < STAIRWAY.use ? `<br><small>${tapping() ? 'tap Warp' : `press ${keyHtml('interact')} to climb`}</small>` : ''}`, 40);
       else stairLabel.style.display = 'none';
-      if (!panel.classList.contains('hidden') && !nearWaystone(state.x, state.z)) panel.classList.add('hidden');
+      if (!panel.classList.contains('hidden') && !nearWaypoint(state.x, state.z, 0.6)) panel.classList.add('hidden');
     }
   }
 

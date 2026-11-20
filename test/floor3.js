@@ -1,14 +1,14 @@
 // In-process checks for Floor 3 — The Gale Spires (docs/floor3.md, ROADMAP H4): unlock and travel (the Stairway from
-// the Sunken Court, waystones, respawn at Windbreak Camp), the field enemies' mechanics (harpies aloft, sentinel armour,
+// the Sunken Court, waypoints, respawn at Windbreak Camp), the field enemies' mechanics (harpies aloft, sentinel armour,
 // the acolyte's Wind Ward, the ram's charge and a Guardian bracing it), the Storm Colossus (health scaling, Overload
 // stopped by Break + Switch / Team Burst / a solo Break, Thunderclap, the Tempest Beam, Gale Push), forceBossMove's
 // Colossus moves, level cap 30 progression, the Floor 3 drop tables and the Stormforged set, and the bots' beam timing.
 // Usage: node test/floor3.js
 import assert from 'node:assert/strict';
 import { Game } from '../server/game.js';
-import { MAX_LEVEL, MOB_IDS, MOBS, xpToNext } from '../shared/data.js';
-import { F3, COLOSSUS, HARPY, ACOLYTE, SENTINEL, RAM, STAIRWAY3, WAYSTONE3, F3_TWISTS, inArena3 } from '../shared/floor3.js';
-import { F2, floorUnlocked, floorOf, WAYSTONES } from '../shared/floor2.js';
+import { MAX_LEVEL, MOB_IDS, MOBS, OBSTACLES, xpToNext } from '../shared/data.js';
+import { F3, COLOSSUS, HARPY, ACOLYTE, SENTINEL, RAM, STAIRWAY3, WAYPOINT3, F3_TWISTS, inArena3 } from '../shared/floor3.js';
+import { F2, floorUnlocked, floorOf, WAYPOINTS, nearWaypoint, nearWaystone, WAYSTONES } from '../shared/floor2.js';
 import { pointsAt, MILESTONES } from '../shared/talents.js';
 import { loadoutFor } from '../shared/playerbots.js';
 import { lootFor, SETS, makeSetPiece } from '../shared/loot.js';
@@ -48,7 +48,16 @@ function arena(classes = ['guardian', 'swordsman', 'cleric'], lvl = 30) {
 {
   assert.equal(floorOf(1200), 3); assert.equal(floorOf(600), 2); assert.equal(floorOf(0), 1);
   assert.ok(MOB_IDS.indexOf('colossus') > MOB_IDS.indexOf('sovereign'), 'Floor 3 enemies are appended after Floor 2 (type indices never move)');
-  assert.ok(WAYSTONES.some(w => w.floor === 3 && w.x === WAYSTONE3.x), 'Windbreak Camp has a waystone');
+  assert.ok(WAYPOINTS.some(w => w.floor === 3 && w.x === WAYPOINT3.x), 'Windbreak Camp has a waypoint');
+  // each town's centrepiece is its waypoint: an obstacle of its own, usable from just outside it; no crystals left
+  for (const [f, kind] of [[1, 'fountain'], [2, 'campfire'], [3, 'brazier']]) {
+    const w = WAYPOINTS.find(w => w.floor === f), o = OBSTACLES.find(o => o.kind === kind && o.x === w.x && o.z === w.z);
+    assert.ok(w.kind === kind && o && o.r === w.r, `Floor ${f}'s waypoint is its ${kind}`);
+    assert.ok(w.use > w.r + 0.5 + 0.6, `the ${kind} can be used from outside its collision ring`);
+    assert.equal(nearWaypoint(w.x, w.z + w.r + 0.6), w); assert.equal(nearWaypoint(w.x, w.z + w.use + 0.1), undefined);
+  }
+  assert.ok(!OBSTACLES.some(o => o.kind === 'waystone'), 'the old waystone crystals are gone');
+  assert.ok(WAYSTONES === WAYPOINTS && nearWaystone === nearWaypoint, 'old names still work');
   assert.equal(MAX_LEVEL, 30); assert.equal(pointsAt(30), 29); assert.equal(xpToNext(29), 1450);
   const lo = loadoutFor(30); assert.equal(lo.rarityName, 'Epic'); assert.equal(lo.mastery, 5);
   assert.ok(MILESTONES.some(m => m.lvl === 21 && /Floor 3/.test(m.text)) && MILESTONES.some(m => m.lvl === 25 && /Colossus/.test(m.text)));
@@ -63,10 +72,10 @@ function arena(classes = ['guardian', 'swordsman', 'cleric'], lvl = 30) {
   const g = newGame();
   const p = g.addPlayer(null, 'Trav', 'guardian'); p.lvl = 25; g.recompute(p);
   assert.equal(floorUnlocked(p.stats, 3), false, 'sealed at first');
-  const w2 = WAYSTONES.find(w => w.floor === 2);
-  p.x = w2.x; p.z = w2.z + 1; p.stats.floor2 = 1; g.events = [];
+  const w2 = WAYPOINTS.find(w => w.floor === 2);
+  p.x = w2.x; p.z = w2.z + w2.r + 1; p.stats.floor2 = 1; g.events = [];
   quiet(() => g.warp(p, 3));
-  assert.ok(p.x < F3.split, 'the waystone refuses Floor 3 while sealed');
+  assert.ok(p.x < F3.split, 'the waypoint refuses Floor 3 while sealed');
   // the Sovereign falls with p fighting: Floor 3 opens and the Stairway appears in the Sunken Court
   const S = g.sovereign; S.contributors.add(p.id); p.x = F2.arena.x; p.z = F2.arena.z;
   quiet(() => g.killSovereign(S, p));
@@ -77,10 +86,10 @@ function arena(classes = ['guardian', 'swordsman', 'cleric'], lvl = 30) {
   assert.ok(Math.hypot(p.x - F3.camp.x, p.z - F3.camp.z) < F3.camp.r && evs(g, 'warp').some(e => e.f === 3), 'the Stairway takes you to Windbreak Camp');
   const [rx, rz] = g.respawnPoint({ ...p, x: A.x, z: A.z });
   assert.ok(Math.hypot(rx - F3.camp.x, rz - F3.camp.z) < F3.camp.r, 'deaths on Floor 3 respawn at Windbreak Camp');
-  p.x = WAYSTONE3.x; p.z = WAYSTONE3.z + 1;
+  p.x = WAYPOINT3.x; p.z = WAYPOINT3.z + WAYPOINT3.r + 1;
   quiet(() => g.warp(p, 1));
-  assert.equal(floorOf(p.x), 1, 'the Floor 3 waystone goes back down');
-  ok('unlock (Sovereign kill), the Stairway from the Sunken Court, waystones both ways, respawn at Windbreak Camp');
+  assert.equal(floorOf(p.x), 1, 'the Floor 3 waypoint (the brazier) goes back down');
+  ok('unlock (Sovereign kill), the Stairway from the Sunken Court, waypoints both ways, respawn at Windbreak Camp');
 }
 
 // ---------- field enemies ----------
