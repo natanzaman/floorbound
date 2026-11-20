@@ -1,0 +1,15 @@
+
+== warden (per fight; kill time over kills; opening used: share of 0.5s opening slices with a melee hit on the boss, of the opening s per fight)
+party  skill  n  kills  kill time      downs  deaths  melee deaths  dmg melee/rng/heal  opening used       quake              
+3      3      4  1/4    69s (69-69)    2.8    1.8     1.3           84%/0%/16%          48% of 11s (3.3x)  rings cleared 52%  
+3      5      4  4/4    76s (48-97)    0.3    0.0     0.0           82%/0%/18%          35% of 13s (4.0x)  rings cleared 96%  
+6      5      4  4/4    103s (98-111)  0.0    0.0     0.0           56%/37%/8%          45% of 18s (5.3x)  rings cleared 99%  
+  ability (hits/uses per fight)   3p s3           3p s5           6p s5           
+  swing (warden cleave)           2.5/3.3 (0.77)  3.8/3.3 (1.15)  4.8/3.5 (1.36)  
+  slam (warden slam)              1.3/5.5 (0.23)  0.0/6.8 (0.00)  0.0/11.0 (0.00) 
+  quake (warden quake)            12.5/5.0 (2.50) 1.5/5.5 (0.27)  1.3/8.0 (0.16)  
+  charge (warden charge)          0.8/2.0 (0.38)  0.5/3.0 (0.17)  0.5/4.0 (0.13)  
+  sweep (warden sweep)            0.3/0.5 (0.50)  0.0/1.3 (0.00)  0.3/1.8 (0.14)  
+  spin (warden spin)              0.5/1.8 (0.29)  0.0/3.0 (0.00)  0.0/2.0 (0.00)  
+  rock (rockfall)                 1.0/2.5 (0.40)  0.0/4.3 (0.00)  0.0/2.8 (0.00)  
+  other hits per fight: hound bite 9.9, thornbind 3.9, tether 3.6, spread 2.0, spitter thorn 1.7, meteor 1.3, cracked ground 0.8, warden slam echo 0.2

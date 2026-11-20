@@ -1,0 +1,15 @@
+tuneboss: 2 cells x 2 runs, 2 at a time, ports 37440-37441
+  done colossus 3p s5 pause1.6: 2/2 kills, 155s (141-169) (330s in)
+  done colossus 6p s5 pause1.6: 2/2 kills, 170s (155-185) (360s in)
+
+== colossus (per fight; kill time over kills; opening used: share of 0.5s opening slices with a melee hit on the boss, of the opening s per fight)
+party  skill  pauseMul  n  kills  kill time       downs  deaths  melee deaths  dmg melee/rng/heal  opening used       beam / overload                        
+3      5      1.6       2  2/2    155s (141-169)  0.5    0.5     0.5           87%/0%/13%          56% of 31s (7.5x)  beam hit 6/13 · overloads stopped 5/5  
+6      5      1.6       2  2/2    170s (155-185)  2.0    0.0     0.0           70%/25%/5%          41% of 21s (5.0x)  beam hit 6/26 · overloads stopped 5/5  
+  ability (hits/uses per fight)   3p s5 pause1.6  6p s5 pause1.6  
+  swing (colossus hammerfall)     5.0/8.0 (0.63)  13.0/13.0 (1.00)
+  strike (colossus lightning)     0.0/13.5 (0.00) 0.0/15.5 (0.00) 
+  gust (gale push)                0.5/10.0 (0.05) 0.5/12.0 (0.04) 
+  beam (tempest beam)             2.0/2.0 (1.00)  3.0/2.0 (1.50)  
+  overload (thunderclap)          0.0/2.5 (0.00)  0.0/5.5 (0.00)  
+  other hits per fight: harpy strike 4.5, fire 3.5, spread 3.0, meteor 2.3, harpy dive 2.0

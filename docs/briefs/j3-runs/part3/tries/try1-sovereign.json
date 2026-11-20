@@ -1,0 +1,1335 @@
+[
+ {
+  "boss": "sovereign",
+  "party": 3,
+  "skill": 3,
+  "knobs": {},
+  "label": "3p s3",
+  "rs": [
+   {
+    "run": 1,
+    "result": "wipe",
+    "secs": 133,
+    "deaths": 5,
+    "downs": 6,
+    "revives": 2,
+    "twist": "riptide",
+    "team": {
+     "cover": 1,
+     "covered": 1,
+     "pincer": 81
+    },
+    "combos": {
+     "execute": 5,
+     "sanctified": 3
+    },
+    "mech": {
+     "stack": [
+      3,
+      2
+     ],
+     "spread": [
+      2,
+      2
+     ],
+     "tether": [
+      0,
+      0
+     ]
+    },
+    "traps": {
+     "down": 2
+    },
+    "bursts": [
+     3,
+     2
+    ],
+    "causes": [
+     "tidal wave",
+     "tidal wave",
+     "tidal wave",
+     "sovereign orb",
+     "tidal wave"
+    ],
+    "hpLeft": 100,
+    "threat": {
+     "share": 93,
+     "locks": 10,
+     "dps": [
+      102,
+      90,
+      81,
+      14,
+      50,
+      43,
+      85,
+      67,
+      69,
+      12
+     ],
+     "heal": [
+      39,
+      45,
+      25,
+      36,
+      14,
+      19,
+      5,
+      18,
+      33
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 5153,
+      "cleric": 2038,
+      "swordsman": 8602
+     },
+     "downs": {
+      "swordsman": 3,
+      "cleric": 3
+     },
+     "deaths": {
+      "cleric": 2,
+      "swordsman": 2,
+      "guardian": 1
+     },
+     "open": {
+      "n": 10,
+      "secs": 34.5,
+      "slices": 69,
+      "used": 25,
+      "hits": 33
+     },
+     "uses": {
+      "swing": 11,
+      "geyser": 20,
+      "wave": 8,
+      "pools": 9,
+      "deluge": 1,
+      "volley": 5
+     },
+     "hits": {
+      "sovereign trident": 9,
+      "meteor": 5,
+      "tidal wave": 16,
+      "drowning pillar": 4,
+      "sovereign geyser": 1,
+      "thrall bite": 9,
+      "mire pool": 4,
+      "spread": 1,
+      "sovereign orb": 6,
+      "the deluge": 3
+     }
+    },
+    "quake": {
+     "jump": 0,
+     "roll": 0,
+     "hit": 0
+    },
+    "wave": {
+     "roll": 28,
+     "hit": 22,
+     "geyser": 6,
+     "deluge": 5
+    }
+   },
+   {
+    "run": 2,
+    "result": "kill",
+    "secs": 158,
+    "deaths": 2,
+    "downs": 2,
+    "revives": 0,
+    "twist": "brackish",
+    "team": {
+     "cover": 0,
+     "covered": 0,
+     "pincer": 94
+    },
+    "combos": {
+     "execute": 8,
+     "sanctified": 3
+    },
+    "traps": {
+     "freed": 1,
+     "down": 1
+    },
+    "mech": {
+     "stack": [
+      1
+     ],
+     "spread": [
+      3,
+      4
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     1,
+     2,
+     3
+    ],
+    "causes": [
+     "tidal wave",
+     "tidal wave"
+    ],
+    "threat": {
+     "share": 89,
+     "locks": 12,
+     "dps": [
+      99,
+      88,
+      72,
+      73,
+      52,
+      50,
+      50,
+      89,
+      58,
+      10,
+      35
+     ],
+     "heal": [
+      25,
+      31,
+      28,
+      30,
+      28,
+      39,
+      50,
+      72,
+      11,
+      0,
+      16,
+      28
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 6262,
+      "swordsman": 9134,
+      "cleric": 2577
+     },
+     "downs": {
+      "cleric": 1,
+      "swordsman": 1
+     },
+     "deaths": {
+      "cleric": 1,
+      "swordsman": 1
+     },
+     "open": {
+      "n": 11,
+      "secs": 37,
+      "slices": 74,
+      "used": 36,
+      "hits": 47
+     },
+     "uses": {
+      "swing": 15,
+      "geyser": 22,
+      "pools": 10,
+      "wave": 9,
+      "deluge": 1,
+      "volley": 4
+     },
+     "hits": {
+      "sovereign trident": 12,
+      "mire pool": 21,
+      "drowning pillar": 22,
+      "thrall bite": 15,
+      "spread": 2,
+      "tether": 8,
+      "sovereign geyser": 5,
+      "meteor": 1,
+      "tidal wave": 5,
+      "sovereign orb": 5,
+      "the deluge": 5
+     }
+    },
+    "quake": {
+     "jump": 0,
+     "roll": 0,
+     "hit": 0
+    },
+    "wave": {
+     "roll": 22,
+     "hit": 5,
+     "geyser": 6,
+     "deluge": 8
+    }
+   }
+  ]
+ },
+ {
+  "boss": "sovereign",
+  "party": 3,
+  "skill": 5,
+  "knobs": {},
+  "label": "3p s5",
+  "rs": [
+   {
+    "run": 1,
+    "result": "kill",
+    "secs": 179,
+    "deaths": 0,
+    "downs": 1,
+    "revives": 1,
+    "twist": "brackish",
+    "combos": {
+     "execute": 10,
+     "sanctified": 4
+    },
+    "team": {
+     "cover": 1,
+     "covered": 0,
+     "pincer": 74
+    },
+    "mech": {
+     "stack": [
+      2,
+      1
+     ],
+     "spread": [
+      3,
+      4
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "traps": {
+     "freed": 1,
+     "timeout": 1
+    },
+    "bursts": [
+     3,
+     3,
+     3,
+     3
+    ],
+    "threat": {
+     "share": 95,
+     "locks": 17,
+     "dps": [
+      85,
+      50,
+      82,
+      95,
+      58,
+      50,
+      50,
+      57,
+      56,
+      116,
+      50,
+      8,
+      47,
+      50,
+      70,
+      54,
+      61
+     ],
+     "heal": [
+      64,
+      64,
+      63,
+      59,
+      40,
+      46,
+      56,
+      72,
+      50,
+      74,
+      53,
+      56,
+      76,
+      54,
+      67,
+      55,
+      62
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 6537,
+      "cleric": 3452,
+      "swordsman": 7869
+     },
+     "downs": {
+      "swordsman": 1
+     },
+     "deaths": {},
+     "open": {
+      "n": 12,
+      "secs": 41,
+      "slices": 82,
+      "used": 22,
+      "hits": 26
+     },
+     "uses": {
+      "swing": 20,
+      "geyser": 32,
+      "wave": 9,
+      "pools": 12,
+      "deluge": 1,
+      "volley": 4
+     },
+     "hits": {
+      "sovereign trident": 19,
+      "meteor": 3,
+      "drowning pillar": 22,
+      "thrall bite": 12,
+      "mire pool": 19,
+      "spread": 3,
+      "tidal wave": 5,
+      "sovereign geyser": 2,
+      "sovereign orb": 1,
+      "the deluge": 2
+     }
+    },
+    "quake": {
+     "jump": 0,
+     "roll": 0,
+     "hit": 0
+    },
+    "wave": {
+     "roll": 25,
+     "hit": 5,
+     "geyser": 3,
+     "deluge": 3
+    }
+   },
+   {
+    "run": 2,
+    "result": "kill",
+    "secs": 127,
+    "deaths": 1,
+    "downs": 1,
+    "revives": 0,
+    "twist": "hightide",
+    "combos": {
+     "execute": 10,
+     "sanctified": 4
+    },
+    "team": {
+     "cover": 0,
+     "covered": 0,
+     "pincer": 87
+    },
+    "mech": {
+     "stack": [
+      3
+     ],
+     "spread": [
+      4,
+      4
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     3,
+     3,
+     3
+    ],
+    "traps": {
+     "down": 1
+    },
+    "causes": [
+     "tidal wave"
+    ],
+    "threat": {
+     "share": 100,
+     "locks": 12,
+     "dps": [
+      86,
+      72,
+      66,
+      90,
+      81,
+      77,
+      54,
+      72,
+      80,
+      72,
+      50,
+      82
+     ],
+     "heal": [
+      63,
+      43,
+      44,
+      53,
+      63,
+      59,
+      53,
+      74,
+      73,
+      11,
+      18
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 5423,
+      "cleric": 3135,
+      "swordsman": 9405
+     },
+     "downs": {
+      "cleric": 1
+     },
+     "deaths": {
+      "cleric": 1
+     },
+     "open": {
+      "n": 7,
+      "secs": 24,
+      "slices": 48,
+      "used": 24,
+      "hits": 35
+     },
+     "uses": {
+      "swing": 12,
+      "geyser": 19,
+      "wave": 10,
+      "pools": 9,
+      "deluge": 1,
+      "volley": 2
+     },
+     "hits": {
+      "sovereign trident": 9,
+      "spread": 4,
+      "mire pool": 5,
+      "tether": 5,
+      "meteor": 3,
+      "drowning pillar": 7,
+      "thrall bite": 6,
+      "sovereign geyser": 1,
+      "tidal wave": 2,
+      "the deluge": 3
+     }
+    },
+    "quake": {
+     "jump": 0,
+     "roll": 0,
+     "hit": 0
+    },
+    "wave": {
+     "roll": 28,
+     "hit": 3,
+     "geyser": 2,
+     "deluge": 6
+    }
+   }
+  ]
+ },
+ {
+  "boss": "sovereign",
+  "party": 6,
+  "skill": 3,
+  "knobs": {},
+  "label": "6p s3",
+  "rs": [
+   {
+    "run": 1,
+    "result": "kill",
+    "secs": 190,
+    "deaths": 4,
+    "downs": 12,
+    "revives": 8,
+    "twist": "coralhide",
+    "combos": {
+     "execute": 24,
+     "chorus": 14,
+     "sanctified": 2
+    },
+    "team": {
+     "cover": 3,
+     "covered": 1,
+     "pincer": 225
+    },
+    "mech": {
+     "stack": [
+      3,
+      4,
+      4
+     ],
+     "spread": [
+      2,
+      6
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     5,
+     4,
+     5,
+     5,
+     5
+    ],
+    "traps": {
+     "freed": 1,
+     "down": 1
+    },
+    "causes": [
+     "tidal wave",
+     "sovereign trident",
+     "tidal wave",
+     "tidal wave"
+    ],
+    "threat": {
+     "share": 88,
+     "locks": 17,
+     "dps": [
+      107,
+      63,
+      105,
+      170,
+      70,
+      38,
+      61,
+      61,
+      67,
+      52,
+      71,
+      70,
+      91,
+      60,
+      74,
+      81,
+      73,
+      53,
+      71,
+      69,
+      129,
+      59,
+      101,
+      115,
+      50,
+      55,
+      64,
+      63,
+      65,
+      13,
+      85,
+      71,
+      58,
+      15,
+      63,
+      54,
+      57,
+      25,
+      63,
+      59,
+      63,
+      36,
+      76,
+      9,
+      60,
+      8,
+      65,
+      5,
+      50,
+      55,
+      1,
+      25,
+      77,
+      1,
+      70,
+      62,
+      16,
+      38,
+      58,
+      72,
+      35,
+      11,
+      70,
+      63,
+      12
+     ],
+     "heal": [
+      44,
+      29,
+      38,
+      48,
+      51,
+      62,
+      49,
+      52,
+      49,
+      53,
+      11,
+      3,
+      1,
+      4,
+      2,
+      8
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "bard": 8062,
+      "guardian": 8210,
+      "cleric": 5105,
+      "ranger": 23334,
+      "berserker": 22838,
+      "swordsman": 17539
+     },
+     "downs": {
+      "bard": 3,
+      "swordsman": 4,
+      "cleric": 4,
+      "berserker": 1
+     },
+     "deaths": {
+      "bard": 1,
+      "swordsman": 2,
+      "cleric": 1
+     },
+     "open": {
+      "n": 8,
+      "secs": 28,
+      "slices": 56,
+      "used": 17,
+      "hits": 22
+     },
+     "uses": {
+      "swing": 12,
+      "geyser": 28,
+      "wave": 10,
+      "pools": 11,
+      "deluge": 1,
+      "volley": 5
+     },
+     "hits": {
+      "sovereign geyser": 6,
+      "spread": 4,
+      "sovereign trident": 6,
+      "meteor": 8,
+      "thrall bite": 6,
+      "tidal wave": 12,
+      "mire pool": 9,
+      "sovereign orb": 8,
+      "the deluge": 7,
+      "drowning pillar": 3
+     }
+    },
+    "quake": {
+     "jump": 0,
+     "roll": 0,
+     "hit": 0
+    },
+    "wave": {
+     "roll": 47,
+     "hit": 14,
+     "geyser": 17,
+     "deluge": 14
+    }
+   },
+   {
+    "run": 2,
+    "result": "kill",
+    "secs": 185,
+    "deaths": 6,
+    "downs": 15,
+    "revives": 8,
+    "twist": "moonless",
+    "combos": {
+     "execute": 20,
+     "chorus": 10,
+     "sanctified": 5
+    },
+    "team": {
+     "cover": 6,
+     "covered": 2,
+     "pincer": 214
+    },
+    "mech": {
+     "stack": [
+      3,
+      1,
+      1
+     ],
+     "spread": [
+      3,
+      6
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     5,
+     6,
+     3,
+     5,
+     5
+    ],
+    "traps": {
+     "freed": 1,
+     "down": 1
+    },
+    "causes": [
+     "tidal wave",
+     "tidal wave",
+     "tidal wave",
+     "sovereign trident",
+     "meteor",
+     "tidal wave"
+    ],
+    "threat": {
+     "share": 86,
+     "locks": 17,
+     "dps": [
+      77,
+      170,
+      124,
+      152,
+      48,
+      58,
+      62,
+      72,
+      60,
+      89,
+      78,
+      81,
+      64,
+      113,
+      78,
+      97,
+      54,
+      62,
+      61,
+      50,
+      60,
+      75,
+      42,
+      52,
+      57,
+      56,
+      64,
+      66,
+      9,
+      9,
+      51,
+      53,
+      22,
+      15,
+      81,
+      79,
+      29,
+      52,
+      57,
+      54,
+      61,
+      99,
+      108,
+      12,
+      60,
+      65,
+      67,
+      9,
+      13,
+      50,
+      52,
+      0,
+      52,
+      82,
+      146,
+      105,
+      41,
+      10,
+      15,
+      10,
+      58,
+      6,
+      0,
+      50,
+      4,
+      44
+     ],
+     "heal": [
+      69,
+      41,
+      44,
+      49,
+      38,
+      48,
+      10,
+      14,
+      30,
+      35,
+      59,
+      53,
+      10,
+      29,
+      0
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "bard": 8608,
+      "guardian": 9562,
+      "cleric": 5089,
+      "ranger": 19815,
+      "berserker": 20166,
+      "swordsman": 21045
+     },
+     "downs": {
+      "swordsman": 4,
+      "ranger": 3,
+      "cleric": 4,
+      "berserker": 2,
+      "bard": 2
+     },
+     "deaths": {
+      "swordsman": 2,
+      "cleric": 2,
+      "ranger": 1,
+      "berserker": 1
+     },
+     "open": {
+      "n": 9,
+      "secs": 31,
+      "slices": 62,
+      "used": 39,
+      "hits": 68
+     },
+     "uses": {
+      "swing": 23,
+      "geyser": 30,
+      "wave": 10,
+      "pools": 12,
+      "deluge": 1,
+      "volley": 6
+     },
+     "hits": {
+      "sovereign trident": 26,
+      "sovereign geyser": 7,
+      "spread": 5,
+      "meteor": 4,
+      "tidal wave": 13,
+      "mire pool": 18,
+      "thrall bite": 13,
+      "the deluge": 25,
+      "sovereign orb": 7,
+      "tether": 12,
+      "drowning pillar": 17
+     }
+    },
+    "quake": {
+     "jump": 0,
+     "roll": 0,
+     "hit": 0
+    },
+    "wave": {
+     "roll": 45,
+     "hit": 16,
+     "geyser": 23,
+     "deluge": 101
+    }
+   }
+  ]
+ },
+ {
+  "boss": "sovereign",
+  "party": 6,
+  "skill": 5,
+  "knobs": {},
+  "label": "6p s5",
+  "rs": [
+   {
+    "run": 1,
+    "result": "kill",
+    "secs": 128,
+    "deaths": 1,
+    "downs": 4,
+    "revives": 3,
+    "twist": "moonless",
+    "combos": {
+     "execute": 20,
+     "chorus": 12,
+     "sanctified": 8
+    },
+    "team": {
+     "cover": 1,
+     "covered": 0,
+     "pincer": 167
+    },
+    "mech": {
+     "stack": [
+      6,
+      6
+     ],
+     "spread": [
+      1,
+      3
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     6,
+     6,
+     6,
+     6
+    ],
+    "traps": {
+     "freed": 1
+    },
+    "causes": [
+     "tidal wave"
+    ],
+    "threat": {
+     "share": 93,
+     "locks": 13,
+     "dps": [
+      92,
+      95,
+      84,
+      94,
+      75,
+      92,
+      82,
+      90,
+      68,
+      73,
+      64,
+      76,
+      82,
+      86,
+      64,
+      70,
+      66,
+      71,
+      53,
+      54,
+      12,
+      80,
+      58,
+      80,
+      11,
+      12,
+      56,
+      66,
+      11,
+      12,
+      55,
+      59,
+      76,
+      66,
+      108,
+      0,
+      60,
+      57,
+      61,
+      39,
+      88,
+      61,
+      14,
+      80,
+      60,
+      64,
+      41,
+      76,
+      55,
+      54,
+      64,
+      53
+     ],
+     "heal": [
+      79,
+      75,
+      60,
+      57,
+      55,
+      56,
+      53,
+      51,
+      68,
+      55,
+      54,
+      55,
+      56
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 8727,
+      "bard": 9311,
+      "cleric": 6939,
+      "berserker": 19981,
+      "ranger": 19849,
+      "swordsman": 20122
+     },
+     "downs": {
+      "swordsman": 2,
+      "berserker": 1,
+      "ranger": 1
+     },
+     "deaths": {
+      "berserker": 1
+     },
+     "open": {
+      "n": 7,
+      "secs": 24,
+      "slices": 48,
+      "used": 9,
+      "hits": 22
+     },
+     "uses": {
+      "swing": 15,
+      "geyser": 19,
+      "wave": 6,
+      "pools": 7,
+      "deluge": 1,
+      "volley": 3
+     },
+     "hits": {
+      "sovereign trident": 14,
+      "drowning pillar": 6,
+      "tidal wave": 5,
+      "mire pool": 2,
+      "tether": 6,
+      "sovereign orb": 4,
+      "meteor": 5,
+      "the deluge": 1,
+      "thrall bite": 2
+     }
+    },
+    "quake": {
+     "jump": 0,
+     "roll": 0,
+     "hit": 0
+    },
+    "wave": {
+     "roll": 36,
+     "hit": 5,
+     "geyser": 0,
+     "deluge": 3
+    }
+   },
+   {
+    "run": 2,
+    "result": "kill",
+    "secs": 187,
+    "deaths": 7,
+    "downs": 13,
+    "revives": 6,
+    "twist": "riptide",
+    "combos": {
+     "execute": 21,
+     "chorus": 13,
+     "sanctified": 7
+    },
+    "team": {
+     "cover": 4,
+     "covered": 1,
+     "pincer": 207
+    },
+    "mech": {
+     "stack": [
+      6,
+      3
+     ],
+     "spread": [
+      2,
+      6
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     6,
+     5,
+     6,
+     1,
+     6,
+     3
+    ],
+    "traps": {
+     "freed": 1,
+     "down": 1
+    },
+    "causes": [
+     "tidal wave",
+     "tidal wave",
+     "tidal wave",
+     "tidal wave",
+     "tidal wave",
+     "tidal wave",
+     "tidal wave"
+    ],
+    "threat": {
+     "share": 96,
+     "locks": 17,
+     "dps": [
+      91,
+      87,
+      90,
+      99,
+      74,
+      88,
+      91,
+      90,
+      87,
+      61,
+      78,
+      92,
+      85,
+      65,
+      74,
+      84,
+      83,
+      55,
+      73,
+      57,
+      99,
+      65,
+      88,
+      90,
+      12,
+      55,
+      80,
+      72,
+      11,
+      57,
+      68,
+      50,
+      60,
+      62,
+      86,
+      15,
+      57,
+      59,
+      69,
+      62,
+      55,
+      68,
+      29,
+      69,
+      56,
+      66,
+      73,
+      9,
+      0,
+      0,
+      20,
+      51,
+      21,
+      4,
+      12,
+      50,
+      10,
+      35,
+      11,
+      20,
+      8,
+      65,
+      53,
+      30,
+      67,
+      0
+     ],
+     "heal": [
+      75,
+      64,
+      59,
+      53,
+      57,
+      54,
+      48,
+      52,
+      56,
+      53,
+      53,
+      56,
+      7,
+      10,
+      31,
+      50,
+      78
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 9937,
+      "bard": 10101,
+      "cleric": 6575,
+      "berserker": 17955,
+      "ranger": 21797,
+      "swordsman": 18786
+     },
+     "downs": {
+      "swordsman": 3,
+      "berserker": 4,
+      "cleric": 1,
+      "ranger": 4,
+      "bard": 1
+     },
+     "deaths": {
+      "berserker": 3,
+      "ranger": 1,
+      "swordsman": 1,
+      "cleric": 1,
+      "bard": 1
+     },
+     "open": {
+      "n": 7,
+      "secs": 24.5,
+      "slices": 49,
+      "used": 12,
+      "hits": 25
+     },
+     "uses": {
+      "swing": 22,
+      "geyser": 28,
+      "wave": 9,
+      "pools": 13,
+      "deluge": 1,
+      "volley": 4
+     },
+     "hits": {
+      "sovereign trident": 16,
+      "drowning pillar": 12,
+      "thrall bite": 6,
+      "tidal wave": 16,
+      "spread": 8,
+      "mire pool": 12,
+      "meteor": 3,
+      "the deluge": 15,
+      "sovereign geyser": 3,
+      "sovereign orb": 6
+     }
+    },
+    "quake": {
+     "jump": 0,
+     "roll": 0,
+     "hit": 0
+    },
+    "wave": {
+     "roll": 88,
+     "hit": 27,
+     "geyser": 18,
+     "deluge": 43
+    }
+   }
+  ]
+ }
+]

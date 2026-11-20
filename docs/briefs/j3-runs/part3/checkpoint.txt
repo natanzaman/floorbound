@@ -2,3 +2,12 @@ J3 part 3 checkpoint
 - done: server/game.js hooks (BOSS_KNOBS, TUNE_STATS), scripts/tuneboss.js, TUNE_JSON hooks in test/wardenskill.js + test/floor3boss.js; smoke run OK
 - running: before batch (tables at f6245f4) -> before-<boss>.txt
 - left: tuning in shared/bosstiming.js, after batch, README section, tests
+- before batch done (before-*.txt). running sweeps 1: colossus cooldownMul/pauseMul, warden+sov pauseMul (6p s5)
+- try1 tables applied (warden/sov/colossus pauses 3-3.5, sov combos every 13/12/12, colossus gust [13,12,11] beam 15, beam combo w1 vs w2) -> tries/try1-*.txt
+- try2 tables (= after candidate): warden try1 + close.gap 1.5; sov combos every back to 16/15/14, pauses 3, close 1.5; colossus try1 + harpies 34, team [32,30,26], overload [0,27,22], close 1.5. runs 3 -> tries/try2-*.txt
+- try3 = after candidate: try2 + warden combos every 13/12/11, colossus combos 13/12/12, strike every [8.5,7.5,6.5]. Running after-*.txt (runs 4) + before2-*.txt from scratch copy with f6245f4 table (runs 2, pooled with before)
+- FINAL tables set: warden = try2 warden; sovereign = part 2 (reverted); colossus = try3 minus overload/harpies/team changes. Running final-colossus (runs 4) + final-warden (runs 3, pool with tries/try2-warden)
+- DONE runs. Files: before-<boss>.txt/json (n=2, f6245f4 tables) + before2-<boss>-s5/s3 (n=2 more, scratch copy with f6245f4 table) -> pooled-before-<boss>.txt (n=4);
+  after-warden.txt = tries/try2-warden + final-warden-* (n=6/6/3/6); after-colossus.txt = final-colossus-* (n=4); sovereign reverted to part 2 (after = before).
+  tries/: try1 (all), try1b (colossus timeline), try2 (all, runs 3), try3-* (runs 4). sweep-*.txt: knob sweeps.
+- left: final test run, report

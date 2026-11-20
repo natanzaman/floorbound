@@ -1,0 +1,20 @@
+# Brief: J3 review fixes, part B (knobs on basic swings, Colossus HP, client glows, bot spot, dead data)
+Worktree: /Users/natanzamanzadeh/floorbound/.claude/worktrees/parallel-worktree-tasks-0648c6/wt/openings (branch feat/openings, HEAD 30edaf0). Work ONLY there. Do NOT commit. Another implementer (part A) edits other files in the same worktree at the same time: touch only the files listed below.
+Findings: ../../docs/briefs/reviews/j3-soft-review.md (ROOT docs/briefs/reviews/j3-soft-review.md) findings 3, 4, 6, 7 + "Dead data". Specs: ROOT docs/ROADMAP.md section J3 (around lines 463-620). README "Tuning bosses" documents scripts/tuneboss.js.
+
+## Do
+1. Finding 4: knobs never reach the basic swings. server/game.js ~:1061-1063 (Warden cleave via def.boss uses def.atk; cleave.mult unused; dead branch in bite() ~:1094), server/game.js ~:1082, server/floor2.js ~:53, server/floor3.js ~:267 set atkT from def.atkCd instead of the fight table (m.tm.cleave / m.tm.sweep cd). Make damageMul and cooldownMul reach all three bosses' basic swings. CAUTION: the default (no knobs) numbers must stay exactly today's (test/bosstiming.js section 1 "no behaviour change"); if the table defaults differ from def.atk / def.atkCd, keep defaults neutral (e.g. mult 1, cd = def.atkCd) rather than changing balance. Test: fightTable with {damageMul:2, cooldownMul:0.5} via this.bossKnobs: each boss swing damage = 2x atk and atkT - t ~ 0.5x cd (+ paced extra).
+2. Finding 3: shorten the Colossus fight. Fight HP is COLOSSUS.hpBase / hpPer in shared/floor3.js:134 (NOT MOBS.colossus.hp at :101, leave that alone). Scale both by ~0.72 (8000 -> 5750, 6300 -> 4550). Add a test that engage maxHp equals the formula with the new values. Then verify the length with (cwd wt/openings; it is slow, run it in the background and wait for it):
+   `node scripts/tuneboss.js --boss colossus --party 3,6 --skills 3,5 --runs 2 --jobs 2 --port 37480 --json ../../docs/briefs/j3-runs/hp/colossus.json > ../../docs/briefs/j3-runs/hp/colossus.txt 2>&1` (mkdir the hp/ folder first).
+   Before (part 3, old HP): 3p s3 158 s, 3p s5 196 s, 6p s5 177 s. Target ~125-130 s at skill 5 and no extra wipes. If it lands far off (under ~105 s or over ~150 s, or wipes rise), adjust the scale once (e.g. x0.75 or x0.68) and rerun; report both.
+3. Finding 6: public/openings.js glows never disposed (dispose + delete when the id leaves mobs or the model is rebuilt); started() refires when w.op drops and returns: dedupe the callout by opening start.
+4. Finding 7: shared/bots/openings.js ~:52-55 Gale Push "straight out" spot (13 m) not clamped to the arena: clamp to arena radius - 1 (inArena3 / the floor-3 arena radius). Test it.
+5. Dead data: shared/bosstiming.js overload.stopped {state:'stunned'} is unread: remove it (or mark as doc-only if a test or doc reads it).
+Each finding: regression test FIRST (add to test/bosstiming.js or a new test/j3knobs.js), see it fail on the current code, then fix.
+
+## Files you may edit
+server/game.js, server/floor2.js, server/floor3.js, shared/floor3.js, shared/bosstiming.js, shared/bots/openings.js, public/openings.js, test/bosstiming.js, test/j3knobs.js (new), ../../docs/briefs/j3-runs/hp/ (outputs). Nothing else (part A owns server/openings.js, server/bossteam.js, server/arenas.js, server/twists.js, test/j3combo.js).
+
+## Done when
+New tests pass (each failed before its fix); these pass, ports in 37460-37479 where one is needed: node test/bosstiming.js, test/j3knobs.js (if made), test/bossteam.js, test/warden3.js, test/arenas.js, test/combat.js, test/botskill.js, test/floor3.js, test/floor3boss.js; and the tuneboss HP run finished with its summary. If a test fails because of part A's concurrent edits (files you did not touch), say so, do not fix it.
+Report: per finding what changed (file:line), test result lines copied, the tuneboss summary lines (time, kill rate, deaths per party/skill) before vs after, anything not verified, open questions. No design decisions: report them.

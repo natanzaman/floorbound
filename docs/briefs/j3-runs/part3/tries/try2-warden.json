@@ -1,0 +1,3632 @@
+[
+ {
+  "boss": "warden",
+  "party": 3,
+  "skill": 3,
+  "knobs": {},
+  "label": "3p s3",
+  "rs": [
+   {
+    "run": 1,
+    "result": "kill",
+    "secs": 100,
+    "deaths": 1,
+    "downs": 5,
+    "revives": 3,
+    "twist": "echo",
+    "team": {
+     "cover": 0,
+     "covered": 0,
+     "pincer": 43
+    },
+    "combos": {
+     "execute": 4,
+     "sanctified": 1
+    },
+    "mech": {
+     "stack": [
+      1
+     ],
+     "spread": [
+      2,
+      2
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     3
+    ],
+    "causes": [
+     "warden quake"
+    ],
+    "traps": {
+     "down": 1
+    },
+    "threat": {
+     "share": 89,
+     "locks": 7,
+     "dps": [
+      104,
+      50,
+      74,
+      69,
+      12,
+      2,
+      0
+     ],
+     "heal": [
+      20,
+      32,
+      52,
+      53,
+      65,
+      53,
+      54
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 2060,
+      "swordsman": 3164,
+      "cleric": 889
+     },
+     "downs": {
+      "guardian": 1,
+      "swordsman": 3,
+      "cleric": 1
+     },
+     "deaths": {
+      "swordsman": 1
+     },
+     "open": {
+      "n": 5,
+      "secs": 16.5,
+      "slices": 33,
+      "used": 16,
+      "hits": 20
+     },
+     "uses": {
+      "swing": 4,
+      "slam": 11,
+      "quake": 8,
+      "sweep": 2,
+      "charge": 5,
+      "rock": 7,
+      "spin": 4
+     },
+     "hits": {
+      "warden cleave": 2,
+      "warden quake": 19,
+      "spread": 2,
+      "warden sweep": 1,
+      "warden slam echo": 1,
+      "tether": 14,
+      "rockfall": 4,
+      "warden charge": 1,
+      "hound bite": 6,
+      "warden spin": 1,
+      "rockfall echo": 2,
+      "meteor": 1,
+      "thornbind": 14
+     },
+     "tl": {
+      "dmg": [
+       13,
+       62,
+       250,
+       184,
+       139,
+       104,
+       190,
+       200,
+       123,
+       146,
+       134,
+       175,
+       115,
+       14,
+       43,
+       14,
+       34,
+       59,
+       39,
+       84,
+       34,
+       46,
+       149,
+       100,
+       70,
+       48,
+       45,
+       85,
+       132,
+       112,
+       143,
+       38,
+       18,
+       82,
+       176,
+       165,
+       79,
+       174,
+       194,
+       113,
+       137,
+       77,
+       166,
+       55,
+       100,
+       0,
+       0,
+       272,
+       67,
+       0,
+       82,
+       153,
+       55,
+       89,
+       17,
+       41,
+       0,
+       21,
+       19,
+       0,
+       0,
+       0,
+       17,
+       17,
+       0,
+       0,
+       0,
+       0,
+       13,
+       21,
+       80,
+       100,
+       32,
+       59,
+       20,
+       41,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       13,
+       25,
+       13,
+       14,
+       0,
+       13,
+       0,
+       0,
+       0,
+       13,
+       24,
+       16,
+       0,
+       31,
+       0,
+       33,
+       42
+      ],
+      "marks": [
+       [
+        22,
+        "down"
+       ],
+       [
+        53,
+        "down"
+       ],
+       [
+        60,
+        "death"
+       ],
+       [
+        71,
+        "down"
+       ],
+       [
+        86,
+        "down"
+       ],
+       [
+        99,
+        "down"
+       ]
+      ]
+     }
+    },
+    "quake": {
+     "jump": 26,
+     "roll": 2,
+     "hit": 23
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   },
+   {
+    "run": 2,
+    "result": "kill",
+    "secs": 112,
+    "deaths": 2,
+    "downs": 3,
+    "revives": 1,
+    "twist": "ironhide",
+    "team": {
+     "cover": 0,
+     "covered": 0,
+     "pincer": 59
+    },
+    "combos": {
+     "execute": 6,
+     "sanctified": 2
+    },
+    "mech": {
+     "stack": [
+      2
+     ],
+     "spread": [
+      2,
+      2
+     ],
+     "tether": [
+      0,
+      0
+     ]
+    },
+    "bursts": [
+     2
+    ],
+    "causes": [
+     "tether",
+     "warden quake"
+    ],
+    "traps": {
+     "freed": 1
+    },
+    "threat": {
+     "share": 96,
+     "locks": 9,
+     "dps": [
+      100,
+      52,
+      18,
+      15,
+      12,
+      3,
+      30,
+      59,
+      58
+     ],
+     "heal": [
+      30,
+      37,
+      56,
+      59,
+      10,
+      11,
+      26,
+      37,
+      48
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 2051,
+      "cleric": 1009,
+      "swordsman": 3022
+     },
+     "downs": {
+      "swordsman": 2,
+      "cleric": 1
+     },
+     "deaths": {
+      "cleric": 1,
+      "swordsman": 1
+     },
+     "open": {
+      "n": 6,
+      "secs": 20,
+      "slices": 40,
+      "used": 27,
+      "hits": 35
+     },
+     "uses": {
+      "swing": 4,
+      "slam": 11,
+      "quake": 8,
+      "sweep": 2,
+      "charge": 4,
+      "rock": 6,
+      "spin": 4
+     },
+     "hits": {
+      "warden cleave": 3,
+      "warden quake": 15,
+      "spread": 2,
+      "hound bite": 13,
+      "tether": 19,
+      "warden sweep": 1,
+      "meteor": 2,
+      "warden spin": 2,
+      "thornbind": 11
+     },
+     "tl": {
+      "dmg": [
+       18,
+       40,
+       220,
+       102,
+       92,
+       11,
+       108,
+       267,
+       186,
+       185,
+       121,
+       215,
+       211,
+       31,
+       62,
+       52,
+       29,
+       42,
+       20,
+       21,
+       34,
+       19,
+       23,
+       0,
+       61,
+       47,
+       110,
+       186,
+       216,
+       182,
+       30,
+       87,
+       65,
+       19,
+       41,
+       16,
+       0,
+       9,
+       22,
+       48,
+       20,
+       14,
+       25,
+       42,
+       52,
+       89,
+       165,
+       13,
+       10,
+       72,
+       102,
+       412,
+       84,
+       22,
+       34,
+       10,
+       9,
+       0,
+       0,
+       0,
+       0,
+       0,
+       9,
+       9,
+       0,
+       0,
+       0,
+       30,
+       24,
+       14,
+       26,
+       12,
+       14,
+       50,
+       27,
+       8,
+       24,
+       20,
+       101,
+       71,
+       26,
+       16,
+       16,
+       76,
+       61,
+       62,
+       105,
+       71,
+       20,
+       26,
+       40,
+       11,
+       77,
+       173,
+       41,
+       26,
+       30,
+       12,
+       20,
+       15,
+       17,
+       48,
+       70,
+       30,
+       0,
+       9,
+       0,
+       0,
+       0,
+       27,
+       41,
+       54
+      ],
+      "marks": [
+       [
+        31,
+        "down"
+       ],
+       [
+        51,
+        "down"
+       ],
+       [
+        55,
+        "down"
+       ],
+       [
+        59,
+        "death"
+       ],
+       [
+        61,
+        "death"
+       ]
+      ]
+     }
+    },
+    "quake": {
+     "jump": 29,
+     "roll": 0,
+     "hit": 22
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   },
+   {
+    "run": 3,
+    "result": "kill",
+    "secs": 85,
+    "deaths": 2,
+    "downs": 3,
+    "revives": 1,
+    "twist": "thornbound",
+    "team": {
+     "cover": 0,
+     "covered": 0,
+     "pincer": 49
+    },
+    "combos": {
+     "execute": 4,
+     "sanctified": 2
+    },
+    "mech": {
+     "stack": [
+      3
+     ],
+     "spread": [
+      1,
+      2
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     2
+    ],
+    "traps": {
+     "down": 1
+    },
+    "causes": [
+     "warden quake",
+     "rockfall"
+    ],
+    "threat": {
+     "share": 94,
+     "locks": 6,
+     "dps": [
+      100,
+      59,
+      77,
+      53,
+      10,
+      0
+     ],
+     "heal": [
+      39,
+      56,
+      55,
+      57,
+      23
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "cleric": 977,
+      "guardian": 2100,
+      "swordsman": 3010
+     },
+     "downs": {
+      "cleric": 1,
+      "swordsman": 2
+     },
+     "deaths": {
+      "cleric": 1,
+      "swordsman": 1
+     },
+     "open": {
+      "n": 4,
+      "secs": 13,
+      "slices": 26,
+      "used": 13,
+      "hits": 14
+     },
+     "uses": {
+      "swing": 4,
+      "slam": 10,
+      "quake": 7,
+      "sweep": 2,
+      "charge": 3,
+      "rock": 6,
+      "spin": 4
+     },
+     "hits": {
+      "warden cleave": 1,
+      "spitter thorn": 20,
+      "warden quake": 12,
+      "meteor": 3,
+      "hound bite": 15,
+      "thornbind": 9,
+      "rockfall": 1,
+      "spread": 1,
+      "warden spin": 1
+     },
+     "tl": {
+      "dmg": [
+       62,
+       42,
+       236,
+       429,
+       204,
+       135,
+       196,
+       59,
+       18,
+       109,
+       58,
+       91,
+       15,
+       36,
+       177,
+       44,
+       35,
+       0,
+       0,
+       0,
+       55,
+       60,
+       100,
+       213,
+       313,
+       308,
+       139,
+       97,
+       166,
+       76,
+       118,
+       120,
+       39,
+       28,
+       45,
+       57,
+       162,
+       68,
+       75,
+       72,
+       31,
+       32,
+       38,
+       151,
+       197,
+       18,
+       0,
+       200,
+       0,
+       0,
+       20,
+       18,
+       0,
+       35,
+       20,
+       30,
+       0,
+       0,
+       21,
+       15,
+       0,
+       0,
+       0,
+       0,
+       45,
+       79,
+       35,
+       45,
+       61,
+       40,
+       49,
+       35,
+       60,
+       16,
+       41,
+       118,
+       18,
+       16,
+       27,
+       51,
+       29,
+       83,
+       15,
+       141
+      ],
+      "marks": [
+       [
+        47,
+        "down"
+       ],
+       [
+        54,
+        "down"
+       ],
+       [
+        54,
+        "death"
+       ],
+       [
+        61,
+        "death"
+       ],
+       [
+        69,
+        "down"
+       ]
+      ]
+     }
+    },
+    "quake": {
+     "jump": 20,
+     "roll": 2,
+     "hit": 16
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   }
+  ]
+ },
+ {
+  "boss": "warden",
+  "party": 3,
+  "skill": 5,
+  "knobs": {},
+  "label": "3p s5",
+  "rs": [
+   {
+    "run": 1,
+    "result": "kill",
+    "secs": 88,
+    "deaths": 0,
+    "downs": 1,
+    "revives": 1,
+    "twist": "packmaster",
+    "combos": {
+     "execute": 6,
+     "sanctified": 3
+    },
+    "team": {
+     "cover": 0,
+     "covered": 0,
+     "pincer": 50
+    },
+    "mech": {
+     "stack": [
+      3
+     ],
+     "spread": [
+      2,
+      2
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     3,
+     3
+    ],
+    "traps": {
+     "down": 1
+    },
+    "threat": {
+     "share": 97,
+     "locks": 7,
+     "dps": [
+      94,
+      86,
+      73,
+      55,
+      76,
+      10,
+      16
+     ],
+     "heal": [
+      66,
+      56,
+      67,
+      51,
+      55,
+      56,
+      54
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 2294,
+      "cleric": 1015,
+      "swordsman": 2792
+     },
+     "downs": {
+      "swordsman": 1
+     },
+     "deaths": {},
+     "open": {
+      "n": 5,
+      "secs": 17,
+      "slices": 34,
+      "used": 23,
+      "hits": 31
+     },
+     "uses": {
+      "swing": 4,
+      "slam": 8,
+      "quake": 7,
+      "charge": 3,
+      "spin": 3,
+      "rock": 4
+     },
+     "hits": {
+      "warden cleave": 5,
+      "hound bite": 35,
+      "meteor": 3,
+      "thornbind": 20,
+      "warden slam": 1,
+      "rockfall": 1,
+      "spread": 2
+     },
+     "tl": {
+      "dmg": [
+       50,
+       233,
+       213,
+       252,
+       50,
+       97,
+       70,
+       42,
+       26,
+       53,
+       120,
+       43,
+       32,
+       45,
+       149,
+       190,
+       40,
+       57,
+       87,
+       97,
+       77,
+       116,
+       68,
+       63,
+       193,
+       75,
+       199,
+       210,
+       228,
+       469,
+       37,
+       63,
+       0,
+       0,
+       0,
+       198,
+       105,
+       104,
+       95,
+       77,
+       204,
+       234,
+       0,
+       0,
+       0,
+       0,
+       0,
+       17,
+       45,
+       27,
+       0,
+       0,
+       0,
+       22,
+       14,
+       34,
+       25,
+       39,
+       39,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       60,
+       35,
+       44,
+       13,
+       22,
+       0,
+       18,
+       0,
+       0,
+       19,
+       160,
+       61,
+       0,
+       0,
+       368,
+       47,
+       31,
+       102,
+       98
+      ],
+      "marks": [
+       [
+        53,
+        "down"
+       ]
+      ]
+     }
+    },
+    "quake": {
+     "jump": 36,
+     "roll": 1,
+     "hit": 0
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   },
+   {
+    "run": 2,
+    "result": "kill",
+    "secs": 94,
+    "deaths": 0,
+    "downs": 0,
+    "revives": 0,
+    "twist": "thornbound",
+    "combos": {
+     "execute": 4,
+     "sanctified": 2
+    },
+    "team": {
+     "cover": 0,
+     "covered": 0,
+     "pincer": 49
+    },
+    "mech": {
+     "stack": [
+      3
+     ],
+     "spread": [
+      2,
+      2
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "traps": {
+     "freed": 1
+    },
+    "bursts": [
+     3
+    ],
+    "threat": {
+     "share": 99,
+     "locks": 9,
+     "dps": [
+      90,
+      100,
+      57,
+      60,
+      50,
+      53,
+      53,
+      59,
+      56
+     ],
+     "heal": [
+      68,
+      56,
+      65,
+      57,
+      53,
+      47,
+      53,
+      50,
+      44
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 2135,
+      "cleric": 1098,
+      "swordsman": 2881
+     },
+     "downs": {},
+     "deaths": {},
+     "open": {
+      "n": 5,
+      "secs": 17,
+      "slices": 34,
+      "used": 17,
+      "hits": 21
+     },
+     "uses": {
+      "swing": 4,
+      "slam": 9,
+      "quake": 8,
+      "charge": 3,
+      "sweep": 1,
+      "spin": 3,
+      "rock": 4
+     },
+     "hits": {
+      "warden cleave": 3,
+      "spitter thorn": 13,
+      "meteor": 3,
+      "hound bite": 10,
+      "thornbind": 5,
+      "spread": 2
+     },
+     "tl": {
+      "dmg": [
+       47,
+       211,
+       225,
+       231,
+       58,
+       56,
+       159,
+       111,
+       160,
+       136,
+       102,
+       82,
+       77,
+       112,
+       185,
+       159,
+       66,
+       78,
+       44,
+       120,
+       72,
+       52,
+       47,
+       53,
+       134,
+       66,
+       71,
+       104,
+       197,
+       0,
+       49,
+       37,
+       40,
+       32,
+       40,
+       130,
+       156,
+       172,
+       74,
+       112,
+       21,
+       0,
+       22,
+       20,
+       50,
+       20,
+       169,
+       506,
+       119,
+       80,
+       122,
+       140,
+       42,
+       21,
+       15,
+       70,
+       0,
+       0,
+       0,
+       0,
+       29,
+       82,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       37,
+       37,
+       102,
+       0,
+       0,
+       0,
+       0,
+       14,
+       45,
+       55,
+       203,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       36
+      ],
+      "marks": []
+     }
+    },
+    "quake": {
+     "jump": 45,
+     "roll": 0,
+     "hit": 0
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   },
+   {
+    "run": 3,
+    "result": "kill",
+    "secs": 78,
+    "deaths": 0,
+    "downs": 1,
+    "revives": 1,
+    "twist": "eclipse",
+    "combos": {
+     "execute": 5,
+     "sanctified": 2
+    },
+    "team": {
+     "cover": 1,
+     "covered": 1,
+     "pincer": 40
+    },
+    "mech": {
+     "stack": [
+      3
+     ],
+     "spread": [
+      2,
+      2
+     ],
+     "tether": [
+      0,
+      0
+     ]
+    },
+    "bursts": [
+     3
+    ],
+    "traps": {
+     "down": 1
+    },
+    "threat": {
+     "share": 97,
+     "locks": 7,
+     "dps": [
+      94,
+      82,
+      82,
+      55,
+      63,
+      14,
+      58
+     ],
+     "heal": [
+      69,
+      58,
+      64,
+      42,
+      50,
+      53,
+      53
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 1923,
+      "cleric": 1069,
+      "swordsman": 3128
+     },
+     "downs": {
+      "swordsman": 1
+     },
+     "deaths": {},
+     "open": {
+      "n": 3,
+      "secs": 10.5,
+      "slices": 21,
+      "used": 14,
+      "hits": 16
+     },
+     "uses": {
+      "swing": 4,
+      "slam": 8,
+      "quake": 7,
+      "sweep": 2,
+      "charge": 1,
+      "rock": 4,
+      "spin": 3
+     },
+     "hits": {
+      "warden cleave": 3,
+      "meteor": 3,
+      "hound bite": 4,
+      "thornbind": 9,
+      "warden quake": 1,
+      "warden spin": 1,
+      "warden slam": 1,
+      "spread": 2
+     },
+     "tl": {
+      "dmg": [
+       49,
+       259,
+       258,
+       198,
+       55,
+       87,
+       87,
+       50,
+       98,
+       122,
+       122,
+       56,
+       59,
+       15,
+       129,
+       137,
+       80,
+       77,
+       66,
+       123,
+       74,
+       125,
+       91,
+       78,
+       164,
+       141,
+       213,
+       282,
+       680,
+       0,
+       54,
+       25,
+       17,
+       69,
+       60,
+       171,
+       48,
+       52,
+       48,
+       159,
+       94,
+       80,
+       111,
+       44,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       40,
+       22,
+       26,
+       33,
+       30,
+       35,
+       0,
+       0,
+       0,
+       58,
+       41,
+       0,
+       0,
+       120,
+       60,
+       99,
+       113,
+       234,
+       95,
+       0,
+       0,
+       0,
+       14,
+       48,
+       0,
+       13,
+       32
+      ],
+      "marks": [
+       [
+        47,
+        "down"
+       ]
+      ]
+     }
+    },
+    "quake": {
+     "jump": 39,
+     "roll": 0,
+     "hit": 4
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   }
+  ]
+ },
+ {
+  "boss": "warden",
+  "party": 6,
+  "skill": 3,
+  "knobs": {},
+  "label": "6p s3",
+  "rs": [
+   {
+    "run": 1,
+    "result": "wipe",
+    "secs": 219,
+    "deaths": 23,
+    "downs": 37,
+    "revives": 14,
+    "twist": "packmaster",
+    "combos": {
+     "execute": 11,
+     "chorus": 2,
+     "sanctified": 3
+    },
+    "team": {
+     "cover": 2,
+     "covered": 0,
+     "pincer": 104
+    },
+    "traps": {
+     "down": 2
+    },
+    "bursts": [
+     5,
+     4,
+     5
+    ],
+    "causes": [
+     "warden quake",
+     "warden slam",
+     "warden quake",
+     "warden quake",
+     "warden sweep",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "hound bite",
+     "warden quake",
+     "warden spin",
+     "warden slam",
+     "warden quake",
+     "hound bite",
+     "warden charge",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden slam",
+     "warden quake",
+     "warden slam"
+    ],
+    "mech": {
+     "stack": [
+      1,
+      0
+     ],
+     "spread": [
+      4,
+      8
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "hpLeft": 100,
+    "threat": {
+     "share": 45,
+     "locks": 9,
+     "dps": [
+      111,
+      104,
+      92,
+      57,
+      21,
+      73,
+      68,
+      46,
+      28,
+      112,
+      44,
+      82,
+      7,
+      51,
+      10,
+      51,
+      18,
+      62,
+      0,
+      0,
+      23,
+      77,
+      3,
+      7,
+      51,
+      19,
+      56,
+      50,
+      5,
+      26,
+      1,
+      4,
+      0,
+      0,
+      0
+     ],
+     "heal": [
+      9,
+      4,
+      28,
+      6,
+      11,
+      2,
+      0,
+      10
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "cleric": 1256,
+      "bard": 2207,
+      "guardian": 3213,
+      "ranger": 4163,
+      "berserker": 5420,
+      "swordsman": 4442
+     },
+     "downs": {
+      "cleric": 9,
+      "swordsman": 8,
+      "guardian": 5,
+      "ranger": 6,
+      "bard": 5,
+      "berserker": 4
+     },
+     "deaths": {
+      "swordsman": 5,
+      "cleric": 5,
+      "ranger": 5,
+      "bard": 4,
+      "guardian": 2,
+      "berserker": 2
+     },
+     "open": {
+      "n": 12,
+      "secs": 40.5,
+      "slices": 81,
+      "used": 25,
+      "hits": 34
+     },
+     "uses": {
+      "swing": 8,
+      "slam": 21,
+      "quake": 16,
+      "sweep": 3,
+      "charge": 7,
+      "rock": 9,
+      "spin": 8
+     },
+     "hits": {
+      "warden cleave": 5,
+      "hound bite": 103,
+      "warden slam": 10,
+      "warden quake": 42,
+      "thornbind": 12,
+      "warden sweep": 3,
+      "spread": 4,
+      "tether": 4,
+      "warden charge": 2,
+      "wolf bite": 3,
+      "meteor": 1,
+      "rockfall": 5,
+      "warden spin": 1,
+      "spitter thorn": 5
+     },
+     "tl": {
+      "dmg": [
+       96,
+       161,
+       560,
+       864,
+       621,
+       310,
+       123,
+       198,
+       519,
+       227,
+       371,
+       155,
+       91,
+       169,
+       109,
+       127,
+       139,
+       183,
+       288,
+       99,
+       256,
+       95,
+       24,
+       22,
+       40,
+       162,
+       111,
+       303,
+       199,
+       177,
+       663,
+       499,
+       328,
+       295,
+       332,
+       270,
+       56,
+       40,
+       44,
+       25,
+       0,
+       0,
+       0,
+       0,
+       33,
+       68,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       14,
+       13,
+       269,
+       318,
+       240,
+       186,
+       114,
+       20,
+       52,
+       131,
+       102,
+       40,
+       80,
+       105,
+       55,
+       119,
+       167,
+       123,
+       16,
+       81,
+       19,
+       0,
+       20,
+       839,
+       305,
+       393,
+       245,
+       259,
+       149,
+       113,
+       85,
+       38,
+       68,
+       16,
+       0,
+       0,
+       0,
+       0,
+       0,
+       62,
+       45,
+       61,
+       87,
+       325,
+       537,
+       826,
+       423,
+       82,
+       98,
+       113,
+       221,
+       45,
+       41,
+       119,
+       0,
+       0,
+       15,
+       81,
+       0,
+       16,
+       19,
+       15,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       227,
+       213,
+       1139,
+       282,
+       171,
+       340,
+       186,
+       84,
+       67,
+       41,
+       54,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       21,
+       15,
+       18,
+       0,
+       210,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       41,
+       36,
+       15,
+       16,
+       48
+      ],
+      "marks": [
+       [
+        7,
+        "down"
+       ],
+       [
+        12,
+        "down"
+       ],
+       [
+        13,
+        "down"
+       ],
+       [
+        21,
+        "down"
+       ],
+       [
+        21,
+        "down"
+       ],
+       [
+        22,
+        "down"
+       ],
+       [
+        35,
+        "down"
+       ],
+       [
+        36,
+        "down"
+       ],
+       [
+        37,
+        "down"
+       ],
+       [
+        42,
+        "down"
+       ],
+       [
+        43,
+        "down"
+       ],
+       [
+        44,
+        "death"
+       ],
+       [
+        48,
+        "death"
+       ],
+       [
+        49,
+        "death"
+       ],
+       [
+        53,
+        "death"
+       ],
+       [
+        57,
+        "down"
+       ],
+       [
+        65,
+        "down"
+       ],
+       [
+        73,
+        "down"
+       ],
+       [
+        80,
+        "down"
+       ],
+       [
+        82,
+        "down"
+       ],
+       [
+        83,
+        "death"
+       ],
+       [
+        89,
+        "death"
+       ],
+       [
+        103,
+        "down"
+       ],
+       [
+        104,
+        "down"
+       ],
+       [
+        110,
+        "down"
+       ],
+       [
+        112,
+        "death"
+       ],
+       [
+        114,
+        "down"
+       ],
+       [
+        114,
+        "down"
+       ],
+       [
+        114,
+        "death"
+       ],
+       [
+        129,
+        "down"
+       ],
+       [
+        130,
+        "down"
+       ],
+       [
+        134,
+        "down"
+       ],
+       [
+        141,
+        "death"
+       ],
+       [
+        142,
+        "down"
+       ],
+       [
+        143,
+        "death"
+       ],
+       [
+        143,
+        "death"
+       ],
+       [
+        143,
+        "down"
+       ],
+       [
+        151,
+        "down"
+       ],
+       [
+        153,
+        "down"
+       ],
+       [
+        156,
+        "death"
+       ],
+       [
+        159,
+        "down"
+       ],
+       [
+        159,
+        "death"
+       ],
+       [
+        160,
+        "down"
+       ],
+       [
+        165,
+        "down"
+       ],
+       [
+        165,
+        "death"
+       ],
+       [
+        169,
+        "death"
+       ],
+       [
+        173,
+        "death"
+       ],
+       [
+        174,
+        "death"
+       ],
+       [
+        175,
+        "down"
+       ],
+       [
+        175,
+        "down"
+       ],
+       [
+        176,
+        "down"
+       ],
+       [
+        181,
+        "down"
+       ],
+       [
+        183,
+        "death"
+       ],
+       [
+        183,
+        "death"
+       ],
+       [
+        183,
+        "death"
+       ],
+       [
+        188,
+        "down"
+       ],
+       [
+        191,
+        "death"
+       ],
+       [
+        199,
+        "death"
+       ],
+       [
+        209,
+        "down"
+       ],
+       [
+        218,
+        "death"
+       ]
+      ]
+     }
+    },
+    "quake": {
+     "jump": 61,
+     "roll": 3,
+     "hit": 80
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   },
+   {
+    "run": 2,
+    "result": "kill",
+    "secs": 191,
+    "deaths": 12,
+    "downs": 20,
+    "revives": 8,
+    "twist": "twinhorns",
+    "combos": {
+     "execute": 11,
+     "chorus": 7,
+     "sanctified": 1
+    },
+    "team": {
+     "cover": 3,
+     "covered": 2,
+     "pincer": 119
+    },
+    "mech": {
+     "stack": [
+      4,
+      3
+     ],
+     "spread": [
+      4,
+      5
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     5,
+     6,
+     4
+    ],
+    "causes": [
+     "warden slam",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "rockfall",
+     "rockfall",
+     "warden quake",
+     "tether",
+     "warden quake",
+     "warden quake",
+     "warden quake"
+    ],
+    "traps": {
+     "freed": 2
+    },
+    "threat": {
+     "share": 74,
+     "locks": 11,
+     "dps": [
+      86,
+      77,
+      62,
+      101,
+      14,
+      72,
+      11,
+      70,
+      76,
+      83,
+      42,
+      67,
+      86,
+      61,
+      11,
+      79,
+      19,
+      13,
+      76,
+      10,
+      18,
+      89,
+      8,
+      45,
+      11,
+      0,
+      0,
+      4,
+      15,
+      7,
+      2,
+      44,
+      60,
+      36,
+      38,
+      56,
+      38,
+      4,
+      68
+     ],
+     "heal": [
+      59,
+      10,
+      21,
+      27,
+      5,
+      4,
+      1,
+      10,
+      6
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "cleric": 1281,
+      "bard": 2640,
+      "guardian": 3440,
+      "ranger": 7104,
+      "berserker": 5035,
+      "swordsman": 5261
+     },
+     "downs": {
+      "swordsman": 6,
+      "cleric": 6,
+      "bard": 4,
+      "berserker": 2,
+      "ranger": 2
+     },
+     "deaths": {
+      "bard": 3,
+      "cleric": 3,
+      "swordsman": 3,
+      "ranger": 2,
+      "berserker": 1
+     },
+     "open": {
+      "n": 11,
+      "secs": 36,
+      "slices": 72,
+      "used": 28,
+      "hits": 37
+     },
+     "uses": {
+      "swing": 2,
+      "slam": 18,
+      "charge": 22,
+      "quake": 13,
+      "sweep": 1,
+      "spin": 7,
+      "rock": 9
+     },
+     "hits": {
+      "warden cleave": 1,
+      "warden slam": 5,
+      "warden quake": 27,
+      "spread": 4,
+      "warden charge": 5,
+      "warden sweep": 1,
+      "tether": 10,
+      "hound bite": 28,
+      "meteor": 6,
+      "thornbind": 18,
+      "rockfall": 3,
+      "warden spin": 3
+     },
+     "tl": {
+      "dmg": [
+       87,
+       209,
+       628,
+       856,
+       426,
+       193,
+       241,
+       192,
+       84,
+       95,
+       170,
+       151,
+       256,
+       316,
+       311,
+       303,
+       198,
+       132,
+       146,
+       0,
+       0,
+       87,
+       84,
+       204,
+       178,
+       79,
+       44,
+       163,
+       483,
+       356,
+       258,
+       522,
+       248,
+       359,
+       364,
+       87,
+       147,
+       47,
+       283,
+       182,
+       1053,
+       242,
+       323,
+       387,
+       71,
+       60,
+       101,
+       0,
+       0,
+       0,
+       0,
+       16,
+       25,
+       0,
+       35,
+       23,
+       112,
+       53,
+       71,
+       141,
+       61,
+       102,
+       89,
+       101,
+       20,
+       141,
+       0,
+       0,
+       0,
+       23,
+       67,
+       104,
+       74,
+       183,
+       26,
+       162,
+       99,
+       74,
+       85,
+       98,
+       42,
+       90,
+       103,
+       230,
+       297,
+       309,
+       409,
+       1493,
+       236,
+       133,
+       81,
+       20,
+       0,
+       20,
+       0,
+       35,
+       37,
+       74,
+       0,
+       74,
+       114,
+       102,
+       0,
+       0,
+       15,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       32,
+       24,
+       44,
+       126,
+       151,
+       35,
+       35,
+       126,
+       37,
+       52,
+       78,
+       26,
+       0,
+       0,
+       22,
+       95,
+       45,
+       202,
+       85,
+       43,
+       66,
+       73,
+       0,
+       0,
+       0,
+       24,
+       0,
+       0,
+       48,
+       0,
+       0,
+       0,
+       31,
+       54,
+       16,
+       30,
+       50,
+       28,
+       38,
+       34,
+       17,
+       22,
+       58,
+       52,
+       86,
+       119,
+       357,
+       276,
+       233,
+       141,
+       107,
+       170,
+       167,
+       149,
+       159,
+       88,
+       130,
+       209,
+       94,
+       518,
+       241,
+       172,
+       126,
+       305,
+       221,
+       140,
+       164,
+       36,
+       93,
+       35,
+       82,
+       258,
+       206,
+       269,
+       130,
+       76
+      ],
+      "marks": [
+       [
+        16,
+        "down"
+       ],
+       [
+        16,
+        "down"
+       ],
+       [
+        17,
+        "down"
+       ],
+       [
+        39,
+        "down"
+       ],
+       [
+        44,
+        "down"
+       ],
+       [
+        46,
+        "down"
+       ],
+       [
+        51,
+        "down"
+       ],
+       [
+        51,
+        "death"
+       ],
+       [
+        56,
+        "death"
+       ],
+       [
+        59,
+        "down"
+       ],
+       [
+        71,
+        "down"
+       ],
+       [
+        72,
+        "down"
+       ],
+       [
+        81,
+        "death"
+       ],
+       [
+        87,
+        "down"
+       ],
+       [
+        89,
+        "down"
+       ],
+       [
+        89,
+        "down"
+       ],
+       [
+        102,
+        "death"
+       ],
+       [
+        103,
+        "down"
+       ],
+       [
+        103,
+        "down"
+       ],
+       [
+        103,
+        "death"
+       ],
+       [
+        104,
+        "down"
+       ],
+       [
+        112,
+        "death"
+       ],
+       [
+        114,
+        "death"
+       ],
+       [
+        115,
+        "death"
+       ],
+       [
+        134,
+        "down"
+       ],
+       [
+        143,
+        "death"
+       ],
+       [
+        150,
+        "down"
+       ],
+       [
+        159,
+        "death"
+       ],
+       [
+        166,
+        "down"
+       ],
+       [
+        174,
+        "down"
+       ],
+       [
+        176,
+        "death"
+       ],
+       [
+        185,
+        "death"
+       ]
+      ]
+     }
+    },
+    "quake": {
+     "jump": 64,
+     "roll": 3,
+     "hit": 53
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   },
+   {
+    "run": 3,
+    "result": "wipe",
+    "secs": 97,
+    "deaths": 8,
+    "downs": 15,
+    "revives": 8,
+    "twist": "ironhide",
+    "combos": {
+     "execute": 8,
+     "chorus": 3,
+     "sanctified": 1
+    },
+    "team": {
+     "cover": 1,
+     "covered": 0,
+     "pincer": 74
+    },
+    "traps": {
+     "down": 1
+    },
+    "causes": [
+     "warden quake",
+     "warden cleave",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden quake",
+     "warden quake"
+    ],
+    "bursts": [
+     5,
+     3
+    ],
+    "mech": {
+     "stack": [
+      0
+     ],
+     "spread": [
+      1,
+      3
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "hpLeft": 100,
+    "threat": {
+     "share": 79,
+     "locks": 6,
+     "dps": [
+      98,
+      78,
+      126,
+      95,
+      62,
+      15,
+      83,
+      59,
+      26,
+      91,
+      51,
+      58,
+      55,
+      59,
+      2,
+      96,
+      113,
+      54,
+      41,
+      27,
+      84,
+      9,
+      20
+     ],
+     "heal": [
+      49,
+      10,
+      15,
+      31,
+      55,
+      51
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "cleric": 921,
+      "bard": 1337,
+      "guardian": 1829,
+      "ranger": 3465,
+      "berserker": 2942,
+      "swordsman": 3540
+     },
+     "downs": {
+      "cleric": 2,
+      "bard": 4,
+      "ranger": 3,
+      "berserker": 3,
+      "swordsman": 2,
+      "guardian": 1
+     },
+     "deaths": {
+      "cleric": 2,
+      "bard": 2,
+      "swordsman": 1,
+      "guardian": 1,
+      "berserker": 1,
+      "ranger": 1
+     },
+     "open": {
+      "n": 3,
+      "secs": 10.5,
+      "slices": 21,
+      "used": 4,
+      "hits": 4
+     },
+     "uses": {
+      "swing": 5,
+      "slam": 12,
+      "quake": 7,
+      "sweep": 4,
+      "charge": 3
+     },
+     "hits": {
+      "warden cleave": 6,
+      "warden slam": 5,
+      "warden quake": 16,
+      "thornbind": 11,
+      "warden sweep": 3,
+      "hound bite": 16,
+      "spread": 3,
+      "tether": 4
+     },
+     "tl": {
+      "dmg": [
+       65,
+       121,
+       454,
+       945,
+       595,
+       555,
+       354,
+       102,
+       68,
+       112,
+       259,
+       92,
+       36,
+       85,
+       133,
+       95,
+       260,
+       318,
+       28,
+       51,
+       0,
+       0,
+       21,
+       25,
+       27,
+       28,
+       0,
+       0,
+       19,
+       27,
+       0,
+       0,
+       0,
+       0,
+       0,
+       39,
+       166,
+       46,
+       244,
+       483,
+       286,
+       499,
+       585,
+       222,
+       492,
+       228,
+       160,
+       185,
+       116,
+       112,
+       88,
+       23,
+       335,
+       54,
+       32,
+       189,
+       23,
+       23,
+       23,
+       66,
+       545,
+       489,
+       467,
+       369,
+       225,
+       233,
+       304,
+       193,
+       83,
+       55,
+       32,
+       66,
+       22,
+       51,
+       146,
+       111,
+       156,
+       195,
+       69,
+       24,
+       115,
+       123,
+       31,
+       122,
+       46,
+       13,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       155
+      ],
+      "marks": [
+       [
+        16,
+        "down"
+       ],
+       [
+        17,
+        "down"
+       ],
+       [
+        21,
+        "down"
+       ],
+       [
+        24,
+        "down"
+       ],
+       [
+        26,
+        "down"
+       ],
+       [
+        28,
+        "down"
+       ],
+       [
+        29,
+        "death"
+       ],
+       [
+        38,
+        "death"
+       ],
+       [
+        52,
+        "down"
+       ],
+       [
+        68,
+        "down"
+       ],
+       [
+        71,
+        "down"
+       ],
+       [
+        80,
+        "down"
+       ],
+       [
+        82,
+        "down"
+       ],
+       [
+        86,
+        "down"
+       ],
+       [
+        92,
+        "down"
+       ],
+       [
+        93,
+        "down"
+       ],
+       [
+        93,
+        "down"
+       ],
+       [
+        93,
+        "death"
+       ],
+       [
+        94,
+        "death"
+       ],
+       [
+        94,
+        "death"
+       ],
+       [
+        94,
+        "death"
+       ],
+       [
+        94,
+        "death"
+       ],
+       [
+        94,
+        "death"
+       ]
+      ]
+     }
+    },
+    "quake": {
+     "jump": 30,
+     "roll": 1,
+     "hit": 24
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   }
+  ]
+ },
+ {
+  "boss": "warden",
+  "party": 6,
+  "skill": 5,
+  "knobs": {},
+  "label": "6p s5",
+  "rs": [
+   {
+    "run": 1,
+    "result": "kill",
+    "secs": 103,
+    "deaths": 0,
+    "downs": 1,
+    "revives": 1,
+    "twist": "thornbound",
+    "combos": {
+     "execute": 10,
+     "chorus": 9,
+     "sanctified": 1
+    },
+    "team": {
+     "cover": 0,
+     "covered": 0,
+     "pincer": 91
+    },
+    "traps": {
+     "freed": 1
+    },
+    "bursts": [
+     6,
+     6
+    ],
+    "mech": {
+     "stack": [
+      1
+     ],
+     "spread": [
+      3,
+      3
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "threat": {
+     "share": 97,
+     "locks": 8,
+     "dps": [
+      93,
+      90,
+      91,
+      75,
+      92,
+      77,
+      81,
+      66,
+      91,
+      88,
+      83,
+      61,
+      63,
+      61,
+      67,
+      65,
+      54,
+      58,
+      62,
+      54,
+      53,
+      53,
+      63,
+      53,
+      50,
+      50,
+      72,
+      55,
+      63,
+      30,
+      92,
+      68
+     ],
+     "heal": [
+      74,
+      55,
+      62,
+      55,
+      51,
+      52,
+      51,
+      51
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 2731,
+      "bard": 3066,
+      "cleric": 2072,
+      "berserker": 5390,
+      "ranger": 6042,
+      "swordsman": 5473
+     },
+     "downs": {
+      "berserker": 1
+     },
+     "deaths": {},
+     "open": {
+      "n": 5,
+      "secs": 16,
+      "slices": 32,
+      "used": 17,
+      "hits": 31
+     },
+     "uses": {
+      "swing": 4,
+      "slam": 11,
+      "quake": 7,
+      "sweep": 1,
+      "charge": 7,
+      "rock": 6,
+      "spin": 3
+     },
+     "hits": {
+      "warden cleave": 6,
+      "spitter thorn": 13,
+      "warden quake": 4,
+      "thornbind": 3,
+      "hound bite": 6,
+      "spread": 3,
+      "meteor": 1
+     },
+     "tl": {
+      "dmg": [
+       61,
+       549,
+       752,
+       254,
+       260,
+       47,
+       238,
+       198,
+       482,
+       264,
+       232,
+       168,
+       287,
+       352,
+       386,
+       233,
+       320,
+       228,
+       188,
+       467,
+       470,
+       255,
+       286,
+       613,
+       518,
+       321,
+       400,
+       438,
+       189,
+       97,
+       91,
+       172,
+       145,
+       263,
+       60,
+       129,
+       43,
+       177,
+       379,
+       682,
+       1767,
+       501,
+       347,
+       494,
+       109,
+       92,
+       84,
+       150,
+       371,
+       301,
+       127,
+       507,
+       53,
+       133,
+       209,
+       70,
+       405,
+       533,
+       447,
+       336,
+       306,
+       163,
+       180,
+       64,
+       6,
+       20,
+       87,
+       61,
+       290,
+       67,
+       21,
+       18,
+       0,
+       0,
+       222,
+       109,
+       82,
+       170,
+       31,
+       0,
+       1494,
+       277,
+       119,
+       51,
+       43,
+       50,
+       85,
+       128,
+       57,
+       45,
+       0,
+       0,
+       0,
+       19,
+       130,
+       47,
+       59,
+       49,
+       104,
+       423,
+       425,
+       220,
+       322
+      ],
+      "marks": [
+       [
+        88,
+        "down"
+       ]
+      ]
+     }
+    },
+    "quake": {
+     "jump": 84,
+     "roll": 0,
+     "hit": 4
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   },
+   {
+    "run": 2,
+    "result": "kill",
+    "secs": 135,
+    "deaths": 0,
+    "downs": 0,
+    "revives": 0,
+    "twist": "twinhorns",
+    "combos": {
+     "execute": 12,
+     "chorus": 7,
+     "sanctified": 2
+    },
+    "team": {
+     "cover": 0,
+     "covered": 0,
+     "pincer": 83
+    },
+    "mech": {
+     "stack": [
+      6,
+      5
+     ],
+     "spread": [
+      3,
+      6
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     6,
+     6
+    ],
+    "traps": {
+     "freed": 1
+    },
+    "threat": {
+     "share": 85,
+     "locks": 12,
+     "dps": [
+      90,
+      93,
+      90,
+      82,
+      87,
+      64,
+      89,
+      68,
+      56,
+      61,
+      74,
+      57,
+      94,
+      92,
+      87,
+      67,
+      77,
+      85,
+      94,
+      81,
+      79,
+      81,
+      77,
+      59,
+      78,
+      59,
+      88,
+      64,
+      50,
+      56,
+      73,
+      59,
+      84,
+      83,
+      92,
+      79,
+      50,
+      80,
+      76,
+      57,
+      91,
+      101,
+      91,
+      66,
+      85,
+      93,
+      83,
+      65
+     ],
+     "heal": [
+      75,
+      53,
+      45,
+      52,
+      60,
+      59,
+      59,
+      56,
+      59,
+      49,
+      70,
+      64
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 2567,
+      "bard": 3333,
+      "cleric": 1863,
+      "berserker": 5315,
+      "ranger": 6960,
+      "swordsman": 4732
+     },
+     "downs": {},
+     "deaths": {},
+     "open": {
+      "n": 6,
+      "secs": 20,
+      "slices": 40,
+      "used": 24,
+      "hits": 43
+     },
+     "uses": {
+      "swing": 2,
+      "slam": 15,
+      "charge": 16,
+      "quake": 9,
+      "sweep": 1,
+      "rock": 6,
+      "spin": 3
+     },
+     "hits": {
+      "warden cleave": 3,
+      "spread": 7,
+      "thornbind": 4,
+      "warden quake": 3,
+      "hound bite": 1,
+      "rockfall": 1
+     },
+     "tl": {
+      "dmg": [
+       90,
+       573,
+       688,
+       288,
+       212,
+       109,
+       61,
+       108,
+       121,
+       99,
+       200,
+       125,
+       66,
+       90,
+       114,
+       431,
+       167,
+       147,
+       115,
+       159,
+       240,
+       401,
+       98,
+       123,
+       195,
+       44,
+       28,
+       56,
+       0,
+       113,
+       139,
+       405,
+       604,
+       218,
+       247,
+       113,
+       118,
+       64,
+       48,
+       119,
+       277,
+       149,
+       289,
+       338,
+       384,
+       382,
+       645,
+       274,
+       65,
+       123,
+       0,
+       903,
+       124,
+       263,
+       111,
+       175,
+       456,
+       628,
+       176,
+       311,
+       356,
+       424,
+       385,
+       288,
+       159,
+       100,
+       17,
+       18,
+       0,
+       20,
+       0,
+       51,
+       18,
+       24,
+       8,
+       368,
+       503,
+       52,
+       108,
+       69,
+       155,
+       120,
+       214,
+       62,
+       115,
+       138,
+       133,
+       162,
+       28,
+       19,
+       19,
+       0,
+       15,
+       176,
+       21,
+       243,
+       284,
+       121,
+       26,
+       1280,
+       118,
+       0,
+       135,
+       33,
+       156,
+       125,
+       165,
+       94,
+       51,
+       47,
+       208,
+       35,
+       61,
+       0,
+       22,
+       0,
+       193,
+       656,
+       335,
+       360,
+       135,
+       169,
+       124,
+       21,
+       0,
+       0,
+       0,
+       570,
+       567,
+       308,
+       0,
+       96,
+       28,
+       193,
+       57
+      ],
+      "marks": []
+     }
+    },
+    "quake": {
+     "jump": 85,
+     "roll": 1,
+     "hit": 3
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   },
+   {
+    "run": 3,
+    "result": "kill",
+    "secs": 119,
+    "deaths": 0,
+    "downs": 1,
+    "revives": 1,
+    "twist": "ironhide",
+    "combos": {
+     "execute": 13,
+     "chorus": 11
+    },
+    "team": {
+     "cover": 1,
+     "covered": 0,
+     "pincer": 100
+    },
+    "mech": {
+     "stack": [
+      6,
+      3
+     ],
+     "spread": [
+      3,
+      3
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     6,
+     6
+    ],
+    "traps": {
+     "down": 1
+    },
+    "threat": {
+     "share": 97,
+     "locks": 10,
+     "dps": [
+      87,
+      93,
+      73,
+      88,
+      58,
+      56,
+      69,
+      83,
+      56,
+      56,
+      54,
+      66,
+      72,
+      68,
+      64,
+      69,
+      10,
+      61,
+      54,
+      62,
+      28,
+      71,
+      63,
+      77,
+      58,
+      73,
+      65,
+      69,
+      50,
+      64,
+      51,
+      53,
+      70,
+      79,
+      76,
+      79,
+      54,
+      61,
+      53,
+      67
+     ],
+     "heal": [
+      71,
+      54,
+      57,
+      58,
+      50,
+      53,
+      51,
+      51,
+      53,
+      51
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 2579,
+      "bard": 3632,
+      "cleric": 1577,
+      "berserker": 6024,
+      "ranger": 5984,
+      "swordsman": 4952
+     },
+     "downs": {
+      "swordsman": 1
+     },
+     "deaths": {},
+     "open": {
+      "n": 6,
+      "secs": 20,
+      "slices": 40,
+      "used": 17,
+      "hits": 41
+     },
+     "uses": {
+      "swing": 5,
+      "slam": 12,
+      "quake": 9,
+      "sweep": 2,
+      "charge": 4,
+      "rock": 5,
+      "spin": 3
+     },
+     "hits": {
+      "warden cleave": 9,
+      "warden sweep": 1,
+      "thornbind": 4,
+      "warden quake": 1,
+      "hound bite": 5,
+      "spread": 3,
+      "warden spin": 1,
+      "meteor": 3
+     },
+     "tl": {
+      "dmg": [
+       44,
+       262,
+       428,
+       383,
+       354,
+       262,
+       82,
+       167,
+       176,
+       129,
+       163,
+       239,
+       262,
+       141,
+       87,
+       235,
+       102,
+       137,
+       215,
+       204,
+       737,
+       715,
+       201,
+       27,
+       139,
+       130,
+       188,
+       153,
+       574,
+       528,
+       460,
+       194,
+       67,
+       133,
+       223,
+       207,
+       135,
+       1448,
+       481,
+       353,
+       448,
+       138,
+       127,
+       89,
+       132,
+       46,
+       68,
+       95,
+       137,
+       159,
+       267,
+       216,
+       531,
+       266,
+       299,
+       53,
+       193,
+       76,
+       224,
+       418,
+       321,
+       49,
+       63,
+       187,
+       130,
+       137,
+       127,
+       448,
+       187,
+       515,
+       365,
+       86,
+       43,
+       58,
+       44,
+       122,
+       22,
+       28,
+       0,
+       1331,
+       70,
+       237,
+       235,
+       18,
+       11,
+       10,
+       60,
+       319,
+       87,
+       54,
+       273,
+       148,
+       289,
+       312,
+       120,
+       175,
+       203,
+       81,
+       109,
+       188,
+       18,
+       33,
+       337,
+       315,
+       247,
+       388,
+       16,
+       65,
+       13,
+       12,
+       11,
+       10,
+       70,
+       9,
+       12,
+       12,
+       18,
+       65,
+       655,
+       33
+      ],
+      "marks": [
+       [
+        45,
+        "down"
+       ]
+      ]
+     }
+    },
+    "quake": {
+     "jump": 102,
+     "roll": 1,
+     "hit": 1
+    },
+    "wave": {
+     "roll": 0,
+     "hit": 0,
+     "geyser": 0,
+     "deluge": 0
+    }
+   }
+  ]
+ }
+]

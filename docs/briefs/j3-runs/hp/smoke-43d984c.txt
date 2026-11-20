@@ -1,0 +1,28 @@
+tuneboss: 2 cells x 1 runs, 2 at a time, ports 37490-37491
+  done warden 3p s5: 1/1 kills, 66s (66-66) (77s in)
+  done colossus 3p s5: 1/1 kills, 136s (136-136) (146s in)
+
+== warden (per fight; kill time over kills; opening used: share of 0.5s opening slices with a melee hit on the boss, of the opening s per fight)
+party  skill  n  kills  kill time    downs  deaths  melee deaths  dmg melee/rng/heal  opening used       quake               
+3      5      1  1/1    66s (66-66)  0.0    0.0     0.0           83%/0%/17%          80% of 10s (3.0x)  rings cleared 100%  
+  ability (hits/uses per fight)   3p s5           
+  swing (warden cleave)           4.0/4.0 (1.00)  
+  slam (warden slam)              0.0/5.0 (0.00)  
+  quake (warden quake)            0.0/4.0 (0.00)  
+  charge (warden charge)          0.0/1.0 (0.00)  
+  sweep (warden sweep)            1.0/1.0 (1.00)  
+  spin (warden spin)              0.0/1.0 (0.00)  
+  rock (rockfall)                 0.0/1.0 (0.00)  
+  other hits per fight: thornbind 3.0, spread 2.0, tether 2.0, hound bite 2.0
+
+== colossus (per fight; kill time over kills; opening used: share of 0.5s opening slices with a melee hit on the boss, of the opening s per fight)
+party  skill  n  kills  kill time       downs  deaths  melee deaths  dmg melee/rng/heal  opening used       beam / overload                       
+3      5      1  1/1    136s (136-136)  0.0    0.0     0.0           88%/0%/12%          50% of 16s (5.0x)  beam hit 1/4 · overloads stopped 1/2  
+  ability (hits/uses per fight)   3p s5           
+  swing (colossus hammerfall)     9.0/12.0 (0.75) 
+  strike (colossus lightning)     1.0/12.0 (0.08) 
+  gust (gale push)                0.0/7.0 (0.00)  
+  beam (tempest beam)             1.0/1.0 (1.00)  
+  overload (thunderclap)          3.0/7.0 (0.43)  
+  other hits per fight: harpy strike 8.0, spread 4.0, fire 3.0, harpy dive 3.0
+exit=0

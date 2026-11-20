@@ -1,0 +1,17 @@
+tuneboss: 2 cells x 2 runs, 1 at a time, ports 37480-37480
+  done warden 3p s5: 2/2 kills, 111s (104-117) (242s in)
+  done warden 6p s5: 2/2 kills, 102s (99-105) (471s in)
+
+== warden (per fight; kill time over kills; opening used: share of 0.5s opening slices with a melee hit on the boss, of the opening s per fight)
+party  skill  n  kills  kill time       downs  deaths  melee deaths  dmg melee/rng/heal  opening used       quake              
+3      5      2  2/2    111s (104-117)  0.0    0.0     0.0           84%/0%/16%          34% of 15s (6.0x)  rings cleared 92%  
+6      5      2  2/2    102s (99-105)   0.0    0.0     0.0           53%/39%/8%          49% of 10s (4.0x)  rings cleared 98%  
+  ability (hits/uses per fight)   3p s5           6p s5           
+  swing (warden cleave)           3.0/4.0 (0.75)  5.0/4.0 (1.25)  
+  slam (warden slam)              0.5/12.5 (0.04) 0.0/10.5 (0.00) 
+  quake (warden quake)            4.5/9.0 (0.50)  1.5/7.5 (0.20)  
+  charge (warden charge)          0.0/7.5 (0.00)  1.5/8.5 (0.18)  
+  sweep (warden sweep)            0.0/2.0 (0.00)  0.5/1.0 (0.50)  
+  spin (warden spin)              0.0/4.0 (0.00)  0.0/3.0 (0.00)  
+  rock (rockfall)                 1.5/7.0 (0.21)  0.0/3.5 (0.00)  
+  other hits per fight: thornbind 14.3, hound bite 11.3, meteor 3.8, spread 2.8, tether 1.5, spitter thorn 0.3
