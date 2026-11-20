@@ -4,3 +4,9 @@
   showed the pad only answers power-on after a reset). gip 5/5, controlsui 18/18. Waiting on Natan to retest in Chrome.
 - 2026-11-19 chat 1 end: Natan confirmed the wired SCUF WORKS in Chrome after 96823e2 (light solid, buttons light up).
   Next: handoff "Next steps" 2 onward (checklist, open items, guide line, tests, review, merge). State: HEAD 7ea7369+this.
+- 2026-11-19 chat 2: Natan played with the SCUF. Fixed his two reports in afcc519: (1) key hints now follow the device
+  (public/keyname.js read at draw time; skill bar relabels via new input.onLabels on device / pad kind / picture /
+  binding change; ~15 hardcoded F/E/K/T/V/Shift/Space prompts and 4 server sys texts ({key:action} tokens));
+  (2) the open Controls screen's tab follows a device switch. Checks on afcc519: padsmoke 9/9 (new check 9), controlsui
+  18/18, keys 26/26, padnav 8/8, controls 12, gamepad 6, gip 5, revive 11, talents 17, rescue 17, teamplay 14,
+  focusnav 5. Next: handoff steps 2-8 (rest of checklist with Natan, open items, guide line, review, merge).
