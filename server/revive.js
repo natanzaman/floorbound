@@ -150,11 +150,14 @@ export function installRevive(Game) {
   const wrap = (name, fn) => { const orig = P[name]; P[name] = function (...a) { return fn.call(this, orig, ...a); }; };
 
   wrap('handle', function (orig, p, msg) {
-    if (msg?.type === 'test' && process.env.TEST_HOOKS && msg.down && !p.dead) { // testing aid: drop to 0 HP (secs: bleed-out, n: earlier revives this fight)
-      p.iframeUntil = 0;
-      if (msg.n > 0) { p.reviveN = Math.min(20, msg.n | 0); p.revT = this.time; p.revFight = this.activeFightOf?.(p)?.[1] || null; }
-      this.damagePlayer(p, p.maxHp * 100, { peril: true, src: 'test' });
-      if (p.downed && msg.secs > 0) p.downed.until = this.time + Math.min(300, +msg.secs);
+    if (msg?.type === 'test' && process.env.TEST_HOOKS && msg.down) { // testing aid: drop to 0 HP (secs: bleed-out, n: earlier revives this fight)
+      const q = msg.id ? this.players.get(msg.id | 0) : p; // id: a partymate (your bot) instead of you
+      if (q && !q.dead && (q === p || (q.party && q.party === p?.party))) {
+        q.iframeUntil = 0;
+        if (msg.n > 0) { q.reviveN = Math.min(20, msg.n | 0); q.revT = this.time; q.revFight = this.activeFightOf?.(q)?.[1] || null; }
+        this.damagePlayer(q, q.maxHp * 100, { peril: true, src: 'test' });
+        if (q.downed && msg.secs > 0) q.downed.until = this.time + Math.min(300, +msg.secs);
+      }
     }
     if (msg?.type !== 'revive') return orig.call(this, p, msg);
     if (msg.on) this.startRevive(p, msg.id | 0); else this.stopRevive(p);

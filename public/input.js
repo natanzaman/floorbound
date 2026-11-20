@@ -70,12 +70,12 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     fire(hit.action, { down: true, repeat: !!e.repeat, source, event: e });
     return hit;
   }
-  function release(code, e, source, always) {
+  function release(code, e, source, always, cancel = false) { // cancel: let go by force (focus lost, device switch), not by the player
     const a = active.get(code);
     active.delete(code);
     const ups = new Set(a ? [a] : []);
-    if (always) for (const o of actionsOn(kb(), code)) if (ACTION[o.action]?.type === 'hold' && !ACTION[o.action].context) ups.add(o.action);
-    for (const u of ups) fire(u, { down: false, repeat: false, source, event: e });
+    if (always) for (const o of actionsOn(kb(), code)) if (ACTION[o.action]?.type === 'hold' && !ACTION[o.action].context && (device !== 'pad' || KBM_ALWAYS.includes(o.action))) ups.add(o.action); // (under Controller a key never lets go of a pad hold)
+    for (const u of ups) fire(u, { down: false, repeat: false, source, event: e, ...(cancel ? { cancel: true } : {}) });
   }
 
   // rebinding: capture swallows every key first (window, capture phase), Esc cancels
@@ -102,8 +102,8 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     if (active.has(code)) release(code, e, 'kbm', false);
   });
   addEventListener('blur', () => reset());
-  // Keys and mouse let go quietly (callers clear their own holds); pad holds fire their up (the bot wheel closes) and
-  // the pad buttons still down stay down (no new press when they come back up).
+  // Keys and mouse let go quietly (callers clear their own holds); pad holds fire their up marked cancel (the bot wheel
+  // closes without giving an order) and the pad buttons still down stay down (no new press when they come back up).
   function reset() { held.clear(); active.clear(); releasePad(); }
 
   // Mouse buttons on the game view: main.js asks what a click would do (peek), then lets it happen (mouseDown).
@@ -187,12 +187,12 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
   function releasePad() {
     const ups = [...new Set(pad.active.values())];
     pad.active.clear();
-    for (const a of ups) fire(a, { down: false, repeat: false, source: 'pad', event: null });
+    for (const a of ups) fire(a, { down: false, repeat: false, source: 'pad', event: null, cancel: true }); // (forced: blur, switch, pad gone)
   }
   function setDevice(d) {
     if (d === device) return true;
     if (d === 'pad' && !readPads().length) return false; // Controller only while one is connected
-    for (const [code] of active) release(code, null, device, false); // let go of every hold
+    for (const [code] of active) release(code, null, device, false, true); // let go of every hold (cancel: the wheel gives no order)
     releasePad();
     device = d; settings.device = d === 'touch' ? undefined : d; save();
     for (const fn of deviceSubs) fn(d);
@@ -266,7 +266,8 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     },
     resetBindings(d) { B[d] = merged(d, {}); controlsStore.set({ [d]: {} }); relabel(); },
     reload() { // (K2: the account's copy replaced fb_controls) let go of every hold, then take the saved bindings
-      for (const [code] of active) release(code, null, device, false);
+      for (const [code] of active) release(code, null, device, false, true);
+      releasePad();
       const c = controlsStore.get(); B.kbm = loadBindings('kbm', c.kbm); B.pad = loadBindings('pad', c.pad);
       relabel();
     },

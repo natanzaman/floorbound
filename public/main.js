@@ -968,7 +968,7 @@ input.on('guard', e => { // hold to guard; with Settings → Toggle guard, each 
 onPress('lockNext', () => cycleLock());
 input.on('botWheel', e => { // bot command wheel; with Settings → Toggle the bot wheel, each press opens or closes it (no hold)
   if (settings.wheelToggle) { if (e.down && !e.repeat) { if (wheel.isOpen()) wheel.close(); else wheel.open(); } }
-  else if (!e.down) wheel.keyup(); else if (!e.repeat) wheel.keydown(e.event);
+  else if (!e.down) { if (e.cancel) wheel.cancel(); else wheel.keyup(); } else if (!e.repeat) wheel.keydown(e.event);
 });
 onPress('teamBurst', e => { if (!e.repeat) teamplay.press(); }); // Team Burst: start it (full bar) or join the sync window
 onPress('players', () => $('players-btn').click());
@@ -982,7 +982,7 @@ onPress('clearTarget', () => clearSelection()); // Ctrl+right-click: deselect
 let escBusy = false;
 addEventListener('keydown', e => { if (e.key === 'Escape') escBusy = e.cancelBubble || cursorPanelOpen() || wheel.isOpen() || talents.isOpen() || !!document.getElementById('mvp'); }, true);
 function menuOpen() { keys.clear(); attackHeld = false; combat.guard(false); stick.active = false; stick.dx = stick.dy = 0; gmenu.open(); }
-addEventListener('blur', () => { keys.clear(); attackHeld = false; combat.guard(false); });
+addEventListener('blur', () => { keys.clear(); attackHeld = false; combat.guard(false); wheel.cancel(); }); // (a held bot wheel closes, no order)
 
 // camera drag (mouse + touch on the right/anywhere outside the stick)
 // (settings: loaded at the top, before the renderer)
