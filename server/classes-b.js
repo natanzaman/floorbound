@@ -117,10 +117,10 @@ const methods = {
     return 1 - (slot === 0 ? SONG.anthem.haste : SONG.anthem.skillHaste) * (p.anthem.pow || 1);
   },
   // A cone (or a full circle with half = PI) of sound from p. Interrupts wind-ups, adds Discord, optionally slows.
-  chord(p, c, { r, half, mult, stacks = 1, slow = 0, slowFor = 0, knock = 0 }) {
+  // A: the chord's entry in ATTACKS (an area attack: Cleave doesn't apply; Cone mode keeps it inside the cone).
+  chord(p, c, { r, half, mult, stacks = 1, slow = 0, slowFor = 0, knock = 0, A = null }) {
     let n = 0;
-    for (const m of [...this.mobs.values()]) {
-      if (!this.targetable(m) || !this.inArc(p, m, r, half)) continue;
+    for (const m of this.arcTargets(p, r, half, A)) {
       const winding = !!(m.windupAt > 0 || m.sweepPending);
       n++;
       this.addDiscord(m, p, stacks);
@@ -282,8 +282,7 @@ const SKILLS = {
   hamstring(p, c) { // a frontal half-circle: knocked down longer, slowed, more posture
     const H = LANCE.hamstring;
     this.cbFx(p, 'hamstring', { s: c.S, r: H.r });
-    for (const m of [...this.mobs.values()]) {
-      if (!this.targetable(m) || !this.inArc(p, m, H.r, H.half)) continue;
+    for (const m of this.arcTargets(p, H.r, H.half, this.atkFov(p, 'hamstring'))) { // (an area attack: Cone mode keeps it in the cone)
       this.slowMob(m, H.slow, H.slowFor);
       this.damageMob(m, p, c.atk * H.mult, { stun: H.stun, heavy: true, frac: H.frac, sk: c.S });
     }
@@ -319,17 +318,17 @@ const SKILLS = {
   dissonance(p, c) {
     const D = SONG.dissonance, half = D.half * this.styleNum(p, 'chordHalf', 1); // Flute: a wider cone
     this.cbFx(p, 'dissonance', { s: c.S, r: D.r, h: r2(half) });
-    this.chord(p, c, { r: D.r, half, mult: D.mult, slow: D.slow, slowFor: D.slowFor });
+    this.chord(p, c, { r: D.r, half, mult: D.mult, slow: D.slow, slowFor: D.slowFor, A: this.atkFov(p, 'dissonance') });
   },
   shatter(p, c) {
     const D = SONG.shatter, half = D.half * this.styleNum(p, 'chordHalf', 1);
     this.cbFx(p, 'shatter', { s: c.S, r: D.r, h: r2(half) });
-    this.chord(p, c, { r: D.r, half, mult: D.mult, stacks: D.stacks });
+    this.chord(p, c, { r: D.r, half, mult: D.mult, stacks: D.stacks, A: this.atkFov(p, 'shatter') });
   },
   feedback(p, c) {
     const D = SONG.feedback;
     this.cbFx(p, 'feedback', { s: c.S, r: D.r });
-    this.chord(p, c, { r: D.r, half: Math.PI, mult: D.mult, knock: D.knock, slow: D.slow, slowFor: D.slowFor });
+    this.chord(p, c, { r: D.r, half: Math.PI, mult: D.mult, knock: D.knock, slow: D.slow, slowFor: D.slowFor, A: this.atkFov(p, 'feedback') });
   },
   crescendo(p, c) { this.startCresc(p, c, 'crescendo'); },
   finale(p, c) { this.startCresc(p, c, 'finale'); },

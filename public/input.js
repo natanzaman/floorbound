@@ -30,7 +30,7 @@ import { pads as usbPads } from '/xboxusb.js'; // wired third-party Xbox pads on
 // fb_controls: the bindings (and, from K3, accessibility), versioned; follows the account (K2: public/controlsync.js).
 // listen(fn): fn(c) after every set / replace (the account sync uploads changes).
 const CONTROLS_KEY = 'fb_controls', CONTROLS_V = 1;
-let accessCache = null; // fb_controls.access, read once per change (the camera stick reads it every frame)
+let accessCache = null, combatCache = null; // fb_controls.access / .combat, read once per change (the camera stick and guard facing read them every frame)
 const storeListeners = new Set();
 export const controlsStore = {
   access() { // normalised (public/access.js: numbers clamped, wrong types back to the default); padSens only when saved,
@@ -39,11 +39,11 @@ export const controlsStore = {
     if (!raw || typeof raw !== 'object' || !Object.hasOwn(raw, 'padSens')) delete a.padSens;
     return (accessCache = a);
   },
-  combat() { return cleanPrefs(this.get().combat); }, // Controls → Combat: { mode, cleave, max } (shared/targeting.js)
+  combat() { return combatCache || (combatCache = cleanPrefs(this.get().combat)); }, // Controls → Combat: { mode, cleave, max } (shared/targeting.js)
   setCombat(patch) { const c = cleanPrefs({ ...this.combat(), ...patch }); return this.set({ combat: { target: c.mode, cleave: c.cleave, max: c.max } }); },
   get() { try { const c = JSON.parse(localStorage.getItem(CONTROLS_KEY) || 'null'); return c && typeof c === 'object' ? c : { v: CONTROLS_V }; } catch { return { v: CONTROLS_V }; } },
   set(patch) { return this.replace({ ...this.get(), ...patch }); },
-  replace(c) { accessCache = null; c = { ...c, v: CONTROLS_V }; try { localStorage.setItem(CONTROLS_KEY, JSON.stringify(c)); } catch {} for (const fn of storeListeners) fn(c); return c; },
+  replace(c) { accessCache = null; combatCache = null; c = { ...c, v: CONTROLS_V }; try { localStorage.setItem(CONTROLS_KEY, JSON.stringify(c)); } catch {} for (const fn of storeListeners) fn(c); return c; },
   listen(fn) { storeListeners.add(fn); return () => storeListeners.delete(fn); },
 };
 

@@ -178,7 +178,7 @@ export class Game {
   handle(p, msg) {
     switch (msg.type) {
       case 'input': return this.onInput(p, msg);
-      case 'skill': p.healTid = msg.tid | 0; return this.useSkill(p, msg.slot | 0, msg.face); // tid: a heal's preferred target (bots)
+      case 'skill': p.healTid = msg.tid | 0; this.setAimYaw(p, msg.look); return this.useSkill(p, msg.slot | 0, msg.face); // tid: a heal's preferred target (bots); look: the camera's look (Cone mode, server/targeting.js)
       case 'dodge': return this.dodge(p, msg.face);
       case 'jump': return this.jump(p);
       case 'guard': return this.guard(p, msg.on);

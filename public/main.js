@@ -1350,7 +1350,7 @@ function useSkill(slot) {
   }
   state.ready[slot] = now + ((slot === 0 && styles.basicCd(mastery.cd(0))) || mastery.cd(slot)) * 1000; // mastery and branch cooldowns, weapon styles (the server corrects it)
   state.lastPress[slot] = now;
-  send({ type: 'skill', slot, face: state.face });
+  send({ type: 'skill', slot, face: state.face, look: state.yaw }); // look: the camera's look (Cone mode keeps hits inside its cone)
 }
 
 // ---------------- items, merchant, raid gate ----------------

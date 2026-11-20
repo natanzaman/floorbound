@@ -66,7 +66,8 @@ try:
         p.keyboard.down('KeyJ'); frames(3); p.keyboard.up('KeyJ'); frames(2)
         sk = S("() => window.__sent.filter(m => m.type === 'skill').pop()")
         assert sk and abs(sk['face'] - 1.0) < 0.02, sk
-        ok('Aimed: the attack goes where the camera looks')
+        assert abs(sk.get('look', 99) - 1.0) < 0.02, sk
+        ok('Aimed: the attack goes where the camera looks; every skill carries the look (Cone mode)')
 
         p.reload(); join()
         assert tprefs()[-1] == {'type': 'tprefs', 'mode': 'aimed', 'cleave': True, 'max': 5}, tprefs()

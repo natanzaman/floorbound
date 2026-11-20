@@ -839,18 +839,20 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
 Owner: "attacks always go to the nearest enemy even when I'm facing or locked on another". Plan and per-class notes:
 `docs/briefs/targeting.md`. Amends the K3 cut "aim assist strength (attacks already auto-aim)": targeting is now a choice.
 - **Controls → Combat** (fb_controls.combat `{ target, cleave, max }`, synced with the account; `shared/targeting.js`):
-  - **Nearest**; **Locked or nearest** (default: the lock at any distance up to 45 m, no 14 m cutoff); **Cone** (nearest
-    in a 120° cone where the camera looks, a lock inside the cone first, never beside / behind); **Aimed** (no
+  - **Nearest**; **Locked or nearest** (default: the lock within max(14, skill range + 4) m, else the crosshair pick
+    for bows and bolts, else the nearest: the old behaviour); **Cone** (nearest in a 120° cone where the camera looks,
+    a lock inside the cone first; the server drops arc and line hits outside the cone, using the look sent with each
+    skill); **Aimed** (no
     auto-targeting or homing: attacks go where the camera looks; projectiles fly straight with a 0.35 m wider hitbox
     and hit whatever is on the line; marks / pounces / leaps take the first enemy on the aim line).
   - **Cleave** on/off (default on) and **Max targets per hit** 1–8 (default 8). On: min(attack limit, max) enemies in
-    the field of view (lock first, then nearest); off: one (the lock if inside, else the nearest).
+    the field of view (lock first, then nearest); off: one (the lock if inside, else the nearest). Area attacks (Bard
+    chords, Hamstring, the Berserker's Cleave skill, ring basics) keep only their own limit.
 - **Data:** `ATTACKS` (base field of view = the old hitArc half-angles; target limit `n`; `aoe` for crowd-control cones),
   weapon styles' `mods.fov` (x the half-angle; all 1 for now, so balance is unchanged), style steps may carry `n`.
 - **Server:** `{ type: 'tprefs' }` on join and on change, validated; bots never send it and keep the old behaviour.
   The Ranger's server aim now keeps the locked target when it's in range and in the skill's cone.
-- **Not affected:** spins, slams, ground circles, dashes, projectiles (single-target or piercing by design), Bard chords,
-  Hamstring.
+- **Not affected:** spins, slams, ground circles, dashes and projectiles (single-target or piercing by design).
 - **Open for the owner:** per-weapon `fov` values (wider-but-slower weapons), the target limits, whether bots should use
   the limits too, whether Cleave should also cover spins and slams.
 

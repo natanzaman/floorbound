@@ -26,7 +26,7 @@ export function cleanPrefs(raw) {
   const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const mode = TARGET_MODES.includes(r.mode) ? r.mode : TARGET_MODES.includes(r.target) ? r.target : DEFAULT_PREFS.mode;
   const cleave = typeof r.cleave === 'boolean' ? r.cleave : r.cleave === 0 || r.cleave === 1 ? !!r.cleave : DEFAULT_PREFS.cleave;
-  const n = Math.round(Number(r.max));
+  const n = typeof r.max === 'number' || (typeof r.max === 'string' && r.max.trim() !== '') ? Math.round(Number(r.max)) : NaN; // (null, '', true: the default)
   const max = Number.isFinite(n) ? Math.min(MAX_TARGETS.max, Math.max(MAX_TARGETS.min, n)) : DEFAULT_PREFS.max;
   return { mode, cleave, max };
 }
@@ -34,8 +34,11 @@ export function cleanPrefs(raw) {
 // ---------- attack field of view and target limits ----------
 // Per basic attack / ability: r (reach, m) and half (half the attack field of view, radians) where the shape used to
 // be hard-coded (game.js, mastery.js; the base values are the old ones, so balance is unchanged), and n: how many
-// enemies one hit can reach with Cleave on (the player's "max targets" caps it further). aoe: a crowd-control cone or
-// spin that always hits everything in it (Cleave doesn't apply).
+// enemies one hit can reach with Cleave on (the player's "max targets" caps it further).
+//   aoe: an area attack: the Cleave toggle and max targets don't apply (its own n still caps it). The Bard chords,
+//        Hamstring, the Berserker's Cleave skill (a 180° sweep) and all-round ring basics.
+//   round: all around you: Cone mode's "nothing beside or behind" filter doesn't apply (rings, Feedback).
+// Spins, slams and ground circles (hitCircle), dashes and projectiles never go through this table.
 // The newer classes keep their shapes in their own tunes (BERSERKER_TUNE.chop / cleave / executioner, LANCE,
 // SONG.dissonance / shatter) and weapon-style basics in shared/styles.js steps (a step may carry its own n).
 // Weapon styles widen or narrow every arc with mods.fov (x half; wider swings are meant to come with slower ones).
@@ -45,10 +48,10 @@ export const ATTACKS = {
   starburst: { r: 3.2, half: 0.9, n: 4 }, starburstFin: { r: 3.2, half: 0.9, n: 6 },
   finisher: { r: 3.2, half: 0.9, n: 4 }, finisher2: { r: 3.4, half: 0.9, n: 6 },
   chop: { n: 4 }, chopFin: { n: 6 }, // Berserker (BERSERKER_TUNE.chop)
-  cleave: { n: 8 }, executioner: { n: 6 },
+  cleave: { n: 8, aoe: true }, executioner: { n: 6 },
   lthrust: { n: 3 }, lthrustFin: { n: 4 }, // Lancer: the spear line (LANCE.reach / width)
-  hamstring: { aoe: true }, dissonance: { aoe: true }, shatter: { aoe: true }, feedback: { aoe: true },
-  styleArc: { n: 4 }, styleFin: { n: 6 }, styleLine: { n: 3 }, styleRing: { n: 8 }, // weapon-style basics by shape
+  hamstring: { aoe: true }, dissonance: { aoe: true }, shatter: { aoe: true }, feedback: { aoe: true, round: true },
+  styleArc: { n: 4 }, styleFin: { n: 6 }, styleLine: { n: 3 }, styleRing: { n: 8, aoe: true, round: true }, // weapon-style basics by shape
 };
 // The shape and limit of one attack: the table entry, a call's own shape (over: a class tune, a style step), the
 // style's field-of-view multiplier on the half-angle (never past a full circle).
@@ -70,12 +73,32 @@ export function inCone(x, z, front, m, half) {
 }
 const edge = (x, z, m) => Math.hypot(m.x - x, m.z - z) - rad(m);
 
+// What a long-range skill aims at with nothing locked: the enemy closest to the camera's line of sight within range
+// (the crosshair, ~26° either side, more for big or close enemies), else anything within 7 m.
+export const CROSSHAIR = { half: 0.45, fallback: 7, from: 12 }; // from: ranges above this use it (Locked or nearest)
+export function crosshairPick({ x, z, front, mobs, range, canTarget = () => true }) {
+  const fx0 = Math.sin(front), fz0 = Math.cos(front);
+  let best = null, bs = Infinity, near = null, nd = Math.min(range, CROSSHAIR.fallback);
+  for (const m of mobs) {
+    if (!canTarget(m)) continue;
+    const dx = m.x - x, dz = m.z - z, d = Math.hypot(dx, dz) || 0.01;
+    if (d - rad(m) < nd) { nd = d - rad(m); near = m; }
+    if (d > range + rad(m)) continue;
+    const ang = Math.acos(Math.max(-1, Math.min(1, (dx * fx0 + dz * fz0) / d)));
+    if (ang > CROSSHAIR.half + Math.atan2(rad(m) || 0.8, d)) continue;
+    const sc = ang * 4 + d / range;
+    if (sc < bs) { bs = sc; best = m; }
+  }
+  return best || near;
+}
+
 // Which enemy an attack turns you toward, or null (attack where you face / look).
 //   mode: TARGET_MODES · front: the direction "in front of you" (the camera's look) · lock: the locked enemy or null
-//   range: the skill's engage range (nearest picks) · lockRange: how far a lock still counts
-export function pickTarget({ mode, x, z, front = 0, mobs, lock = null, range, lockRange = LOCK_RANGE, canTarget = () => true, cone = CONE_HALF }) {
+//   range: the skill's engage range (nearest picks) · lockRange: how far a lock still turns you (default
+//   max(14, range + 4): a slash doesn't spin to a boss 30 m away while a wolf bites you)
+export function pickTarget({ mode, x, z, front = 0, mobs, lock = null, range, lockRange = Math.max(14, range + 4), canTarget = () => true, cone = CONE_HALF }) {
   if (mode === 'aimed') return null;
-  const lockOk = !!lock && canTarget(lock) && edge(x, z, lock) <= lockRange;
+  const lockOk = !!lock && canTarget(lock) && edge(x, z, lock) <= Math.min(lockRange, LOCK_RANGE);
   const nearest = test => {
     let best = null, bd = range;
     for (const m of mobs) {
@@ -90,13 +113,16 @@ export function pickTarget({ mode, x, z, front = 0, mobs, lock = null, range, lo
     const inside = m => inCone(x, z, front, m, cone);
     return lockOk && inside(lock) ? lock : nearest(inside);
   }
-  return lockOk ? lock : nearest(); // 'lock' (and anything unknown)
+  if (lockOk) return lock; // 'lock' (and anything unknown)
+  return range > CROSSHAIR.from ? crosshairPick({ x, z, front, mobs, range, canTarget }) : nearest(); // bows, bolts: the crosshair
 }
 
-// Cleave: which of the enemies inside an attack's field it hits. At most n, the locked one first, then the nearest.
-export function capTargets(list, { x, z, n = Infinity, lock = null }) {
+// Cleave: which of the enemies inside an attack's field it hits. At most n: the locked one first (pass it only in the
+// modes that honour a lock), then the nearest; line: an angle to order by distance from that line instead (Aimed).
+export function capTargets(list, { x, z, n = Infinity, lock = null, line = null }) {
   if (list.length <= n) return list;
-  const out = [...list].sort((a, b) => edge(x, z, a) - edge(x, z, b));
+  const key = line === null ? m => edge(x, z, m) : m => Math.abs((m.x - x) * Math.cos(line) - (m.z - z) * Math.sin(line)) - rad(m);
+  const out = [...list].sort((a, b) => key(a) - key(b));
   const i = lock ? out.indexOf(lock) : -1;
   if (i > 0) { out.splice(i, 1); out.unshift(lock); }
   return out.slice(0, Math.max(0, n));

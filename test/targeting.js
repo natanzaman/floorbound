@@ -4,7 +4,7 @@
 // lock preference in the Ranger's server aim, aimed marks.
 // Usage: node test/targeting.js
 import assert from 'node:assert/strict';
-import { pickTarget, capTargets, cleanPrefs, inCone, rayPick, attackFov, ATTACKS, CONE_HALF, DEFAULT_PREFS, AIM_PAD } from '../shared/targeting.js';
+import { pickTarget, crosshairPick, capTargets, cleanPrefs, inCone, rayPick, attackFov, ATTACKS, CONE_HALF, DEFAULT_PREFS, AIM_PAD } from '../shared/targeting.js';
 import { cleanControls, combatSetting } from '../shared/controls.js';
 import { Game } from '../server/game.js';
 import { CLASSES } from '../shared/data.js';
@@ -26,16 +26,28 @@ const mob = (id, x, z, r = 0.8) => ({ id, x, z, def: { radius: r } });
 
   assert.equal(pick('nearest'), near, 'nearest: the nearest, behind or not');
   assert.equal(pick('nearest', { lock: far }), near, 'nearest: ignores the lock');
-  assert.equal(pick('lock', { lock: far }), far, 'lock: the locked target however far (no 14 m cutoff)');
+  assert.equal(pick('lock', { lock: far, range: 26 }), far, 'lock: a bow turns to the locked target 30 m away (range + 4)');
+  assert.equal(pick('lock', { lock: far }), near, 'lock: a 12 m skill does not spin to a lock 30 m away (max(14, range + 4))');
+  assert.equal(pick('lock', { lock: mob(6, 0, 15) }).id, 6, 'lock: within 14 m + radius it turns you');
   assert.equal(pick('lock'), near, 'lock: nothing locked = the nearest');
-  assert.equal(pick('lock', { lock: mob(5, 0, 60) }), near, 'lock: past the lock range = the nearest');
+  assert.equal(pick('lock', { lock: mob(5, 0, 60), lockRange: 99 }), near, 'lock: never past the 45 m lock range');
   assert.equal(pick('lock', { lock: far, canTarget: m => m !== far }), near, 'lock: a dead / hidden lock is skipped');
   assert.equal(pick('cone'), front, 'cone: never the one behind you');
-  assert.equal(pick('cone', { lock: far }), far, 'cone: a lock inside the cone wins over a nearer one');
+  assert.equal(pick('cone', { lock: far, range: 26 }), far, 'cone: a lock inside the cone wins over a nearer one');
+  assert.equal(pick('cone', { lock: far }), front, 'cone: a lock too far for the skill = the nearest in the cone');
   assert.equal(pick('cone', { lock: near }), front, 'cone: a lock behind you is ignored (nearest in the cone)');
   assert.equal(pick('cone', { mobs: [near, side] }), null, 'cone: nothing in the cone = no target (attack forward)');
   assert.equal(pick('aimed', { lock: far }), null, 'aimed: never picks');
-  ok('pickTarget: nearest, locked or nearest, cone, aimed');
+  ok('pickTarget: nearest, locked or nearest (lock within max(14, range + 4)), cone, aimed');
+
+  // Locked or nearest, nothing locked, a long-range skill: the crosshair pick (as before), never a spin to one behind
+  const ahead = mob(11, 1, 15), behind = mob(12, 0, -6), beside = mob(13, 9, 1);
+  assert.equal(pick('lock', { mobs: [ahead, behind], range: 24 }), ahead, 'a bow shoots the one in the crosshair, not the nearer one behind');
+  assert.equal(pick('nearest', { mobs: [ahead, behind], range: 24 }), behind, 'Nearest mode: the nearest, as chosen');
+  assert.equal(pick('lock', { mobs: [behind, beside], range: 24 }), behind, 'nothing in the crosshair: anything within 7 m');
+  assert.equal(pick('lock', { mobs: [beside], range: 24 }), null, 'else nothing (shoot where you look)');
+  assert.equal(crosshairPick({ x: 0, z: 0, front: Math.PI / 2, mobs: [ahead, beside], range: 24 }), beside, 'the crosshair follows the look');
+  ok('Locked or nearest keeps the crosshair pick for ranges over 12 m (no 180° turns)');
 
   // the cone edge (60° either side), for a point-sized enemy and for a big one
   const at = deg => mob(9, Math.sin((deg * Math.PI) / 180) * 5, Math.cos((deg * Math.PI) / 180) * 5, 0);
@@ -56,6 +68,8 @@ const mob = (id, x, z, r = 0.8) => ({ id, x, z, def: { radius: r } });
   assert.deepEqual(capTargets([d, b, a, c], { x: 0, z: 0, n: 2, lock: d }), [d, a], 'cap: the lock first, then the nearest');
   assert.deepEqual(capTargets([d, b, a, c], { x: 0, z: 0, n: 1, lock: c }), [c], 'cleave off: the lock');
   assert.deepEqual(capTargets([b, a], { x: 0, z: 0, n: 8 }), [b, a], 'under the cap: unchanged');
+  const offLine = mob(5, 1.5, 1.5), onLine = mob(6, 0.1, 3);
+  assert.deepEqual(capTargets([offLine, onLine], { x: 0, z: 0, n: 1, line: 0 }), [onLine], 'aimed: the nearest to the aim line');
   ok('capTargets: lock first, then nearest, at most n');
 
   const line = [mob(1, 2.5, 4), mob(2, 0.3, 9), mob(3, 0, 20)];
@@ -70,6 +84,8 @@ const mob = (id, x, z, r = 0.8) => ({ id, x, z, def: { radius: r } });
   assert.deepEqual(cleanPrefs({ target: 'aimed', cleave: 0, max: 99 }), { mode: 'aimed', cleave: false, max: 8 });
   assert.deepEqual(cleanPrefs({ mode: '__proto__', cleave: 'yes', max: -4 }), { mode: 'lock', cleave: true, max: 1 });
   assert.deepEqual(cleanPrefs({ max: 'x' }).max, 8);
+  for (const max of [null, '', true, undefined, NaN]) assert.equal(cleanPrefs({ max }).max, 8, `max ${max}: the default`);
+  assert.equal(cleanPrefs({ max: '3' }).max, 3);
   const cc = cleanControls({ v: 1, combat: { target: 'cone', cleave: false, max: 2, junk: 1 } });
   assert.deepEqual(cc.combat, { target: 'cone', cleave: false, max: 2 }, 'saved and synced as { target, cleave, max }');
   assert.deepEqual(cleanControls({ v: 1, combat: 'bad' }).combat, combatSetting({}), 'a bad save falls back to the defaults');
@@ -80,6 +96,7 @@ const mob = (id, x, z, r = 0.8) => ({ id, x, z, def: { radius: r } });
   assert.equal(attackFov('slash', { fov: 1.5 }).half, 1.05 * 1.5, 'a weapon widens it');
   assert.equal(attackFov('cleave', { fov: 9, over: { r: 4.2, half: 1.6 } }).half, Math.PI, 'never past a full circle');
   for (const [k, A] of Object.entries(ATTACKS)) assert.ok(A.aoe || A.n >= 3, `${k}: a target limit`);
+  assert.ok(ATTACKS.styleRing.aoe && ATTACKS.styleRing.round && ATTACKS.feedback.round && ATTACKS.cleave.aoe && ATTACKS.cleave.n === 8);
   ok('attack field of view and target limits: table, weapon multiplier');
 }
 
@@ -105,7 +122,9 @@ g.mobs.clear(); g.boss = null;
 const sword = g.addPlayer(null, 'Kael', 'swordsman');
 const ranger = g.addPlayer(null, 'Sylas', 'ranger');
 const cleric = g.addPlayer(null, 'Mira', 'cleric');
-const all = [sword, ranger, cleric];
+const zerk = g.addPlayer(null, 'Bjorn', 'berserker');
+const bard = g.addPlayer(null, 'Lio', 'bard');
+const all = [sword, ranger, cleric, zerk, bard];
 for (const p of all) { p.lvl = 10; g.recompute(p); }
 g.time = 100;
 const X = 0, Z = 70;
@@ -113,7 +132,7 @@ function reset() {
   for (const m of g.mobs.values()) g.mobs.delete(m.id);
   g.scheduled = []; g.arrowList = [];
   for (const p of all) {
-    Object.assign(p, { x: X, z: Z, face: 0, dead: false, cds: [0, 0, 0, 0], combo: 0, lastBasic: -9, target: 0, tprefs: null });
+    Object.assign(p, { x: X, z: Z, face: 0, dead: false, cds: [0, 0, 0, 0], combo: 0, lastBasic: -9, target: 0, tprefs: null, aimYaw: null, style: null, rage: 0 });
     p.hp = p.maxHp; p.mastery = newMastery({}, p.cls);
   }
   g.time += 30; clear();
@@ -149,9 +168,43 @@ const fan = k => Array.from({ length: k }, (_, i) => wolf(Math.sin(-0.8 + (1.6 *
   assert.equal(sword.tprefs, null);
   assert.equal(hitIds(sword).size, 7, 'bots (no prefs): unchanged, every enemy in the swing');
 
+  reset(); const w4 = [wolf(0.3, 2.6), wolf(-0.6, 1.6)];
+  prefs(sword, { mode: 'nearest', cleave: false }); sword.target = w4[0].id; use(sword, 'slash');
+  assert.deepEqual([...hitIds(sword)], [w4[1].id], 'Nearest mode, cleave off: the nearest, even with a lock');
+
+  reset(); const w5 = [wolf(-1.4, 1.2), wolf(0.2, 2.6)]; // the first is nearer, the second on the aim line
+  prefs(sword, { mode: 'aimed', cleave: false }); use(sword, 'slash');
+  assert.deepEqual([...hitIds(sword)], [w5[1].id], 'Aimed, cleave off: the one nearest the aim line');
+
+  reset(); fan(5); prefs(zerk, { cleave: false }); use(zerk, 'cleave');
+  assert.equal(hitIds(zerk).size, 5, "the Berserker's Cleave skill is an area sweep: Cleave off doesn't make it single-target");
+  reset(); fan(3); bard.style = 'drum'; prefs(bard, { cleave: false }); use(bard, 'sonic');
+  assert.equal(hitIds(bard).size, 3, 'a ring basic (War Drum) hits all around, Cleave off or not');
+
   prefs(sword, { mode: 'nonsense', cleave: 'x', max: 1e9 });
   assert.deepEqual(sword.tprefs, { mode: 'lock', cleave: true, max: 8 }, 'the message is validated');
   ok('cleave: on hits all in the swing, off hits the lock or the nearest, max and skill limits cap it, bots unchanged');
+}
+
+// Cone: arc and line hits stay inside the cone around the camera's look (sent with the skill)
+{
+  const swing = (look, extra = {}) => g.handle(sword, { type: 'skill', slot: 0, face: 1.0, ...(look === undefined ? {} : { look }), ...extra });
+  const layout = () => [wolf(Math.sin(0.5) * 2.4, Math.cos(0.5) * 2.4), wolf(Math.sin(1.9) * 2.4, Math.cos(1.9) * 2.4)]; // 29° and 109° from the look
+  reset(); let [inside, outside] = layout(); prefs(sword, { mode: 'cone' }); swing(0);
+  assert.ok(hitIds(sword).has(inside.id) && !hitIds(sword).has(outside.id), 'Cone: the swing skips the enemy beside the camera');
+  reset(); [inside, outside] = layout(); prefs(sword, { mode: 'cone' }); swing(undefined);
+  assert.equal(hitIds(sword).size, 2, 'an old client without look: no filter');
+  reset(); [inside, outside] = layout(); prefs(sword, { mode: 'cone' }); swing('x');
+  assert.equal(sword.aimYaw, null, 'look is validated'); assert.equal(hitIds(sword).size, 2);
+  reset(); [inside, outside] = layout(); prefs(sword, { mode: 'lock' }); swing(0);
+  assert.equal(hitIds(sword).size, 2, 'other modes: no filter');
+  reset(); [inside, outside] = layout(); swing(0);
+  assert.equal(hitIds(sword).size, 2, 'bots: no filter');
+  reset(); [inside, outside] = layout(); prefs(sword, { mode: 'cone' }); g.handle(sword, { type: 'skill', slot: 0, face: 1.0, look: 2 * Math.PI });
+  assert.ok(hitIds(sword).has(inside.id) && !hitIds(sword).has(outside.id), 'look is wrapped');
+  reset(); fan(3); const behindW = wolf(0, -1.2); bard.style = 'drum'; prefs(bard, { mode: 'cone' }); g.handle(bard, { type: 'skill', slot: 0, face: 0, look: 0 });
+  assert.ok(hitIds(bard).has(behindW.id), 'all-round ring basics are not cone-filtered');
+  ok('Cone: arc / line hits outside the camera cone dropped (look validated; old clients, bots, other modes, rings unfiltered)');
 }
 
 // aimed: arrows fly straight (no homing, no auto-aim), hit whatever walks into the line; padded hitbox
