@@ -99,7 +99,8 @@ export function initBotWheel({ send, state, players, log, keyLabel = () => 'V', 
       if (hover) issue(hover);
       if (isOpen()) close(); // (nothing pointed at, or no bots to give it to)
     },
-    cancel() { // the hold was cut off (focus lost, device switch, pad gone): close a held wheel without giving an order
+    cancel() { // a held keyboard wheel when the window loses focus (main.js blur): close it without an order. (Device switch,
+      // pad gone, reload: those arrive as cancel ups and main.js closes the wheel.)
       if (!key) return;
       key = false; close();
     },

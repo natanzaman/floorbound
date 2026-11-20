@@ -153,7 +153,7 @@ const useText = (u, lab = bindingLabel) => `${ACTION[u.action].label}${u.dir ? `
 // The controls a key can be given from the picture: one-key controls (not fixed, not the axes), on this device.
 export const pickable = device => ACTIONS.filter(a => !a.fixed && a.type !== 'axis' && !(a.kbmOnly && device === 'pad'));
 
-export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controlsui' }) {
+export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controlsui' }) { // (onChange: optional; main.js relabels through input.onLabels)
   const el = document.createElement('div');
   el.id = id; el.className = 'panel hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Controls');
   el.dataset.nav = id; // (the controller drives it: public/focusnav.js)
