@@ -358,7 +358,7 @@ const gmenu = initGameMenu({
   lockCursor: () => lockCursor(), leave: k => leaveGame(k), accounts: () => !!(acct.cfg.accounts && acct.token),
   checkAdmin: () => api('/api/admin/me').then(r => r.admin),
 });
-const wheel = initBotWheel({ send, state, players, log, keyLabel }); // orders for the bots in your party: hold V (public/botwheel.js)
+const wheel = initBotWheel({ send, state, players, log, keyLabel, toggleMode: () => !!settings.wheelToggle }); // orders for the bots in your party: hold V (public/botwheel.js)
 const bubbles = initBubbles({ state, players, project, camera, layer: $('labels'), enabled: () => settings.bubbles !== false && !cine.film }); // speech bubbles over heads (public/bubbles.js); the film view uses subtitles
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
@@ -966,8 +966,9 @@ input.on('guard', e => { // hold to guard; with Settings → Toggle guard, each 
   else if (!e.down) combat.guard(false); else if (!e.repeat) combat.guard(true);
 });
 onPress('lockNext', () => cycleLock());
-input.on('botWheel', e => { // bot command wheel; with Settings → Toggle the bot wheel, each press opens or closes it (no hold)
-  if (settings.wheelToggle) { if (e.down && !e.repeat) { if (wheel.isOpen()) wheel.close(); else wheel.open(); } }
+input.on('botWheel', e => { // bot command wheel; with Settings → Toggle the bot wheel, a press opens it and the next gives the order picked (no hold)
+  if (e.cancel) { wheel.close(); return; } // (a release the player didn't make: blur, device switch: close, no order)
+  if (settings.wheelToggle) { if (e.down && !e.repeat) wheel.toggle(); }
   else if (!e.down) wheel.keyup(); else if (!e.repeat) wheel.keydown(e.event);
 });
 onPress('teamBurst', e => { if (!e.repeat) teamplay.press(); }); // Team Burst: start it (full bar) or join the sync window
@@ -1033,7 +1034,7 @@ $('settings-btn').onclick = () => settingsUi.toggle();
 // bindings (or the account's copy arriving) relabels the HUD.
 function controlsChanged() { if (state.joined && !state.spectator) buildSkillBar(); }
 const controlsUi = initControlsUi({ input, sfx, onChange: controlsChanged });
-panels.register('controlsui', { esc: true });
+panels.register('controlsui', { esc: true, onClose: () => controlsUi.close() }); // (closed by the registry: stop a capture too)
 const controlSync = createControlSync({
   api, signedIn: () => !!(acct.cfg.accounts && acct.token),
   onApply: () => { input.reload(); Object.assign(settings, loadSettings(), { device: settings.device }); applyAccess(settings); settingsUi.refresh(); controlsUi.refresh(); controlsChanged(); },

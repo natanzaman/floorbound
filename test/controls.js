@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
   ACTIONS, ACTION, GROUPS, DEFAULTS, resolve, check, assign, merged, diff, validate, normalize, axisFromKeys,
   bindingHeld, bindingArmed, bindingLabel, keyName, actionsOn, RESERVED,
-  cleanControls, loadBindings, syncPlan, CONTROLS_V, CONTROLS_MAX_BYTES, canSwap, isAxisBinding,
+  cleanControls, loadBindings, syncPlan, CONTROLS_V, CONTROLS_MAX_BYTES, canSwap, isAxisBinding, conflictText,
 } from '../shared/controls.js';
 
 let n = 0;
@@ -229,6 +229,17 @@ const H = (...k) => new Set(k);
   assert.equal(merged('kbm', bad.kbm).bag[1], 'KeyI');
   assert.equal(cleanControls({ v: 1, kbm: { move: ['KeyW,KeyA,KeyS,KeyD', null], selectAimed: ['Ctrl+Mouse0', null] } }).kbm.move[0], 'KeyW,KeyA,KeyS,KeyD');
   ok('binding strings with characters outside [A-Za-z0-9+,] are dropped');
+}
+
+// ---- the conflict prompt's text: a key that is part of an axis names the whole axis (Unbind clears all of it) ----
+{
+  const kb = merged('kbm');
+  const say = (action, b) => conflictText(kb, 'kbm', b, check(kb, 'kbm', action, 0, b).conflicts);
+  assert.equal(say('jump', 'KeyF'), 'F is already on Interact.', 'a plain key names its action');
+  assert.equal(say('skill1', 'KeyW'), 'W is part of WASD on Move: unbinding it clears all of WASD.', 'an axis key names the whole axis');
+  assert.equal(say('move', 'KeyY,KeyF,KeyH,KeyU'), 'F is already on Interact.', 'a new axis names the key it shares');
+  assert.equal(conflictText(kb, 'kbm', 'KeyF', []), '');
+  ok('the conflict prompt names the whole axis for a key inside one ("WASD on Move")');
 }
 
 console.log(`controls: all ${n} checks passed`);

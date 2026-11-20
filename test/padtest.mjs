@@ -353,6 +353,38 @@ async function chords(port) {
     await P.btn('Y', false); await P.btn('LB', false); await frames(3);
     assert.ok(!(await P.visible('botwheel')) && (await sent(m, 'botcmd')).length === 0, 'released on nothing: closed, no order');
     ok(tag, 'LB+Y holds the bot wheel, the right stick picks, release gives the order (or cancels)');
+    // the window loses focus with the wheel held open and an order picked: the wheel closes, no order (no unconfirmed order on alt-tab)
+    const pointUp = async () => {
+      await P.axes([0, 0, 0, -1]); await frames(3);
+      await P.p.waitForFunction(() => !!document.querySelector('#botwheel .wcmd.pick'), null, { timeout: 5000 }).catch(() => {});
+      const c = await S(() => document.querySelector('#botwheel .wcmd.pick')?.dataset.c || null);
+      await P.axes([0, 0, 0, 0]); await frames(1);
+      return c;
+    };
+    m = await mark();
+    await P.btn('LB', true); await P.btn('Y', true); await frames(2);
+    assert.ok(await P.visible('botwheel') && await pointUp(), 'held open, an order picked');
+    await S(() => dispatchEvent(new Event('blur'))); await frames(2);
+    assert.ok(!(await P.visible('botwheel')), 'a blur closes the wheel');
+    await P.btn('Y', false); await P.btn('LB', false); await frames(3);
+    assert.equal((await sent(m, 'botcmd')).length, 0, 'and gives no order');
+    ok(tag, 'a blur with the wheel held closes it without an order');
+    // Settings → Toggle the bot wheel: LB+Y opens it, the right stick picks, LB+Y again gives the picked order
+    await S(() => { window.__fb.settings.wheelToggle = true; });
+    try {
+      m = await mark();
+      await press(['LB', 'Y'], 2);
+      assert.ok(await P.visible('botwheel'), 'toggle: LB+Y opens the wheel (and it stays open)');
+      const tpick = await pointUp();
+      assert.ok(tpick, 'toggle: the right stick points at an order');
+      await press(['LB', 'Y'], 2);
+      assert.ok(!(await P.visible('botwheel')), 'toggle: LB+Y again closes the wheel');
+      assert.deepEqual((await sent(m, 'botcmd')).map(o => o.cmd), [tpick], 'toggle: and gives the picked order');
+      assert.match(await S(() => document.querySelector('#botwheel .hint').textContent), /Press .* again on an order/, 'toggle: the hint says press, not release');
+      m = await mark(); await press(['LB', 'Y'], 2); await press(['LB', 'Y'], 2);
+      assert.ok(!(await P.visible('botwheel')) && (await sent(m, 'botcmd')).length === 0, 'toggle: nothing picked: the second press just closes');
+    } finally { await S(() => { window.__fb.settings.wheelToggle = false; }); }
+    ok(tag, 'toggle bot wheel on the pad: LB+Y, right stick, LB+Y gives the order');
 
     // LB+B: select what you aim at (B alone is skill 3)
     await p_waitMob(P).catch(() => { throw new Error('LB+B: no mob within 22 m to aim at'); });
