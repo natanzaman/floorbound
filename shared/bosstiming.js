@@ -32,7 +32,8 @@
 //              w (weight) }. A one-step sequence is an ability on its own timer (`every`). Sequences with more steps are
 //              combos (server/openings.js): `every` s apart (`first` s into the phase), one picked by weight; each step
 //              starts `gap` s after the previous one ended, and after the last the boss holds its `state` for `pause` s
-//              (the main melee opening). None run during a director show.
+//              (the main melee opening). The next combo also waits `rest` s (per phase, default 2) after that pause,
+//              so the boss's own moves get turns between two combos. None run during a director show.
 //   close      no point-blank chaining: { gap, moves, hold }: a close-range / all-around move (`moves`, the basic swing
 //              included) never starts within `gap` s of the last one landing; hold: the basic swing waits while the
 //              boss's own telegraphed area move is winding up (it favours those over instant swings). Off in a show.
@@ -189,7 +190,10 @@ const scale = (v, k) => (Array.isArray(v) ? v.map(e => (typeof e === 'number' ? 
  *  damageMul: mult frac clap dot boom · windupMul: wind channel (a repeat's `every` grows by the extra wind-up, like
  *  PACE, so the rest after the hit stays the same) · cooldownMul: every cd, the team rotation's every ·
  *  pauseMul: after.pause, each sequence's pause · gapMul: each sequence's gaps, the close-move gap · cooldownMul also
- *  the combos' `every`. `first` timers are unchanged. */
+ *  the combos' `every`. `first` timers are unchanged. Where they reach: the table's own base `knobs` reach every table
+ *  built from TIMED (the J1 trap in RESCUE included); a fight's party-size and live knobs (fightTable: knobs.party,
+ *  BOSS_KNOBS, tuneboss --set) reach only the fight's move table m.tm (its moves, the Horn Sweep, combos, close, team
+ *  rotation), not the J1 trap (RESCUE reads TIMED: its dot / boom / wind) nor the shared TEAM_TIMING moves. */
 export function applyKnobs(T, K) {
   for (const mv of Object.values(T.abilities)) {
     if (K.damageMul !== 1) for (const k of DAMAGE_KEYS) if (k in mv) mv[k] = scale(mv[k], K.damageMul);

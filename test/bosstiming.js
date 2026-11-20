@@ -397,6 +397,8 @@ function wardenFight() {
   assert.equal(openingTurn(b, W, ctx), true, 'out of reach: in for the opening'); assert.ok(b.z > 140 && ctx.ready, 'moving in, ready');
   b.z = 147; assert.equal(openingTurn(b, W, ctx), false, 'in reach: the class brain hits it');
   b.t = 2.7; assert.equal(openingTurn(b, W, ctx), true, 'just before it closes: step out'); assert.ok(b.z < 147, 'backing off');
+  const far = mk(0, 150 - W.def.radius - 6); far.role = 'dps'; readOpenings(far, [[7, 4, 3, 3]]); far.t = 2.8; // 0.2 s left
+  assert.equal(openingTurn(far, W, { ...ctx, ready: false }), true, 'far out as it closes: holds the turn'); assert.equal(far.z, 150 - W.def.radius - 6, 'does not walk in');
   const tank = mk(0, 140); tank.role = 'tank'; readOpenings(tank, [[7, 4, 3, 3]]); assert.equal(openingTurn(tank, W, ctx), false, 'the tank stays on it');
   const archer = mk(0, 140); archer.role = 'dps'; readOpenings(archer, [[7, 4, 3, 3]]); assert.equal(openingTurn(archer, W, { ...ctx, basic: { kind: 'ranged', reach: 14 } }), false, 'ranged: steady as before');
   readOpenings(b, undefined); assert.equal(openingOn(b, W), null, 'gone from the snapshot: over');

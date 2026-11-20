@@ -254,11 +254,13 @@ node scripts/tuneboss.js --boss sovereign --set damageMul=1.1,cooldownMul=0.9 --
 It runs the bot boss runners (`test/wardenskill.js`, `test/floor3boss.js`) for every boss x party (3 = Guardian, Swordsman, Cleric; 6 = Guardian, Swordsman, Berserker, Ranger, Bard, Cleric) x skill, `--runs` fights each, `--jobs` at a time on ports from `--port`, and prints one table per boss: kill rate, kill time (range), downs, deaths and melee deaths per fight, damage on the boss by role (melee incl. the tank / ranged / healer), **opening used** (the share of half-second opening slices in which a melee fighter hit the boss, and the opening seconds per fight), the boss's own check (rings cleared, Tidal Waves, beam hits and Overloads stopped), and per ability the players it hit / its uses per fight (hits per use). `--help` lists the flags.
 
 The knobs (all 1 = the table as written; `knobs.party` in a boss's table overrides them by party size, e.g. `party: { 5: { pauseMul: 1.2 } }` for 5+ fighters):
-- `damageMul`: all the boss's damage;
-- `windupMul`: telegraph times (a repeat's cooldown grows by the extra wind-up);
+- `damageMul`: the damage of the boss's own moves;
+- `windupMul`: its moves' telegraph times (a repeat's cooldown grows by the extra wind-up);
 - `gapMul`: the gaps inside a combo and the close-range gap;
 - `pauseMul`: the pauses after a move or combo, i.e. the melee openings;
 - `cooldownMul`: ability, combo and team-mechanic timers.
+
+Party-size overrides and `--set` / `BOSS_KNOBS` reach the fight's move table only: not the boss's J1 trap (Thornbind, Drowning Pillar, Storm Crystal: its damage and wind-up stay as written; tune those in its `table: 'RESCUE'` entry) nor the shared team mechanics (`TEAM_TIMING`). The base `knobs` in a boss's table reach the trap too. A combo's next one waits at least the phase's `rest` (default 2 s) after its pause, so the boss's own moves get turns in between.
 
 `--set knob=v,...` applies knobs on top of the table for one run, and `--sweep knob=from:to:step` reruns every cell for each value (one row per value). Under the hood the runners take `TUNE_JSON=file`, and the server `TUNE_STATS=1` (logs `[tune] use` / `[tune] hit`) and `BOSS_KNOBS='{"colossus":{"pauseMul":1.2}}'`. Fights run in real time, so keep `--runs` and `--jobs` modest; two runs per cell is noisy, read big changes only.
 

@@ -77,14 +77,14 @@ export function gustDodge(b) {
 }
 
 /** Melee (not the tank): in when the target boss opens up, out just before the opening ends. True if it took the turn
- *  (moving); false: the class brain plays on (ctx.ready is set during an opening: go in now). */
+ *  (moving, or holding back as it closes); false: the class brain plays on (ctx.ready is set during an opening: go in now). */
 export function openingTurn(b, tgt, ctx) {
   const o = tgt?.def?.boss && openingOn(b, tgt);
   if (!o || b.role === 'tank' || ctx.basic.kind === 'ranged') return false;
   const reach = tgt.def.radius + Math.max(1, ctx.basic.reach - 1.4), d = d2(b.x, b.z, tgt.x, tgt.z);
   const leave = 0.35 + react(b); // step out this long before it ends
   if (o.end - b.t <= leave) {
-    if (d > tgt.def.radius + 4.5) return false;
+    if (d > tgt.def.radius + 4.5) { b.goal = 'Waiting out the closing opening'; return true; } // far enough: hold (don't walk in)
     const a = Math.atan2(b.x - tgt.x, b.z - tgt.z);
     moveToward(b, tgt.x + Math.sin(a) * (tgt.def.radius + 5), tgt.z + Math.cos(a) * (tgt.def.radius + 5), 0.2);
     b.goal = 'Stepping out before the opening closes';

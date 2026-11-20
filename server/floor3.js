@@ -397,6 +397,7 @@ export const F3Methods = {
     const want = f < C.phases[1] ? 2 : f < C.phases[0] ? 1 : 0;
     while (m.phase < want) {
       m.phase++;
+      this.dropAfter(m); // the last phase's combo and after state end, and its hold (server/openings.js)
       this.events.push({ t: 'f3phase', id: m.id, n: m.phase });
       if (F3STATS) console.log(`[phase] ${m.phase + 1} at ${Math.round(t - (this.fight3?.start ?? t))}s`);
       if (m.phase === 1) {
@@ -813,7 +814,7 @@ export function installFloor3Moves(Game) {
     switch (move) {
       case 'hammerfall': {
         const [r, h] = BITE.colossus;
-        m.windupAt = t + C.cleave.wind; m.atkT = t + m.def.atkCd + C.cleave.wind; m.busyUntil = Math.min(m.busyUntil || 0, t);
+        m.windupAt = t + C.cleave.wind; m.atkT = t + (m.tm?.cleave?.cd ?? m.def.atkCd) + C.cleave.wind; m.busyUntil = Math.min(m.busyUntil || 0, t);
         this.events.push({ t: 'wind', id: m.id, d: C.cleave.wind, f: r2(m.face), r, h });
         return true;
       }

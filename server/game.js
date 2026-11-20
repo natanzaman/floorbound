@@ -1231,6 +1231,7 @@ export class Game {
     const want = f < W.phases[1] ? 2 : f < W.phases[0] ? 1 : 0;
     while (m.phase < want) {
       m.phase++;
+      this.dropAfter(m); // the last phase's combo and after state end, and its hold (server/openings.js)
       this.events.push({ t: 'phase', id: m.id, n: m.phase });
       if (m.phase === 1) {
         this.sys('The Horned Warden howls for its hounds!');
