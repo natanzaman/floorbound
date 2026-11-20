@@ -15,3 +15,13 @@
   driver: "one read loop", actual 2). Fix re-check (Opus medium): all fixed, 4 minors also fixed in 2096215. Checks on 2096215:
   - xboxusb 4/4, gip 5/5, controls 12/12, gamepad 6, revive 11, rescue 17, padsmoke.mjs 9/9, controlsui.mjs 18/18. Local server restarted (PID 10536). Sent Natan the play checklist + 4 open items; waiting on his reply.
   State: clearing to handoff (context 248k). Next: handoff Next steps 1-5.
+- 2026-11-20 chat 3: Natan: "All passed, items ok" (whole play checklist + the 4 open items). Commit 8eab057: forced let-go
+  (blur, device switch, pad gone, input.reload) cancels a held bot wheel; under Controller a key no longer lets go of a pad
+  hold; padtest section 5 (pad Cover on a bot: server cover event; pad revive of a downed bot: server revived event; TEST_HOOKS
+  down hook takes a partymate id); focus-lost/reload checks in keys.mjs + padtest s3 (fail on old code); ROADMAP K validation
+  note; README. Review Opus high: 0 serious, 3 minor, all fixed in 8eab057 (section 5 ran 3x green by the reviewer).
+  Checks: padtest full 40/40 (s1-5, before the 3 minor fixes), padtest s3 6/6 after; padsmoke 9/9, controlsui 18/18,
+  padnav 8/8, access 13/13; xboxusb 4, gip 5, controls 12, gamepad 6, revive 11, rescue 17, teamplay 14, focusnav 5,
+  talents 17. keys.mjs 26/26 in 3 of 6 runs: the misses time out at ready(0) in the classic-camera check (keys.mjs:285),
+  and unchanged HEAD 2096215 fails there 3/3 too: an existing flaky wait, not this change (follow-up).
+  Merge: base 0bb37d8 still NOT in origin/main (checked 2026-11-20); waiting for the K1b-K4 integration to land.
