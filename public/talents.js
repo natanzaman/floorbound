@@ -12,6 +12,7 @@ import {
   TALENTS, TREES, MILESTONES, pointsAt, levelForPoint, nodeDef, nodesOf, spentOf, branchSpent, spentAbove, spendBlock, refundBlock,
   talentTotals, nodeLines, effectText, nodesForSkill, STAT_TEXT,
 } from '/shared/talents.js';
+import { keyName, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const hex = n => `#${n.toString(16).padStart(6, '0')}`;
@@ -193,7 +194,7 @@ body.tree-open #rare-hint { display: none !important; } /* the rare-enemy pointe
 export function initTalents(ctx) {
   const { state, players, fx, sfx, send, floatNum, mastery, guide, isTouch, $ } = ctx;
   const style = document.createElement('style'); style.textContent = CSS; document.head.appendChild(style);
-  const panel = document.createElement('div'); panel.id = 'talentsp'; panel.className = 'hidden';
+  const panel = document.createElement('div'); panel.id = 'talentsp'; panel.className = 'hidden'; panel.dataset.nav = 'skilltree'; // (controller focus navigation)
   panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Skill Tree');
   $('bag').parentNode.append(panel);
 
@@ -230,7 +231,7 @@ export function initTalents(ctx) {
     guide.seen.add('talent');
     try { localStorage.setItem('fb_tips', JSON.stringify([...guide.seen])); } catch {}
     const el = guide.tipEl; if (!el) return;
-    el.textContent = `You earned a talent point! ${isTouch ? 'Tap Skills' : 'Press K'} to open your Skill Tree.`;
+    el.textContent = `You earned a talent point! ${tapping() ? 'Tap Skills' : `Press ${keyName('skillTree')}`} to open your Skill Tree.`;
     el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
     clearTimeout(firstTip.t); firstTip.t = setTimeout(() => el.classList.remove('show'), 7000);
   }
@@ -424,7 +425,7 @@ export function initTalents(ctx) {
     let cols = '';
     for (let l = 1; l <= MAX_LEVEL; l++) {
       const info = levelInfo(l), cl = l < L ? 'past' : l === L ? 'cur' : '';
-      cols += `<div class="lv ${cl} ${S.sel === l ? 'sel' : ''}" data-lv="${l}" title="Level ${l}">
+      cols += `<div class="lv ${cl} ${S.sel === l ? 'sel' : ''}" data-lv="${l}" data-nav="lv${l}" title="Level ${l}">
         <div class="marks">${info.slice(0, 4).map(i => `<span class="mk ${i.k}" title="${esc(i.t)}"><span>${esc(i.g)}</span></span>`).join('')}</div>
         <div class="dot">${l}</div>${l >= TALENTS.firstLevel ? `<div class="pt" title="+1 talent point"></div>` : '<div style="height:17px"></div>'}</div>`;
     }

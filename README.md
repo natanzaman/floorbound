@@ -26,6 +26,8 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 
 ## Controls
 
+The default keys; change any of them in Game Menu → Controls (they follow your account when signed in): hover a key or button in the keyboard / controller picture to see what it does (★ = bound), click it and Edit to give it a control, or use Rebind in the list.
+
 | Action | Desktop | Phone |
 | --- | --- | --- |
 | Move | WASD / arrows | Left side of the screen (joystick) |
@@ -49,8 +51,10 @@ Note: Vercel and Netlify won't work as-is, since they don't host long-running We
 | Skill Tree (progression, talents, mastery, evolutions) | K, or the Skills button (Esc closes) | Skills button |
 | Interact (merchant, Smith, Skill Shrine, raid gate) | F | Trade / Forge / Skills / Ready button |
 | Sound on/off | Sound button | Sound button |
-| Game Menu (Resume, Settings, Controls & guide, Change character, Log out; Admin page for admins) | Esc (it first closes whatever is open; in mouse look the Esc that frees the cursor opens it). The game keeps running: only your moving and attacking stop while it's open | ☰ button |
+| Game Menu (Resume, Settings, Controls, Controls & guide, Change character, Log out; Admin page for admins) | Esc (it first closes whatever is open; in mouse look the Esc that frees the cursor opens it). The game keeps running: only your moving and attacking stop while it's open | ☰ button |
 | Performance overlay | F3, or Settings → Performance overlay | — |
+
+**Controller:** plug in a standard gamepad and the game asks once whether to switch to it (A: yes, B: not now). Left stick moves, right stick turns the camera; RT attack (hold), RB dodge, LT guard (hold), A jump, X / Y / B skills 1–3, R3 lock on / next target, D-pad ↑ ← → potion / tonic / draught, D-pad ↓ interact (hold next to a downed ally: revive), View bag, Start Game Menu. Hold LB for the second layer: LB+A cover, LB+X Team Burst, LB+Y bot wheel (point with the right stick, release Y to give the order (with Toggle the bot wheel on, press LB+Y again to give it); leaving the window while holding it cancels), LB+B select what you aim at, LB+R3 clear target, LB+D-pad ↑ Skill Tree, LB+D-pad → Players. Triggers press past halfway and let go under a third; sticks have a deadzone. PlayStation and Nintendo pads show their own button names (or pick Xbox / PlayStation names in Controls), and every on-screen hint (the skill bar, "press … to trade", revive prompts) names the button of the device you're playing with. A wired third-party Xbox pad on a Mac (SCUF, PowerA: the light keeps blinking) has no macOS driver: in Chrome or Edge, Game Menu → Controls → Connect it, pick the pad once, and the game drives it over WebUSB (Windows needs nothing). Under Controller the keyboard keeps Esc, Enter (chat) and F3, the mouse is for menus, and the touch stick hides; unplugging the pad goes back to keyboard & mouse. Menus work with the pad too (Game Menu, Settings, Bag, Skill Tree, character select, the MVP card): the d-pad or left stick moves a yellow focus ring, A presses, B goes back (Settings opened from the Game Menu returns to it), Left / Right change sliders, and each window remembers where the ring was; Smith, Hall and Players stay mouse-only for now.
 
 Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 3-hit combos with a heavy, knockback finisher. You sprint automatically after 3 seconds out of combat. All sound effects and music are synthesized in the browser (`public/audio.js`), so there are no audio files.
 
@@ -236,6 +240,29 @@ With a database, the server records play events (session start/end, first kill, 
 - **Healer threat:** healing builds threat too: half of what a heal actually restores (overheal counts for nothing; damage a shield soaks counts like healing for its caster), split across every enemy fighting the party. A Cleric who spams heals and Smites can pull the boss off a Guardian who isn't taunting; a Guardian who Taunts on cooldown keeps it.
 - **Cover (Guardian, C):** dash up to 8 m to an ally (the one you selected, else whoever an enemy is after, most hurt first) and take the next hit meant for them within 1.5 s, braced like a guard (70% less; a guarding Guardian takes it on the guard). 12 s cooldown. Perilous hits (Horn Sweep) can't be covered: dodge or parry those. Guardian bots Cover a partymate under half health that a big hit is coming for (a winding boss after them, or a telegraph under them).
 - **Flanking and Pincers:** a hit from an enemy's back 120° does +8% damage and +12% posture. If a party member is on the opposite side (at least 120° apart around it, both within ~6 m of its edge), both of you get a **Pincer**: +15% damage and +20% posture, with a small "Pincer" tag only the two of you see. Melee bots (Swordsman, Berserker, Lancer) take the side opposite the tank. Tuning: `shared/threat.js`; rules: `server/threat.js`; HUD: `public/threat.js`; bots: `shared/bots/threat.js`; tests: `node test/threat.js`.
+- **Boss combos and openings:** the Warden, the Sovereign and the Colossus now also run short combos (a slam then a Quake Ring; geysers then a Tidal Wave; strikes then a Gale Push or the Tempest Beam, and so on). After one the boss stops for a few seconds, **exposed** or **planted**: a glowing weak point and an **OPENING** tag show over it (and on the boss bar, with the seconds left) for everyone. Melee hits (within ~6 m of its edge) deal +25% damage and posture, added to any flank or Pincer bonus; not while it is Broken (a Switch) or Grounded. Close-range and all-around moves keep a gap between them, and its basic swing waits while its own area telegraph winds up. Melee bots move in for an opening and step out just before it ends; bots now get out of the Gale Push cone. None of this runs during a filmed director show. Tables: `shared/bosstiming.js` (`phases[].seqs`, `close`, `OPENING`); server `server/openings.js`; client `public/openings.js`; bots `shared/bots/openings.js`; tests: `node test/bosstiming.js`.
+
+## Tuning bosses
+Every timing of the Horned Warden, the Drowned Sovereign and the Storm Colossus lives in `shared/bosstiming.js` (`BOSS_TIMING`): per ability its wind-up, damage, shape, cooldown (`every`), how it is dodged and its `after` state; per phase the combos (`seqs`: `steps`, `gaps` between them, the `pause` after, its `state` and weight `w`, one every `every` s); `close` (the gap between close-range / all-around moves); and the boss's knobs. To tune a boss, change numbers there and re-run the bots with the harness:
+
+```
+node scripts/tuneboss.js --boss colossus --party 3,6 --skills 3,5 --runs 2 --jobs 2 --port 37400
+node scripts/tuneboss.js --boss warden --party 6 --skills 5 --sweep pauseMul=0.6:1.4:0.2
+node scripts/tuneboss.js --boss sovereign --set damageMul=1.1,cooldownMul=0.9 --json runs.json
+```
+
+It runs the bot boss runners (`test/wardenskill.js`, `test/floor3boss.js`) for every boss x party (3 = Guardian, Swordsman, Cleric; 6 = Guardian, Swordsman, Berserker, Ranger, Bard, Cleric) x skill, `--runs` fights each, `--jobs` at a time on ports from `--port`, and prints one table per boss: kill rate, kill time (range), downs, deaths and melee deaths per fight, damage on the boss by role (melee incl. the tank / ranged / healer), **opening used** (the share of half-second opening slices in which a melee fighter hit the boss, and the opening seconds per fight), the boss's own check (rings cleared, Tidal Waves, beam hits and Overloads stopped), and per ability the players it hit / its uses per fight (hits per use). `--help` lists the flags.
+
+The knobs (all 1 = the table as written; `knobs.party` in a boss's table overrides them by party size, e.g. `party: { 5: { pauseMul: 1.2 } }` for 5+ fighters):
+- `damageMul`: the damage of the boss's own moves;
+- `windupMul`: its moves' telegraph times (a repeat's cooldown grows by the extra wind-up);
+- `gapMul`: the gaps inside a combo and the close-range gap;
+- `pauseMul`: the pauses after a move or combo, i.e. the melee openings;
+- `cooldownMul`: ability, combo and team-mechanic timers.
+
+Party-size overrides and `--set` / `BOSS_KNOBS` reach the fight's move table only: not the boss's J1 trap (Thornbind, Drowning Pillar, Storm Crystal: its damage and wind-up stay as written; tune those in its `table: 'RESCUE'` entry) nor the shared team mechanics (`TEAM_TIMING`). The base `knobs` in a boss's table reach the trap too. A combo's next one waits at least the phase's `rest` (default 2 s) after its pause, so the boss's own moves get turns in between.
+
+`--set knob=v,...` applies knobs on top of the table for one run, and `--sweep knob=from:to:step` reruns every cell for each value (one row per value). Under the hood the runners take `TUNE_JSON=file`, and the server `TUNE_STATS=1` (logs `[tune] use` / `[tune] hit`) and `BOSS_KNOBS='{"colossus":{"pauseMul":1.2}}'`. Fights run in real time, so keep `--runs` and `--jobs` modest; two runs per cell is noisy, read big changes only.
 
 ## Team combat: combos and the Team Burst
 
@@ -413,7 +440,13 @@ shared/controls.js  every game action, default keyboard & mouse and controller b
 public/input.js  the input layer: keys and mouse buttons -> actions by key code (on, held, axis, label, setBinding, capture; window.__fb.input), saved in localStorage fb_controls
 public/panels.js  the panel registry (open, close, top, isOpen): which windows free the cursor and close on Esc
 public/settings.js  the Settings panel; fb_settings (this browser) vs fb_controls (bindings, sensitivity, invert-Y)
+public/controlsui.js  the Controls screen (Game Menu → Controls): input device, Keyboard & Mouse | Controller tabs with an SVG keyboard + mouse / controller picture (hover tooltip, ★, click popover → Edit → filter list, live light-up), every control with Rebind (conflicts: swap / unbind), Reset to defaults; test/controlsui.mjs
+public/controlsync.js  fb_controls follows the account (accounts.settings, GET / PUT /api/settings, 8 KB): on sign-in the account copy wins, else this browser's uploads; test/controlsync.js (DB)
 test/keys.mjs    every default key and mouse action in a real browser, checked by what it sends or changes (needs Playwright for Node)
+public/keyname.js  the key a prompt names for an action on the active device (input.label at draw time), {key:action} tokens in server text
+public/xboxusb.js  WebUSB driver for wired third-party Xbox pads on a Mac (GIP: reset, power on, read; listed by input.readPads); shared/gip.js the packet parser, test/gip.js
+public/focusnav.js  controller menu navigation: spatial focus over the top window marked data-nav, A / B, focus restore by key; test/focusnav.js (DOM-free parts), test/padnav.mjs (a fake pad in a real browser)
+shared/gamepad.js  pad reading (deadzones, trigger hysteresis, button edges, the LB layer, glyph families; DOM-free); test/gamepad.js, test/padsmoke.mjs (a fake pad in a real browser)
 test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
 test/bubbles.js  speech bubble logic: duration, one per speaker, who sees which line; film subtitle hold (public/bubbles.js)
@@ -503,7 +536,7 @@ Teamwork comes from the party as each bot sees it, **real players included**:
 - **Roles:** the tank taunts whatever is on a non-tank and keeps threat (Ground Slam to Break, Bash to Switch); the healer heals the most hurt party member (a "heal me" first) from behind the tank, interrupts with Smite, blesses once the fight is on; DPS wait for the tank to hold the target, flank it and Switch in.
 - **Social (scripted, rate-limited, party chat only; say chat when not in a party):** greetings on joining a human's party ("Hey! Lyra here, I'll keep you alive."), call-outs (pulling the Warden, low HP, out of potions, Breaks, "Nice Switch!"), thanks for heals, wipes, boss kills, level-ups and grats. Lower capability bots chat less. Bots accept party invites from players (not when already partied with someone else) and form their own parties.
 
-**Orders.** Party members order the bots in their party (admins: any bot, by name) with **`/b` chat orders** or the **command wheel**: hold **V** (or press *⌘ Bot orders* under the party frames), point at an order and release V, or click it; the chips under the wheel pick all bots or one. Only lines starting with `/b` (or `/bot`, `/bots`) are orders: **ordinary chat never orders bots**. `/b <order>` orders every bot in your party, `/b <name>: <order>` (or `/b <name> <order>`) one bot; a unique start of the name is enough (`/b ly: heal`). `/b help` lists the orders; a `/b` line is never shown as chat (you get a short confirmation, the bots answer in party chat). Parsing: `parseBotChat` in `shared/bots/social.js`; the server turns the line into the same `botcmd` event as the wheel (`server/game.js` `botChat`).
+**Orders.** Party members order the bots in their party (admins: any bot, by name) with **`/b` chat orders** or the **command wheel**: hold **V** (or press *⌘ Bot orders* under the party frames), point at an order and release V, or click it (leaving the window while holding V gives no order); the chips under the wheel pick all bots or one. Only lines starting with `/b` (or `/bot`, `/bots`) are orders: **ordinary chat never orders bots**. `/b <order>` orders every bot in your party, `/b <name>: <order>` (or `/b <name> <order>`) one bot; a unique start of the name is enough (`/b ly: heal`). `/b help` lists the orders; a `/b` line is never shown as chat (you get a short confirmation, the bots answer in party chat). Parsing: `parseBotChat` in `shared/bots/social.js`; the server turns the line into the same `botcmd` event as the wheel (`server/game.js` `botChat`).
 
 | Order | `/b` words | What the bot does |
 |---|---|---|

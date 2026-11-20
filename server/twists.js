@@ -65,7 +65,7 @@ export const TwistMethods = {
         if (n) this.events.push({ t: 'howl', id: m.id, n, r: 12 });
       }
     } else if (id === 'twinhorns') {
-      const W = (this.twistW || WARDEN).charge;
+      const W = (m.tm || this.twistW || WARDEN).charge;
       if (m.phase === 0 && t >= m.twinT && t >= m.busyUntil && !m.windupAt) { m.twinT = t + W.every; /* W.every is paced already (paceMoves): the rest after the charge stays as before */ this.hornCharge(m, pick()); }
     } else if (id === 'thornbound') {
       const S = T.totems;
@@ -139,7 +139,7 @@ export const TwistMethods = {
   twistCharge(m, v) {
     if (this.twist?.id !== 'twinhorns') return;
     if (m.twin2) { m.twin2 = false; return; }
-    const W = (this.twistW || WARDEN).charge, delay = W.wind + 0.45 + TWISTS.twinhorns.gap;
+    const W = (m.tm || this.twistW || WARDEN).charge, delay = W.wind + W.after.pause + TWISTS.twinhorns.gap;
     m.busyUntil = Math.max(m.busyUntil || 0, this.time + delay + 0.1);
     this.schedule(delay, () => {
       if (m.dead || !m.engaged || this.time < m.stunUntil) return; // a Break cancels the second horn

@@ -340,7 +340,7 @@ export function installTalents(Game) {
       p.talentsDirty = true;
       if (got > 0) {
         this.events.push({ t: 'tpoint', to: p.id, n: free, got, lvl: p.lvl });
-        this.sys(`+${got} talent point${got > 1 ? 's' : ''} (${free} to spend): press K to open your Skill Tree.`, p.id);
+        this.sys(`+${got} talent point${got > 1 ? 's' : ''} (${free} to spend): press {key:skillTree} to open your Skill Tree.`, p.id);
       }
     }
     return out;

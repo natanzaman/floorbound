@@ -1,0 +1,14 @@
+tuneboss: 1 cells x 2 runs, 1 at a time, ports 37483-37483
+  done sovereign 3p s3: 2/2 kills, 155s (135-175) (333s in)
+
+== sovereign (per fight; kill time over kills; opening used: share of 0.5s opening slices with a melee hit on the boss, of the opening s per fight)
+party  skill  n  kills  kill time       downs  deaths  melee deaths  dmg melee/rng/heal  opening used       tidal wave              
+3      3      2  2/2    155s (135-175)  3.0    1.5     0.5           89%/0%/11%          39% of 23s (9.0x)  waves rolled 45 hit 14  
+  ability (hits/uses per fight)   3p s3           
+  swing (sovereign trident)       13.5/21.0 (0.64)
+  geyser (sovereign geyser)       3.0/24.0 (0.13) 
+  wave (tidal wave)               6.5/9.0 (0.72)  
+  volley (sovereign orb)          3.0/4.5 (0.67)  
+  pools (mire pool)               18.5/9.5 (1.95) 
+  deluge (the deluge)             1.5/1.0 (1.50)  
+  other hits per fight: thrall bite 21.0, tether 11.5, drowning pillar 9.0, spread 3.5, meteor 2.5

@@ -6,13 +6,14 @@ import { CLASSES } from '/shared/data.js';
 import {
   MASTERY, BRANCHES, SHRINES, nearShrine, masteryLevel, masteryProgress, activeBranch, branchDef, skillName, skillDesc, masteryCd,
 } from '/shared/mastery.js';
+import { keyHtml, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 
 const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const CSS = `
-#skillsp { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); left: 50%; transform: translateX(-50%); width: min(620px, 96vw);
-  max-height: calc(100vh - 150px); overflow: auto; padding: 12px 14px; font-size: 13px; z-index: 4; }
+#skillsp { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); left: 50%; transform: translateX(-50%); width: min(620px, calc(96vw / var(--ui-scale, 1)));
+  max-height: calc(100vh / var(--ui-scale, 1) - 150px); overflow: auto; padding: 12px 14px; font-size: 13px; z-index: 4; }
 #skillsp .top { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 15px; letter-spacing: .1em; }
 #skillsp .top small { font-weight: 600; letter-spacing: 0; opacity: .7; font-size: 12px; margin-left: 8px; }
 #skillsp .x { padding: 2px 9px; border-radius: 6px; border: 1px solid rgba(160,200,255,.3); background: transparent; color: inherit; }
@@ -194,7 +195,7 @@ export function initMastery(ctx) {
   function showPrompt(skId) {
     const s = skills().find(x => x.id === skId); if (!s) return;
     M.promptSk = skId;
-    prompt.innerHTML = `<div class="h"><span>${esc(s.name).toUpperCase()} CAN EVOLVE</span><button data-a="later">Later${isTouch ? '' : ' (K to view)'}</button></div>${cards(s, entry(skId), MASTERY.evolveAt, false)}`;
+    prompt.innerHTML = `<div class="h"><span>${esc(s.name).toUpperCase()} CAN EVOLVE</span><button data-a="later">Later${tapping() ? '' : ` (${keyHtml('skillTree')} to view)`}</button></div>${cards(s, entry(skId), MASTERY.evolveAt, false)}`;
     prompt.classList.remove('hidden');
   }
   function hidePrompt() { M.promptSk = null; prompt.classList.add('hidden'); }
@@ -371,7 +372,7 @@ export function initMastery(ctx) {
       const l = lbls[i], sp = project(s.x, 4.4, s.z), d = Math.hypot(state.x - s.x, state.z - s.z);
       if (sp && d < 22) {
         l.style.display = ''; l.style.left = `${sp[0]}px`; l.style.top = `${sp[1]}px`;
-        const html = `Skill Shrine${d < MASTERY.shrineUse ? `<br><small>${isTouch ? 'tap Skills' : 'press F for skills'}</small>` : ''}`;
+        const html = `Skill Shrine${d < MASTERY.shrineUse ? `<br><small>${tapping() ? 'tap Skills' : `press ${keyHtml('interact')} for skills`}</small>` : ''}`;
         if (l.innerHTML !== html) l.innerHTML = html;
       } else l.style.display = 'none';
     });

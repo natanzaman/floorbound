@@ -5,7 +5,9 @@
 import * as THREE from 'three';
 import { F3, GATE3, STAIRWAY3, PHASE_TEXT3, F3_TWISTS, inArena3, inGateZone3, onFloor3, unlocked3 } from '/shared/floor3.js';
 import { createFloor3, makeBolt } from '/floor3world.js';
+import { cue } from '/palette.js'; // sound cue for telegraphs (Settings → Accessibility)
 import { losReach } from '/shared/arenas.js'; // the Undercroft's great pillars stop the Tempest Beam
+import { keyName, keyHtml, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 
 // ctx: { scene, occluders, fx, sfx, state, mobs, players, send, banner, callout, floatNum, log, shake, project, isTouch, hallOpen, tip }
 export function initFloor3Client(ctx) {
@@ -18,7 +20,7 @@ export function initFloor3Client(ctx) {
   const on3 = () => onFloor3(state.x);
   const fighting = () => inArena3(state.x, state.z) && !state.spectator;
   const anim = id => mobs.get(id)?.model.anim;
-  const dodgeKey = () => (ctx.isTouch ? 'Dodge' : 'Shift'), jumpKey = () => (ctx.isTouch ? 'Jump' : 'Space');
+  const dodgeKey = () => (tapping() ? 'Dodge' : keyName('dodge')), jumpKey = () => (tapping() ? 'Jump' : keyName('jump'));
 
   // ---------- the Overload bar (under the boss bar) ----------
   const ovEl = document.createElement('div');
@@ -70,6 +72,7 @@ export function initFloor3Client(ctx) {
         fx.telegraph(e.x, e.z, e.r, e.d, e.follow ? () => mobs.get(e.follow)?.model.group.position : null);
         const mine = near(e.x, e.z, e.r + 1.5);
         sfx.play('warn', { x: e.x, z: e.z }, e.k === 'strike' ? 0.7 : 1);
+        cue(sfx, { x: e.x, z: e.z }, 1.2);
         if (e.k === 'stomp') { const m = mobs.get(e.id); if (m && !m.model.anim) m.stomp = e.d; if (mine) ctx.tip('f3armor'); }
         if (e.k === 'strike' && mine && fighting()) ctx.callout('LIGHTNING', 'Step out of the circle', e.d);
         return true;
@@ -101,7 +104,7 @@ export function initFloor3Client(ctx) {
       case 'stair':
         if (e.f !== 3) return false;
         fx.rareBeam(e.x, e.z, 5); sfx.play('rare', { x: e.x, z: e.z }, 1);
-        if (!on3() && state.z > 120 && Math.abs(state.x - e.x) < 60) setTimeout(() => !on3() && ctx.banner('THE STAIRWAY APPEARS', `Step into it and press ${ctx.isTouch ? 'Warp' : 'F'} to climb to Floor 3 (${e.d} s)`), 6500);
+        if (!on3() && state.z > 120 && Math.abs(state.x - e.x) < 60) setTimeout(() => !on3() && ctx.banner('THE STAIRWAY APPEARS', `Step into it and press ${tapping() ? 'Warp' : keyName('interact')} to climb to Floor 3 (${e.d} s)`), 6500);
         return true;
       case 'warp':
         if (e.f !== 3) return false;
@@ -268,7 +271,7 @@ export function initFloor3Client(ctx) {
       if (k >= 1) { const an = anim(b.e.by); if (an?.wind?.W?.up === 'plant') an.cancelWindup(); for (const o of [b.g, b.rim]) { scene.remove(o); o.traverse(x => { x.geometry?.dispose(); x.material?.dispose(); }); } beams.splice(i, 1); }
     }
     if (!state.spectator) {
-      if (data.stair) place(stairLabel, data.stair[0], 6.2, data.stair[1], `The Stairway · Floor 3 <small>${Math.ceil(data.stair[2])} s</small>${Math.hypot(state.x - data.stair[0], state.z - data.stair[1]) < STAIRWAY3.use ? `<br><small>${ctx.isTouch ? 'tap Warp' : 'press F to climb'}</small>` : ''}`, 40);
+      if (data.stair) place(stairLabel, data.stair[0], 6.2, data.stair[1], `The Stairway · Floor 3 <small>${Math.ceil(data.stair[2])} s</small>${Math.hypot(state.x - data.stair[0], state.z - data.stair[1]) < STAIRWAY3.use ? `<br><small>${tapping() ? 'tap Warp' : `press ${keyHtml('interact')} to climb`}</small>` : ''}`, 40);
       else stairLabel.style.display = 'none';
     }
   }

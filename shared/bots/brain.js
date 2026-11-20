@@ -36,6 +36,7 @@ import { readRescue, rescueTurn, rescueTarget, propApproach } from './rescue.js'
 import './classes.js'; // built-in class plug-ins (Guardian, Swordsman, Cleric, generic)
 import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
 import { comboTurn, burstTurn } from './teamplay.js'; // combo payoffs + Team Burst (G2)
+import { readOpenings, openingTurn, gustDodge } from './openings.js'; // boss openings, Gale Push (J3)
 import { easeOff } from './threat.js'; // DPS ease off near 90% threat (J4)
 
 const BOSS_LVL = { 1: 5, 2: 15, 3: 25 }; // a leader levels on its floor's field until this, then goes for the boss
@@ -138,6 +139,7 @@ function onSnap(b, msg) {
   }
   readDowned(b, msg.w.down); // downed players (p.downed, b.downed)
   readRescue(b, msg.w.trap); // trapped players (p.trap, b.trap)
+  readOpenings(b, msg.w.op); // bosses' openings (J3)
   for (const e of perceive(b, msg.w.events)) onEvent(b, e); // (reaction delays / misses below capability 5)
   if (b.t - (b.pruneT || 0) > 5) prune(b);
   think(b);
@@ -395,7 +397,7 @@ function thinkFree(b) {
   b.anchor = M.anchor ? { id: M.anchor.id, name: M.anchor.name, bot: !!M.anchor.bot } : null;
   upkeep(b, P, M);
   burstTurn(b, P); // join / start a Team Burst
-  if (stepRoll(b) || perilous(b) || waveDodge(b) || beamDodge(b) || travel(b, M)) return;
+  if (stepRoll(b) || perilous(b) || waveDodge(b) || beamDodge(b) || gustDodge(b) || travel(b, M)) return;
   if (reviveTurn(b, P)) return; // a partymate is down and it's our job to pick them up
   if (rescueTurn(b, P)) return; // a partymate is caught in vines and it's our job to cut them free
   act(b, P, M);
@@ -488,6 +490,7 @@ function act(b, P, M) {
     return;
   }
   if (!dodge && overloadTurn(b, tgt)) return; // Floor 3: the Colossus is Overloading: Break it
+  if (!dodge && openingTurn(b, tgt, ctx)) return; // a boss opening: melee in, then out before it closes (J3)
   if (comboTurn(b, tgt, ctx)) return; // a partner's combo setup on the target: cash it in
   if (easeOff(b, tgt, ctx)) b.easeT = b.t; // near 90% threat: keep position, hold attacks (skill 4+)
   if (!brain.combat || brain.combat(b, tgt, ctx) === false) brainFor('*').combat(b, tgt, ctx);

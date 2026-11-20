@@ -1,9 +1,9 @@
-// The Game Menu (Esc, or ☰ on phones): Resume, Settings, Controls & guide, Change character, Log out, and the admin
+// The Game Menu (Esc, or ☰ on phones): Resume, Settings, Controls (the bindings screen, public/controlsui.js), Controls & guide, Change character, Log out, and the admin
 // page for admins. It does NOT pause anything (multiplayer): main.js only blocks your movement and attacks while it's
 // open. Leaving (change character / log out) is main.js's leave(kind); it asks first when you're downed, partied or
 // in a boss fight.
-export function initGameMenu({ state, isTouch, guide, controls, steps, openSettings, lockCursor, leave, accounts, checkAdmin, sfx }) {
-  const back = document.createElement('div'); back.id = 'gamemenu'; back.className = 'hidden';
+export function initGameMenu({ state, isTouch, guide, controls, steps, openSettings, openControls, lockCursor, leave, accounts, checkAdmin, sfx }) {
+  const back = document.createElement('div'); back.id = 'gamemenu'; back.className = 'hidden'; back.dataset.nav = 'gamemenu'; // (data-nav: the controller can drive it, public/focusnav.js)
   back.innerHTML = '<div class="gm-box panel" role="dialog" aria-label="Game Menu"></div>';
   document.body.appendChild(back);
   const box = back.firstChild;
@@ -21,6 +21,7 @@ export function initGameMenu({ state, isTouch, guide, controls, steps, openSetti
       <small class="gm-run">The game is still running: it doesn't pause for anyone.</small>
       <button class="gm-b primary" data-a="resume">Resume</button>
       <button class="gm-b" data-a="settings">Settings</button>
+      ${openControls ? '<button class="gm-b" data-a="bindings">Controls</button>' : ''}
       ${spec ? '' : '<button class="gm-b" data-a="controls">Controls &amp; guide</button>'}
       <button class="gm-b" data-a="char">${spec ? 'Leave spectator view' : acc ? 'Change character' : 'Change name or class'}</button>
       ${acc ? '<button class="gm-b" data-a="logout">Log out</button>' : ''}
@@ -44,6 +45,7 @@ export function initGameMenu({ state, isTouch, guide, controls, steps, openSetti
     const a = e.target.closest('[data-a]')?.dataset.a;
     if (a === 'resume') close(true);
     else if (a === 'settings') { close(); openSettings(); }
+    else if (a === 'bindings') { close(); openControls(); }
     else if (a === 'controls') { view = 'controls'; render(); }
     else if (a === 'back') { view = 'main'; render(); }
     else if (a === 'guide') { guide.off = false; if (guide.key) guide.save(); guide.render(); close(true); }

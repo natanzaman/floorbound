@@ -1,0 +1,15 @@
+[skill 5 Perfect] run 1: kill in 125s, 0 deaths, 1 downed, 1 revived (twist ironhide) · Quake Rings: 92 jumped, 1 rolled, 4 hit · team mechanics: stacks 6/5 in, spread 2/3 clean, tethers 1/1 snapped · traps: 1 freed · Covers 0 (0 hits taken), Pincer tags 97 · combos execute 12, chorus 9, sanctified 1 · Team Bursts 2 (joiners 6/6) · threat: tank held it 88% · 12 locks, DPS at lock end 70% of L (15–105), healer 57%
+    guardian/shield dmg 2820 (22.6/s) basic 99
+    swordsman/sword dmg 5513 (44.2/s) basic 73
+    berserker/greataxe dmg 5963 (47.8/s) basic 79
+    ranger/longbow dmg 6213 (49.8/s) basic 170
+    bard/lyre dmg 3709 (29.7/s) basic 134
+    cleric/staff dmg 1609 (12.9/s) basic 81
+[skill 5 Perfect] run 2: kill in 97s, 0 deaths, 0 downed, 0 revived (twist twinhorns) · Quake Rings: 68 jumped, 2 rolled, 2 hit · team mechanics: stacks - in, spread 3/3 clean, tethers 1/1 snapped · traps: 1 freed · Covers 0 (0 hits taken), Pincer tags 86 · combos execute 12, chorus 9 · Team Bursts 2 (joiners 6/6) · threat: tank held it 96% · 9 locks, DPS at lock end 73% of L (50–98), healer 61%
+    guardian/shield dmg 3069 (31.6/s) basic 97
+    swordsman/sword dmg 5052 (52.0/s) basic 61
+    berserker/greataxe dmg 5460 (56.2/s) basic 66
+    ranger/longbow dmg 6466 (66.6/s) basic 134
+    bard/lyre dmg 3441 (35.4/s) basic 124
+    cleric/staff dmg 2103 (21.6/s) basic 87
+[skill 5 Perfect] 2/2 kills · avg kill time 111s · avg deaths 0.0 · avg revives 0.5 (of 0.5 downs) · Quake Rings cleared 96% of 169 · combos/fight 21.5 · bursts/fight 2.0 · tank share 92% · DPS at lock end avg 71% (median 68, 15% in 75–85) over 21 locks

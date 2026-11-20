@@ -474,7 +474,7 @@ Same rules as F–I: flock lock, push with `--force-with-lease`.
 |---|---|---|---|---|
 | J1 Rescue mechanics | `feat/rescue` | done | agent rescue | db4a5a7 |
 | J2 Multi-area boss fights (Floor 3 first) | `feat/arenas` | done | agent arenas | f0fdc9c |
-| J3 Boss timing tables + melee openings + tuning harness | `feat/openings` | todo (after J1 and J2) | | |
+| J3 Boss timing tables + melee openings + tuning harness | `feat/openings` | done (hard-review fixes 3a4c448) | batch 2026-11-19 | f9ece59 |
 | J4 Threat rules | `feat/threatrules` | done | agent threatrules | 2e52b29 |
 
 ### Shared contracts for J
@@ -636,10 +636,10 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
 | Task | Branch | Status | Owner | Merge |
 |---|---|---|---|---|
 | K1a Input contract + keyboard rewire + keys test | `feat/input` | done | agent input | 9103a86 |
-| K1b Gamepad + focus navigation | `feat/gamepad` | todo (after K1a) | | |
-| K2 Controls screen (pictures, lists, editing) | `feat/controlsui` | todo (after K1's action/binding contract lands) | | |
-| K3 Accessibility options | `feat/access` | todo (with K2) | | |
-| K4 Controller verification (scripted gamepad "bots") | `feat/padtest` | todo (after K1) | | |
+| K1b Gamepad + focus navigation | `feat/gamepad` | done (real-pad check a0df2b8) | batch 2026-11-19 | 0fffadd |
+| K2 Controls screen (pictures, lists, editing) | `feat/controlsui` | done (hard-review fixes 2a2fc9a) | batch 2026-11-19 | eb1a318 |
+| K3 Accessibility options | `feat/access` | done | batch 2026-11-19 | b9b1607 |
+| K4 Controller verification (scripted gamepad "bots") | `feat/padtest` | done | batch 2026-11-19 | 0bb37d8 |
 
 ### Shared contracts for K
 - **Action list** (`shared/controls.js`): every game control has an id, label, group (Move, Camera, Combat, Skills, Items, Social, Menus) and type (`button`, `hold`, `axis`, `toggle`).
@@ -688,7 +688,7 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
 - **Account sync:**
   - `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS settings JSONB`, capped at 8 KB, with a `v` field;
   - only bindings and accessibility sync; graphics, camera mode and active device stay local;
-  - on login the server copy wins if present, otherwise local uploads;
+  - on login the server copy wins if present, otherwise local uploads; exception (hard review 2026-11-20): when this browser has changes for this account the server never got (`fb_controls_unsynced`), those go up instead; a pending change of another account is dropped, never uploaded;
   - unknown ids are dropped, and new actions get their defaults unless the key is taken.
 - **K3 cuts:** "sprint" (sprinting is automatic) and "aim assist strength" (attacks already auto-aim). Reduce-motion is checked inside `shake()` and `slowMotion()`, exempting `cine.js`. The colour-blind telegraph palette and sound cues wait until J merges (telegraph colours are spread across files J is editing).
 - **Touch** is a third, automatic device on the same action bus. The touch HUD hides while a pad is active.
@@ -830,6 +830,12 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
 3. It checks **game state** (positions, cooldowns, HP, server events), not frame timing, and runs in CI-like mode (`node test/padtest.mjs` or Python).
 4. A second scripted pad checks the **modifier layer** and **chords**.
 5. **Accept when:** the harness passes on the default controller layout and on a rebound layout. Report coverage: which actions were verified on the pad.
+
+### K validation with the owner (2026-11-19/20, branch `claude/floorbound-controller-validation-3256da`)
+- **Played by the owner** on a wired SCUF (Xbox One protocol) on a Mac in Chrome: the whole play checklist passed (sticks, combat buttons, D-pad items and revive hold, LB layer, menu focus, rebinds kept across reload and account, unplug/replug, switching device mid-play).
+- **Wired Xbox pads on a Mac:** macOS has no driver for many third-party Xbox pads (Chrome never sees them), so Controls → **Connect it** drives them over WebUSB (`public/xboxusb.js`, `shared/gip.js`); shown on Macs only, reopens by itself later.
+- **Key hints follow the device** (skill bar, world prompts, server texts via `{key:action}` tokens, `public/keyname.js`); the Controls screen's tab follows a device switch; Xbox / PlayStation button pictures.
+- **Owner decisions:** the controller picture stays mouse-only; play buttons stay swallowed while a navigable window is open (except Start); a held bot wheel that loses focus (or the device switches, or the pad drops) **cancels** instead of giving the pointed order; revive hold and Cover are verified by a scripted bot party (`test/padtest.mjs` section 5: the pad really revives a downed bot and really covers it), not by hand.
 
 ## Known issues and backlog
 - **Performance (done, c8d8fb4):** server bots on in-process sockets, 10 Hz brains far from humans, the Named rest at home until a player is in the field (invites / calls / outreach wake them). Bench CPU 0.084-0.098 → 0.040-0.057 s/s with players in town, about -11% with everyone in the field (README → Performance, `scripts/perfbench.js`, `/status` cpu + bot counts). Next if needed: don't simulate floors nobody is on (Floor 2/3 mobs cost CPU with no one there).

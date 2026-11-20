@@ -8,33 +8,29 @@
 //
 // Trap objects are mobs flagged `prop` (RESCUE_MOBS, appended to MOBS in data.js): they take hits and have an HP bar,
 // but give no threat, XP, loot, posture or mastery, can't be taunted and never count as kills.
+import { TIMED, TEAM_TIMING } from './bosstiming.js';
 export const TRAP_MOVES = ['vines', 'pillar', 'crystal'];
 export const TRAP_OF = { warden: 'vines', sovereign: 'pillar', colossus: 'crystal' }; // each boss's v1 trap
 
 export const RESCUE = {
-  minFree: 2,   // free fighters in the room before a trap can start (the victim is one of them)
-  gap: 8,       // s between two team-scale mechanics on one boss (G4 moves, traps, Overload)
+  ...TEAM_TIMING.traps, // minFree: free fighters in the room before a trap can start (the victim is one of them); gap: s
+  // between two team-scale mechanics on one boss (G4 moves, traps, Overload); channel: after a trap lands the boss's big
+  // telegraphed attacks wait this long (+ BOSSTEAM.channel): time to react. (All in shared/bosstiming.js TEAM_TIMING.)
   ownHit: 0.25, // the trapped player's own hits on their trap object do this fraction (slowly freeing yourself)
-  channel: 2,   // after a trap lands the boss's big telegraphed attacks wait this long (+ BOSSTEAM.channel): time to react
-  // Hits it takes to break a trap object: hp = hits × the free allies' average attack × helpers^helpExp, where helpers
-  // are the free allies other than the boss's target (so it reads the same at every level and party size). Hold E (vines): a partymate within `reach` m channels `hold` s (moving past `leash`, acting or
-  // a heavy hit breaks it; the progress fades like a revive's).
-  vines: {
-    name: 'Thornbind', wind: 1.4, hits: 3, max: 14, tick: 0.5, dot: 0.018, // root + dot × max HP every tick
-    hold: 1.5, reach: 2.6, leash: 3.6,
-  },
+  // Each boss's trap is an ability in its timing table (shared/bosstiming.js). Hits it takes to break a trap object: hp =
+  // hits × the free allies' average attack × helpers^helpExp, where helpers are the free allies other than the boss's
+  // target (so it reads the same at every level and party size).
+  // Thornbind (vines): root + dot × max HP every tick. Hold E: a partymate within `reach` m channels `hold` s (moving past
+  // `leash`, acting or a heavy hit breaks it; the progress fades like a revive's).
+  vines: TIMED.warden.abilities.vines,
   // Drowning Pillar: the victim is pinned in a column of moonlit water fed by an orb `src` m away. Breaking the orb
   // ends it; a Guardian body-blocks it by Covering the victim (ends it at once) or by guarding on the line between the
-  // orb and the victim (no ticks while blocked; `block` s of it ends it).
-  pillar: {
-    name: 'Drowning Pillar', wind: 1.6, hits: 3.5, max: 12, tick: 0.5, dot: 0.026,
-    src: [12, 17], block: 1.6, lane: 1.4, // lane: how close to the orb→victim line a guarding Guardian must stand (m)
-  },
+  // orb and the victim (no ticks while blocked; `block` s of it ends it). lane: how close to the orb→victim line a
+  // guarding Guardian must stand (m).
+  pillar: TIMED.sovereign.abilities.pillar,
   // Storm crystal: the victim is encased (can't act, can't be hurt by the boss) inside a crystal; break it within `fuse`
   // s or it detonates, hitting every fighter in the room for `boom` × max HP (the victim too).
-  crystal: {
-    name: 'Storm Crystal', wind: 1.3, hits: 4, fuse: 8, boom: 0.32,
-  },
+  crystal: TIMED.colossus.abilities.crystal,
 };
 
 // Prop mob types (appended to MOB_IDS / MOBS after Floor 3's, so earlier indices never move). hp is set per trap.

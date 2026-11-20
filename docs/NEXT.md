@@ -1,22 +1,18 @@
-# Floorbound: what's next (handoff, 2026-11-19)
+# Floorbound: what's next (handoff, 2026-11-20)
 
-Start here, then use `docs/ROADMAP.md` for full specs and owner decisions. Everything in sections A–J is merged and live, except J3 and F7.
+Start here, then use `docs/ROADMAP.md` for full specs and owner decisions. Everything in sections A–K is merged and live, except F7. The batch of 2026-11-19 (K1b gamepad + menu navigation, K2 Controls screen + account sync, K3 accessibility, K4 scripted pad tests, J3 boss timing tables + melee openings + `scripts/tuneboss.js`, small items) went out with a hard review (Opus high) and its fixes, plus a check on a real wired pad (SCUF on Mac Chrome, WebUSB). Batch log: `docs/briefs/progress-batch-2026-11-19.md`.
 
-## Ready to run now (in parallel, each in its own worktree)
-| Task | Spec | Notes |
-|---|---|---|
-| **K1b** Gamepad + menu focus navigation | ROADMAP K: "Review amendments for K", "K contract" and "K1a as landed" | `readPads()` in `public/input.js` is a stub; fill it and poll it from `tick()`. Use `panels.top()` for focus. |
-| **K2** Controls screen (keyboard and controller pictures, binding list, rebind) | ROADMAP K2 + amendments | Use `check()`, `assign(…,'swap'\|'unbind')` and `capture()` from `shared/controls.js` / `public/input.js`. Register the panel with `panels.register`. Account sync: an `accounts.settings` JSONB column holding all of `fb_controls`. |
-| **K3** Accessibility options | ROADMAP K3 + amendments | Put them in `fb_controls.access`. Reduce-motion gates `shake()` / `slowMotion()` but not `cine.js`. The colour-blind palette is cleared to start now that J has merged. |
-| **K4** Scripted controller "bots" (Playwright fake gamepad) | ROADMAP K4 + amendments | Start once K1b lands. `__fb.input.frames` counts frames, so presses can be held for a set number of them. Copy the pointer-lock stub and helpers from `test/keys.mjs`. |
-| **J3** Boss timing tables + melee openings + tuning harness | ROADMAP J3 + "Review amendments for J" | J1 and J2 have merged, so it can start. Also handle: Colossus fights now run long (~130–170 s, the top of the target), and bots never dodge Gale Push (6-bot parties died to it under the Tailwind twist). |
+## Owner calls waiting (nothing is blocked on them)
+- **Melee share on bosses:** the J3 timing tables did not raise it. Options: a bigger `OPENING.dmg`, or bots that use openings more.
+- **Colossus length:** fight HP is now x0.72 (`hpBase` 5750, `hpPer` 4550 in `shared/floor3.js`): about 105–125 s at bot skill 5. x0.80 (6400 / 5050) if it should run longer.
+- **Riptide twist** wipes 6-bot parties on the Sovereign (older than J3). **Horn Sweep** is rare.
+- **Eye checks:** the colour-blind telegraph palettes; UI-scale caps for the Hall, Smith and skill-point windows; the opening glow and callout.
+- **Controller:** the controller picture on the Controls screen is mouse-only; Smith, Hall and Players stay mouse-only.
 
-After K1b–K4 and J3, run a **Fable review of the code** (the owner asked for this on every big feature: review the plan → build → review the code).
-
-## Small items
-- HUD corner readout: show **"62 fps · 45 ms"**, not just ping. It already toggles in Settings; F3 is the full overlay.
-- `test/threat.js` is flaky (a random-damage race on "tank lost it most of the time"). Loosen the bound or average over more runs.
-- Replace hard-coded key names with `input.label(action)` in the skill bar, the revive prompt, the wheel hint and the controls text (part of K2).
+## Small follow-ups
+- `test/keys.mjs` classic-camera check (around line 285) sometimes times out at `ready(0)`; it fails on older code too. `padsmoke.mjs` / `padtest.mjs` are load-sensitive: run them alone.
+- Controls sync: if a rebind in browser A is closed within 800 ms, then B edits, then A comes back, A's older copy wins (needs a server timestamp).
+- `shared/floor3.js` forced hammerfall (director/testing only) and `server/staging.js` still read `def.atkCd`, not the J3 tables.
 
 ## Still open from earlier
 - **F7** film work (Episode 1 tuning, Episode 2/3 cue sheets). Paused by the owner.

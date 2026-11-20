@@ -9,10 +9,12 @@
 //  - The first three times each trap involves you: a callout; a one-time guide tip.
 import * as THREE from 'three';
 import { RESCUE, readTraps } from '/shared/rescue.js';
+import { col, patterned, cue } from '/palette.js'; // telegraph colours, pattern cue, sound cue (Settings → Accessibility)
+import { keyName, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 
 const PROMPTS = 3;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const COLOR = { vines: 0x65a30d, pillar: 0x38bdf8, crystal: 0x67e8f9 };
+const COLOR_NAME = { vines: 'trapVines', pillar: 'trapPillar', crystal: 'trapCrystal' }, COLOR = k => col(COLOR_NAME[k]);
 const WORD = { vines: ['THORNBIND', '#bef264'], pillar: ['PILLAR', '#bae6fd'], crystal: ['CRYSTAL', '#a5f3fc'] };
 
 const CSS = `
@@ -97,7 +99,7 @@ function label(text, color) {
   return s;
 }
 
-export function initRescue({ state, players, mobs, send, project, layer, guide, sfx, fx, floatNum, callout, isTouch, revive }) {
+export function initRescue({ state, players, mobs, send, project, layer, guide, sfx, fx, floatNum, callout, isTouch, revive, keyLabel = () => 'E' }) { // keyLabel(action): the key the prompt names (input.label)
   const style = document.createElement('style'); style.textContent = CSS; document.head.appendChild(style);
   const banner = document.createElement('div'); banner.id = 'trapped'; banner.className = 'hidden';
   banner.innerHTML = '<div class="tp-title"></div><div class="tp-sub"></div><div class="tp-bar"><div></div></div>';
@@ -133,13 +135,14 @@ export function initRescue({ state, players, mobs, send, project, layer, guide, 
 
   // The telegraph: a ground ring closing on the victim, the trap's name over their head.
   function telegraph(e) {
-    const color = COLOR[e.k], [word, wc] = WORD[e.k];
+    const color = COLOR(e.k), [word, wc] = WORD[e.k];
     const g = new THREE.Group();
     const fill = new THREE.Mesh(new THREE.CircleGeometry(1.6, 40), mat(color, 0.35)); fill.rotation.x = -Math.PI / 2; fill.position.y = 0.02;
     const edge = new THREE.Mesh(new THREE.RingGeometry(1.45, 1.6, 48), mat(color, 0.95)); edge.rotation.x = -Math.PI / 2; edge.position.y = 0.03;
     const closer = new THREE.Mesh(new THREE.RingGeometry(0.93, 1, 48), mat(0xffffff, 0.7)); closer.rotation.x = -Math.PI / 2; closer.position.y = 0.04;
     const tag = label(word, wc); tag.position.y = 4.4;
     g.add(fill, edge, closer, tag);
+    if (patterned()) g.add(fx.dashes(1.6)); // colour-blind palettes: a dashed ring as well
     add(`tele:${e.id}`, g, e.d + 0.1, (m, k) => {
       const p = posOf(e.id); if (p) m.position.set(p.x, 0.1, p.z);
       fill.scale.setScalar(Math.max(0.01, k));
@@ -177,8 +180,9 @@ export function initRescue({ state, players, mobs, send, project, layer, guide, 
     if (e.t === 'trap') {
       telegraph(e);
       sfx.play('warn', posOf(e.id) || undefined, 1);
+      if (e.id === me()) cue(sfx, undefined, 1.2); // a trap targeting you
       const you = e.id === me(), who = name(e.id);
-      if (e.k === 'vines') tell('vines', you ? 'THORNBIND ON YOU' : 'THORNBIND', you ? 'Vines will root you: your party cuts you free.' : `${who} is about to be rooted: hit the vines or hold E next to them.`, e.d + 1);
+      if (e.k === 'vines') tell('vines', you ? 'THORNBIND ON YOU' : 'THORNBIND', you ? 'Vines will root you: your party cuts you free.' : `${who} is about to be rooted: hit the vines or hold ${keyName('revive')} next to them.`, e.d + 1);
       else if (e.k === 'pillar') tell('pillar', you ? 'DROWNING PILLAR ON YOU' : 'DROWNING PILLAR', you ? 'You will be pinned: your party breaks the glowing orb that feeds it.' : `Break the orb feeding ${who}'s pillar (a Guardian can block the beam).`, e.d + 1);
       else tell('crystal', you ? 'STORM CRYSTAL ON YOU' : 'STORM CRYSTAL', you ? 'You will be sealed in: your party has 8 s to break the crystal.' : `Break ${who}'s crystal in 8 s or it explodes on everyone!`, e.d + 1);
       return true;
@@ -186,7 +190,7 @@ export function initRescue({ state, players, mobs, send, project, layer, guide, 
     if (e.t === 'trapon') {
       end(`tele:${e.id}`);
       if (e.k === 'pillar') pillar(e);
-      fx.ring(e.x, e.z, 2.2, COLOR[e.k], 0.5);
+      fx.ring(e.x, e.z, 2.2, COLOR(e.k), 0.5);
       sfx.play(e.k === 'crystal' ? 'shatter' : 'hurt', { x: e.x, z: e.z }, 0.8);
       return true;
     }
@@ -249,7 +253,7 @@ export function initRescue({ state, players, mobs, send, project, layer, guide, 
     if (held) {
       if (sent !== t.id || (t.trap.by !== me() && now - sentAt > 400)) { send({ type: 'free', on: 1, id: t.id }); sent = t.id; sentAt = now; }
     } else if (sent) { send({ type: 'free', on: 0 }); sent = 0; }
-    const ph = t ? `<div>${t.trap.by === me() ? 'Cutting' : isTouch ? 'Hold here to cut' : 'Hold <b>E</b> to cut'} ${esc(name(t.id))} free</div><div class="fp-bar"><div style="width:${Math.round((t.trap.by === me() ? t.trap.prog : 0) * 100)}%"></div></div>` : '';
+    const ph = t ? `<div>${t.trap.by === me() ? 'Cutting' : tapping() ? 'Hold here to cut' : `Hold <b>${esc(keyLabel('revive'))}</b> to cut`} ${esc(name(t.id))} free</div><div class="fp-bar"><div style="width:${Math.round((t.trap.by === me() ? t.trap.prog : 0) * 100)}%"></div></div>` : '';
     if (ph !== lastPrompt) { lastPrompt = ph; prompt.innerHTML = ph; prompt.classList.toggle('hidden', !t); }
     // markers over trapped partymates (all of them for spectators), through walls
     const seen = new Set();

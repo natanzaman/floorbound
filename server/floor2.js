@@ -10,6 +10,8 @@ import { lastAttackItem2 } from '../shared/items.js';
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
 const r2 = v => Math.round(v * 100) / 100;
+// The Sovereign's own timer per move (a combo step pushes it back: server/openings.js bossCombo)
+const SOV_TIMERS = { geyser: 'geyserT', wave: 'waveT', thralls: 'thrallT', pools: 'poolT', volley: 'volleyT' };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const QSTATS = !!process.env.QUAKE_STATS; // test/wardenskill.js BOSS=sovereign: count Tidal Wave evades / hits, geyser hits, Deluge ticks
 const qlog = k => QSTATS && console.log(`[wave] ${k}`);
@@ -107,7 +109,7 @@ export const F2Methods = {
   // A melee hit on the wedge in front of the mob (shown as a red wedge during the wind-up).
   f2Bite(m) {
     const [reach, half] = BITE[m.type] || [m.def.range + 1, 0.6];
-    const atk = m.def.atk * (m.type === 'lurker' && this.matronNear(m) ? 1 + MATRON.aura : 1);
+    const atk = m.def.atk * (m.type === 'lurker' && this.matronNear(m) ? 1 + MATRON.aura : 1) * (m.type === 'sovereign' ? (m.tm || this.sovS || SOVEREIGN).sweep.mult : 1);
     if (!m.def.boss) {
       let nx = m.x + Math.sin(m.face) * 0.7, nz = m.z + Math.cos(m.face) * 0.7;
       [nx, nz] = resolveCollision(nx, nz, m.def.radius * 0.8);
@@ -266,7 +268,8 @@ export const F2Methods = {
   f2Sovereign(m, dt) {
     const target = this.f2Pre(m);
     if (target === false) return;
-    const t = this.time, S = this.sovS || SOVEREIGN, def = m.def;
+    const t = this.time, def = m.def;
+    let S = m.tm || this.sovS || SOVEREIGN;
     if (!target) {
       m.windupAt = 0;
       if (m.engaged || m.hp < m.maxHp) this.resetSovereign(m);
@@ -275,9 +278,10 @@ export const F2Methods = {
     }
     if (!m.engaged) { // scale to the group that walks in
       m.engaged = true;
-      m.phase = 0; m.busyUntil = 0; m.geyserT = t + 4; m.waveT = m.thrallT = m.poolT = m.volleyT = Infinity;
+      m.phase = 0; m.busyUntil = 0; m.geyserT = t + SOVEREIGN.geyser.first; m.waveT = m.thrallT = m.poolT = m.volleyT = Infinity; // (first-use delays: shared/bosstiming.js)
       this.twistEngage2(m); // Sovereign twist timers (server/sovtwists.js)
       this.scaleSovereign(m);
+      S = this.bossTable(m, this.sovS || SOVEREIGN, [...this.players.values()].filter(p => !p.dead && inArena2(p.x, p.z)).length); // m.tm (server/openings.js)
       this.startFight2(m);
     }
     this.sovereignSpecials(m, target);
@@ -286,9 +290,9 @@ export const F2Methods = {
     m.face = angleTo(m.x, m.z, target.x, target.z);
     const d = dist(m, target);
     if (d > def.range + 0.4) this.f2Move(m, target.x, target.z, def.speed * (m.phase === 2 ? 1.15 : 1), dt, def.range);
-    else if (t >= m.atkT) {
+    else if (t >= m.atkT && this.swingReady(m)) {
       const [r, h] = BITE.sovereign;
-      m.windupAt = t + S.sweep.wind; m.atkT = t + def.atkCd * (m.phase === 2 ? 0.8 : 1) + S.sweep.wind * (1 - 1 / PACE); // + the paced extra wind-up
+      m.windupAt = t + S.sweep.wind; this.swingStart(m, S.sweep.wind); m.atkT = t + S.sweep.cd * (m.phase === 2 ? S.sweep.rage : 1) + S.sweep.wind * (1 - 1 / PACE); // the table's cd (cooldownMul) + the paced extra wind-up; swingStart: no point-blank chaining (server/openings.js)
       this.events.push({ t: 'wind', id: m.id, d: S.sweep.wind, f: r2(m.face), r, h });
     }
   },
@@ -306,38 +310,51 @@ export const F2Methods = {
   },
 
   sovereignSpecials(m, target) {
-    const t = this.time, S = this.sovS || SOVEREIGN, f = m.hp / m.maxHp;
+    const t = this.time, S = m.tm || this.sovS || SOVEREIGN, f = m.hp / m.maxHp;
     const want = f < S.phases[1] ? 2 : f < S.phases[0] ? 1 : 0;
     while (m.phase < want) {
       m.phase++;
+      this.dropAfter(m); // the last phase's combo and after state end, and its hold, before the Deluge call's (server/openings.js)
       this.events.push({ t: 'f2phase', id: m.id, n: m.phase });
       if (m.phase === 1) {
         this.sys('The Drowned Sovereign calls the tide! Roll THROUGH the Tidal Wave.');
-        m.waveT = Math.min(m.waveT, t + S.wave.first); m.thrallT = Math.min(m.thrallT, t + 2); m.poolT = t + 6;
+        m.waveT = Math.min(m.waveT, t + S.wave.first); m.thrallT = Math.min(m.thrallT, t + SOVEREIGN.thralls.first); m.poolT = t + SOVEREIGN.pools.first;
       } else {
         this.sys('The Deluge! The outer court floods. Stay near the centre.');
-        this.callDeluge(m); m.volleyT = t + 4 + S.deluge.wind; m.waveT = Math.min(m.waveT, t + 7 + S.deluge.wind);
+        this.callDeluge(m); m.volleyT = t + SOVEREIGN.volley.first + S.deluge.wind; m.waveT = Math.min(m.waveT, t + SOVEREIGN.wave.firstAfterDeluge + S.deluge.wind);
       }
     }
     const fighters = [...this.players.values()].filter(p => !p.dead && inArena2(p.x, p.z));
     const pick = () => fighters[Math.floor(Math.random() * fighters.length)] || target;
-    const rndSpot = (rmax = 20) => { const a = Math.random() * Math.PI * 2, d = 3 + Math.random() * (rmax - 3); return [F2.arena.x + Math.sin(a) * d, F2.arena.z + Math.cos(a) * d]; };
+    // Combos (the table's sequences), and the after state that follows one: its own timers wait (server/openings.js)
+    if (this.bossCombo(m, k => this.sovMove(m, k, target, fighters, pick), SOV_TIMERS)) return;
     const free = t >= m.busyUntil && !m.windupAt;
 
     // Geysers: circles under fighters plus strays (roll or jump out)
-    if (t >= m.geyserT && t >= m.busyUntil) {
-      const G = S.geyser;
-      m.geyserT = t + G.every[m.phase];
-      const spots = [];
+    if (t >= m.geyserT && t >= m.busyUntil) { m.geyserT = t + S.geyser.every[m.phase]; this.sovMove(m, 'geyser', target, fighters, pick); }
+    if (t >= m.waveT && free && S.wave.every[m.phase] > 0) { m.waveT = t + S.wave.every[m.phase]; this.tidalWave(m); } // (High Tide: from phase 1)
+    if (t >= m.thrallT) { m.thrallT = t + S.thralls.every; this.sovMove(m, 'thralls', target, fighters, pick); } // phase 2 on (Drowned Host: from the start)
+    if (m.phase >= 1 && t >= m.poolT) { m.poolT = t + S.pools.every; this.sovMove(m, 'pools', target, fighters, pick); }
+    this.bossTeam?.(m, fighters); // team mechanics: shared meteor, spread, tether (server/bossteam.js)
+    if (m.phase >= 2 && t >= m.volleyT && free) { m.volleyT = t + S.volley.every; this.sovMove(m, 'volley', target, fighters, pick); }
+  },
+
+  /** One of the Sovereign's moves, now (its own timer or a combo step). Returns when it ends (absolute s). */
+  sovMove(m, k, target, fighters, pick) {
+    const t = this.time, S = m.tm || this.sovS || SOVEREIGN;
+    const rndSpot = (rmax = 20) => { const a = Math.random() * Math.PI * 2, d = 3 + Math.random() * (rmax - 3); return [F2.arena.x + Math.sin(a) * d, F2.arena.z + Math.cos(a) * d]; };
+    if (k === 'geyser') {
+      const G = S.geyser, spots = [];
       const v = pick(); spots.push([v.x, v.z]);
       if (m.phase >= 1 && fighters.length > 1) { const w = pick(); if (w !== v) spots.push([w.x, w.z]); }
       for (let i = 0; i < G.extra[m.phase]; i++) spots.push(rndSpot());
       for (const [x, z] of spots) this.f2Circle(m, x, z, G.r, G.wind, m.def.atk * G.mult, 'geyser');
+      this.areaHold(m, t + G.wind);
+      return t + G.wind;
     }
-    if (t >= m.waveT && free && S.wave.every[m.phase] > 0) { m.waveT = t + S.wave.every[m.phase]; this.tidalWave(m); } // (High Tide: from phase 1)
-    if (t >= m.thrallT) { // phase 2 on (Drowned Host: from the start)
+    if (k === 'wave') return this.tidalWave(m);
+    if (k === 'thralls') {
       const T = S.thralls;
-      m.thrallT = t + T.every;
       let alive = 0; for (const h of this.mobs.values()) if (h.temp2 && !h.dead) alive++;
       for (let i = 0; i < T.n && alive < T.max; i++, alive++) {
         const a = Math.random() * Math.PI * 2;
@@ -346,28 +363,27 @@ export const F2Methods = {
         const v = pick(); if (v) h.threat.set(v.id, 5);
         this.events.push({ t: 'f2fx', k: 'rise', x: r2(h.x), z: r2(h.z) });
       }
+      return t;
     }
-    if (m.phase >= 1) {
-      if (t >= m.poolT) {
-        const P = S.pools;
-        m.poolT = t + P.every;
-        for (let i = 0; i < P.n; i++) {
-          if (this.pools.length >= P.max) this.pools.shift();
-          const [x, z] = i === 0 ? [pick().x, pick().z] : rndSpot(18);
-          this.pools.push({ id: this.id(), x, z, r: P.r, armAt: t + P.arm, until: t + P.life, next: t + P.arm });
-          this.events.push({ t: 'tele', x: r2(x), z: r2(z), r: P.r, d: P.arm, k: 'pool' });
-        }
+    if (k === 'pools') {
+      const P = S.pools;
+      for (let i = 0; i < P.n; i++) {
+        if (this.pools.length >= P.max) this.pools.shift();
+        const v = i === 0 && pick(), [x, z] = v ? [v.x, v.z] : rndSpot(18); // the first on one fighter
+        this.pools.push({ id: this.id(), x, z, r: P.r, armAt: t + P.arm, until: t + P.life, next: t + P.arm });
+        this.events.push({ t: 'tele', x: r2(x), z: r2(z), r: P.r, d: P.arm, k: 'pool' });
       }
+      return t;
     }
-    this.bossTeam?.(m, fighters); // team mechanics: shared meteor, spread, tether (server/bossteam.js)
-    if (m.phase >= 2 && t >= m.volleyT && free) {
+    if (k === 'volley') {
       const V = S.volley;
-      m.volleyT = t + V.every;
       for (let i = 0; i < V.n; i++) {
         const v = fighters.length ? fighters[i % fighters.length] : target;
-        this.spawnOrb(m, v, (i - (V.n - 1) / 2) * 0.45, 0.8);
+        this.spawnOrb(m, v, (i - (V.n - 1) / 2) * V.fan, V.mult);
       }
+      return t;
     }
+    return t;
   },
 
   f2Circle(m, x, z, r, wind, amount, src) {
@@ -382,18 +398,19 @@ export const F2Methods = {
 
   // The must-dodge: a ring of water that sweeps out across the whole court. Only a dodge roll's i-frames get you through it.
   tidalWave(m) {
-    const W = (this.sovS || SOVEREIGN).wave, t = this.time;
-    m.busyUntil = t + W.wind + 0.5; m.windupAt = 0;
+    const W = (m.tm || this.sovS || SOVEREIGN).wave, t = this.time;
+    m.windupAt = 0; const end = this.bossAfter(m, W, t + W.wind); // + its after pause (shared/bosstiming.js)
     const w = { id: this.id(), x: m.x, z: m.z, start: t + W.wind, r: 0, hit: new Set(), ev: new Set(), atk: m.def.atk * W.mult, max: F2.arena.r * 2 + 2, m };
     this.waves.push(w);
     this.events.push({ t: 'f2wave', id: w.id, by: m.id, x: r2(w.x), z: r2(w.z), d: W.wind, sp: W.speed, w: W.width, max: w.max });
     this.twistWave2(m, w); // Riptide: a second wave behind it
+    return end;
   },
 
   // The Deluge: the Sovereign calls it (a wind-up pose and a flood line filling in from the wall to the safe ring),
   // then the outer court floods for the rest of the fight (delugeAt: when the call lands; delugeT: the next damage tick).
   callDeluge(m) {
-    const D = (this.sovS || SOVEREIGN).deluge, t = this.time;
+    const D = (m.tm || this.sovS || SOVEREIGN).deluge, t = this.time;
     m.busyUntil = Math.max(m.busyUntil, t + D.wind); m.windupAt = 0;
     this.deluge = true; this.delugeAt = this.delugeT = t + D.wind;
     this.events.push({ t: 'f2fx', k: 'dcall', id: m.id, x: F2.arena.x, z: F2.arena.z, r: D.r, r2: F2.arena.r, d: D.wind });
@@ -577,7 +594,7 @@ export const F2Methods = {
     this.orbs = this.orbs.filter(o => o.ttl > 0);
 
     // tidal waves: damage anyone in the band who isn't rolling (i-frames) as it sweeps past
-    const W = SOVEREIGN.wave;
+    const W = this.sovereign?.tm?.wave || SOVEREIGN.wave; // (the fight's table: server/openings.js)
     for (const w of this.waves) {
       if (t < w.start) continue;
       const prev = w.r;
@@ -594,7 +611,7 @@ export const F2Methods = {
     this.waves = this.waves.filter(w => w.r < w.max && !w.m.dead);
 
     // mire pools and the Deluge: damage over time
-    const s = this.sovereign, P = SOVEREIGN.pools, D = SOVEREIGN.deluge;
+    const s = this.sovereign, P = (s?.tm || SOVEREIGN).pools, D = (s?.tm || SOVEREIGN).deluge;
     for (const pl of this.pools) {
       if (t < pl.next) continue;
       pl.next = t + P.tick;

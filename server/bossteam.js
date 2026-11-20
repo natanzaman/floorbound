@@ -38,13 +38,13 @@ const methods = {
 
   // ---------- the rotation (called every tick while the boss is fighting) ----------
   bossTeam(m, fighters) {
-    const C = BOSSTEAM[m.type];
+    const C = BOSSTEAM[m.type] && (m.tm?.team || BOSSTEAM[m.type]); // the fight's table (party-size knobs: server/openings.js)
     if (!C) return;
     const t = this.time, key = this.btFight(m);
     if (m.btKey !== key) { m.btKey = key; m.btT = t + C.first; m.btI = Math.floor(Math.random() * 3); } // a new fight
     if (t < m.btT) return;
     fighters ||= this.btFighters(m);
-    if (fighters.length < BOSSTEAM.min || this.director?.running || this.btBusy(m)) { m.btT = t + 2; return; }
+    if (fighters.length < BOSSTEAM.min || this.director?.running || this.btBusy(m)) { m.btT = t + BOSSTEAM.retry; return; }
     const list = C.moves[m.phase] || C.moves[0];
     m.btT = t + C.every[m.phase];
     for (let i = 0; i < list.length; i++) if (this.btStart(m, list[m.btI++ % list.length], fighters, null)) return; // (a trap that can't start: the next one)
@@ -81,7 +81,8 @@ const methods = {
   // (Quake Rings and basic swings go on: you can jump or take a swing where you stand.)
   btChannel(m, secs) {
     const until = this.time + secs + BOSSTEAM.channel;
-    for (const k of ['slamT', 'chargeT', 'spinT', 'rockT', 'sweepT', 'geyserT', 'waveT', 'volleyT', 'strikeT', 'gustT', 'beamT', 'ovT']) if (typeof m[k] === 'number' && m[k] < until) m[k] = until;
+    for (const k of ['slamT', 'chargeT', 'spinT', 'rockT', 'sweepT', 'geyserT', 'waveT', 'volleyT', 'strikeT', 'gustT', 'beamT', 'ovT', 'comboT']) if (typeof m[k] === 'number' && m[k] < until) m[k] = until;
+    m.comboWait = Math.max(m.comboWait || 0, until); // combos too: no start, no next step until then (server/openings.js)
   },
 
   btAdd(a) { (this.btActive ||= []).push(a); return a; },

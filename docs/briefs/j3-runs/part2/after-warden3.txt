@@ -1,0 +1,9 @@
+[skill 5 Perfect] run 1: kill in 70s, 0 deaths, 0 downed, 0 revived (twist quaking) · Quake Rings: 47 jumped, 0 rolled, 4 hit · team mechanics: stacks 2 in, spread 2/2 clean, tethers 1/1 snapped · Covers 0 (0 hits taken), Pincer tags 8 · combos sanctified 2 · Team Bursts 1 (joiners 3) · threat: tank held it 87% · 7 locks, DPS at lock end 78% of L (63–93), healer 59%
+    guardian/shield dmg 1603 (22.9/s) basic 57
+    ranger/longbow dmg 3923 (56.0/s) basic 92
+    cleric/staff dmg 1063 (15.2/s) basic 59
+[skill 5 Perfect] run 2: kill in 74s, 0 deaths, 0 downed, 0 revived (twist thornbound) · Quake Rings: 29 jumped, 0 rolled, 2 hit · team mechanics: stacks - in, spread 2/2 clean, tethers 1/1 snapped · traps: 1 freed · Covers 0 (0 hits taken), Pincer tags 12 · combos sanctified 2 · Team Bursts 0 · threat: tank held it 92% · 7 locks, DPS at lock end 82% of L (74–94), healer 58%
+    guardian/shield dmg 1690 (22.8/s) basic 65
+    ranger/longbow dmg 4023 (54.2/s) basic 92
+    cleric/staff dmg 982 (13.2/s) basic 53
+[skill 5 Perfect] 2/2 kills · avg kill time 72s · avg deaths 0.0 · avg revives 0.0 (of 0.0 downs) · Quake Rings cleared 93% of 82 · combos/fight 2.0 · bursts/fight 0.5 · tank share 90% · DPS at lock end avg 80% (median 79, 43% in 75–85) over 14 locks

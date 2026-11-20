@@ -1,0 +1,117 @@
+--- run 1
+Warden twist: packmaster
+Sovereign twist: hightide
+Colossus twist: tailwind
+[ai] companions off: AI_PROVIDER isn't set (ANTHROPIC_API_KEY is)
+Floorbound running on http://localhost:37443
+[threat] lockend colossus by guardian L 2199 swordsman:78 cleric:50
+[threat] lockend colossus by guardian L 3408 swordsman:89 cleric:47
+[threat] lockend colossus by guardian L 5608 swordsman:58 cleric:40
+[threat] lockend colossus by guardian L 11560 swordsman:62 cleric:36
+[opening] colossus exposed 2.5s melee hits 9 by guardian:5,swordsman:4
+[threat] lockend colossus by guardian L 4180 swordsman:90 cleric:41
+[threat] lockend colossus by guardian L 4804 swordsman:57 cleric:41
+[opening] colossus exposed 2.5s melee hits 0 by -
+[phase] 2 at 55s
+[threat] lockend colossus by guardian L 2199 swordsman:112 cleric:53
+[arena] crack colossus -> undercroft at 61%, 60s
+[threat] lockend colossus by guardian L 2199 swordsman:95 cleric:48
+[arena] resume colossus in undercroft, 68s
+[threat] lockend colossus by guardian L 2632 swordsman:101 cleric:53
+[arena] fire hit
+[arena] fire hit
+[threat] lockend colossus by guardian L 7516 swordsman:54 cleric:33
+[ov] stop switch after 6.3s
+[threat] lockend colossus by guardian L 5120 swordsman:69 cleric:36
+[opening] colossus exposed 2.5s melee hits 0 by -
+[threat] lockend colossus by guardian L 2199 swordsman:99 cleric:80
+[arena] fire hit
+[arena] fire hit
+[arena] fire hit
+[threat] lockend colossus by guardian L 2199 swordsman:54 cleric:55
+[phase] 3 at 109s
+[opening] colossus exposed 2.5s melee hits 7 by guardian:3,swordsman:4
+[threat] lockend colossus by guardian L 3236 swordsman:65 cleric:49
+[beam] cover
+[beam] jump
+[beam] hit
+[beam] cover
+[threat] lockend colossus by guardian L 3464 swordsman:74 cleric:50
+[opening] colossus exposed 2.5s melee hits 5 by guardian:3,swordsman:2
+[ov] stop switch after 0.4s
+[threat] lockend colossus by guardian L 4764 swordsman:91 cleric:45
+[beam] cover
+[beam] cover
+[beam] cover
+[beam] hit
+[beam] hit
+[threat] lockend colossus by guardian L 3668 swordsman:50 cleric:35
+[opening] colossus exposed 2.5s melee hits 5 by guardian:4,cleric:1
+[beam] jump
+[threat] lockend colossus by guardian L 2199 swordsman:91 cleric:49
+[beam] cover
+[beam] hit
+[beam] cover
+[threat] lockend colossus by guardian L 2199 swordsman:20 cleric:50
+[opening] colossus exposed 2.5s melee hits 0 by -
+[arena] fire hit
+[threat] lockend colossus by guardian L 2199 cleric:50
+[beam] jump
+[beam] cover
+[beam] jump
+[beam] hit
+[threat] lockend colossus by guardian L 2199 cleric:52 swordsman:5
+[beam] cover
+[beam] cover
+[beam] hit
+[opening] colossus planted 3s melee hits 3 by guardian:3
+[threat] lockend colossus by guardian L 2199 cleric:50 swordsman:6
+[beam] roll
+[threat] lockend colossus by guardian L 1434 cleric:59 swordsman:0
+--- run 2
+Warden twist: eclipse
+Sovereign twist: coralhide
+Colossus twist: calm
+[ai] companions off: AI_PROVIDER isn't set (ANTHROPIC_API_KEY is)
+Floorbound running on http://localhost:37443
+[threat] lockend colossus by guardian L 2199 swordsman:93 cleric:62
+[threat] lockend colossus by guardian L 4900 swordsman:70 cleric:41
+[opening] colossus exposed 2.5s melee hits 10 by swordsman:4,guardian:4,cleric:2
+[threat] lockend colossus by guardian L 4272 swordsman:66 cleric:40
+[threat] lockend colossus by guardian L 2199 swordsman:60 cleric:42
+[opening] colossus exposed 2.5s melee hits 7 by guardian:4,swordsman:3
+[threat] lockend colossus by guardian L 2199 swordsman:82 cleric:33
+[threat] lockend colossus by guardian L 4532 swordsman:64 cleric:23
+[opening] colossus exposed 2.5s melee hits 6 by guardian:6
+[threat] lockend colossus by guardian L 2199 swordsman:90 cleric:38
+[phase] 2 at 58s
+[arena] crack colossus -> undercroft at 66%, 60s
+[threat] lockend colossus by guardian L 6824 swordsman:64 cleric:29
+[arena] resume colossus in undercroft, 68s
+[threat] lockend colossus by guardian L 2572 swordsman:80 cleric:41
+[opening] colossus exposed 2.5s melee hits 0 by -
+[ov] stop switch after 2.7s
+[arena] fire hit
+[threat] lockend colossus by guardian L 5212 swordsman:56 cleric:28
+[opening] colossus exposed 2.5s melee hits 2 by swordsman:1,guardian:1
+[threat] lockend colossus by guardian L 2199 swordsman:125 cleric:49
+[threat] lockend colossus by guardian L 2199 swordsman:92 cleric:42
+[opening] colossus exposed 2.5s melee hits 5 by guardian:2,cleric:1,swordsman:2
+[threat] lockend colossus by guardian L 2199 swordsman:66 cleric:37
+[threat] lockend colossus by guardian L 2199 swordsman:61 cleric:37
+[phase] 3 at 123s
+[opening] colossus exposed 2.5s melee hits 10 by guardian:5,cleric:1,swordsman:4
+[threat] lockend colossus by guardian L 2900 swordsman:79 cleric:37
+[ov] stop switch after 2.1s
+[threat] lockend colossus by guardian L 6380 swordsman:90 cleric:37
+[opening] colossus exposed 2.5s melee hits 0 by -
+[threat] lockend colossus by guardian L 3940 swordsman:90 cleric:35
+[beam] cover
+[beam] cover
+[beam] jump
+[beam] cover
+[beam] cover
+[threat] lockend colossus by guardian L 2199 swordsman:87 cleric:39
+[opening] colossus planted 3s melee hits 11 by guardian:4,swordsman:7
+[arena] fire hit
+[threat] lockend colossus by guardian L 6512 swordsman:61 cleric:36

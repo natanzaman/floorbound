@@ -1,0 +1,20 @@
+tuneboss: 4 cells x 2 runs, 1 at a time, ports 37410-37410
+  done sovereign 3p s3: 1/2 kills, 164s (164-164) (269s in)
+  done sovereign 3p s5: 2/2 kills, 148s (133-162) (585s in)
+  done sovereign 6p s3: 1/2 kills, 221s (221-221) (1024s in)
+  done sovereign 6p s5: 2/2 kills, 151s (137-165) (1348s in)
+
+== sovereign (per fight; kill time over kills; opening used: share of 0.5s opening slices with a melee hit on the boss, of the opening s per fight)
+party  skill  n  kills  kill time       downs  deaths  melee deaths  dmg melee/rng/heal  opening used       tidal wave               
+3      3      2  1/2    164s (164-164)  4.0    3.5     2.0           84%/0%/16%          26% of 19s (7.0x)  waves rolled 53 hit 35   
+3      5      2  2/2    148s (133-162)  0.5    0.5     0.5           85%/0%/15%          59% of 17s (6.5x)  waves rolled 44 hit 7    
+6      3      2  1/2    221s (221-221)  20.0   10.0    4.0           55%/38%/7%          30% of 26s (9.5x)  waves rolled 137 hit 65  
+6      5      2  2/2    151s (137-165)  3.0    0.5     0.5           58%/34%/8%          42% of 8s (3.0x)   waves rolled 79 hit 10   
+  ability (hits/uses per fight)   3p s3           3p s5           6p s3           6p s5           
+  swing (sovereign trident)       12.0/13.0 (0.92)14.5/19.0 (0.76)14.0/20.5 (0.68)12.0/10.0 (1.20)
+  geyser (sovereign geyser)       5.5/18.5 (0.30) 0.5/25.0 (0.02) 8.5/31.0 (0.27) 1.5/20.5 (0.07) 
+  wave (tidal wave)               12.0/8.0 (1.50) 3.5/8.0 (0.44)  20.5/12.0 (1.71)4.5/7.0 (0.64)  
+  volley (sovereign orb)          1.5/1.5 (1.00)  2.0/3.0 (0.67)  4.5/4.0 (1.13)  3.0/2.5 (1.20)  
+  pools (mire pool)               5.0/8.0 (0.63)  8.0/10.0 (0.80) 31.0/15.5 (2.00)8.5/9.5 (0.89)  
+  deluge (the deluge)             3.0/0.5 (6.00)  1.5/1.0 (1.50)  13.0/1.0 (13.00)2.0/1.0 (2.00)  
+  other hits per fight: drowning pillar 14.4, thrall bite 11.6, meteor 3.9, spread 3.8, tether 1.0

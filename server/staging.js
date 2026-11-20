@@ -85,7 +85,7 @@ const methods = {
         }
         case 'trident': { // its sweep: the red wedge wind-up, resolved by its own AI (f2Sovereign)
           const [r, h] = BITE.sovereign;
-          m.windupAt = t + S.sweep.wind; m.atkT = t + m.def.atkCd + S.sweep.wind - S.sweep.wind / PACE; m.busyUntil = Math.min(m.busyUntil || 0, t);
+          m.windupAt = t + S.sweep.wind; m.atkT = t + (m.tm?.sweep?.cd ?? m.def.atkCd) + S.sweep.wind - S.sweep.wind / PACE; m.busyUntil = Math.min(m.busyUntil || 0, t); // atkT: the fight table's cd (cooldownMul)
           this.events.push({ t: 'wind', id: m.id, d: S.sweep.wind, f: r2(m.face), r, h });
           return true;
         }

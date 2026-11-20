@@ -7,7 +7,10 @@ const raw = (process.env.DATABASE_URL || '').trim();
 const url = (raw.match(/postgres(?:ql)?:\/\/[^\s'"]+/) || [raw])[0] || '';
 export let enabled = !!url;
 
-const local = url && /@(localhost|127\.0\.0\.1)|host=\/|sslmode=disable/.test(url);
+// Local Postgres (no TLS): localhost / 127.0.0.1 as the URL's own host (with or without a user), a socket host, or
+// sslmode=disable. Exported for test/dburl.js.
+export const isLocalUrl = u => !!u && /^postgres(?:ql)?:\/\/(?:[^@/?#]*@)?(localhost|127\.0\.0\.1)(?:[:/?#]|$)|host=\/|sslmode=disable/.test(u);
+const local = isLocalUrl(url);
 // Let our ssl setting win over sslmode/channel_binding in the URL (Neon requires TLS either way).
 const cleanUrl = local ? url : url.replace(/([?&])(sslmode|channel_binding)=[^&]*&?/g, '$1').replace(/[?&]$/, '');
 const pool = enabled ? new pg.Pool({
@@ -85,4 +88,7 @@ async function setup() {
     char_id INT NOT NULL REFERENCES characters(id) ON DELETE CASCADE, named_id TEXT NOT NULL, req JSONB,
     next_at BIGINT NOT NULL DEFAULT 0, day INT NOT NULL DEFAULT 0, got REAL NOT NULL DEFAULT 0,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (char_id, named_id))`);
+  // Controls that follow the account (roadmap K2): the browser's whole fb_controls object (bindings + accessibility),
+  // capped at 8 KB (server/accounts.js /api/settings).
+  await q(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS settings JSONB`);
 }

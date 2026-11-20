@@ -208,7 +208,25 @@ try {
   assert.ok(await visible('botwheel'), 'a quick tap keeps it open');
   await tap('KeyV');
   assert.ok(!(await visible('botwheel')), 'V again closes it');
-  ok('V: hold for the bot wheel, tap to keep it open, tap again to close');
+  let mw = await mark();
+  await p.keyboard.down('KeyV'); await frames(2);
+  assert.ok(await visible('botwheel'), 'holding V opens the wheel again');
+  await S(() => { const b = document.querySelector('#botwheel .wcmd'); b.disabled = false; window.__fb.wheel.point(Math.cos(Math.atan2(parseFloat(b.style.top), parseFloat(b.style.left))), Math.sin(Math.atan2(parseFloat(b.style.top), parseFloat(b.style.left)))); }); // (no bots here: enable one order and point at it)
+  assert.ok(await S(() => !!document.querySelector('#botwheel .wcmd.pick')), 'pointing at an order');
+  await S(() => dispatchEvent(new Event('blur'))); await frames(2);
+  assert.ok(!(await visible('botwheel')), 'losing focus while V is held closes the wheel (no order)');
+  await p.keyboard.up('KeyV'); await frames(2);
+  assert.ok(!(await visible('botwheel')), 'and letting go of V afterwards opens nothing');
+  assert.equal((await sent(mw, 'botcmd')).length, 0, 'focus lost while pointing: no order sent');
+  // the account's controls arriving (input.reload, after sign-in) also cancels a held wheel
+  mw = await mark();
+  await p.keyboard.down('KeyV'); await frames(2);
+  await S(() => { const b = document.querySelector('#botwheel .wcmd'); b.disabled = false; window.__fb.wheel.point(Math.cos(Math.atan2(parseFloat(b.style.top), parseFloat(b.style.left))), Math.sin(Math.atan2(parseFloat(b.style.top), parseFloat(b.style.left)))); });
+  await S(() => window.__fb.input.reload()); await frames(2);
+  await p.keyboard.up('KeyV'); await frames(2);
+  assert.equal((await sent(mw, 'botcmd')).length, 0, 'controls reloaded while pointing: no order sent');
+  await S(() => window.__fb.wheel.close());
+  ok('V: hold for the bot wheel, tap to keep it open, tap again to close; focus lost cancels a held wheel');
 
   // ---- chat: Enter focuses, keys type instead of playing, Enter sends, Esc leaves ----
   await tap('Enter');
@@ -230,8 +248,11 @@ try {
 
   // ---- F3 overlay, wheel zoom ----
   const perf0 = await visible('perf');
-  await tap('F3'); assert.equal(await visible('perf'), !perf0, 'F3 toggles the overlay');
-  await tap('F3'); assert.equal(await visible('perf'), perf0, 'F3 toggles it back');
+  // perf.js shows/hides the overlay on its own 4-per-second UI tick, which a slow headless frame rate stretches past
+  // a couple of frames: poll the state for up to 3 s instead of reading it right after the key.
+  const perfIs = async want => { for (let i = 0; i < 60; i++) { if ((await visible('perf')) === want) return want; await sleep(50); } return visible('perf'); };
+  await tap('F3'); assert.equal(await perfIs(!perf0), !perf0, 'F3 toggles the overlay');
+  await tap('F3'); assert.equal(await perfIs(perf0), perf0, 'F3 toggles it back');
   {
     const d0 = await S(() => window.__fb.state.camDist);
     await p.mouse.move(vx, vy); await p.mouse.wheel(0, 300); await frames(2);

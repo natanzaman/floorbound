@@ -36,7 +36,11 @@ import { initCine } from '/cine.js'; // film view camera, titles, fades, letterb
 import { initBubbles } from '/bubbles.js';
 import { initThreat } from '/threat.js'; // who bosses target, threat meter, Cover, Pincer tags (G3)
 import { initRevive } from '/revive.js'; // downed + revive (G1)
+import { initControlsUi } from '/controlsui.js'; // the Controls screen: device, bindings, rebind (K2)
+import { createControlSync } from '/controlsync.js'; // fb_controls follows the account (K2)
+import { setKeySource, keyText, keyHtml, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 import { initBossTeam } from '/bossteam.js'; // boss team mechanics: STACK, SPREAD, tether (G4)
+import { initOpenings } from '/openings.js'; // boss openings: weak point, OPENING tag (J3)
 import { initRescue } from '/rescue.js'; // rescue traps: vines, Drowning Pillar, storm crystal (J1)
 import { initTeamplay } from '/teamplay.js'; // combo counters, the Team Burst bar and sync window (G2)
 import { initMvp } from '/mvp.js'; // the post-fight MVP card (G5)
@@ -47,7 +51,9 @@ import { makeNetsim } from '/netsim.js'; // test-only bad network (?netsim=120,6
 import { initGameMenu } from '/gamemenu.js'; // the Game Menu (Esc / ☰)
 import { createInput } from '/input.js'; // keys, mouse buttons (and pads, K1b) -> actions, by the bindings in shared/controls.js
 import { createPanels } from '/panels.js'; // the panels that free the cursor / close on Esc
-import { loadSettings, saveSettings as storeSettings, initSettingsPanel } from '/settings.js'; // fb_settings + fb_controls, the Settings panel
+import { cue } from '/palette.js'; // sound cue for telegraphs
+import { createFocusNav } from '/focusnav.js'; // controller menu navigation (d-pad / stick, A, B)
+import { loadSettings, saveSettings as storeSettings, initSettingsPanel, applyAccess } from '/settings.js'; // fb_settings + fb_controls, the Settings panel
 
 const sfx = new Sound();
 
@@ -61,6 +67,7 @@ if (isTouch) document.body.classList.add('touch');
 
 // ---------- settings (camera, chat, graphics; public/settings.js) ----------
 const settings = loadSettings();
+applyAccess(settings); // text/UI scale + high contrast (CSS variables, style.css)
 const saveSettings = () => storeSettings(settings);
 if (QS.get('quality')) settings.quality = QS.get('quality'); // (tests: ?quality=low)
 const lastAuto = (() => { try { return localStorage.getItem('fb_autoq'); } catch { return null; } })(); // where Auto settled last time
@@ -107,7 +114,7 @@ const state = {
 const players = new Map(); // id -> entity
 const mobs = new Map();
 let boss = null;
-const cine = initCine({ camera, state, players, mobs, slowMotion: (a, b) => slowMotion(a, b), twists, occluders }); // public/cine.js
+const cine = initCine({ camera, state, players, mobs, slowMotion: (a, b) => slowMotion(a, b, { force: true }), twists, occluders }); // public/cine.js
 // Floor 2 — The Glimmering Mire (floor2client.js): world, waystones, Stairway, hazards and its events.
 const f2 = initFloor2Client({
   scene, sun, occluders, fx, sfx, state, mobs, players, isTouch,
@@ -227,6 +234,7 @@ function showAuth() { $('discord-btn').classList.toggle('hidden', !acct.cfg.disc
 async function loadMe() {
   try {
     acct.me = await api('/api/me');
+    controlSync.login(); // (the account's controls win when it has some; else this browser's go up)
     renderChars();
     if (!acct.me.characters.length) showCreate(); else showPanel('chars');
   } catch (e) {
@@ -240,7 +248,7 @@ function renderChars() {
     : `<span class="who">Guest account: saved in this browser</span>${acct.cfg.discord ? '<button id="link-discord" class="link">Link Discord</button>' : ''}<button id="signout">Sign out</button>`;
   $('char-list').innerHTML = characters.map(c => {
     const k = CLASSES[c.cls], hex = '#' + k.color.toString(16).padStart(6, '0');
-    return `<div class="char"><span class="dot" style="background:${hex}"></span><div class="info"><b>${esc(c.name)}</b><small>Lv ${c.lvl} ${k.name} · ${k.role}</small></div><button class="play" data-id="${c.id}">Play</button><button class="del" data-id="${c.id}" title="Delete">✕</button></div>`;
+    return `<div class="char"><span class="dot" style="background:${hex}"></span><div class="info"><b>${esc(c.name)}</b><small>Lv ${c.lvl} ${k.name} · ${k.role}</small></div><button class="play" data-id="${c.id}" data-nav="play-${c.id}">Play</button><button class="del" data-id="${c.id}" data-nav="del-${c.id}" title="Delete">✕</button></div>`;
   }).join('');
   $('new-char').classList.toggle('hidden', characters.length >= (acct.cfg.maxCharacters || 8));
   for (const b of $('char-list').querySelectorAll('.play')) b.onclick = () => {
@@ -319,8 +327,14 @@ function reconnect(joinMsg) {
   };
   setTimeout(poll, 1500);
 }
-const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send });
-const controlsText = () => isTouch ? 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion. ☰: the Game Menu.' : `WASD move (S back, A/D strafe) · mouse to look (click to capture, Esc frees it; Settings for classic) · Left click (or J) attack · 1 2 3 skills · K skill tree · Shift dodge · Space jump${state.cls === 'guardian' ? ' · R guard / parry · C cover an ally' : ''} · 4 5 6 items · B bag · F interact · P party · T Team Burst · V bot orders · Ctrl+click select · Esc menu · F3 performance`;
+const guide = new Guide({ el: $('guide'), tipEl: $('tip'), send, keyLabel: a => input.label(a) }); // (tips name the player's keys)
+// (key names follow the bindings and the active device: input.label)
+const keyLabel = a => input.label(a);
+const controlsText = () => {
+  if (isTouch && input.device !== 'pad') return 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion. ☰: the Game Menu.';
+  const L = keyLabel, pad = input.device === 'pad';
+  return `${L('move')} move · ${pad ? `${L('look')} to look` : 'mouse to look (click to capture, Esc frees it; Settings for classic)'} · ${L('attack')} attack · ${L('skill1')} ${L('skill2')} ${L('skill3')} skills · ${L('skillTree')} skill tree · ${L('dodge')} dodge · ${L('jump')} jump${state.cls === 'guardian' ? ` · ${L('guard')} guard / parry · ${L('cover')} cover an ally` : ''} · ${L('item1')} ${L('item2')} ${L('item3')} items · ${L('bag')} bag · ${L('interact')} interact · ${L('players')} party · ${L('teamBurst')} Team Burst · ${L('botWheel')} bot orders · ${L('selectAimed')} select · ${L('menu')} menu${pad ? '' : ` · ${L('perfOverlay')} performance`} · Game Menu → Controls to change them`;
+};
 // Leave the game from the Game Menu: back to character select ('char'; anonymous: the name / class screen), signed out
 // ('logout'), or out of the spectator view ('spectate'). A clean reload with no automatic rejoin; the server saves
 // your character on disconnect, as when a tab closes. Asks first when leaving would cost you something.
@@ -335,17 +349,17 @@ async function leaveGame(kind) {
   }
   const ws = state.ws; state.ws = null; state.joined = false; // (no reconnect: ws.onclose ignores a replaced socket)
   try { sessionStorage.removeItem('fb_rejoin'); } catch {}
-  if (kind === 'logout') { try { await api('/api/logout', { method: 'POST' }); } catch {} localStorage.removeItem('fb_session'); }
+  if (kind === 'logout') { try { await api('/api/logout', { method: 'POST' }); } catch {} localStorage.removeItem('fb_session'); acct.token = null; }
   ws?.close();
   location.href = location.pathname; // (drops ?spectate and friends)
 }
 const gmenu = initGameMenu({
   state, isTouch, guide, sfx, controls: () => esc(controlsText()), steps: () => GUIDE_STEPS.map(s => ({ title: esc(s.title), text: esc(s.text()) })),
-  openSettings: () => settingsUi.open(),
+  openSettings: () => settingsUi.open(), openControls: () => controlsUi.open(),
   lockCursor: () => lockCursor(), leave: k => leaveGame(k), accounts: () => !!(acct.cfg.accounts && acct.token),
   checkAdmin: () => api('/api/admin/me').then(r => r.admin),
 });
-const wheel = initBotWheel({ send, state, players, log }); // orders for the bots in your party: hold V (public/botwheel.js)
+const wheel = initBotWheel({ send, state, players, log, keyLabel, toggleMode: () => !!settings.wheelToggle }); // orders for the bots in your party: hold V (public/botwheel.js)
 const bubbles = initBubbles({ state, players, project, camera, layer: $('labels'), enabled: () => settings.bubbles !== false && !cine.film }); // speech bubbles over heads (public/bubbles.js); the film view uses subtitles
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
@@ -376,10 +390,11 @@ const loot = initLoot({ state, send, $, styleTitle: it => styles.title(it), fx, 
 // the Tower Bell (toll, sway, banner) and the engraved Hall stones (public/bell.js)
 const bell = initBell({ scene, sfx, guide, banner: (a, b, c) => banner(a, b, c) });
 // downed + revive: your downed overlay, "Hold E to revive", markers over downed partymates (public/revive.js)
-const revive = initRevive({ state, players, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), isTouch });
+const revive = initRevive({ state, players, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), isTouch, keyLabel });
 // boss team mechanics: the gold STACK circle, SPREAD rings, tether beams, first-time prompts (public/bossteam.js)
 // rescue traps: telegraphs, the pillar's beam, your trapped banner, "Hold E to cut free", markers (public/rescue.js)
-const rescue = initRescue({ state, players, mobs, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), callout: (a, b, c) => callout(a, b, c), isTouch, revive });
+const openings = initOpenings({ state, mobs, guide, callout: (a, b, c) => callout(a, b, c) });
+const rescue = initRescue({ state, players, mobs, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), callout: (a, b, c) => callout(a, b, c), isTouch, revive, keyLabel });
 const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a) });
 // skill combos between players and the Team Burst: chain counters, setup hints, the party bar, T to sync (public/teamplay.js)
 const teamplay = initTeamplay({ state, players, mobs, fx, sfx, floatNum, project, send, guide, isTouch, callout: (a, b, c) => callout(a, b, c), shake: a => shake(a), $ });
@@ -513,6 +528,7 @@ function onSnapshot({ st, me, w }, arrival) {
     Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, moving: flags & 1, engaged: flags & 2, enraged: flags & 4, stunned: flags & 8, winding: flags & 16, staggered: flags & 32, frenzy: flags & 64, launched: flags & 128, posture: posture || 0 });
   }
   for (const [id, e] of mobs) if (!seenM.has(id) && !e.dying) { removeEntity(e); mobs.delete(id); if (e === boss) boss = null; }
+  openings.snap(w.op); // bosses' openings (public/openings.js)
   looks.snap(w.looks); // who wears a look (after the entities and their weapon styles are in step)
   renderPlayersThrottled();
 }
@@ -659,6 +675,7 @@ function handleEvent(e) {
       break;
     }
     case 'tele': {
+      cue(sfx, { x: e.x, z: e.z }, 1.2); // (Settings → Sound cue for attacks; once per telegraph, twists included)
       if (twists.tele(e)) break; // Warden twists: cracked ground, Echo strikes
       const mine = Math.hypot(e.x - state.x, e.z - state.z) < e.r + 2;
       if (e.k === 'line') {
@@ -714,7 +731,7 @@ function handleEvent(e) {
         if (e.id === me) { state.lastCombat = performance.now(); sfx.play('hurt'); }
         if (e.id === me) {
           floatNum(p.model.group.position, 2.2, `-${e.a}`, 'hurt');
-          if (e.big) { hitStop = Math.max(hitStop, BIG_HIT_STOP); shake(0.3); } else shake(0.15);
+          if (e.big) { if (!settings.reduceMotion) hitStop = Math.max(hitStop, BIG_HIT_STOP); shake(0.3); } else shake(0.15);
         } else if (state.spectator) floatNum(p.model.group.position, 2.2, `-${e.a}`, 'other hurt');
       }
       break;
@@ -813,7 +830,7 @@ function handleEvent(e) {
       if (e.ch === 'p') { if (state.party && e.party === state.party) log(`[Party] ${e.from}: ${e.text}`, e.id === me ? 'me party' : 'party'); break; }
       if (e.ch === 's') { if (state.spectator || Math.hypot(e.x - state.x, e.z - state.z) < 40) log(`${e.from} says: ${e.text}`, e.id === me ? 'me' : 'say'); break; }
       log(`${e.from}: ${e.text}`, e.id === me ? 'me' : ''); break;
-    case 'sys': if (!e.to || e.to === me) log(e.text, 'sys'); break;
+    case 'sys': if (!e.to || e.to === me) log(keyText(e.text), 'sys'); break; // ({key:revive} → the player's key)
     case 'emote': { const p = players.get(e.id), x = EMOTES[e.a]; if (p?.model.anim && x && !p.model.anim.dead) p.model.anim.shot(x[0], x[1], { clamp: !!x[2] }); break; } // scene director (server/director.js)
   }
 }
@@ -898,8 +915,23 @@ function removeEntity(e) {
 // Keys and mouse buttons arrive as actions (public/input.js, bindings in shared/controls.js, by key code).
 // The gate: nothing but the overlay before you join; under the Game Menu only Esc (no moving, attacking or hotkeys;
 // the game itself keeps running).
-const input = createInput({ isTouch, settings, save: saveSettings, notify: t => log(t, 'sys'),
+const input = createInput({ isTouch, settings, save: saveSettings, notify: t => { log(t, 'sys'); padToast(t); }, ask: (t, answer) => padToast(t, answer),
   gate: a => a === 'perfOverlay' || (state.joined && (a === 'menu' || !gmenu.isOpen())) });
+setKeySource(input, isTouch); // (public/keyname.js: every prompt reads the active device's bindings when drawn)
+// Controller toasts (input.js): a short note, or the one-time "Controller detected" question (A / B answer it too).
+function padToast(text, answer) {
+  let el = $('padtoast');
+  if (!el) { el = document.createElement('div'); el.id = 'padtoast'; el.className = 'panel hidden'; document.body.appendChild(el); }
+  el.innerHTML = `<span>${esc(text)}</span>${answer ? '<button data-a="1">Switch (A)</button><button data-a="0">Not now (B)</button>' : ''}`;
+  el.onclick = e => { const b = e.target.closest('[data-a]'); if (b) answer?.(b.dataset.a === '1'); };
+  el.classList.remove('hidden');
+  const close = () => { clearTimeout(el.timer); el.classList.add('hidden'); };
+  clearTimeout(el.timer); el.timer = setTimeout(() => { answer?.(false); close(); }, answer ? 15000 : 4000);
+  return close;
+}
+// Under Controller: no pointer lock, and the touch HUD (stick, lock button) hides while the pad drives play.
+input.onDevice(d => { document.body.classList.toggle('pad', d === 'pad'); if (d === 'pad') freeCursor(); });
+input.onLabels(() => labelBar()); // (device, pad kind, picture or bindings changed: the bar's key chips follow; prompts read keyname.js when drawn)
 // The old key set, now a view of the input layer (revive.js and rescue.js read keys.has('e'): the revive action).
 const LEGACY_KEYS = { e: 'revive', q: 'turnLeft', j: 'attack', r: 'guard', v: 'botWheel' };
 const keys = { has: k => (LEGACY_KEYS[k] ? input.held(LEGACY_KEYS[k]) : input.key(k.length === 1 ? `Key${k.toUpperCase()}` : k)), clear: () => input.reset() };
@@ -911,9 +943,10 @@ let attackHeld = false;
 
 const onPress = (action, fn) => input.on(action, e => { if (e.down) fn(e); });
 onPress('perfOverlay', () => { perf.toggle(); settingsUi.refresh(); }); // the diagnostics overlay
-onPress('menu', () => { // Esc: close what's open, else clear the target, else the Game Menu
+onPress('menu', e => { // Esc / Start: close what's open, else clear the target, else the Game Menu
   if (gmenu.isOpen()) { if (!gmenu.justOpened()) gmenu.close(); return; }
-  if (escBusy) { panels.close(); if (wheel.isOpen()) wheel.close(); return; }
+  if (e.source === 'pad') escBusy = cursorPanelOpen() || wheel.isOpen() || talents.isOpen() || !!document.getElementById('mvp'); // (Start: no keydown to look at)
+  if (escBusy) { panels.close(); if (wheel.isOpen()) wheel.close(); if (e.source === 'pad') { if (talents.isOpen()) talents.toggle(false); mvp.close(); } return; } // (the keyboard's Esc: they close themselves)
   if (state.lock || state.focus) { state.lock = 0; state.focus = 0; return; }
   menuOpen();
 });
@@ -930,22 +963,30 @@ onPress('skill2', () => useSkill(2));
 onPress('skill3', () => useSkill(3));
 onPress('dodge', () => dodge());
 onPress('skillTree', e => { if (!e.repeat) talents.toggle(); }); // Skill Tree window (public/talents.js)
-input.on('guard', e => { if (!e.down) combat.guard(false); else if (!e.repeat) combat.guard(true); });
+input.onDevice?.(() => combat.guard(false)); // a device switch lets go of every hold: a toggled guard would stay up
+input.on('guard', e => { // hold to guard; with Settings → Toggle guard, each press flips it
+  if (settings.guardToggle) { if (e.down && !e.repeat) combat.guard(!combat.guarding); }
+  else if (!e.down) combat.guard(false); else if (!e.repeat) combat.guard(true);
+});
 onPress('lockNext', () => cycleLock());
-input.on('botWheel', e => { if (!e.down) wheel.keyup(); else if (!e.repeat) wheel.keydown(e.event); }); // bot command wheel
+input.on('botWheel', e => { // bot command wheel; with Settings → Toggle the bot wheel, a press opens it and the next gives the order picked (no hold)
+  if (e.cancel) { wheel.close(); return; } // (a release the player didn't make: blur, device switch, pad gone: close, no order)
+  if (settings.wheelToggle) { if (e.down && !e.repeat) wheel.toggle(); }
+  else if (!e.down) wheel.keyup(); else if (!e.repeat) wheel.keydown(e.event);
+});
 onPress('teamBurst', e => { if (!e.repeat) teamplay.press(); }); // Team Burst: start it (full bar) or join the sync window
 onPress('players', () => $('players-btn').click());
 onPress('bag', () => toggleBag());
 onPress('interact', () => interact());
 onPress('cover', e => { if (!e.repeat) threat.cover(); }); // Guardian Cover
 ['item1', 'item2', 'item3'].forEach((a, i) => onPress(a, () => useItem(CONSUMABLE_IDS[i])));
-onPress('selectAimed', e => { if (locked()) selectAim(); else selectAt(e.event?.clientX ?? mouse.x, e.event?.clientY ?? mouse.y); }); // Ctrl+click: select (mouse look: what the crosshair is aimed at)
+onPress('selectAimed', e => { if (locked() || e.source === 'pad') selectAim(); else selectAt(e.event?.clientX ?? mouse.x, e.event?.clientY ?? mouse.y); }); // Ctrl+click: select (mouse look: what the crosshair is aimed at)
 onPress('clearTarget', () => clearSelection()); // Ctrl+right-click: deselect
 // Was something open when Esc went down? (Capture phase: before the panels' own Esc handlers close them.)
 let escBusy = false;
 addEventListener('keydown', e => { if (e.key === 'Escape') escBusy = e.cancelBubble || cursorPanelOpen() || wheel.isOpen() || talents.isOpen() || !!document.getElementById('mvp'); }, true);
 function menuOpen() { keys.clear(); attackHeld = false; combat.guard(false); stick.active = false; stick.dx = stick.dy = 0; gmenu.open(); }
-addEventListener('blur', () => { keys.clear(); attackHeld = false; combat.guard(false); });
+addEventListener('blur', () => { keys.clear(); attackHeld = false; combat.guard(false); wheel.cancel(); }); // (a held bot wheel closes, no order)
 
 // camera drag (mouse + touch on the right/anywhere outside the stick)
 // (settings: loaded at the top, before the renderer)
@@ -982,8 +1023,24 @@ addEventListener('resize', layoutChips);
 setTimeout(layoutChips, 0); setTimeout(layoutChips, 1500);
 
 const settingsUi = initSettingsPanel({ el: $('settings'), settings, save: saveSettings, Q, PRESETS, perf, applyQuality, freeCursor, bubbles, sfx }); // public/settings.js
+// Controller menu navigation over the window on top (public/focusnav.js): the MVP card, else the top panel, else
+// character select, else the death card; only windows marked data-nav. B: back (Settings opened from the Game Menu
+// goes back to it); the Game Menu's Controls page backs out to the menu first.
+const nav = createFocusNav({ input, panels, order: ['mvp', '*', 'login', 'dead'], hooks: {
+  gamemenu: { back: () => { const b = $('gamemenu').querySelector('[data-a=back]'); if (b) b.click(); else gmenu.close(); }, open: () => menuOpen() },
+  talentsp: { back: () => talents.toggle(false) },
+  mvp: { back: () => mvp.close() },
+} });
 $('menu-btn').onclick = () => menuOpen(); // phones: the Game Menu
 $('settings-btn').onclick = () => settingsUi.toggle();
+// The Controls screen (public/controlsui.js) and the account copy of fb_controls (public/controlsync.js). A change of
+// bindings (or the account's copy arriving) relabels the HUD through input.onLabels.
+const controlsUi = initControlsUi({ input, sfx });
+panels.register('controlsui', { esc: true, onClose: () => controlsUi.close() }); // (closed by the registry: stop a capture too)
+const controlSync = createControlSync({
+  api, signedIn: () => !!(acct.cfg.accounts && acct.token), account: () => acct.me?.account?.id,
+  onApply: () => { input.reload(); Object.assign(settings, loadSettings(), { device: settings.device }); applyAccess(settings); settingsUi.refresh(); controlsUi.refresh(); },
+});
 
 const drag = { id: null, x: 0, y: 0 };
 canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -1039,6 +1096,16 @@ stickEl.addEventListener('pointerup', endStick);
 stickEl.addEventListener('pointercancel', endStick);
 
 // skill bar
+const BAR_ACTIONS = { 0: 'attack', 1: 'skill1', 2: 'skill2', 3: 'skill3', dodge: 'dodge', jump: 'jump', guard: 'guard', cover: 'cover', ...Object.fromEntries(CONSUMABLE_IDS.map((id, i) => [id, `item${i + 1}`])) };
+// The bar's key chips name the bindings on the active device (none under touch play). Only the chips' text changes, so a
+// device switch or a rebind relabels in place instead of rebuilding the bar.
+function labelBar() {
+  const touch = isTouch && input.device !== 'pad'; // (a phone back from a pad: 'kbm' in Controls, still no key names)
+  for (const b of $('skills').children) {
+    const a = BAR_ACTIONS[b.dataset.slot] || BAR_ACTIONS[b.dataset.item], k = a && b.querySelector('.key');
+    if (k) k.textContent = touch ? '' : keyLabel(a).toUpperCase();
+  }
+}
 function buildSkillBar(lvl = state.lvl) {
   const skills = CLASSES[state.cls].skills;
   mastery.barChanged(); // remember the names/pips this bar was built with
@@ -1054,6 +1121,7 @@ function buildSkillBar(lvl = state.lvl) {
     + threat.coverButton(state.cls, isTouch)
     + CONSUMABLE_IDS.map(id => `<button class="sk it2 ${id}" data-item="${id}" title="${CONSUMABLES[id].name}: ${CONSUMABLES[id].desc}"><span class="key">${isTouch ? '' : CONSUMABLES[id].key}</span>${CONSUMABLES[id].name.split(' ').pop()}<span class="cnt"></span><span class="cd"></span></button>`).join('')
     + `<button class="sk act" data-slot="act">Ready</button>`;
+  labelBar();
   for (const b of $('skills').children) {
     if (b.dataset.item || b.dataset.slot === 'act') {
       b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('pressed'); if (b.dataset.item) useItem(b.dataset.item); else interact(); });
@@ -1333,7 +1401,7 @@ $('hall').addEventListener('click', e => { if (e.target.closest('[data-a="close"
 // The board's floating label (called every frame), and close the panel when walking away.
 function updateHallLabel() {
   const hl = $('hall-lbl'), hp = project(HALL.x, 5.4, HALL.z), hd = Math.hypot(state.x - HALL.x, state.z - HALL.z);
-  if (hp && hd < 22) { hl.style.display = ''; hl.style.left = `${hp[0]}px`; hl.style.top = `${hp[1]}px`; const html = `Hall of Clearers${hd < HALL.r + 1 ? `<br><small>${isTouch ? 'tap Read' : 'press F to read'}</small>` : ''}`; if (hl.innerHTML !== html) hl.innerHTML = html; }
+  if (hp && hd < 22) { hl.style.display = ''; hl.style.left = `${hp[0]}px`; hl.style.top = `${hp[1]}px`; const html = `Hall of Clearers${hd < HALL.r + 1 ? `<br><small>${tapping() ? 'tap Read' : `press ${keyHtml('interact')} to read`}</small>` : ''}`; if (hl.innerHTML !== html) hl.innerHTML = html; }
   else hl.style.display = 'none';
   if (hd > HALL.r + 7 && !$('hall').classList.contains('hidden')) toggleHall(false);
 }
@@ -1598,7 +1666,7 @@ function updateHud(now) {
     const pc = (p.hp / p.maxHp) * 100, bot = state.roster.get(p.id)?.bot;
     const nm = state.roster.get(p.id)?.name || p.name;
     return `<div class="frame ${p.dead ? 'dead' : ''} ${p.downed ? 'downed' : ''} ${bot && !state.spectator ? 'botf' : ''}" ${bot && !state.spectator ? `data-bot="${esc(nm)}" title="Click for ${esc(nm)}'s orders"` : ''}><div class="row" style="font-size:12px;margin:0"><span>${bot && !state.spectator ? '<span class="bcmd">⌘</span> ' : ''}${looks.swatch(p.id, 14)}${esc(p.name)}${bot ? ' <small class="bottag">BOT</small>' : ''}${titleTag(state.roster.get(p.id)?.title)}${state.spectator ? ` <small style="opacity:.75;font-weight:600">${CLASSES[p.cls].name} · ${CLASSES[p.cls].role}</small>` : ''}${p.downed ? ` <b class="dtag">${p.downed.by ? 'REVIVING' : 'DOWNED'}</b>` : ''}${p.trap && !p.downed ? ' <b class="dtag">TRAPPED</b>' : ''}</span><span style="opacity:.7">Lv ${p.lvl}</span></div><div class="bar hp ${pc < 25 ? 'low' : pc < 50 ? 'mid' : ''}"><div style="width:${pc}%"></div></div>${classesA.frameBar(p)}</div>`;
-  }).join('') + (!state.spectator && mates.some(p => state.roster.get(p.id)?.bot) ? `<button id="bots-btn" class="pbtn" title="Orders for all your bots (or hold V for the wheel)">⌘ All bots <small>V</small></button>` : '');
+  }).join('') + (!state.spectator && mates.some(p => state.roster.get(p.id)?.bot) ? `<button id="bots-btn" class="pbtn" title="Orders for all your bots (or hold ${esc(keyLabel('botWheel'))} for the wheel)">⌘ All bots <small>${esc(keyLabel('botWheel'))}</small></button>` : '');
   if (partyHtml !== hudParty) { hudParty = partyHtml; $('party').innerHTML = partyHtml; }
 
   // boss bar (the boss of the floor you're on)
@@ -1611,6 +1679,7 @@ function updateHud(now) {
     const bn = $('boss').querySelector('.boss-name'); if (bn.textContent !== boss.def.name) bn.textContent = boss.def.name;
     combat.bossBar(boss);
     threat.bossBar(boss); // who it's after, my threat meter
+    openings.bossBar(boss); // OPENING · EXPOSED · 2 s
     setText($('boss-phase'), onF3 ? f3.phaseText() : onF2 ? f2.phaseText() : ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '');
     if (!onF3) twists.bossLine($('boss-phase'), onF2); // the Warden's twist, or the Sovereign's on Floor 2
   }
@@ -1738,9 +1807,10 @@ function hitJuice(m, e) {
 
 // Slow down visual time (animation and effects only; input and movement keep real time).
 let slowMo = 0, slowMoScale = 1, slowMoLen = 1;
-function slowMotion(secs, scale) {
+function slowMotion(secs, scale, { force = false } = {}) { // force: the film director's slow-mo (public/cine.js) ignores Reduce motion
+  if (settings.reduceMotion && !force) return; // (Settings → Reduce motion: no slow-mo, kill zoom, shake or hit-stop)
   slowMo = slowMoLen = secs; slowMoScale = scale;
-  shake(0.45); hitStop = 0;
+  shake(0.45); hitStop = 0; // (shake() is itself gated by Reduce motion)
 }
 
 const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
@@ -1773,7 +1843,7 @@ function updateRareHint(now) { // a small HUD line pointing at a live rare: "Old
 // ---------------- main loop ----------------
 const v3 = new THREE.Vector3();
 let shakeAmt = 0;
-const shake = a => { shakeAmt = Math.max(shakeAmt, a); };
+const shake = a => { if (!settings.reduceMotion) shakeAmt = Math.max(shakeAmt, a); };
 // A shake that fades with distance: full at the spot, 40% at r, nothing beyond (stomps, rockfall, Quake Rings).
 const shakeNear = (x, z, a, r) => { const d = Math.hypot(x - state.x, z - state.z); if (d < r && !state.dead) shake(a * (1 - (0.6 * d) / r)); };
 // Hit-stop: a boss's big hit landed on YOU (a `hurt` event tagged big). Only this client freezes; never on your own hits.
@@ -1932,7 +2002,7 @@ function animateEntity(e, dt) {
     setShown(e.label, true);
     const tr = `translate(${p[0].toFixed(1)}px, ${p[1].toFixed(1)}px) translate(-50%, -100%)`;
     if (tr !== e.label.tr) { e.label.tr = tr; e.label.el.style.transform = tr; }
-    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${looks.plate(e, e.def.name)}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}` : `<span class="lv">Lv${e.lvl}</span>${looks.plate(e, `${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}`)}`;
+    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${looks.plate(e, e.def.name)}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}${openings.tag(e)}` : `<span class="lv">Lv${e.lvl}</span>${looks.plate(e, `${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}`)}`;
     if (txt !== e.label.text) { e.label.text = txt; e.label.nm.innerHTML = txt; }
     const pct = Math.round((e.hp / e.maxHp) * 100);
     if (pct !== e.label.pct) { e.label.pct = pct; e.label.fill.style.width = `${pct}%`; }
@@ -2003,7 +2073,11 @@ function frame(now) {
   frameNo++; entStats.interp = entStats.extrap = entStats.hold = 0;
   frustum.setFromProjectionMatrix(frM4.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); // (last frame's camera)
   corr.step(dt * 1000);
-  input.tick(); input.setContext('downedAlly', !!state.joined && (revive.usesE() || rescue.usesE())); // (pads polled here from K1b; E revives / cuts free instead of turning)
+  input.tick(); nav.tick(now); input.setContext('downedAlly', !!state.joined && (revive.usesE() || rescue.usesE())); // (pads polled here; E / D-pad down revives / cuts free instead of turning)
+  if (input.device === 'pad' && state.joined && !state.spectator && !gmenu.isOpen() && !nav.active()) { // the right stick: camera, or picks on the bot wheel (not while a window is navigated)
+    if (wheel.isOpen()) { const s = input.stick(input.bindings('pad').look?.[0]); wheel.point(s.x, s.y); }
+    else { const lk = input.axis('look'); state.yaw -= lk.x * dt * 2.6; state.pitch = Math.min(1.25, Math.max(0.12, state.pitch - lk.y * dt * 1.5)); }
+  }
   const lm = state.joined && !state.spectator ? lockedMob() : null;
   const la = !lm && state.joined && !state.spectator ? focusedAlly() : null;
   const sel = lm || la;
@@ -2041,7 +2115,7 @@ function frame(now) {
   if (state.joined && !state.dead && !state.spectator && !arenas.frozen()) { // (frozen: falling / landing in a boss arena)
     // movement input
     let ix = 0, iz = 0;
-    const typing = document.activeElement === $('chat-input') || gmenu.isOpen(); // (the Game Menu blocks movement too)
+    const typing = document.activeElement === $('chat-input') || gmenu.isOpen() || nav.active(); // (the Game Menu blocks movement too; so does a window the left stick is navigating)
     if (!typing) {
       const mv = input.axis('move'); ix += mv.x; iz += mv.y;
       if (input.held('turnLeft')) state.yaw += dt * 2;
@@ -2122,7 +2196,7 @@ function frame(now) {
     const ml = $('merchant-lbl'), mp = project(MERCHANT.x, 3.6, MERCHANT.z), md = Math.hypot(state.x - MERCHANT.x, state.z - MERCHANT.z);
     if (mp && md < 20) {
       ml.style.display = ''; ml.style.left = `${mp[0]}px`; ml.style.top = `${mp[1]}px`;
-      const html = `Merchant${md < MERCHANT.r + 1 ? `<br><small>${isTouch ? 'tap Trade' : 'press F to trade'}</small>` : ''}`;
+      const html = `Merchant${md < MERCHANT.r + 1 ? `<br><small>${tapping() ? 'tap Trade' : `press ${keyHtml('interact')} to trade`}</small>` : ''}`;
       if (ml.innerHTML !== html) ml.innerHTML = html;
     } else if (ml.style.display !== 'none') ml.style.display = 'none';
     updateHallLabel();
@@ -2161,6 +2235,7 @@ function frame(now) {
   bubbles.frame();
   revive.frame(keys); // downed overlay, revive prompt, downed markers
   rescue.frame(keys, vdt); // trapped banner, "Hold E to cut free", trapped markers
+  openings.frame(); // weak points pulse while a boss is open
   teamplay.frame(); // combo chain counters over targets
 
   if (state.joined) updateHud(now);
@@ -2176,4 +2251,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { input, panels, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality };
+window.__fb = { settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };

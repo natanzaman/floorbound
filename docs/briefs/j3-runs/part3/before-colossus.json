@@ -1,0 +1,1454 @@
+[
+ {
+  "boss": "colossus",
+  "party": 3,
+  "skill": 3,
+  "knobs": {},
+  "label": "3p s3",
+  "rs": [
+   {
+    "run": 1,
+    "result": "kill",
+    "secs": 162,
+    "deaths": 0,
+    "downs": 2,
+    "revives": 2,
+    "twist": "static",
+    "ov": 4,
+    "beams": 3,
+    "phase": 2,
+    "hpLeft": 0,
+    "minHp": 0,
+    "taken": 4018,
+    "combos": {
+     "execute": 11,
+     "sanctified": 6
+    },
+    "mech": {
+     "stack": [
+      2
+     ],
+     "spread": [
+      1,
+      2
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     3,
+     3,
+     3
+    ],
+    "traps": {
+     "freed": 1
+    },
+    "threat": {
+     "share": 92,
+     "locks": 15,
+     "dps": [
+      121,
+      68,
+      70,
+      76,
+      62,
+      83,
+      101,
+      63,
+      50,
+      84,
+      51,
+      21,
+      55,
+      58,
+      54
+     ],
+     "heal": [
+      25,
+      17,
+      16,
+      37,
+      30,
+      47,
+      32,
+      28,
+      30,
+      20,
+      22,
+      40,
+      47,
+      11,
+      22
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 14175,
+      "cleric": 4415,
+      "swordsman": 29544
+     },
+     "downs": {
+      "swordsman": 1,
+      "cleric": 1
+     },
+     "deaths": {},
+     "open": {
+      "n": 5,
+      "secs": 13,
+      "slices": 26,
+      "used": 8,
+      "hits": 15
+     },
+     "uses": {
+      "swing": 10,
+      "strike": 14,
+      "gust": 9,
+      "overload": 4,
+      "beam": 3
+     },
+     "hits": {
+      "colossus hammerfall": 8,
+      "gale push": 3,
+      "meteor": 2,
+      "fire": 10,
+      "colossus lightning": 2,
+      "harpy dive": 6,
+      "harpy strike": 10,
+      "tether": 2,
+      "tempest beam": 3,
+      "spread": 1
+     }
+    },
+    "stop": {
+     "sw": 4,
+     "burst": 0,
+     "brk": 0
+    },
+    "clap": 0,
+    "beam": {
+     "jump": 2,
+     "roll": 0,
+     "hit": 3,
+     "cover": 6
+    },
+    "arena": {
+     "falls": 1,
+     "fire": 14
+    }
+   },
+   {
+    "run": 2,
+    "result": "kill",
+    "secs": 148,
+    "deaths": 0,
+    "downs": 0,
+    "revives": 0,
+    "twist": "tailwind",
+    "ov": 2,
+    "beams": 2,
+    "phase": 2,
+    "hpLeft": 0,
+    "minHp": 19,
+    "taken": 3637,
+    "combos": {
+     "execute": 10,
+     "sanctified": 8
+    },
+    "traps": {
+     "freed": 2
+    },
+    "mech": {
+     "stack": [],
+     "spread": [
+      2,
+      2
+     ],
+     "tether": [
+      0,
+      1
+     ]
+    },
+    "bursts": [
+     3,
+     2
+    ],
+    "threat": {
+     "share": 98,
+     "locks": 14,
+     "dps": [
+      76,
+      64,
+      77,
+      92,
+      76,
+      75,
+      62,
+      109,
+      61,
+      92,
+      84,
+      59,
+      60,
+      87
+     ],
+     "heal": [
+      32,
+      38,
+      40,
+      40,
+      41,
+      63,
+      41,
+      47,
+      36,
+      35,
+      40,
+      36,
+      46,
+      29
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 13939,
+      "cleric": 5263,
+      "swordsman": 29032
+     },
+     "downs": {},
+     "deaths": {},
+     "open": {
+      "n": 5,
+      "secs": 13,
+      "slices": 26,
+      "used": 18,
+      "hits": 26
+     },
+     "uses": {
+      "swing": 11,
+      "strike": 15,
+      "gust": 9,
+      "overload": 2,
+      "beam": 2
+     },
+     "hits": {
+      "colossus hammerfall": 14,
+      "colossus lightning": 1,
+      "gale push": 3,
+      "spread": 2,
+      "harpy strike": 6,
+      "harpy dive": 5,
+      "fire": 4,
+      "tether": 16,
+      "tempest beam": 2
+     }
+    },
+    "stop": {
+     "sw": 2,
+     "burst": 0,
+     "brk": 0
+    },
+    "clap": 0,
+    "beam": {
+     "jump": 1,
+     "roll": 0,
+     "hit": 3,
+     "cover": 2
+    },
+    "arena": {
+     "falls": 1,
+     "fire": 4
+    }
+   }
+  ]
+ },
+ {
+  "boss": "colossus",
+  "party": 3,
+  "skill": 5,
+  "knobs": {},
+  "label": "3p s5",
+  "rs": [
+   {
+    "run": 1,
+    "result": "kill",
+    "secs": 165,
+    "deaths": 0,
+    "downs": 1,
+    "revives": 1,
+    "twist": "static",
+    "ov": 4,
+    "beams": 3,
+    "phase": 2,
+    "hpLeft": 0,
+    "minHp": 0,
+    "combos": {
+     "execute": 14,
+     "sanctified": 6
+    },
+    "taken": 4873,
+    "mech": {
+     "stack": [
+      3
+     ],
+     "spread": [
+      2,
+      2
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     3,
+     3,
+     2
+    ],
+    "traps": {
+     "boom": 1
+    },
+    "threat": {
+     "share": 94,
+     "locks": 19,
+     "dps": [
+      79,
+      95,
+      61,
+      79,
+      84,
+      68,
+      80,
+      57,
+      52,
+      84,
+      116,
+      50,
+      51,
+      80,
+      100,
+      62,
+      109,
+      64,
+      65
+     ],
+     "heal": [
+      53,
+      53,
+      40,
+      42,
+      55,
+      36,
+      38,
+      35,
+      35,
+      39,
+      44,
+      36,
+      36,
+      46,
+      50,
+      44,
+      58,
+      54,
+      13
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 14401,
+      "swordsman": 28659,
+      "cleric": 5212
+     },
+     "downs": {
+      "cleric": 1
+     },
+     "deaths": {},
+     "open": {
+      "n": 6,
+      "secs": 15.5,
+      "slices": 31,
+      "used": 14,
+      "hits": 18
+     },
+     "uses": {
+      "swing": 9,
+      "strike": 15,
+      "gust": 10,
+      "overload": 4,
+      "beam": 3
+     },
+     "hits": {
+      "colossus hammerfall": 8,
+      "thunderclap": 9,
+      "meteor": 3,
+      "harpy strike": 7,
+      "fire": 1,
+      "storm crystal": 3,
+      "harpy dive": 4,
+      "tempest beam": 3,
+      "spread": 1
+     }
+    },
+    "stop": {
+     "sw": 1,
+     "burst": 0,
+     "brk": 0
+    },
+    "clap": 3,
+    "beam": {
+     "jump": 0,
+     "roll": 1,
+     "hit": 3,
+     "cover": 3
+    },
+    "arena": {
+     "falls": 1,
+     "fire": 1
+    }
+   },
+   {
+    "run": 2,
+    "result": "kill",
+    "secs": 196,
+    "deaths": 1,
+    "downs": 1,
+    "revives": 0,
+    "twist": "tailwind",
+    "ov": 2,
+    "beams": 3,
+    "phase": 2,
+    "hpLeft": 0,
+    "minHp": 0,
+    "taken": 2305,
+    "combos": {
+     "execute": 16,
+     "sanctified": 4
+    },
+    "mech": {
+     "stack": [
+      3,
+      3
+     ],
+     "spread": [
+      4,
+      4
+     ],
+     "tether": [
+      0,
+      0
+     ]
+    },
+    "bursts": [
+     3,
+     3,
+     3
+    ],
+    "traps": {
+     "freed": 2
+    },
+    "causes": [
+     "tempest beam"
+    ],
+    "threat": {
+     "share": 98,
+     "locks": 19,
+     "dps": [
+      87,
+      75,
+      79,
+      69,
+      74,
+      60,
+      90,
+      63,
+      67,
+      97,
+      71,
+      58,
+      59,
+      50,
+      91,
+      122,
+      75,
+      87,
+      15
+     ],
+     "heal": [
+      60,
+      43,
+      43,
+      44,
+      47,
+      41,
+      78,
+      51,
+      53,
+      50,
+      24,
+      28,
+      36,
+      45,
+      48,
+      60,
+      35,
+      37,
+      29
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 15256,
+      "cleric": 6014,
+      "swordsman": 26970
+     },
+     "downs": {
+      "swordsman": 1
+     },
+     "deaths": {
+      "swordsman": 1
+     },
+     "open": {
+      "n": 11,
+      "secs": 28.5,
+      "slices": 57,
+      "used": 23,
+      "hits": 34
+     },
+     "uses": {
+      "swing": 13,
+      "strike": 18,
+      "gust": 16,
+      "overload": 7,
+      "beam": 3
+     },
+     "hits": {
+      "colossus hammerfall": 8,
+      "spread": 4,
+      "meteor": 6,
+      "fire": 6,
+      "harpy strike": 6,
+      "harpy dive": 4,
+      "tempest beam": 3
+     }
+    },
+    "stop": {
+     "sw": 2,
+     "burst": 0,
+     "brk": 0
+    },
+    "clap": 0,
+    "beam": {
+     "jump": 0,
+     "roll": 0,
+     "hit": 3,
+     "cover": 6
+    },
+    "arena": {
+     "falls": 1,
+     "fire": 9
+    }
+   }
+  ]
+ },
+ {
+  "boss": "colossus",
+  "party": 6,
+  "skill": 3,
+  "knobs": {},
+  "label": "6p s3",
+  "rs": [
+   {
+    "run": 1,
+    "result": "kill",
+    "secs": 215,
+    "deaths": 0,
+    "downs": 6,
+    "revives": 6,
+    "twist": "stoneskin",
+    "ov": 4,
+    "beams": 3,
+    "phase": 2,
+    "hpLeft": 0,
+    "minHp": 0,
+    "taken": 8677,
+    "combos": {
+     "execute": 30,
+     "chorus": 17,
+     "sanctified": 9
+    },
+    "mech": {
+     "stack": [
+      5,
+      4
+     ],
+     "spread": [
+      4,
+      6
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "bursts": [
+     3,
+     2,
+     6,
+     6,
+     6,
+     5
+    ],
+    "traps": {
+     "boom": 1
+    },
+    "threat": {
+     "share": 88,
+     "locks": 24,
+     "dps": [
+      72,
+      69,
+      89,
+      81,
+      58,
+      45,
+      60,
+      54,
+      56,
+      49,
+      69,
+      60,
+      89,
+      61,
+      122,
+      109,
+      67,
+      49,
+      66,
+      64,
+      62,
+      63,
+      82,
+      67,
+      61,
+      54,
+      69,
+      60,
+      56,
+      52,
+      62,
+      56,
+      62,
+      54,
+      59,
+      59,
+      103,
+      53,
+      105,
+      177,
+      55,
+      43,
+      65,
+      62,
+      63,
+      48,
+      73,
+      70,
+      58,
+      10,
+      50,
+      54,
+      135,
+      16,
+      86,
+      89,
+      55,
+      10,
+      56,
+      53,
+      51,
+      11,
+      50,
+      11,
+      10,
+      14,
+      56,
+      18,
+      76,
+      34,
+      89,
+      16,
+      72,
+      43,
+      53,
+      20,
+      15,
+      40,
+      58,
+      17,
+      30,
+      45,
+      67,
+      19,
+      62,
+      43,
+      58,
+      20,
+      12,
+      42,
+      50,
+      22,
+      10,
+      38,
+      59,
+      26
+     ],
+     "heal": [
+      24,
+      22,
+      23,
+      35,
+      28,
+      35,
+      37,
+      33,
+      34,
+      43,
+      24,
+      36,
+      34,
+      44,
+      25,
+      25,
+      25,
+      31,
+      37,
+      34,
+      38,
+      27,
+      27,
+      6
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "bard": 16526,
+      "guardian": 25446,
+      "ranger": 38369,
+      "swordsman": 54602,
+      "berserker": 52479,
+      "cleric": 10495
+     },
+     "downs": {
+      "bard": 1,
+      "ranger": 1,
+      "swordsman": 3,
+      "cleric": 1
+     },
+     "deaths": {},
+     "open": {
+      "n": 8,
+      "secs": 20,
+      "slices": 40,
+      "used": 17,
+      "hits": 23
+     },
+     "uses": {
+      "swing": 17,
+      "strike": 20,
+      "gust": 14,
+      "overload": 5,
+      "beam": 3
+     },
+     "hits": {
+      "colossus hammerfall": 18,
+      "gale push": 4,
+      "spread": 6,
+      "meteor": 6,
+      "colossus lightning": 3,
+      "fire": 7,
+      "harpy dive": 5,
+      "harpy strike": 3,
+      "tempest beam": 5,
+      "storm crystal": 4
+     }
+    },
+    "stop": {
+     "sw": 1,
+     "burst": 3,
+     "brk": 0
+    },
+    "clap": 0,
+    "beam": {
+     "jump": 1,
+     "roll": 2,
+     "hit": 5,
+     "cover": 13
+    },
+    "arena": {
+     "falls": 1,
+     "fire": 10
+    }
+   },
+   {
+    "run": 2,
+    "result": "kill",
+    "secs": 218,
+    "deaths": 1,
+    "downs": 8,
+    "revives": 6,
+    "twist": "calm",
+    "ov": 2,
+    "beams": 6,
+    "phase": 2,
+    "hpLeft": 0,
+    "minHp": 0,
+    "taken": 11202,
+    "combos": {
+     "execute": 29,
+     "chorus": 13,
+     "sanctified": 4
+    },
+    "traps": {
+     "freed": 2
+    },
+    "bursts": [
+     6,
+     5,
+     4,
+     2,
+     4
+    ],
+    "mech": {
+     "stack": [
+      1
+     ],
+     "spread": [
+      1,
+      6
+     ],
+     "tether": [
+      2,
+      2
+     ]
+    },
+    "causes": [
+     "colossus lightning"
+    ],
+    "threat": {
+     "share": 91,
+     "locks": 23,
+     "dps": [
+      80,
+      63,
+      65,
+      8,
+      60,
+      62,
+      66,
+      26,
+      74,
+      67,
+      78,
+      35,
+      54,
+      64,
+      60,
+      38,
+      57,
+      54,
+      58,
+      32,
+      69,
+      80,
+      69,
+      39,
+      59,
+      57,
+      57,
+      40,
+      89,
+      125,
+      103,
+      60,
+      79,
+      82,
+      55,
+      45,
+      51,
+      60,
+      54,
+      39,
+      117,
+      259,
+      149,
+      74,
+      52,
+      67,
+      58,
+      33,
+      55,
+      50,
+      54,
+      37,
+      67,
+      11,
+      61,
+      44,
+      50,
+      52,
+      38,
+      89,
+      67,
+      31,
+      20,
+      57,
+      59,
+      17,
+      51,
+      63,
+      50,
+      17,
+      69,
+      59,
+      93,
+      20,
+      20,
+      10,
+      53,
+      4,
+      5,
+      86,
+      56,
+      10,
+      100,
+      58,
+      31,
+      6,
+      64,
+      66,
+      45,
+      10,
+      62
+     ],
+     "heal": [
+      15,
+      20,
+      25,
+      25,
+      19,
+      23,
+      23,
+      24,
+      17,
+      18,
+      48,
+      15,
+      18,
+      22,
+      26,
+      24,
+      19,
+      23,
+      6,
+      9,
+      25,
+      18,
+      24
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "bard": 13466,
+      "guardian": 26397,
+      "cleric": 8202,
+      "ranger": 44863,
+      "berserker": 49919,
+      "swordsman": 54878
+     },
+     "downs": {
+      "bard": 2,
+      "swordsman": 3,
+      "cleric": 2,
+      "berserker": 1
+     },
+     "deaths": {
+      "swordsman": 1
+     },
+     "open": {
+      "n": 10,
+      "secs": 26,
+      "slices": 52,
+      "used": 25,
+      "hits": 45
+     },
+     "uses": {
+      "swing": 15,
+      "strike": 20,
+      "gust": 11,
+      "overload": 8,
+      "beam": 6
+     },
+     "hits": {
+      "colossus hammerfall": 15,
+      "colossus lightning": 8,
+      "gale push": 2,
+      "spread": 3,
+      "harpy strike": 11,
+      "fire": 6,
+      "tether": 6,
+      "harpy dive": 2,
+      "meteor": 1,
+      "tempest beam": 13
+     }
+    },
+    "stop": {
+     "sw": 2,
+     "burst": 0,
+     "brk": 0
+    },
+    "clap": 0,
+    "beam": {
+     "jump": 6,
+     "roll": 0,
+     "hit": 15,
+     "cover": 18
+    },
+    "arena": {
+     "falls": 1,
+     "fire": 10
+    }
+   }
+  ]
+ },
+ {
+  "boss": "colossus",
+  "party": 6,
+  "skill": 5,
+  "knobs": {},
+  "label": "6p s5",
+  "rs": [
+   {
+    "run": 1,
+    "result": "kill",
+    "secs": 157,
+    "deaths": 0,
+    "downs": 1,
+    "revives": 0,
+    "twist": "tailwind",
+    "ov": 2,
+    "beams": 2,
+    "phase": 2,
+    "hpLeft": 0,
+    "minHp": 0,
+    "combos": {
+     "execute": 25,
+     "chorus": 17,
+     "sanctified": 6
+    },
+    "taken": 3221,
+    "traps": {
+     "freed": 2
+    },
+    "bursts": [
+     6,
+     6,
+     6,
+     6
+    ],
+    "mech": {
+     "stack": [],
+     "spread": [
+      3,
+      3
+     ],
+     "tether": [
+      1,
+      1
+     ]
+    },
+    "threat": {
+     "share": 96,
+     "locks": 20,
+     "dps": [
+      94,
+      90,
+      98,
+      87,
+      89,
+      82,
+      61,
+      59,
+      65,
+      62,
+      62,
+      55,
+      76,
+      76,
+      72,
+      54,
+      65,
+      65,
+      68,
+      56,
+      76,
+      84,
+      71,
+      58,
+      73,
+      64,
+      62,
+      56,
+      53,
+      57,
+      53,
+      51,
+      59,
+      67,
+      54,
+      57,
+      84,
+      95,
+      80,
+      65,
+      70,
+      62,
+      55,
+      53,
+      91,
+      90,
+      72,
+      61,
+      165,
+      111,
+      92,
+      72,
+      91,
+      65,
+      86,
+      47,
+      69,
+      61,
+      52,
+      54,
+      59,
+      70,
+      70,
+      55,
+      86,
+      73,
+      57,
+      51,
+      87,
+      62,
+      58,
+      56,
+      73,
+      63,
+      54,
+      53,
+      50,
+      50,
+      51,
+      51
+     ],
+     "heal": [
+      71,
+      44,
+      44,
+      46,
+      45,
+      47,
+      42,
+      43,
+      46,
+      56,
+      46,
+      51,
+      58,
+      34,
+      37,
+      43,
+      41,
+      41,
+      41,
+      9
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 20757,
+      "bard": 17527,
+      "cleric": 9095,
+      "berserker": 48514,
+      "ranger": 41146,
+      "swordsman": 60765
+     },
+     "downs": {
+      "cleric": 1
+     },
+     "deaths": {},
+     "open": {
+      "n": 6,
+      "secs": 15,
+      "slices": 30,
+      "used": 14,
+      "hits": 32
+     },
+     "uses": {
+      "swing": 11,
+      "gust": 12,
+      "strike": 16,
+      "overload": 7,
+      "beam": 2
+     },
+     "hits": {
+      "colossus hammerfall": 7,
+      "harpy strike": 18,
+      "spread": 3,
+      "fire": 4,
+      "tether": 6,
+      "tempest beam": 3,
+      "harpy dive": 1
+     }
+    },
+    "stop": {
+     "sw": 0,
+     "burst": 2,
+     "brk": 0
+    },
+    "clap": 0,
+    "beam": {
+     "jump": 3,
+     "roll": 0,
+     "hit": 3,
+     "cover": 7
+    },
+    "arena": {
+     "falls": 1,
+     "fire": 5
+    }
+   },
+   {
+    "run": 2,
+    "result": "kill",
+    "secs": 176,
+    "deaths": 0,
+    "downs": 1,
+    "revives": 1,
+    "twist": "calm",
+    "ov": 3,
+    "beams": 3,
+    "phase": 2,
+    "hpLeft": 0,
+    "minHp": 0,
+    "combos": {
+     "execute": 25,
+     "chorus": 16,
+     "sanctified": 5
+    },
+    "taken": 2944,
+    "traps": {
+     "freed": 1
+    },
+    "bursts": [
+     6,
+     6,
+     6,
+     6
+    ],
+    "mech": {
+     "stack": [
+      5
+     ],
+     "spread": [
+      3,
+      3
+     ],
+     "tether": [
+      2,
+      2
+     ]
+    },
+    "threat": {
+     "share": 99,
+     "locks": 23,
+     "dps": [
+      106,
+      92,
+      91,
+      94,
+      78,
+      70,
+      44,
+      73,
+      62,
+      61,
+      45,
+      57,
+      66,
+      74,
+      58,
+      72,
+      82,
+      73,
+      62,
+      77,
+      58,
+      62,
+      58,
+      74,
+      50,
+      50,
+      54,
+      58,
+      46,
+      58,
+      57,
+      68,
+      73,
+      77,
+      59,
+      64,
+      71,
+      67,
+      50,
+      57,
+      83,
+      100,
+      44,
+      86,
+      63,
+      69,
+      38,
+      61,
+      55,
+      64,
+      55,
+      68,
+      52,
+      59,
+      52,
+      54,
+      90,
+      75,
+      66,
+      57,
+      57,
+      68,
+      56,
+      74,
+      86,
+      71,
+      61,
+      69,
+      78,
+      81,
+      57,
+      56,
+      67,
+      69,
+      52,
+      65,
+      10,
+      50,
+      52,
+      50,
+      22,
+      72,
+      57,
+      75,
+      51,
+      66,
+      56,
+      50,
+      61,
+      68,
+      50,
+      50
+     ],
+     "heal": [
+      72,
+      38,
+      32,
+      38,
+      36,
+      36,
+      37,
+      34,
+      31,
+      34,
+      40,
+      30,
+      36,
+      35,
+      51,
+      49,
+      56,
+      50,
+      39,
+      35,
+      37,
+      40,
+      43
+     ]
+    },
+    "tune": {
+     "dmg": {
+      "guardian": 24615,
+      "cleric": 9645,
+      "bard": 20286,
+      "berserker": 52251,
+      "ranger": 41382,
+      "swordsman": 48910
+     },
+     "downs": {
+      "swordsman": 1
+     },
+     "deaths": {},
+     "open": {
+      "n": 6,
+      "secs": 15.5,
+      "slices": 31,
+      "used": 25,
+      "hits": 59
+     },
+     "uses": {
+      "swing": 13,
+      "strike": 17,
+      "gust": 11,
+      "overload": 5,
+      "beam": 3
+     },
+     "hits": {
+      "colossus hammerfall": 12,
+      "spread": 3,
+      "harpy strike": 8,
+      "fire": 1,
+      "harpy dive": 1,
+      "meteor": 1,
+      "colossus lightning": 1,
+      "tempest beam": 1
+     }
+    },
+    "stop": {
+     "sw": 3,
+     "burst": 0,
+     "brk": 0
+    },
+    "clap": 0,
+    "beam": {
+     "jump": 5,
+     "roll": 0,
+     "hit": 2,
+     "cover": 13
+    },
+    "arena": {
+     "falls": 1,
+     "fire": 4
+    }
+   }
+  ]
+ }
+]

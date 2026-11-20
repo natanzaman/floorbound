@@ -7,8 +7,9 @@
 // Runtime state (which area each arena is in, the fire pattern) is module state, set by the server as it changes and by
 // clients and bots from the snapshot (applyArenaSnap). resolveCollision (shared/data.js) adds the active area's colliders,
 // so players, bots, mobs and client prediction all collide with them without knowing about areas.
-// This module imports only shared/floor3.js (which imports nothing), so shared/data.js can import it.
+// This module imports only shared/floor3.js and the boss timing tables (shared/bosstiming.js), so shared/data.js can import it.
 import { F3 } from './floor3.js';
+import { TIMED } from './bosstiming.js';
 
 // Positions are offsets [dx, dz] from the room's centre (face convention: +z is north, the way in is from the south).
 // Per arena:
@@ -26,7 +27,7 @@ import { F3 } from './floor3.js';
 export const ARENAS = {
   colossus: {
     room: F3.arena, boss: 'colossus', game: 'colossus', fight: 'fight3',
-    timing: { crack: 3.2, fall: 1.1, land: 2.0, enter: 1.6, impact: 0.55, gap: 8, after: 3, shove: 7, shoveR: 7 },
+    timing: TIMED.colossus.transition, // shared/bosstiming.js (also: resume, resumeJitter: when the boss's own moves come back)
     transitions: [{ phase: 1, to: 1 }],
     areas: [
       { id: 'eye', name: 'The Eye of the Storm' },

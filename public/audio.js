@@ -172,6 +172,7 @@ export class Sound {
         this.noise(o, { dur: 0.7, vol: 0.6, type: 'lowpass', f: 900, to: 120 });
         break;
       case 'warn': this.tone(o, { f: 520, dur: 0.12, vol: 0.12, type: 'square' }); this.tone(o, { f: 520, dur: 0.12, vol: 0.12, type: 'square', at: 0.18 }); break;
+      case 'cue': [0, 0.09, 0.18].forEach((at, i) => this.tone(o, { f: NOTE(81 + i * 3), dur: 0.1, vol: 0.14, type: 'triangle', at, attack: 0.002 })); break; // telegraph cue (Settings → Accessibility): three quick rising chirps, unlike 'warn'
       case 'spit': this.noise(o, { dur: 0.12, vol: 0.3, f: 1200, to: 400, q: 2 }); this.tone(o, { f: 500, to: 200, dur: 0.1, vol: 0.15, type: 'square' }); break;
       case 'howl':
         this.tone(o, { f: 330, to: 620, dur: 0.6, vol: 0.22, type: 'sawtooth', attack: 0.1 });
