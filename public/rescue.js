@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { RESCUE, readTraps } from '/shared/rescue.js';
 import { col, patterned, cue } from '/palette.js'; // telegraph colours, pattern cue, sound cue (Settings → Accessibility)
-import { keyName } from '/keyname.js'; // prompts name the player's key on the active device
+import { keyName, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 
 const PROMPTS = 3;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -253,7 +253,7 @@ export function initRescue({ state, players, mobs, send, project, layer, guide, 
     if (held) {
       if (sent !== t.id || (t.trap.by !== me() && now - sentAt > 400)) { send({ type: 'free', on: 1, id: t.id }); sent = t.id; sentAt = now; }
     } else if (sent) { send({ type: 'free', on: 0 }); sent = 0; }
-    const ph = t ? `<div>${t.trap.by === me() ? 'Cutting' : isTouch ? 'Hold here to cut' : `Hold <b>${esc(keyLabel('revive'))}</b> to cut`} ${esc(name(t.id))} free</div><div class="fp-bar"><div style="width:${Math.round((t.trap.by === me() ? t.trap.prog : 0) * 100)}%"></div></div>` : '';
+    const ph = t ? `<div>${t.trap.by === me() ? 'Cutting' : tapping() ? 'Hold here to cut' : `Hold <b>${esc(keyLabel('revive'))}</b> to cut`} ${esc(name(t.id))} free</div><div class="fp-bar"><div style="width:${Math.round((t.trap.by === me() ? t.trap.prog : 0) * 100)}%"></div></div>` : '';
     if (ph !== lastPrompt) { lastPrompt = ph; prompt.innerHTML = ph; prompt.classList.toggle('hidden', !t); }
     // markers over trapped partymates (all of them for spectators), through walls
     const seen = new Set();

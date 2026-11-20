@@ -914,7 +914,7 @@ function removeEntity(e) {
 // the game itself keeps running).
 const input = createInput({ isTouch, settings, save: saveSettings, notify: t => { log(t, 'sys'); padToast(t); }, ask: (t, answer) => padToast(t, answer),
   gate: a => a === 'perfOverlay' || (state.joined && (a === 'menu' || !gmenu.isOpen())) });
-setKeySource(input); // (public/keyname.js: every prompt reads the active device's bindings when drawn)
+setKeySource(input, isTouch); // (public/keyname.js: every prompt reads the active device's bindings when drawn)
 // Controller toasts (input.js): a short note, or the one-time "Controller detected" question (A / B answer it too).
 function padToast(text, answer) {
   let el = $('padtoast');
@@ -1096,7 +1096,7 @@ const BAR_ACTIONS = { 0: 'attack', 1: 'skill1', 2: 'skill2', 3: 'skill3', dodge:
 // The bar's key chips name the bindings on the active device (none under touch play). Only the chips' text changes, so a
 // device switch or a rebind relabels in place instead of rebuilding the bar.
 function labelBar() {
-  const touch = input.device === 'touch';
+  const touch = isTouch && input.device !== 'pad'; // (a phone back from a pad: 'kbm' in Controls, still no key names)
   for (const b of $('skills').children) {
     const a = BAR_ACTIONS[b.dataset.slot] || BAR_ACTIONS[b.dataset.item], k = a && b.querySelector('.key');
     if (k) k.textContent = touch ? '' : keyLabel(a).toUpperCase();

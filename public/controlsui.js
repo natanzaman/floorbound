@@ -182,7 +182,7 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
       <h4>Input device</h4>
       <div class="cu-dev" role="radiogroup">${['kbm', 'pad'].map(d => `<label class="cu-opt ${d === 'pad' && !p.length ? 'off' : ''}"><input type="radio" name="cu-dev" value="${d}" data-nav="cu-dev-${d}" ${dev === d ? 'checked' : ''} ${d === 'pad' && !p.length && dev !== 'pad' ? 'disabled' : ''}> ${DEVICE_NAMES[d]}</label>`).join('')}</div>
       <small class="cu-status" id="cu-status">${p.length ? `Controller connected: ${esc(padName(p[0]))}` : 'No controller connected (press a button on one to wake it).'}</small>
-      ${!p.length && xboxUsb.supported() ? '<small class="cu-usb">Wired Xbox controller with a blinking light (a Mac)? <button data-a="usb" data-nav="cu-usb">Connect it</button></small>' : ''}
+      ${!p.length && xboxUsb.needed() ? '<small class="cu-usb">Wired Xbox controller with a blinking light (a Mac)? <button data-a="usb" data-nav="cu-usb">Connect it</button></small>' : ''}
       <div class="cu-tabs" role="tablist">${['kbm', 'pad'].map(d => `<button role="tab" data-tab="${d}" data-nav="cu-tab-${d}" class="${tab === d ? 'on' : ''}" aria-selected="${tab === d}">${DEVICE_NAMES[d]}</button>`).join('')}</div>`;
   }
   function slotCell(device, a, slot) {

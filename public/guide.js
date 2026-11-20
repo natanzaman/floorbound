@@ -1,13 +1,13 @@
 // First-time player guide: a short step-by-step card plus one-time contextual tips.
 // Progress is kept in this browser, per character, and reported to the server for play tracking.
 import { COMBOS } from '/shared/teamplay.js'; // combo tips (G2)
-import { DEFAULTS, bindingLabel } from '/shared/controls.js';
+import { keyName } from '/keyname.js'; // (the active device's key; an unbound pad action names no keyboard key)
 
 const touch = () => document.body.classList.contains('touch');
 // K(action): the key a tip names, from the player's bindings (new Guide({ keyLabel }): input.label); the default key until then.
 let keyLabel = null;
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); // (the card is innerHTML; key names come from saved bindings)
-const K = a => { try { const l = keyLabel?.(a); if (l && l !== 'Not bound') return l; } catch {} return bindingLabel(DEFAULTS.kbm[a]?.[0]); };
+const K = a => { try { const l = keyLabel?.(a); if (l && l !== 'Not bound') return l; } catch {} return keyName(a); };
 
 export const STEPS = [ // (the Game Menu's Controls & guide lists them too)
   { id: 'move', title: 'Find your feet', text: () => touch() ? 'Drag on the left half of the screen to move. Drag on the right half to look around.' : `Move with ${K('move')} (back walks backwards, left / right strafe). Click the game, then move the mouse to look around. Esc frees the cursor. Prefer right-drag? Change it in Settings.` },

@@ -10,6 +10,9 @@
 import { GIP_FILTER, powerOn, ackFor, parseGip, blankPad } from '/shared/gip.js';
 
 const open = new Map(); // USBDevice -> { st, alive }
+const starting = new Map(); // USBDevice -> the start in progress (load-time reopen, 'connect' and a click can overlap)
+const gone = new WeakSet(); // unplugged devices (no retry after a read error)
+const retriedAt = new WeakMap(); // USBDevice -> when a failed read loop last reopened it (once per 10 s)
 const resetAt = new Map(); // vendor:product:serial -> when it was last reset
 // A short log for checking a pad by hand (window.__xboxusb.log in the console): what was sent, read and failed.
 const log = [];
@@ -18,6 +21,8 @@ const hx = b => [...b].map(x => x.toString(16).padStart(2, '0')).join(' ');
 if (typeof window !== 'undefined') window.__xboxusb = { log, pads: () => pads(), devices: () => [...open.keys()] };
 const hex = n => n.toString(16).padStart(4, '0');
 export const supported = () => typeof navigator !== 'undefined' && !!navigator.usb;
+// Only a Mac needs it (Windows and Linux drive these pads themselves): the Controls screen offers "Connect it" there.
+export const needed = () => supported() && /Mac/i.test(navigator.userAgentData?.platform || navigator.platform || '');
 export const pads = () => [...open.values()].map(p => p.st);
 
 function gipInterface(dev) {
@@ -29,8 +34,14 @@ function gipInterface(dev) {
   return null;
 }
 
-async function start(dev) {
-  if (open.has(dev)) return true;
+function start(dev) {
+  if (open.has(dev)) return Promise.resolve(true);
+  if (!starting.has(dev)) starting.set(dev, doStart(dev).finally(() => starting.delete(dev)));
+  return starting.get(dev);
+}
+const freeIndex = () => { const used = new Set(pads().map(p => p.index)); let i = 100; while (used.has(i)) i++; return i; };
+async function doStart(dev) {
+  gone.delete(dev);
   try {
     if (!dev.opened) await dev.open();
     if (!dev.configuration) await dev.selectConfiguration(1);
@@ -50,7 +61,7 @@ async function start(dev) {
       await dev.claimInterface(g.num).catch(e => note('reclaim', e.message));
     }
     const name = (dev.productName && dev.productName !== 'Controller' ? dev.productName : `${dev.manufacturerName || 'Xbox'} controller`).trim();
-    const p = { st: blankPad(`${name} (Xbox wired USB, Vendor: ${hex(dev.vendorId)} Product: ${hex(dev.productId)})`, 100 + open.size), alive: true, seq: 0, inputs: 0 };
+    const p = { st: blankPad(`${name} (Xbox wired USB, Vendor: ${hex(dev.vendorId)} Product: ${hex(dev.productId)})`, freeIndex()), alive: true, seq: 0, inputs: 0 };
     open.set(dev, p);
     note('opened', dev.manufacturerName, dev.productName, hex(dev.vendorId), hex(dev.productId), JSON.stringify(g));
     const send = bytes => dev.transferOut(g.outEp, bytes).then(r => note('out', r.status, hx(bytes))).catch(e => note('out failed', hx(bytes), e.message));
@@ -58,10 +69,12 @@ async function start(dev) {
     setTimeout(() => { if (p.alive && !p.woken) p.wake(); }, 1000); // (no announce: wake it anyway)
     dispatchEvent(new Event('gamepadconnected'));
     (async () => { // the read loop: one packet per transfer, until the pad goes away
+      let stalls = 0, failed = false;
       while (p.alive) {
         let r;
-        try { r = await dev.transferIn(g.inEp, g.size); } catch (e) { note('in failed', e.message); break; }
-        if (r.status === 'stall') { await dev.clearHalt('in', g.inEp).catch(() => {}); continue; }
+        try { r = await dev.transferIn(g.inEp, g.size); } catch (e) { note('in failed', e.message); failed = true; break; }
+        if (r.status === 'stall') { if (++stalls > 5) { note('stalled'); failed = true; break; } await dev.clearHalt('in', g.inEp).catch(() => {}); continue; }
+        stalls = 0;
         if (!r.data) continue;
         const b = new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength);
         if (b[0] !== 0x20 || p.inputs++ < 3) note('in', hx(b));
@@ -69,7 +82,12 @@ async function start(dev) {
         if (b[0] === 0x02) p.wake(); // (the pad announced itself: wake it)
         parseGip(b, p.st);
       }
+      // A read that failed while the pad is still plugged in (a glitch, a stuck endpoint): close it and reopen it once.
+      // (closed before it's unlisted, so a "Connect it" click in between can't have its fresh start closed under it)
+      const retry = failed && !gone.has(dev) && !(Date.now() - (retriedAt.get(dev) || 0) < 10000);
+      if (retry) { retriedAt.set(dev, Date.now()); await dev.close().catch(() => {}); }
       stop(dev);
+      if (retry) setTimeout(() => { if (!gone.has(dev) && !open.has(dev) && !starting.has(dev)) start(dev); }, 500);
     })();
     return true;
   } catch (e) {
@@ -100,5 +118,5 @@ export async function connect() {
 if (supported()) {
   navigator.usb.getDevices().then(ds => ds.forEach(start)).catch(() => {});
   navigator.usb.addEventListener('connect', e => start(e.device));
-  navigator.usb.addEventListener('disconnect', e => stop(e.device));
+  navigator.usb.addEventListener('disconnect', e => { gone.add(e.device); stop(e.device); });
 }
