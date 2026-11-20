@@ -94,6 +94,69 @@ try {
     assert.equal(got.access?.sens, 2, 'with the rest of fb_controls');
     assert.deepEqual(errors, []);
     ok('browser: on sign-in the account copy wins and takes effect; a later rebind uploads');
+
+    // ---- hard review finding 1: a change this browser made is never lost to the account copy ----
+    const jumpLocal = () => p.evaluate(() => JSON.parse(localStorage.getItem('fb_controls')).kbm.jump?.[0]);
+    const jumpLive = () => p.evaluate(() => window.__fb?.input.bindings('kbm').jump[0]);
+    async function serverJump(want, ms = 8000) {
+      const end = Date.now() + ms; let j;
+      while (Date.now() < end) { j = (await call('GET', '/api/settings', token)).body.settings?.kbm?.jump?.[0]; if (j === want) return j; await sleep(150); }
+      return j;
+    }
+    const ready = () => p.waitForFunction(() => window.__fb?.input && !document.getElementById('enter').disabled, null, { timeout: 30000 });
+    // (a) a rebind, then a reload before the debounced upload fires
+    await p.evaluate(() => window.__fb.input.setBinding('kbm', 'jump', 0, 'KeyU'));
+    await p.reload(); await ready();
+    assert.equal(await serverJump('KeyU'), 'KeyU', 'a rebind just before a reload reaches the server');
+    await sleep(1500);
+    assert.equal(await jumpLocal(), 'KeyU', 'and is still this browser\'s binding after the reload');
+    assert.equal(await jumpLive(), 'KeyU');
+    ok('browser: rebind then an immediate reload keeps the binding, and it reaches the server');
+    // (b) the sign-in GET fails once: a rebind made meanwhile survives a reload and reaches the server
+    let failed = 0;
+    await p.route('**/api/settings', r => (r.request().method() === 'GET' && !failed++ ? r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"down"}' }) : r.continue()));
+    await p.reload(); await ready();
+    for (let end = Date.now() + 15000; !failed && Date.now() < end;) await sleep(50);
+    assert.equal(failed >= 1, true, 'the first GET /api/settings failed');
+    await p.evaluate(() => window.__fb.input.setBinding('kbm', 'jump', 0, 'KeyV'));
+    await sleep(200);
+    await p.reload(); await ready();
+    assert.equal(await serverJump('KeyV'), 'KeyV', 'the rebind reaches the server');
+    await sleep(1500);
+    assert.equal(await jumpLocal(), 'KeyV', 'the rebind is kept after the reload');
+    assert.equal(await jumpLive(), 'KeyV');
+    await p.unroute('**/api/settings');
+    ok('browser: the sign-in GET fails once, a rebind, a reload: the rebind is kept and uploaded');
+    // (d) the sign-in GET fails once and is retried, so later rebinds still upload in that session; (e) a failed PUT
+    // (a deploy restart) is retried
+    let getFails = 0, putFails = 0;
+    await p.route('**/api/settings', r => {
+      const m = r.request().method();
+      if (m === 'GET' && !getFails++) return r.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
+      if (m === 'PUT' && putFails < 1 && JSON.parse(r.request().postData()).settings.kbm.jump[0] === 'KeyW') { putFails++; return r.abort('connectionreset'); }
+      return r.continue();
+    });
+    await p.reload(); await ready();
+    for (let end = Date.now() + 15000; !getFails && Date.now() < end;) await sleep(50);
+    await sleep(2500); // (the retried GET has answered)
+    await p.evaluate(() => window.__fb.input.setBinding('kbm', 'jump', 0, 'KeyT'));
+    assert.equal(await serverJump('KeyT'), 'KeyT', 'after a retried sign-in GET, a rebind uploads');
+    ok('browser: a failed sign-in GET is retried, so the session still uploads rebinds');
+    await p.evaluate(() => window.__fb.input.setBinding('kbm', 'jump', 0, 'KeyW'));
+    assert.equal(await serverJump('KeyW'), 'KeyW', 'a failed upload is retried');
+    assert.equal(putFails, 1, 'the first upload failed');
+    await p.unroute('**/api/settings');
+    ok('browser: a failed upload is retried with backoff');
+    // (c) a second login (loadMe again, here: creating a character) does not revert a change still waiting to upload
+    await sleep(1500); // (the login after that reload has finished)
+    await p.evaluate(() => window.__fb.input.setBinding('kbm', 'jump', 0, 'KeyY'));
+    await p.evaluate(() => { document.getElementById('name').value = 'Syncer'; document.getElementById('enter').click(); });
+    assert.equal(await serverJump('KeyY'), 'KeyY', 'the pending change reaches the server');
+    await sleep(1500);
+    assert.equal(await jumpLocal(), 'KeyY', 'a second login does not revert the pending change');
+    assert.equal(await jumpLive(), 'KeyY');
+    assert.deepEqual(errors, []);
+    ok('browser: a second login (loadMe again) flushes a pending change instead of reverting it');
   } else console.log('  (browser part skipped: no Playwright)');
 
   // ---- review fixes: prototype names and odd binding strings are never stored; the body cap is the 8 KB cap (+512) ----
