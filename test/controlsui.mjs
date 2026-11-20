@@ -265,7 +265,7 @@ try {
   assert.deepEqual((await sent(m, 'chat')).map(o => o.text), ['hello while open'], 'Enter in chat sends while Controls is open');
   assert.ok(await S(() => document.activeElement?.id !== 'chat-input'), 'and leaves the chat box');
   await rebind('skill1', 'KeyW');
-  assert.match(await S(() => document.getElementById('cu-prompt')?.textContent || ''), /W is already on Move/, 'the conflict prompt');
+  assert.match(await S(() => document.getElementById('cu-prompt')?.textContent || ''), /W is part of WASD on Move: unbinding it clears all of WASD/, 'the conflict prompt names the whole axis');
   assert.ok(await S(() => !document.querySelector('#cu-prompt [data-p=swap]')), 'no Swap when Move could not take Skill 1\'s key');
   await p.click('#cu-prompt [data-p=cancel]'); await frames(1);
   assert.equal(await bound('move'), 'KeyW,KeyA,KeyS,KeyD');
@@ -289,6 +289,15 @@ try {
   await p.click('#cu-tab-kbm [data-reset=kbm]'); await p.click('#cu-tab-kbm [data-reset=kbm]'); await frames(1);
   await p.click('#controlsui [data-a=close]'); await frames(1);
   ok('chat Enter works with Controls open; no Swap that would cross an axis; Cmd chords capture on press; guide labels escaped');
+
+  // ---- the panel registry closing it (panels.close(): Start / Esc on the pad) closes it properly: no capture left running ----
+  await tap('Escape'); await frames(2); await p.click('#gamemenu [data-a=bindings]'); await frames(1);
+  await p.click('#cu-tab-kbm [data-rb="jump:0"]');
+  await p.waitForFunction(() => window.__fb.input.capturing);
+  await S(() => window.__fb.panels.close()); await frames(1);
+  assert.ok(!(await visible('controlsui')), 'panels.close() hides it');
+  assert.equal(await S(() => window.__fb.input.capturing), false, 'and stops the capture (controlsUi.close())');
+  ok('the panel registry closing Controls calls its close(): a capture does not outlive it');
 
   assert.deepEqual(errors, [], 'no page errors');
   console.log(`controlsui: all ${n} checks passed`);

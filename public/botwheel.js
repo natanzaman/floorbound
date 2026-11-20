@@ -1,11 +1,12 @@
 // Command wheel for the bots in your party (shared/bots/social.js lists the orders; bots obey in shared/bots/brain.js).
 // Hold V (or press the Bots button under the party frames): the cursor is freed, point at an order and release V, or
 // click it. A quick tap of V keeps the wheel open until you click an order or press Esc / V again.
+// Settings → Toggle the bot wheel (toggleMode()): a press opens it, the next press gives the order pointed at (else closes).
 // The chips under the wheel pick who gets the order: all your bots, or one of them.
 import { BOT_COMMANDS } from '/shared/bots/social.js';
 
-// keyLabel(action): the key the hint names (input.label: follows the player's bindings).
-export function initBotWheel({ send, state, players, log, keyLabel = () => 'V' }) {
+// keyLabel(action): the key the hint names (input.label: follows the player's bindings). toggleMode(): the hint's wording.
+export function initBotWheel({ send, state, players, log, keyLabel = () => 'V', toggleMode = () => false }) {
   const el = document.createElement('div');
   el.id = 'botwheel'; el.className = 'hidden';
   document.getElementById('hud').appendChild(el);
@@ -25,7 +26,7 @@ export function initBotWheel({ send, state, players, log, keyLabel = () => 'V' }
     }).join('')}<div class="hub"><b>${bots.length ? 'ORDERS' : 'NO BOTS'}</b><small>${bots.length ? esc(who || 'all bots') : 'in your party'}</small></div></div>
     <div class="who">${bots.length ? `<button data-w="" class="${who ? '' : 'on'}">All bots</button>${bots.map(b => `<button data-w="${esc(b.name)}" class="${who === b.name ? 'on' : ''} ${b.dead ? 'dead' : ''}">${esc(b.name)}</button>`).join('')}<button data-c="leave" class="dismiss" title="Ask ${esc(who || 'every bot')} to leave the party">Dismiss</button>`
       : `<span>Invite bots from the Players panel (${esc(keyLabel('players'))}), or ask an admin for a party of bots.</span>`}</div>
-    <div class="hint">Release ${esc(keyLabel('botWheel'))} on an order or click it · Esc to close · or type /b stay, /b Lyra: heal (/b help)</div>`;
+    <div class="hint">${toggleMode() ? 'Press' : 'Release'} ${esc(keyLabel('botWheel'))}${toggleMode() ? ' again' : ''} on an order or click it · Esc to close · or type /b stay, /b Lyra: heal (/b help)</div>`;
   }
 
   function open() {
@@ -93,8 +94,13 @@ export function initBotWheel({ send, state, players, log, keyLabel = () => 'V' }
       if (hover) issue(hover);
       else if (performance.now() - openedAt > 350) close(); // held and released on nothing: cancel
     },
+    toggle() { // (toggle mode) closed: open it; open: give the order pointed at, else close
+      if (!isOpen()) return open();
+      if (hover) issue(hover);
+      if (isOpen()) close(); // (nothing pointed at, or no bots to give it to)
+    },
     hasBots: () => partyBots().length > 0,
-    point(x, y) { // a stick (x right, y down): highlight the order it points at; release the button to give it (K1b)
+    point(x, y) { // a stick (x right, y down): highlight the order it points at; release the button (toggle: press it again) to give it (K1b)
       if (!isOpen() || Math.hypot(x, y) < 0.5) return;
       const btns = [...el.querySelectorAll('.wcmd:not([disabled])')], want = Math.atan2(y, x);
       const off = b => Math.abs(Math.atan2(Math.sin(Math.atan2(parseFloat(b.style.top), parseFloat(b.style.left)) - want), Math.cos(Math.atan2(parseFloat(b.style.top), parseFloat(b.style.left)) - want)));

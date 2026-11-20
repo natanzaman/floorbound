@@ -55,7 +55,7 @@ export function initSettingsPanel({ el, settings, save, Q, PRESETS, perf, applyQ
     <input type="range" min="${RANGES.padSens[0]}" max="${RANGES.padSens[1]}" step="0.1" value="${settings.padSens}" data-a="padSens">
     <h4>Accessibility</h4>
     <label class="opt"><input type="checkbox" data-a="guardToggle" ${settings.guardToggle ? 'checked' : ''}> Toggle guard <small>press the guard key to raise it, again to lower it (instead of holding)</small></label>
-    <label class="opt"><input type="checkbox" data-a="wheelToggle" ${settings.wheelToggle ? 'checked' : ''}> Toggle the bot wheel <small>press V to open it, again (or Esc) to close it</small></label>
+    <label class="opt"><input type="checkbox" data-a="wheelToggle" ${settings.wheelToggle ? 'checked' : ''}> Toggle the bot wheel <small>press V to open it, V again gives the order you point at (Esc closes it)</small></label>
     <label class="opt"><input type="checkbox" data-a="reduceMotion" ${settings.reduceMotion ? 'checked' : ''}> Reduce motion <small>no camera shake, hit-stop or kill-zoom</small></label>
     <label class="opt"><input type="checkbox" data-a="highContrast" ${settings.highContrast ? 'checked' : ''}> High-contrast HUD text <small>brighter text on darker panels</small></label>
     <label class="opt">Telegraph colours <select data-a="palette">${[['off', 'Default'], ['deuter', 'Red-green friendly'], ['trit', 'Blue-yellow friendly']].map(([v, l]) => `<option value="${v}" ${settings.palette === v ? 'selected' : ''}>${l}</option>`).join('')}</select> <small>safer colours plus a dashed edge on danger rings</small></label>

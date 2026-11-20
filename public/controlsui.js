@@ -11,7 +11,7 @@
 //   Rebind: input.capture() takes the next key, click or chord (Esc cancels). shared/controls.js check() decides:
 //           refused keys get a reason; a key that's taken asks Swap / Unbind / Cancel (assign 'swap' | 'unbind').
 //   Reset to defaults per device. Every change saves to fb_controls (input.setBinding), which the account sync uploads.
-import { ACTION, ACTIONS, DEFAULTS, GROUPS, PAD_BUTTONS, PAD_MODIFIERS, bindingLabel, canSwap, check, isAxisBinding, keyName, modOfCode, tokens } from '/shared/controls.js';
+import { ACTION, ACTIONS, DEFAULTS, GROUPS, PAD_BUTTONS, PAD_MODIFIERS, bindingLabel, canSwap, check, conflictText, isAxisBinding, keyName, modOfCode, tokens } from '/shared/controls.js';
 
 export const DEVICE_NAMES = { kbm: 'Keyboard & Mouse', pad: 'Controller' };
 // Why a binding is refused (check() errors), in plain words.
@@ -201,7 +201,7 @@ export function initControlsUi({ input, sfx, onChange = () => {}, id = 'controls
       + ['kbm', 'pad'].map(d => `<section class="cu-tab ${tab === d ? '' : 'hidden'}" id="cu-tab-${d}" role="tabpanel">
         <div class="cu-pic" id="cu-pic-${d}" data-device="${d}">${picture(d)}</div>
         <div class="cu-msg ${msg ? '' : 'hidden'}" id="cu-msg-${d}" role="status">${esc(msg)}</div>
-        ${p && p.device === d ? `<div class="cu-prompt" id="cu-prompt"><div><b>${esc(bindingLabel(p.binding))}</b> is already on ${p.conflicts.map(c => `<b>${esc(ACTION[c.action].label)}</b>`).join(', ')}.</div>
+        ${p && p.device === d ? `<div class="cu-prompt" id="cu-prompt"><div>${esc(conflictText(input.bindings(d), d, p.binding, p.conflicts))}</div>
           ${p.swap ? '<button data-p="swap" data-nav="cu-p-swap" data-nav-default>Swap</button>' : ''}<button data-p="unbind" data-nav="cu-p-unbind"${p.swap ? '' : ' data-nav-default'}>Unbind ${p.conflicts.length > 1 ? 'them' : 'it'}</button><button data-p="cancel" data-nav="cu-p-cancel">Cancel</button></div>` : ''}
         <div class="cu-list">${list(d)}</div>
         <button class="cu-reset" data-reset="${d}" data-nav="cu-reset-${d}">${resetArmed === d ? `Sure? Reset ${DEVICE_NAMES[d]}` : `Reset ${DEVICE_NAMES[d]} to defaults`}</button>

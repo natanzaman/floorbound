@@ -1,6 +1,7 @@
 // The input layer (roadmap K): raw keyboard, mouse (and, from K1b, gamepad) events become actions from
 // shared/controls.js, using the player's bindings. main.js and feature modules subscribe to actions, not keys.
-//   on(action, fn)      fn({ down, repeat, source, event }) on press (and on release for hold actions); returns off()
+//   on(action, fn)      fn({ down, repeat, source, event, cancel }) on press (and on release for hold actions); returns off()
+//                       cancel: a release the player didn't make (blur, device switch, pad change): let go, confirm nothing
 //   held(action)        is it held now (polled actions: turning, revive)
 //   armed(action)       are its chord modifiers held (Ctrl down for Ctrl+click: hover previews)
 //   axis('move'|'look') { x, y } (move: x right, y forward)
@@ -20,6 +21,7 @@
 // Bound by KeyboardEvent.code, so Shift+1 is still 1 and other layouts keep the same physical keys. Typing fields
 // (input, textarea, select, IME composition) swallow game keys; preventDefault only on keys that did something.
 import { ACTION, merged, loadBindings, resolve, actionsOn, bindingHeld, bindingArmed, axisFromKeys, assign, diff, bindingLabel, modOfCode, isAxisBinding, tokens } from '/shared/controls.js';
+import { normalizeAccess } from '/access.js';
 import { readButtons, readSticks, padEdges, pressAction, lookFrom, glyphFamily, padLabel, GLYPH_FAMILIES } from '/shared/gamepad.js';
 
 // fb_controls: the bindings (and, from K3, accessibility), versioned; follows the account (K2: public/controlsync.js).
@@ -28,7 +30,12 @@ const CONTROLS_KEY = 'fb_controls', CONTROLS_V = 1;
 let accessCache = null; // fb_controls.access, read once per change (the camera stick reads it every frame)
 const storeListeners = new Set();
 export const controlsStore = {
-  access() { return accessCache ||= { sens: 1, invertY: false, ...(this.get().access || {}) }; },
+  access() { // normalised (public/access.js: numbers clamped, wrong types back to the default); padSens only when saved,
+    if (accessCache) return accessCache; // so the stick keeps following sens in an older save (shared/gamepad.js lookFrom)
+    const raw = this.get().access, a = normalizeAccess(raw);
+    if (!raw || typeof raw !== 'object' || !Object.hasOwn(raw, 'padSens')) delete a.padSens;
+    return (accessCache = a);
+  },
   get() { try { const c = JSON.parse(localStorage.getItem(CONTROLS_KEY) || 'null'); return c && typeof c === 'object' ? c : { v: CONTROLS_V }; } catch { return { v: CONTROLS_V }; } },
   set(patch) { return this.replace({ ...this.get(), ...patch }); },
   replace(c) { accessCache = null; c = { ...c, v: CONTROLS_V }; try { localStorage.setItem(CONTROLS_KEY, JSON.stringify(c)); } catch {} for (const fn of storeListeners) fn(c); return c; },
@@ -40,7 +47,7 @@ export const isTyping = el => !!el && (el.isContentEditable || ['INPUT', 'TEXTAR
 
 // gate(action): may this action fire now (main.js: joined, the Game Menu not open, ...)
 // notify(text): a short message (a toast). ask(text, answer): a yes / no prompt, answer(bool); returns close().
-export function createInput({ isTouch = false, gate = () => true, settings = {}, save = () => {}, notify = () => {}, ask = null } = {}) {
+export function createInput({ isTouch = false, gate = () => true, settings = {}, save = () => {}, notify: toast = () => {}, ask = null } = {}) {
   const stored = controlsStore.get();
   const B = { kbm: loadBindings('kbm', stored.kbm), pad: loadBindings('pad', stored.pad) };
   const held = new Set();     // key codes, 'Mouse<n>', and 'Ctrl' 'Shift' 'Alt' 'Meta' while down
@@ -53,7 +60,9 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
   // the pad: the one being read (index, id), its buttons down now, the hold actions they pressed, its sticks
   const pad = { index: -1, id: null, recognised: true, family: 'xbox', held: new Set(), active: new Map(), sticks: { LS: { x: 0, y: 0 }, RS: { x: 0, y: 0 } } };
   const padSubs = new Set(), deviceSubs = new Set();
-  let pendingAsk = null; // the "Controller detected" prompt's answer(), while it's up (A: yes, B: no)
+  let pendingAsk = null, askClose = null; // the "Controller detected" prompt's answer() and close(), while it's up (A: yes, B: no)
+  const dropAsk = () => { const c = askClose; pendingAsk = null; askClose = null; c?.(); }; // (unanswered: the toast goes too)
+  const notify = t => { dropAsk(); toast(t); }; // a note takes the toast's place: the question it hides is dropped, never left live
 
   const fire = (action, ev) => { for (const fn of subs.get(action) || []) fn(ev); };
   const setMods = e => { for (const [m, on] of [['Ctrl', e.ctrlKey], ['Shift', e.shiftKey], ['Alt', e.altKey], ['Meta', e.metaKey]]) on ? held.add(m) : held.delete(m); };
@@ -67,12 +76,12 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     fire(hit.action, { down: true, repeat: !!e.repeat, source, event: e });
     return hit;
   }
-  function release(code, e, source, always) {
+  function release(code, e, source, always, cancel) { // (cancel: a let-go the player did not make: blur, device switch, reload)
     const a = active.get(code);
     active.delete(code);
     const ups = new Set(a ? [a] : []);
     if (always) for (const o of actionsOn(kb(), code)) if (ACTION[o.action]?.type === 'hold' && !ACTION[o.action].context) ups.add(o.action);
-    for (const u of ups) fire(u, { down: false, repeat: false, source, event: e });
+    for (const u of ups) fire(u, { down: false, repeat: false, source, event: e, ...(cancel ? { cancel: true } : {}) });
   }
 
   // rebinding: capture swallows every key first (window, capture phase), Esc cancels
@@ -99,8 +108,8 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     if (active.has(code)) release(code, e, 'kbm', false);
   });
   addEventListener('blur', () => reset());
-  // Keys and mouse let go quietly (callers clear their own holds); pad holds fire their up (the bot wheel closes) and
-  // the pad buttons still down stay down (no new press when they come back up).
+  // Keys and mouse let go quietly (callers clear their own holds); pad holds fire a cancelling up (the bot wheel closes
+  // without giving an order) and the pad buttons still down stay down (no new press when they come back up).
   function reset() { held.clear(); active.clear(); releasePad(); }
 
   // Mouse buttons on the game view: main.js asks what a click would do (peek), then lets it happen (mouseDown).
@@ -183,12 +192,12 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
   function releasePad() {
     const ups = [...new Set(pad.active.values())];
     pad.active.clear();
-    for (const a of ups) fire(a, { down: false, repeat: false, source: 'pad', event: null });
+    for (const a of ups) fire(a, { down: false, repeat: false, source: 'pad', event: null, cancel: true }); // (not the player's release)
   }
   function setDevice(d) {
     if (d === device) return true;
     if (d === 'pad' && !readPads().length) return false; // Controller only while one is connected
-    for (const [code] of active) release(code, null, device, false); // let go of every hold
+    for (const [code] of active) release(code, null, device, false, true); // let go of every hold
     releasePad();
     device = d; settings.device = d === 'touch' ? undefined : d; save();
     for (const fn of deviceSubs) fn(d);
@@ -201,15 +210,16 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     if (!pad.recognised) notify('Controller not recognised: its buttons are read by position. Rebind them in Controls if they feel wrong.');
     if (device === 'pad' || settings.padAsked) return;
     settings.padAsked = true; save(); // (asked once; the Controls screen switches later)
-    let close = () => {};
-    const answer = yes => { if (pendingAsk !== answer) return; pendingAsk = null; close?.(); if (yes && setDevice('pad')) notify('Controller on: Start opens the Game Menu.'); };
+    const answer = yes => { if (pendingAsk !== answer) return; dropAsk(); if (yes && setDevice('pad')) notify('Controller on: Start opens the Game Menu.'); };
+    if (!ask) return notify('Controller detected: choose it in the Game Menu → Controls.');
     pendingAsk = answer;
-    close = ask ? ask('Controller detected. Switch to it?', answer) : (notify('Controller detected: choose it in the Game Menu → Controls.'), pendingAsk = null, () => {});
+    const close = ask('Controller detected. Switch to it?', answer);
+    if (pendingAsk === answer) askClose = close;
   }
   function padLost() {
     releasePad();
     pad.index = -1; pad.id = null; pad.held = new Set(); pad.sticks = { LS: { x: 0, y: 0 }, RS: { x: 0, y: 0 } };
-    pendingAsk = null;
+    dropAsk(); // (its toast closes with it)
     if (device !== 'pad') return;
     setDevice(isTouch ? 'touch' : 'kbm'); notify('Controller disconnected: back to keyboard & mouse.');
   }
@@ -258,7 +268,7 @@ export function createInput({ isTouch = false, gate = () => true, settings = {},
     },
     resetBindings(d) { B[d] = merged(d, {}); controlsStore.set({ [d]: {} }); },
     reload() { // (K2: the account's copy replaced fb_controls) let go of every hold, then take the saved bindings
-      for (const [code] of active) release(code, null, device, false);
+      for (const [code] of active) release(code, null, device, false, true);
       const c = controlsStore.get(); B.kbm = loadBindings('kbm', c.kbm); B.pad = loadBindings('pad', c.pad);
     },
     setContext(name, on) { on ? ctx.add(name) : ctx.delete(name); },

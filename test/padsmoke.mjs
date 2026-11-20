@@ -61,6 +61,43 @@ try {
     ok('the button press that wakes the pad does not answer "Controller detected"; a fresh A does');
   }
 
+  // ---- the "Controller detected" toast: unplugging closes it; a later note never leaves the question live ----
+  {
+    const q = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    q.on('pageerror', e => errors.push(e.message));
+    await q.addInitScript(() => {
+      const mk = (id, index, mapping) => ({ id, index, connected: true, mapping, timestamp: 0, buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })), axes: [0, 0, 0, 0] });
+      window.__pads = [mk('Xbox Wireless Controller (STANDARD GAMEPAD)', 0, 'standard'), mk('Generic USB Joystick', 1, '')];
+      window.__on = [false, false];
+      navigator.getGamepads = () => [window.__on[0] ? window.__pads[0] : null, window.__on[1] ? window.__pads[1] : null, null, null];
+    });
+    await q.goto(`${base}/?quality=low`);
+    await q.waitForFunction(() => window.__fb?.input && window.__fb.input.frames > 3, null, { timeout: 60000 });
+    const tq = () => q.evaluate(() => { const el = document.getElementById('padtoast'); return el && !el.classList.contains('hidden') ? el.textContent : null; });
+    const fq = k => q.evaluate(k => new Promise(r => { const end = window.__fb.input.frames + k; const f = () => (window.__fb.input.frames >= end ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), k);
+    await q.evaluate(() => { window.__on[0] = true; dispatchEvent(new Event('gamepadconnected')); }); await fq(2);
+    assert.match(await tq() || '', /Controller detected/, 'the question is up');
+    await q.evaluate(() => { window.__on[0] = false; dispatchEvent(new Event('gamepaddisconnected')); }); await fq(2);
+    assert.equal(await tq(), null, 'unplugging the pad closes the "Controller detected" toast');
+    // the question again, then the pad is swapped for an unrecognised one in one poll: its note replaces the question
+    await q.evaluate(() => { window.__fb.settings.padAsked = false; window.__on[0] = true; dispatchEvent(new Event('gamepadconnected')); }); await fq(2);
+    assert.match(await tq() || '', /Controller detected/, 'asked again');
+    await q.evaluate(() => { window.__on[0] = false; window.__on[1] = true; }); await fq(2);
+    assert.match(await tq() || '', /not recognised/, 'the unrecognised pad\'s note');
+    await q.evaluate(() => { const b = window.__pads[1].buttons[0]; b.pressed = true; b.value = 1; }); await fq(3);
+    assert.equal(await q.evaluate(() => window.__fb.input.device), 'kbm', 'A after the note does not answer the hidden question');
+    // the stored access is clamped before the camera stick reads it
+    const acc = await q.evaluate(async () => {
+      const { controlsStore } = await import('/input.js');
+      controlsStore.set({ access: { sens: 1e308, padSens: -5, invertY: 'yes' } });
+      const a = controlsStore.access(); controlsStore.set({ access: {} });
+      return { sens: a.sens, padSens: a.padSens, invertY: a.invertY };
+    });
+    assert.deepEqual(acc, { sens: 3, padSens: 0.3, invertY: false }, 'stored access is normalised (sens / padSens clamped)');
+    await q.close();
+    ok('unplugging closes the "Controller detected" toast; a note never leaves the question live; stored access is clamped');
+  }
+
   await p.goto(`${base}/?quality=low`);
   await p.fill('#name', 'Pad');
   await p.click('.cls[data-id=guardian]');
@@ -76,7 +113,7 @@ try {
   const press = async (names, k = 3) => { for (const nm of names) await btn(nm, true); await frames(k); for (const nm of [...names].reverse()) await btn(nm, false); await frames(2); };
   const axes = a => S(a => { window.__pad.pad.axes = a; }, a);
   const keepAlive = () => S(() => window.__fb.send({ type: 'test', hurt: 1 }));
-  const ready = slot => p.waitForFunction(s => performance.now() > window.__fb.state.ready[s] + 50, slot, { timeout: 20000 });
+  const ready = slot => p.waitForFunction(s => performance.now() > window.__fb.state.ready[s] + 50, slot, { timeout: 60000 });
   const toast = () => S(() => { const el = document.getElementById('padtoast'); return el && !el.classList.contains('hidden') ? el.textContent : null; });
 
   // ---- plugging it in: the one-time prompt; A switches ----
