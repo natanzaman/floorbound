@@ -91,4 +91,9 @@ async function setup() {
   // Controls that follow the account (roadmap K2): the browser's whole fb_controls object (bindings + accessibility),
   // capped at 8 KB (server/accounts.js /api/settings).
   await q(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS settings JSONB`);
+  // Access levels (shared/accesslevels.js): a permission level per account, 1-5, set by devs on the admin page (never the
+  // character level). Everyone starts at 1; admin accounts count as 5 without it being stored.
+  await q(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS access_level SMALLINT NOT NULL DEFAULT 1`);
+  // Each Named's allow list (who may control them; empty = anyone allowed by the rule), kept across restarts.
+  await q(`ALTER TABLE named_chars ADD COLUMN IF NOT EXISTS allow JSONB`);
 }

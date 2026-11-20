@@ -31,7 +31,7 @@ export async function accountFromToken(token) {
   const rows = await q(
     `UPDATE sessions s SET last_used = now() FROM accounts a
      WHERE s.token_hash = $1 AND a.id = s.account_id
-     RETURNING a.id, a.discord_id, a.discord_name, a.discord_avatar`, [sha(token)]);
+     RETURNING a.id, a.discord_id, a.discord_name, a.discord_avatar, a.access_level`, [sha(token)]);
   return rows[0] || null;
 }
 

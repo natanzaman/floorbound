@@ -6,6 +6,8 @@
 // Character edits go to the live player when the character is online (then saved), otherwise straight to the DB.
 // Skill mastery (characters.mastery, { skillId: { pts, br } }) is edited like the rest.
 // Talents (characters.talents, { nodeId: rank }, shared/talents.js) too: validated against the tree and the level.
+// Access levels (accounts.access_level, 1-5, shared/accesslevels.js): POST /api/admin/accounts/:id/access { level }; the
+// players list shows each account's level. Bots carry their creator and an allow list (PATCH /api/admin/bots/:bid { allow }).
 import * as db from './db.js';
 import * as accounts from './accounts.js';
 import { CLASSES, MAX_LEVEL, xpToNext, areaName } from '../shared/data.js';
@@ -19,6 +21,7 @@ import { MASTERY, BRANCHES, newMastery, masteryLevel } from '../shared/mastery.j
 import { newTalents, allocError, TREES, spendBlock, nodesOf, pointsAt } from '../shared/talents.js';
 import { BEHAVIOURS } from './botmanager.js';
 import { isNamedName } from '../shared/named.js';
+import { ACCESS_MIN, ACCESS_MAX, ACCESS_ADMIN, clampAccess } from '../shared/accesslevels.js';
 import * as hall from './hall.js';
 import * as track from './track.js';
 
@@ -372,13 +375,14 @@ async function deleteCharacter(id) {
 // ---------- players list ----------
 async function playersList() {
   const rows = await q(`SELECT c.id, c.name, c.cls, c.lvl, c.created_at, c.updated_at,
-    a.id AS account_id, a.discord_id, a.discord_name, a.is_admin
+    a.id AS account_id, a.discord_id, a.discord_name, a.is_admin, a.access_level
     FROM characters c JOIN accounts a ON a.id = c.account_id ORDER BY c.updated_at DESC LIMIT 5000`);
   const live = new Map(livePlayers().filter(p => p.charId).map(p => [p.charId, p]));
   const out = rows.map(r => {
     const p = live.get(r.id);
     return {
-      id: r.id, name: p ? p.name : r.name, cls: r.cls, lvl: p ? p.lvl : r.lvl, account: accountLabel(r), accountId: r.account_id, admin: !!r.is_admin,
+      id: r.id, name: p ? p.name : r.name, cls: r.cls, lvl: p ? p.lvl : r.lvl, account: accountLabel(r), accountId: r.account_id, admin: !!(r.is_admin || ADMIN_IDS.has(String(r.discord_id))),
+      access: clampAccess(r.access_level), // the account's access level (an admin counts as ACCESS_ADMIN whatever is stored)
       online: !!p, area: p ? areaName(p.x, p.z) : null, floor: p ? floorOf(p.x) : null, party: p ? partyNames(p) : [],
       lastSeen: p ? new Date().toISOString() : r.updated_at, created: r.created_at,
     };
@@ -420,13 +424,23 @@ export async function handle(req, res, url) {
       if (!a) return json(res, 401, { admin: false, error: 'Signed out.' }), true;
       return json(res, 200, { admin: await isAdmin(a), account: { id: a.id, discord: a.discord_name || null } }), true;
     }
-    if (!(await requireAdmin(req, res))) return true;
+    const adm = await requireAdmin(req, res);
+    if (!adm) return true;
     const m = req.method;
     let mm;
 
     if (path === '/api/admin/players' && m === 'GET') return json(res, 200, await playersList()), true;
     if (path === '/api/admin/summary' && m === 'GET') return json(res, 200, summary()), true;
     if (path === '/api/admin/stats' && m === 'GET') return json(res, 200, await track.detail(Number(url.searchParams.get('days')) || 7)), true; // stats dashboard (/stats.html)
+
+    if ((mm = path.match(/^\/api\/admin\/accounts\/(\d+)\/access$/)) && m === 'POST') { // { level }: the account's access level
+      const body = await readBody(req);
+      const level = int(body?.level, ACCESS_MIN, ACCESS_MAX, 'Access level');
+      const rows = await q('UPDATE accounts SET access_level = $2 WHERE id = $1 RETURNING id, is_admin', [+mm[1], level]);
+      if (!rows.length) throw new Bad('No such account.', 404);
+      for (const p of livePlayers()) if (p.accountId === +mm[1] && !p.bot) { p.access = level; game.rosterDirty = true; } // (online: at once)
+      return json(res, 200, { id: +mm[1], level, effective: rows[0].is_admin ? ACCESS_ADMIN : level }), true;
+    }
 
     if ((mm = path.match(/^\/api\/admin\/characters\/(\d+)$/))) {
       const id = +mm[1];
@@ -456,17 +470,17 @@ export async function handle(req, res, url) {
     }
     if (path === '/api/admin/bots' && m === 'POST') {
       const b = await readBody(req) || {};
-      return json(res, 200, { added: bots.add({ cls: b.cls, name: b.name, lvl: b.lvl, behaviour: b.behaviour, follow: b.follow, skill: b.skill }) }), true;
+      return json(res, 200, { added: bots.add({ cls: b.cls, name: b.name, lvl: b.lvl, behaviour: b.behaviour, follow: b.follow, skill: b.skill, creator: { accountId: adm.id, name: adm.discord_name || `admin #${adm.id}` } }) }), true;
     }
     if (path === '/api/admin/bots/team' && m === 'POST') {
       const b = await readBody(req) || {};
-      return json(res, 200, { added: bots.addTeam({ lvl: b.lvl, behaviour: b.behaviour || 'auto', follow: b.follow, skill: b.skill }) }), true;
+      return json(res, 200, { added: bots.addTeam({ lvl: b.lvl, behaviour: b.behaviour || 'auto', follow: b.follow, skill: b.skill, creator: { accountId: adm.id, name: adm.discord_name || `admin #${adm.id}` } }) }), true;
     }
     if (path === '/api/admin/bots' && m === 'DELETE') return json(res, 200, { removed: bots.removeAll() }), true;
     if ((mm = path.match(/^\/api\/admin\/bots\/(\d+)$/)) && m === 'DELETE') {
       return bots.remove(+mm[1]) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'No such bot.' }), true;
     }
-    if ((mm = path.match(/^\/api\/admin\/bots\/(\d+)$/)) && m === 'PATCH') { // live edit: name, lvl, skill, behaviour, follow
+    if ((mm = path.match(/^\/api\/admin\/bots\/(\d+)$/)) && m === 'PATCH') { // live edit: name, lvl, skill, behaviour, follow, allow
       const b = await readBody(req);
       if (!b) return json(res, 400, { error: 'Bad JSON.' }), true;
       return json(res, 200, { bot: bots.edit(+mm[1], b) }), true;
