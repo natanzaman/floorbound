@@ -16,7 +16,7 @@ import { createSmith } from '/smith.js';
 import { initGround } from '/ground.js';
 import { MATS, MAT_IDS } from '/shared/crafting.js';
 import { initCombat } from '/combat.js';
-import { F2, inGateZone2, inArena2, onFloor2, floorOf, WAYSTONES } from '/shared/floor2.js';
+import { F2, inGateZone2, inArena2, onFloor2, floorOf, WAYPOINTS } from '/shared/floor2.js';
 import { initFloor2Client } from '/floor2client.js';
 import { initFloor3Client } from '/floor3client.js';
 import { initArenas } from '/arenas.js'; // multi-area boss fights: the Colossus's fall to the Undercroft (J2)
@@ -115,9 +115,9 @@ const players = new Map(); // id -> entity
 const mobs = new Map();
 let boss = null;
 const cine = initCine({ camera, state, players, mobs, slowMotion: (a, b) => slowMotion(a, b, { force: true }), twists, occluders }); // public/cine.js
-// Floor 2 — The Glimmering Mire (floor2client.js): world, waystones, Stairway, hazards and its events.
+// Floor 2 — The Glimmering Mire (floor2client.js): world, the waypoints (town centrepieces), Stairway, hazards and its events.
 const f2 = initFloor2Client({
-  scene, sun, occluders, fx, sfx, state, mobs, players, isTouch,
+  scene, sun, occluders, fx, sfx, state, mobs, players, isTouch, calm: () => settings.reduceMotion, tip: id => guide.tip(id),
   send: o => send(o), banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a),
   log: (a, b) => log(a, b), shake: a => shake(a), project: (x, y, z) => project(x, y, z), hallOpen: () => !$('hall').classList.contains('hidden'),
 });
@@ -768,7 +768,7 @@ function handleEvent(e) {
     }
     case 'pdie': {
       if (e.id === me) {
-        const camp = WAYSTONES.find(w => w.floor === (e.f || floorOf(state.x)))?.name || 'town'; // Town of Beginnings / Mirelight Camp
+        const camp = WAYPOINTS.find(w => w.floor === (e.f || floorOf(state.x)))?.name || 'town'; // Town of Beginnings / Mirelight Camp
         $('dead').innerHTML = `<div>You were defeated</div><small>${e.src && e.src !== '?' ? `by ${esc(e.src)} · ` : ''}${e.stay ? 'waiting to be revived' : `respawning at ${esc(camp)}…`}</small>`;
         $('dead').classList.remove('hidden');
       }
@@ -1338,7 +1338,7 @@ function interactKind() {
   if (mastery.near()) return 'shrine'; // Skill Shrine (public/mastery.js)
   if (ground.near()) return 'pickup';
   if (!state.gateOpen && (inGateZone(state.x, state.z) || inGateZone2(state.x, state.z) || inGateZone3(state.x, state.z))) return 'gate';
-  return f3.interactKind() || f2.interactKind(); // waystones and the Stairways
+  return f3.interactKind() || f2.interactKind(); // the waypoints and the Stairways
 
 }
 function interact() {
@@ -2251,4 +2251,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };
+window.__fb = { interactKind, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };

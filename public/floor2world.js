@@ -1,8 +1,8 @@
-// Floor 2 — The Glimmering Mire: scene construction, the waystones and the Stairway, atmosphere, and block models
+// Floor 2 — The Glimmering Mire: scene construction, the waypoint glows and the Stairway, atmosphere, and block models
 // for Floor 2's enemies. Built alongside Floor 1 in the same scene (600 units east).
 import * as THREE from 'three';
 import { OBSTACLES } from '/shared/data.js';
-import { F2, GATE2, WAYSTONES, STAIRWAY, SOVEREIGN } from '/shared/floor2.js';
+import { F2, GATE2, WAYPOINTS, STAIRWAY, SOVEREIGN } from '/shared/floor2.js';
 import { ATMOS3 } from '/floor3world.js';
 import { Q } from '/quality.js'; // graphics quality (effect density)
 
@@ -167,17 +167,18 @@ export function createFloor2(scene, { sun, occluders = [] } = {}) {
   const deluge = flat(new THREE.RingGeometry(SOVEREIGN.deluge.r, A.r + 0.4, 64, 1), new THREE.MeshStandardMaterial({ color: 0x2a8a86, emissive: 0x0f4f4c, emissiveIntensity: 0.7, transparent: true, opacity: 0, roughness: 0.1, metalness: 0.3, depthWrite: false }), 0.22, A.x, A.z);
   deluge.userData.k = 0;
 
-  // waystones (one per town) and the Stairway portal in the Warden's chamber
-  const waystones = WAYSTONES.map(w => {
+  // waypoints: each town's centrepiece (fountain, campfire, brazier; modelled with its floor) gets a soft glow that reads
+  // as "usable": an additive ring on the ground round it, a faint circle where its reach ends, and a halo at its light.
+  // No extra lights. In the scene (not root) so Floor 1's shows too.
+  const HALO_Y = { fountain: 4.1, campfire: 1.0, brazier: 1.9 }; // (the fountain's crystal, the flames)
+  const additive = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const waypoints = WAYPOINTS.map(w => {
     const g = add(new THREE.Group(), scene); g.position.set(w.x, 0, w.z);
     const color = ({ 2: 0x5eead4, 3: 0xfcd34d })[w.floor] || 0x93c5fd;
-    add(new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.6, 0.5, 8), mat(0x6b7280)), g).position.y = 0.25;
-    add(new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 0.4, 8), mat(0x9ca3af)), g).position.y = 0.7;
-    const rune = add(new THREE.Mesh(new THREE.TorusGeometry(1.25, 0.06, 6, 32), glow(color)), g); rune.rotation.x = Math.PI / 2; rune.position.y = 0.52;
-    const core = add(new THREE.Mesh(new THREE.OctahedronGeometry(0.62), glow(color)), g); core.scale.set(1, 2.1, 1); core.position.y = 2.9;
-    const shell = add(new THREE.Mesh(new THREE.OctahedronGeometry(0.85), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false })), g); shell.scale.set(1, 2.1, 1); shell.position.y = 2.9;
-    g.traverse(m => { if (m.isMesh && m.material.isMeshStandardMaterial) m.castShadow = true; });
-    return { ...w, g, core, shell, rune };
+    const ring = add(new THREE.Mesh(new THREE.RingGeometry(w.r + 0.3, w.r + 0.8, 48, 1), additive(color, 0.4)), g); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06;
+    const reach = add(new THREE.Mesh(new THREE.RingGeometry(w.use - 0.08, w.use, 64, 1), additive(color, 0.18)), g); reach.rotation.x = -Math.PI / 2; reach.position.y = 0.05;
+    const halo = add(new THREE.Mesh(new THREE.SphereGeometry(w.kind === 'fountain' ? 1.0 : 0.9, 14, 10), additive(color, 0.16)), g); halo.position.y = HALO_Y[w.kind] ?? 2;
+    return { ...w, g, ring, reach, halo, k: 0 };
   });
   const stair = add(new THREE.Group(), scene); stair.position.set(STAIRWAY.x, 0, STAIRWAY.z); stair.visible = false;
   const ringM = add(new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.22, 8, 40), glow(0xfde68a)), stair); ringM.position.y = 2.8;
@@ -211,7 +212,8 @@ export function createFloor2(scene, { sun, occluders = [] } = {}) {
   }
 
   let time = 0;
-  function update(dt, onF2, deluged, onF3 = false) {
+  // wp: { near: the waypoint you're in reach of (or null), calm: Reduce motion (no pulsing) }
+  function update(dt, onF2, deluged, onF3 = false, wp = {}) {
     time += dt;
     const want = onF2 ? 1 : 0, want3 = onF3 ? 1 : 0;
     if (Math.abs(cur.k - want) > 0.001 || Math.abs(cur.k3 - want3) > 0.001) {
@@ -220,7 +222,11 @@ export function createFloor2(scene, { sun, occluders = [] } = {}) {
     }
     gate2.update(dt);
     root.visible = cur.k > 0.02 || onF2; // skip drawing the Mire from Floor 1
-    for (const w of waystones) { w.core.rotation.y += dt * 0.8; w.shell.rotation.y -= dt * 0.5; w.core.position.y = 2.9 + Math.sin(time * 1.6 + w.x) * 0.15; w.shell.position.y = w.core.position.y; }
+    for (const w of waypoints) { // brighter while you're in reach; a slow breathe unless Reduce motion is on
+      w.k += ((wp.near === w.floor ? 1 : 0) - w.k) * Math.min(1, dt * 6);
+      const b = wp.calm ? 1 : 0.85 + 0.15 * Math.sin(time * 1.8 + w.floor);
+      w.ring.material.opacity = (0.4 + 0.35 * w.k) * b; w.reach.material.opacity = 0.18 + 0.32 * w.k; w.halo.material.opacity = (0.16 + 0.14 * w.k) * b;
+    }
     if (stair.visible) { ringM.rotation.z += dt * 0.6; disc.material.opacity = 0.45 + Math.sin(time * 3) * 0.12; column.material.opacity = 0.14 + Math.sin(time * 2) * 0.05; }
     const fire = root.userData.fire; if (fire) { fire.scale.set(1 + Math.sin(time * 9) * 0.08, 1 + Math.sin(time * 7) * 0.15, 1); }
     deluge.userData.k += ((deluged ? 1 : 0) - deluge.userData.k) * Math.min(1, dt * 0.8);
@@ -236,7 +242,7 @@ export function createFloor2(scene, { sun, occluders = [] } = {}) {
     }
   }
 
-  return { root, gate2, stairway, waystones, update, deluge };
+  return { root, gate2, stairway, waypoints, update, deluge };
 }
 
 // ---------- block models for Floor 2's enemies ----------

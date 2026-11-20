@@ -4,7 +4,7 @@
 import { createHash } from 'node:crypto';
 import YAML from 'yaml';
 import { CLASSES, MAX_LEVEL, MOBS, WORLD, GATE } from '../shared/data.js';
-import { F2, GATE2, WAYSTONES } from '../shared/floor2.js';
+import { F2, GATE2 } from '../shared/floor2.js';
 import { MERCHANT } from '../shared/items.js';
 import { SMITH } from '../shared/crafting.js';
 import { SHRINES } from '../shared/mastery.js';
@@ -38,10 +38,11 @@ export const LANDMARKS = {
   town_square: { at: [0, 9], floor: 1 },
   fountain: { at: [0, 4.6], look: [0, 0], ring: 4.6, floor: 1 },
   merchant: { at: front(MERCHANT, 3.2), look: [MERCHANT.x, MERCHANT.z], floor: 1 },
-  smith: { at: [3.2, -10.2], look: [SMITH.x, SMITH.z], floor: 1 }, // (the waystone stands right in front of the forge)
+  smith: { at: [3.2, -10.2], look: [SMITH.x, SMITH.z], floor: 1 },
   skill_shrine: { at: front(SHRINES[0], 2.6), look: [SHRINES[0].x, SHRINES[0].z], floor: 1 },
   hall_of_clearers: { at: front(HALL, 3.6), look: [HALL.x, HALL.z], floor: 1 },
-  waystone: { at: front(WAYSTONES[0], 2.6), look: [WAYSTONES[0].x, WAYSTONES[0].z], floor: 1 },
+  waypoint: { at: [0, 4.6], look: [0, 0], ring: 4.6, floor: 1 }, // the fountain is the town's waypoint (shared/floor2.js WAYPOINTS)
+  waystone: { at: [0, 4.6], look: [0, 0], ring: 4.6, floor: 1 }, // (old name: Episode 1's sheet walks the party here)
   north_road: { at: [0, 30], floor: 1 },
   raid_gate: { at: [0, 152], look: [0, GATE.z], floor: 1 },
   arena_edge: { at: [WORLD.arena.x, WORLD.arena.z - 20], look: [WORLD.arena.x, WORLD.arena.z], floor: 1 },

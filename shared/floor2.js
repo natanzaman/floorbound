@@ -3,7 +3,7 @@
 // Its layout mirrors Floor 1's skeleton (camp in the south, field, corridor + raid gate at z≈161, boss court at z≈190),
 // so z-based heuristics (gate, boss bar, music) work on both floors.
 // This module must not import shared/data.js (data.js imports it). Floor 3 (x > 900) is shared/floor3.js.
-import { F3, WAYSTONE3, unlocked3 } from './floor3.js';
+import { F3, WAYPOINT3, unlocked3 } from './floor3.js';
 import { TIMED, movesOf } from './bosstiming.js'; // boss timing tables (J3)
 
 export const F2 = {
@@ -41,14 +41,20 @@ export function areaName2(x, z) {
   return 'Floor 2 — The Glimmering Mire';
 }
 
-// Waystones: a teleport crystal in each town (F to use). They offer every floor the character has unlocked.
-export const WAYSTONES = [
-  { floor: 1, x: 0, z: -11, r: 1.4, name: 'Town of Beginnings' },
-  { floor: 2, x: 600, z: -9, r: 1.4, name: 'Mirelight Camp' },
-  WAYSTONE3, // Floor 3: Windbreak Camp
+// Waypoints: each town's centrepiece doubles as its warp (interact there to pick a floor). They offer every floor the
+// character has unlocked. r: the centrepiece's collision radius (its obstacle: the fountain in data.js, the campfire
+// below, the brazier in floor3.js); use: how close you need to stand (past r + the player's 0.5 m). Floor 1's 4.4 stops
+// short of the Merchant's reach (shared/items.js MERCHANT at 9, 3, r 4 + 1), which wins the interact key there.
+export const WAYPOINTS = [
+  { floor: 1, x: 0, z: 0, r: 3, use: 4.4, kind: 'fountain', name: 'Town of Beginnings' }, // (WORLD.town's centre)
+  { floor: 2, x: F2.camp.x, z: F2.camp.z, r: 1.3, use: 3.2, kind: 'campfire', name: 'Mirelight Camp' },
+  WAYPOINT3, // Floor 3: Windbreak Camp's brazier
 ];
-export const WAYSTONE_USE = 3.2; // how close you need to stand
-export const nearWaystone = (x, z) => WAYSTONES.find(w => Math.hypot(x - w.x, z - w.z) < WAYSTONE_USE);
+// pad: extra reach (the server allows a little for lag).
+export const nearWaypoint = (x, z, pad = 0) => WAYPOINTS.find(w => Math.hypot(x - w.x, z - w.z) < w.use + pad);
+// Old names (the separate waystone crystals were removed 2026-11-20): kept so older callers still work.
+export const WAYSTONES = WAYPOINTS;
+export const nearWaystone = nearWaypoint;
 // The Stairway: a portal that appears in the Warden's chamber for a while after a kill.
 export const STAIRWAY = { x: 0, z: 207, r: 2.2, use: 3.6, secs: 60 };
 
@@ -63,9 +69,8 @@ function rng(seed) {
 // Static obstacles for Floor 2 (deterministic): appended to OBSTACLES in data.js.
 export function floor2Obstacles() {
   const out = [];
-  for (const w of WAYSTONES) out.push({ kind: 'waystone', x: w.x, z: w.z, r: w.r, floor: w.floor });
   const { camp, arena } = F2;
-  out.push({ kind: 'campfire', x: camp.x, z: camp.z, r: 1.3 });
+  out.push({ kind: 'campfire', x: camp.x, z: camp.z, r: WAYPOINTS[1].r }); // Mirelight Camp's waypoint
   for (const [dx, dz] of [[-11, -6], [11, -6], [-12, 7], [12, 7]]) out.push({ kind: 'tent', x: camp.x + dx, z: camp.z + dz, r: 2.2, rot: Math.atan2(-dx, -dz) });
   const r = rng(2024);
   const placed = () => out;

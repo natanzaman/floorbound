@@ -37,7 +37,8 @@ Keep it **in the spirit of SAO with original characters, names and places**. The
 |---|---|
 | `town_square` | the plaza north of the fountain |
 | `fountain` | around the town fountain (actors stand in a ring) |
-| `merchant`, `smith`, `skill_shrine`, `hall_of_clearers`, `waystone` | in front of each (actors stand in a row facing it) |
+| `merchant`, `smith`, `skill_shrine`, `hall_of_clearers` | in front of each (actors stand in a row facing it) |
+| `waypoint` | the town fountain, which is the town's waypoint (a ring, like `fountain`; `waystone` is its old name and still works) |
 | `north_road` | the road out of town to the fields |
 | `raid_gate` | before the Warden's raid gate (inside its ready zone) |
 | `arena_edge`, `arena_center` | the Warden's arena: just inside, facing the centre; the centre |
