@@ -133,7 +133,9 @@ check('the Sovereign crossing 33% mid-combo: the next step waits for the Deluge,
   }
   assert.ok(crossed !== null && s.phase === 2 && g.deluge, 'phase 3: the Deluge was called');
   const later = calls.filter(c => c[0] === 'geyser' && c[1] > crossed);
-  assert.ok(later.every(c => c[1] >= g.delugeAt - EPS), `no combo step before the Deluge lands (steps at ${later.map(c => c[1])}, delugeAt ${g.delugeAt})`);
+  assert.equal(s.seq, null, 'the phase change dropped the combo in flight');
+  assert.equal(later.length, 0, `no combo step after the crossing (phase 3 table has no combos here; steps at ${later.map(c => c[1])})`);
+  assert.ok(later.every(c => c[1] >= g.delugeAt - EPS),`no combo step before the Deluge lands (steps at ${later.map(c => c[1])}, delugeAt ${g.delugeAt})`);
   // crossing during the combo's planted after state: it is dropped with the phase
   const h = sovereignFight();
   let done = null;

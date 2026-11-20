@@ -91,8 +91,9 @@ const methods = {
       m.seq = { s, i: 0, next: t, stag: m.staggerUntil || 0 };
       m.windupAt = 0;
     }
-    const q = m.seq, wait = Math.max(m.busyUntil || 0, m.comboWait || 0);
-    if (t >= q.next && t < wait) q.next = wait; // something else holds the boss now: the next step waits for it
+    const q = m.seq;
+    if (t >= q.next && t < (m.busyUntil || 0)) q.next = m.busyUntil; // another move holds the boss: the next step waits for it
+    if (t < (m.comboWait || 0)) return false; // a team channel: the combo pauses, basic swings go on (server/bossteam.js btChannel)
     if (t < q.next) { m.busyUntil = Math.max(m.busyUntil || 0, q.next); return true; }
     const k = q.s.steps[q.i], mv = tm[k];
     const end = Math.max(t, run(k) ?? t);
