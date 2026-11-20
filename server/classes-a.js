@@ -97,14 +97,14 @@ const SKILLS = {
     for (let i = 0; i < V.n; i++) g.fireArrowA(p, { a: p.face + (i - (V.n - 1) / 2) * V.spread, dmg: c.atk * V.mult, k: 'shot', opts: { sk: c.S } });
   },
   mark(g, p, c) {
-    const M = RT.mark, tg = g.aimA(p, M.range, 0.6) || g.pickFront(p, 10, Math.PI);
+    const M = RT.mark, tg = g.markPickA(p, M.range);
     if (!tg) { g.sys('No enemy in sight to mark.', p.id); return false; }
     p.face = angleTo(p.x, p.z, tg.x, tg.z);
     g.fxA(p, 'mark', { s: 'mark', m: tg.id, x2: r2(tg.x), z2: r2(tg.z) });
     g.markA(p, tg, '', M.dur, M.bonus * c.pow, M.sw);
   },
   packhunter(g, p, c) {
-    const K = RT.pack, tg = g.aimA(p, RT.mark.range, 0.6) || g.pickFront(p, 10, Math.PI);
+    const K = RT.pack, tg = g.markPickA(p, RT.mark.range);
     if (!tg) { g.sys('No enemy in sight to mark.', p.id); return false; }
     p.face = angleTo(p.x, p.z, tg.x, tg.z);
     const others = [...g.mobs.values()].filter(m => m !== tg && g.targetable(m) && dist(m, tg) <= K.r).sort((a, b) => dist(a, tg) - dist(b, tg)).slice(0, K.n - 1);
@@ -112,7 +112,7 @@ const SKILLS = {
     for (const m of [tg, ...others]) g.markA(p, m, 'pack', K.dur, K.bonus * c.pow, K.sw);
   },
   deadeye(g, p, c) {
-    const E = RT.deadeye, tg = g.aimA(p, RT.mark.range, 0.6) || g.pickFront(p, 10, Math.PI);
+    const E = RT.deadeye, tg = g.markPickA(p, RT.mark.range);
     if (!tg) { g.sys('No enemy in sight to mark.', p.id); return false; }
     p.face = angleTo(p.x, p.z, tg.x, tg.z);
     g.fxA(p, 'mark', { s: 'mark', m: tg.id, x2: r2(tg.x), z2: r2(tg.z), dead: 1 });
@@ -128,17 +128,18 @@ const SKILLS = {
     g.fxA(p, 'chop', { s: 'chop', n: p.combo, r: ring || C.r, fin: fin ? 1 : 0, sty: g.styleNum(p, 'chop', null) ? p.style : undefined });
     const opts = { heavy: C.heavy ? C.heavy[p.combo] : true, knock: fin ? C.fin.knock : 0.3, frac: fin ? C.fin.frac : C.frac || null };
     if (ring) g.hitCircle(p, p.x, p.z, ring, c.atk * C.mult[p.combo], opts); // Warhammer: the third blow smashes all around
-    else g.hitArc(p, C.r, C.half, c.atk * C.mult[p.combo], opts);
+    else { const A = g.atkFov(p, fin ? 'chopFin' : 'chop', { r: C.r, half: C.half }); g.hitArc(p, A.r, A.half, c.atk * C.mult[p.combo], { ...opts, atk: A }); }
     return g.raging(p) ? p.brA.haste : 1; // Bloodrage / Frenzy: faster swings
   },
   cleave(g, p, c) {
     const C = BT.cleave, rage = p.rage || 0, twin = g.styleNum(p, 'cleaveTwin', 0); // Twin Axes: a second sweep
-    g.fxA(p, 'cleave', { s: 'cleave', r: C.r, h: C.half, rage: Math.round(rage) });
-    g.hitArc(p, C.r, C.half, c.atk * (C.mult + (C.rage * rage) / 100), { sk: c.S, heavy: true, knock: 1.2 });
+    const A = g.atkFov(p, 'cleave', { r: C.r, half: C.half });
+    g.fxA(p, 'cleave', { s: 'cleave', r: A.r, h: r2(A.half), rage: Math.round(rage) });
+    g.hitArc(p, A.r, A.half, c.atk * (C.mult + (C.rage * rage) / 100), { sk: c.S, heavy: true, knock: 1.2, atk: A });
     if (twin) g.schedule(paced(0.22), () => {
       if (!c.alive()) return;
-      g.fxA(p, 'cleave', { r: C.r, h: C.half, rage: Math.round(p.rage || 0), tw: 1 });
-      g.hitArc(p, C.r, C.half, c.atkNow() * twin * (C.mult + (C.rage * (p.rage || 0)) / 100), { sk: c.S, heavy: true, knock: 0.6 });
+      g.fxA(p, 'cleave', { r: A.r, h: r2(A.half), rage: Math.round(p.rage || 0), tw: 1 });
+      g.hitArc(p, A.r, A.half, c.atkNow() * twin * (C.mult + (C.rage * (p.rage || 0)) / 100), { sk: c.S, heavy: true, knock: 0.6, atk: A });
     });
   },
   whirlingaxe(g, p, c) {
@@ -152,11 +153,10 @@ const SKILLS = {
     }
   },
   executioner(g, p, c) {
-    const X = BT.executioner, rage = p.rage || 0;
+    const X = BT.executioner, rage = p.rage || 0, A = g.atkFov(p, 'executioner', { r: X.r, half: X.half });
     p.rage = Math.max(0, rage - X.cost);
-    g.fxA(p, 'execute', { s: 'cleave', r: X.r, h: X.half });
-    for (const m of [...g.mobs.values()]) {
-      if (!g.targetable(m) || !g.inArc(p, m, X.r, X.half)) continue;
+    g.fxA(p, 'execute', { s: 'cleave', r: A.r, h: r2(A.half) });
+    for (const m of g.arcTargets(p, A.r, A.half, A)) {
       const low = m.hp / m.maxHp < X.low;
       g.damageMob(m, p, c.atk * (X.mult + (X.rage * rage) / 100) * (low ? X.lowMult : 1), { sk: c.S, heavy: true, knock: 1.5 });
     }
@@ -227,7 +227,15 @@ export const ClassesAMethods = {
   },
 
   // Best enemy to shoot at: within range, inside the cone around the facing (wider for big or close enemies).
+  // Targeting modes (server/targeting.js): Aimed never auto-aims (none: the shot flies along the aim, no homing);
+  // Locked or nearest / Cone: the locked enemy when it's in range and inside the cone (a nearer one off-axis used to win).
   aimA(p, range, cone) {
+    if (this.aimedMode?.(p)) return null;
+    const lk = this.lockedFor?.(p);
+    if (lk) {
+      const d = dist(lk, p), ang = Math.abs(wrapAngle(angleTo(p.x, p.z, lk.x, lk.z) - p.face));
+      if (d <= range + lk.def.radius && ang <= cone + Math.atan2(lk.def.radius, Math.max(d, 0.5))) return lk;
+    }
     let best = null, bs = Infinity;
     for (const m of this.mobs.values()) {
       if (!this.targetable(m)) continue;
@@ -240,6 +248,10 @@ export const ClassesAMethods = {
     }
     return best;
   },
+
+  // What a Hunter's Mark lands on: the aimed enemy in range, else anything close in front (pickFront: Cone mode keeps
+  // it in the cone). Aimed mode: the first enemy along the aim line, out to the mark's full range.
+  markPickA(p, range) { return this.aimedMode?.(p) ? this.aimedPick(p, range) : this.aimA(p, range, 0.6) || this.pickFront(p, 10, Math.PI); },
 
   // Furthest walkable point up to `len` m from p along angle `a` (stops at walls, trees and a shut gate).
   lineEndA(p, a, len) {
@@ -259,6 +271,7 @@ export const ClassesAMethods = {
   //   enemies it passes through: Crossbow), k (visual) }
   fireArrowA(p, o) {
     const A = RT.arrow;
+    if (this.aimedMode?.(p)) o = { ...o, tg: null, rad: (o.rad ?? A.radius) + this.aimPad(p) }; // aimed: straight, no homing, a bigger hitbox
     const ar = {
       id: this.id(), by: p.id, x: p.x, z: p.z, ox: p.x, oz: p.z, a: o.a ?? p.face, tg: o.tg?.id || 0,
       sp: o.sp || A.speed, range: (o.range || A.range) + (o.tg ? o.tg.def.radius : 0), rad: o.rad ?? A.radius, trav: 0,

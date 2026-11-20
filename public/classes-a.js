@@ -362,26 +362,10 @@ export function initClassesA(ctx) {
     }
   }
 
-  // Auto-aim range for a skill (main.js useSkill turns you toward the locked / nearest enemy within it), or 0.
+  // Engage range of a skill (main.js useSkill turns you by the targeting mode within it), or 0.
   const AIM = { shot: 24, pierce: 26, disengage: 24, mark: 28, chop: 6, cleave: 5, leap: 10 };
   const AIM_EVO = { rainofarrows: 18, snipershot: 32, tumblevolley: 24, snaretrap: 0, packhunter: 28, deadeye: 28, pounce: 12, earthshatter: 10 };
   function aimRange(skId, evoId) { return evoId && evoId in AIM_EVO ? AIM_EVO[evoId] : AIM[skId] || 0; }
-  // What a ranged skill aims at with nothing locked: the enemy closest to the camera's line of sight within range
-  // (the crosshair), else anything close by.
-  function pick(range, canTarget, nearestMob) {
-    const fx0 = Math.sin(state.yaw), fz0 = Math.cos(state.yaw);
-    let best = null, bs = Infinity;
-    for (const m of mobs.values()) {
-      if (!canTarget(m)) continue;
-      const dx = m.x - state.x, dz = m.z - state.z, d = Math.hypot(dx, dz) || 0.01;
-      if (d > range + (m.def?.radius || 0)) continue;
-      const ang = Math.acos(Math.max(-1, Math.min(1, (dx * fx0 + dz * fz0) / d)));
-      if (ang > 0.45 + Math.atan2(m.def?.radius || 0.8, d)) continue;
-      const sc = ang * 4 + d / range;
-      if (sc < bs) { bs = sc; best = m; }
-    }
-    return best || nearestMob(Math.min(range, 7));
-  }
   // Party frame: a thin Rage bar under a Berserker's health.
   function frameBar(p) {
     if (p.cls !== 'berserker') return '';
@@ -389,5 +373,5 @@ export function initClassesA(ctx) {
     return `<div class="bar rage ${v >= 100 ? 'full' : ''} ${on ? 'on' : ''}"><div style="width:${v}%"></div></div>`;
   }
 
-  return { event, frame, aimRange, pick, frameBar, rage: id => rageOf(id)[0] };
+  return { event, frame, aimRange, frameBar, rage: id => rageOf(id)[0] };
 }

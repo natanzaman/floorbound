@@ -11,6 +11,8 @@
 //   An axis on keys lists four keys, up,left,down,right ('KeyW,KeyA,KeyS,KeyD').
 // Bindings for one device: { [actionId]: [main, alt] } (null = unbound). The alt slot is keyboard & mouse only.
 
+import { cleanPrefs } from './targeting.js';
+
 export const DEVICES = ['kbm', 'pad'];
 export const GROUPS = ['Move', 'Camera', 'Combat', 'Target', 'World', 'Items', 'Menus', 'Keyboard & mouse'];
 
@@ -312,7 +314,7 @@ export function bindingLabel(b) {
 }
 
 // ---------- saving and account sync (fb_controls, roadmap K2) ----------
-// fb_controls = { v, kbm: {changes}, pad: {changes}, access: {...} }: the whole object follows the account
+// fb_controls = { v, kbm: {changes}, pad: {changes}, access: {...}, combat: { target, cleave, max } }: the whole object follows the account
 // (accounts.settings), capped at CONTROLS_MAX_BYTES. Graphics, camera mode and the active device stay in fb_settings.
 export const CONTROLS_V = 1;
 export const CONTROLS_MAX_BYTES = 8192;
@@ -339,8 +341,12 @@ export function cleanControls(c) {
     const ok = v => typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && v.length <= MAX_ACCESS);
     out.access = Object.fromEntries(Object.entries(c.access).filter(([k, v]) => k.length <= MAX_ACCESS && ok(v)).slice(0, MAX_ACCESS));
   }
+  if (c.combat !== undefined) out.combat = combatSetting(c.combat); // targeting mode + cleave (shared/targeting.js)
   return out;
 }
+
+// Controls → Combat as saved: { target: mode, cleave, max } (shared/targeting.js cleanPrefs; bad values: the defaults).
+export function combatSetting(raw) { const p = cleanPrefs(raw); return { target: p.mode, cleave: p.cleave, max: p.max }; }
 
 // The bindings in force from saved changes (merged(), made safe): a saved change the rules refuse is unbound, and an
 // action that keeps its default (one added since the save, say) loses it when a saved change has taken its key.
