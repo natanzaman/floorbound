@@ -314,6 +314,7 @@ export const F2Methods = {
     const want = f < S.phases[1] ? 2 : f < S.phases[0] ? 1 : 0;
     while (m.phase < want) {
       m.phase++;
+      this.dropAfter(m); // the last phase's combo and after state end, and its hold, before the Deluge call's (server/openings.js)
       this.events.push({ t: 'f2phase', id: m.id, n: m.phase });
       if (m.phase === 1) {
         this.sys('The Drowned Sovereign calls the tide! Roll THROUGH the Tidal Wave.');
@@ -368,7 +369,7 @@ export const F2Methods = {
       const P = S.pools;
       for (let i = 0; i < P.n; i++) {
         if (this.pools.length >= P.max) this.pools.shift();
-        const [x, z] = i === 0 ? [pick().x, pick().z] : rndSpot(18);
+        const v = i === 0 && pick(), [x, z] = v ? [v.x, v.z] : rndSpot(18); // the first on one fighter
         this.pools.push({ id: this.id(), x, z, r: P.r, armAt: t + P.arm, until: t + P.life, next: t + P.arm });
         this.events.push({ t: 'tele', x: r2(x), z: r2(z), r: P.r, d: P.arm, k: 'pool' });
       }

@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import * as nodeModule from 'node:module';
 import { Game } from '../server/game.js';
 import { WARDEN, CLASSES, PACE, MOBS } from '../shared/data.js';
-import { F2 } from '../shared/floor2.js';
+import { F2, SOVEREIGN } from '../shared/floor2.js';
 import { COLOSSUS, F3 } from '../shared/floor3.js';
 import { runHooks } from '../shared/bots/registry.js';
 import { stepRoll } from '../shared/bots/motor.js';
@@ -63,6 +63,27 @@ await check('knobs', async () => {
     near(k.cd - extra, 0.5 * (base.cd - extra), `${boss}: cooldownMul 0.5 halves the swing's cooldown`);
   }
   return 'knobs reach the basic swings: damageMul and cooldownMul on the Warden cleave, Sovereign sweep and Colossus hammerfall; no knobs: today\'s numbers';
+});
+
+// ---- 1b. ... and the director's forced swings (staging.js 'trident', floor3.js 'hammerfall'): the table's cooldown ----
+await check('forced swings', async () => {
+  for (const [boss, move, key, S] of [['sovereign', 'trident', 'sweep', SOVEREIGN], ['colossus', 'hammerfall', 'cleave', COLOSSUS]]) {
+    const g = quiet(() => new Game());
+    g.bossKnobs = { [boss]: { cooldownMul: 2 } };
+    quiet(() => g.setTwist2(null)); process.env.F3_TWIST = 'calm'; quiet(() => g.newTwist3()); delete process.env.F3_TWIST;
+    g.time = 40;
+    const p = quiet(() => g.addPlayer(null, 'Kael', 'guardian')), m = boss === 'sovereign' ? g.sovereign : g.colossus, A = boss === 'sovereign' ? F2.arena : F3.arena;
+    m.x = A.x; m.z = A.z; p.x = A.x; p.z = A.z - 3; m.threat.clear(); m.threat.set(p.id, 1);
+    quiet(() => (boss === 'sovereign' ? g.f2Sovereign(m, 0.05) : g.f3Colossus(m, 0.05)));
+    assert.ok(m.engaged && m.tm, `${boss}: engaged`);
+    near(m.tm[key].cd, 2 * MOBS[boss].atkCd, `${boss}: cooldownMul 2 doubles the table's cd`);
+    g.time = 41; m.busyUntil = 45; m.windupAt = 0; // (a hold in place: the forced swing releases it)
+    assert.equal(quiet(() => g.forceBossMove(m, move, p.id)), true, `${boss}: ${move} forced`);
+    assert.ok(m.busyUntil <= 41, `${boss}: the forced ${move} isn't held (busyUntil ${m.busyUntil})`);
+    const extra = boss === 'sovereign' ? S.sweep.wind * (1 - 1 / PACE) : S.cleave.wind; // (each forced swing's own wind-up term)
+    near(m.atkT - 41, m.tm[key].cd + extra, `${boss}: the forced ${move} arms the table's cooldown`);
+  }
+  return 'the director\'s forced swings (Sovereign trident, Colossus hammerfall) arm the fight table\'s cooldown (cooldownMul)';
 });
 
 // ---- 2. The Colossus's fight health (finding 3: x ~0.72, verified with scripts/tuneboss.js) ----

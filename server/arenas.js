@@ -94,7 +94,7 @@ const methods = {
     if (this.beams) this.beams = this.beams.filter(b => b.m !== m); // the Tempest Beam
     const resume = m.busyUntil;
     for (const k of TIMERS) if (typeof m[k] === 'number' && m[k] < resume + T.resume) m[k] = resume + T.resume + Math.random() * T.resumeJitter;
-    m.seq = null; m.comboWait = Math.max(m.comboWait || 0, resume + T.resume); // the fall ends a combo in flight; the next waits (server/openings.js)
+    m.seq = null; m.after = null; m.comboWait = Math.max(m.comboWait || 0, resume + T.resume); // the fall ends a combo in flight and its after state (no OPENING through the crack); the next waits (server/openings.js)
     for (const k of TEAM_TIMERS) if (typeof m[k] === 'number' && m[k] < resume + T.gap) m[k] = resume + T.gap;
     R.fire = null;
     this.events.push({ t: 'arena', k: key, s: 'crack', id: m.id, a: to, d: T.crack, x: r2(m.x), z: r2(m.z) });
