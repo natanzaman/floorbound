@@ -1,0 +1,17 @@
+# Brief: hard-review fixes, boss/server (all 8 findings of docs/briefs/reviews/hard-boss.md)
+Worktree: /Users/natanzamanzadeh/floorbound/.claude/worktrees/parallel-worktree-tasks-0648c6/wt/hardfix-boss (branch feat/hardfix-boss from ee48bb1). Work only there. Do NOT commit. State machine work: be careful.
+Read: /Users/natanzamanzadeh/floorbound/.claude/worktrees/parallel-worktree-tasks-0648c6/docs/briefs/reviews/hard-boss.md (findings + suggested fixes); scratch sims named there in /private/tmp/claude-501/-Users-natanzamanzadeh-floorbound--claude-worktrees-parallel-worktree-tasks-0648c6/1a37a7f5-bea2-4fd9-a06b-12d7303f69cf/scratchpad/ (backtoback.mjs, ghostswing2.mjs, phasedrop.mjs) may help as test starting points. Spec ROADMAP J (463-620). server/openings.js header documents the combo machine.
+Do (regression test first for each, in test/j3combo.js / test/bosstiming.js / a new test file, see it fail, then fix):
+1. next combo counted from the end of its after state plus a rest (e.g. m.comboT = max(comboT, end + pause + (P.rest ?? 2))), so own moves, Horn Sweep, swings and twist specials get turns. Test: sim with the longest combo pinned: an own move fires between two combos, for Warden p3 and Colossus p3.
+2. in bossCombo, no step while a basic swing winds up (if (m.windupAt) return false, or push q.next): no ghost swing late, no silent cancel.
+3. phase change releases the after state's hold (separate m.afterUntil gated as max(busyUntil, afterUntil), or drop in each boss's phase loop before the phase move) without breaking the Sovereign's Deluge hold.
+4. RESCUE traps: either knob them per fight or correct shared/bosstiming.js:188-192 + README "Tuning bosses" (pick the doc fix unless knobbing is a few lines).
+5. shared/bots/openings.js:86-87: far melee bot in the closing window holds (returns true).
+6. server/arenas.js:97: also m.after = null.
+7. server/floor2.js sovMove 'pools': one pick().
+8. server/staging.js:88: m.tm?.sweep?.cd ?? m.def.atkCd (and server/floor3.js forceBossMove 'hammerfall' ~:816 the same way with cleave).
+Files you may edit: server/openings.js, server/arenas.js, server/floor2.js, server/floor3.js, server/game.js, server/staging.js, server/bossteam.js, shared/bosstiming.js, shared/bots/openings.js, README.md (Tuning bosses section only), test/j3combo.js, test/j3knobs.js, test/bosstiming.js, new test files.
+Run (ports 37960-37979): node test/j3combo.js, j3knobs.js, bosstiming.js; PORT=.. node test/arenas.js, bossteam.js, warden3.js, rescue.js, revive.js, director.js, pacing.js, combat.js, threat.js, botskill.js, floor3.js, sovtwists.js. Then the tuning check (finding 1 changes fight rhythm), in the background, wait for it:
+  node scripts/tuneboss.js --boss warden,sovereign,colossus --party 3,6 --skills 5 --runs 2 --jobs 2 --port 37480 --json /Users/natanzamanzadeh/floorbound/.claude/worktrees/parallel-worktree-tasks-0648c6/docs/briefs/j3-runs/hardfix/tune.json > /Users/natanzamanzadeh/floorbound/.claude/worktrees/parallel-worktree-tasks-0648c6/docs/briefs/j3-runs/hardfix/tune.txt 2>&1   (mkdir hardfix/ first)
+  Compare with /Users/natanzamanzadeh/floorbound/.claude/worktrees/parallel-worktree-tasks-0648c6/docs/briefs/j3-runs/hp/colossus.txt and part3 final-*-s5.txt. Report kill rate, time, downs/deaths, melee share before -> after. Do not retune.
+Report: per finding change file:line, test result lines copied, tune summary, not verified, open questions.
