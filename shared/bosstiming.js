@@ -76,13 +76,14 @@ export const BOSS_TIMING = {
       // J1 trap (shared/rescue.js RESCUE.vines): root + dot x max HP every tick, up to `max` s
       vines: { table: 'RESCUE', name: 'Thornbind', wind: 1.4, hits: 3, max: 14, tick: 0.5, dot: 0.018, hold: 1.5, reach: 2.6, leash: 3.6, shape: 'trap', avoid: AVOID(['none']), posture: 0, after: idle() },
     },
-    // combos: a slam and a Quake Ring, then it stands exposed; later a charge or the spin leads in
+    // combos: a slam and a Quake Ring, then it stands exposed; later a charge or the spin leads in. J3 part 3 (scripts/
+    // tuneboss.js): openings 3-3.5 s (were 2.5-3), close-range moves 1.5 s apart (were 1)
     phases: [
-      phase(['cleave', 'slam', 'quake', 'sweep'], 16, 11, { steps: ['slam', 'quake'], gaps: [0.4], pause: 2.5 }),
-      phase(['cleave', 'slam', 'quake', 'sweep', 'hounds', 'charge'], 15, 7, { steps: ['slam', 'quake'], gaps: [0.4], pause: 2.5 }, { steps: ['charge', 'slam'], gaps: [0.3], pause: 2.5 }),
-      phase(['cleave', 'slam', 'quake', 'sweep', 'hounds', 'charge', 'spin', 'rock'], 13, 6, { steps: ['spin', 'slam', 'quake'], gaps: [0.3, 0.4], pause: 3 }, { steps: ['charge', 'spin'], gaps: [0.3], pause: 2.5 }),
+      phase(['cleave', 'slam', 'quake', 'sweep'], 16, 11, { steps: ['slam', 'quake'], gaps: [0.4], pause: 3.5 }),
+      phase(['cleave', 'slam', 'quake', 'sweep', 'hounds', 'charge'], 15, 7, { steps: ['slam', 'quake'], gaps: [0.4], pause: 3.5 }, { steps: ['charge', 'slam'], gaps: [0.3], pause: 3 }),
+      phase(['cleave', 'slam', 'quake', 'sweep', 'hounds', 'charge', 'spin', 'rock'], 13, 6, { steps: ['spin', 'slam', 'quake'], gaps: [0.3, 0.4], pause: 3.5 }, { steps: ['charge', 'spin'], gaps: [0.3], pause: 3 }),
     ],
-    close: { gap: 1, moves: ['cleave', 'spin', 'sweep'], hold: true },
+    close: { gap: 1.5, moves: ['cleave', 'spin', 'sweep'], hold: true },
     team: { every: [26, 22, 18], first: 16, moves: [['meteor', 'vines', 'spread'], ['meteor', 'vines', 'spread', 'tether'], ['meteor', 'vines', 'spread', 'tether']] },
   },
   // The Drowned Sovereign (Floor 2): server/floor2.js f2Sovereign / sovereignSpecials, server/sovtwists.js.
@@ -119,25 +120,27 @@ export const BOSS_TIMING = {
     pace: ['cleave', 'strike', 'gust', 'beam'],
     abilities: {
       cleave: { wind: 0.9, active: 0, mult: 1.0, cd: 2.3, rage: 0.85, shape: 'wedge', avoid: AVOID(HIT), posture: 0, after: idle() }, // its basic sword swing
-      strike: { every: [7, 6, 5], first: 4, r: 3.2, wind: 1.7, active: 0, mult: 2.2, extra: [2, 3, 4], shape: 'circle', avoid: AVOID(HIT), posture: 0, after: idle() },
-      gust: { every: [11, 10, 9], first: 7, wind: 1.5, active: 0, r: 11, half: 0.75, mult: 2.2, shove: 7, shape: 'cone', avoid: AVOID(HIT), posture: 0, after: idle(0.45) },
+      strike: { every: [8.5, 7.5, 6.5], first: 4, r: 3.2, wind: 1.7, active: 0, mult: 2.2, extra: [2, 3, 4], shape: 'circle', avoid: AVOID(HIT), posture: 0, after: idle() },
+      gust: { every: [13, 12, 11], first: 7, wind: 1.5, active: 0, r: 11, half: 0.75, mult: 2.2, shove: 7, shape: 'cone', avoid: AVOID(HIT), posture: 0, after: idle(0.45) },
       // Overload: a team mechanic (Break it, then Switch or Team Burst). after: the Thunderclap's pause; stopped, it is
       // stunned for `stun` s, then Grounded (takes `weak` x damage) for `weakD` s. firstStatic: s after the engage with
       // the Static twist; phase3: the next one comes within every[2] x this when phase 3 starts.
       overload: { every: [0, 30, 24], first: 5, firstStatic: 14, phase3: 0.6, channel: 8, posture: 0.5, clap: 0.55, charged: 15, chargedMult: 1.25, stun: 4, weakD: 8, weak: 1.3, shape: 'room', avoid: AVOID(['none'], 'zone'), after: idle(0.6), stopped: { state: 'stunned' } },
       harpies: { every: 26, n: 2, max: 3, first: 6, shape: 'summon', avoid: AVOID(['none']), posture: 0, after: idle() },
       // Tempest Beam: the sword planted, a beam sweeps `sweep` rad around it in `turn` s (its active time)
-      beam: { every: [0, 0, 12], first: 4, wind: 2.2, active: 7, turn: 7, sweep: Math.PI * 2, len: 26, w: 0.8, mult: 2.5, from: 0.5, shape: 'beam', avoid: AVOID(['jump', 'roll'], 'sweep'), posture: 0, after: idle(0.4) },
+      beam: { every: [0, 0, 15], first: 4, wind: 2.2, active: 7, turn: 7, sweep: Math.PI * 2, len: 26, w: 0.8, mult: 2.5, from: 0.5, shape: 'beam', avoid: AVOID(['jump', 'roll'], 'sweep'), posture: 0, after: idle(0.4) },
       // J1 trap (RESCUE.crystal): encased; break it within `fuse` s or it bursts for `boom` x max HP on everyone
       crystal: { table: 'RESCUE', name: 'Storm Crystal', wind: 1.3, hits: 4, fuse: 8, boom: 0.32, shape: 'trap', avoid: AVOID(['none']), posture: 0, after: idle() },
     },
-    // combos: strikes into a Gale Push (or the beam), then it stands exposed / its sword planted
+    // combos: strikes into a Gale Push (or the beam), then it stands exposed / its sword planted. J3 part 3 (scripts/
+    // tuneboss.js): a combo every 12-13 s (was 14-16) with 3-3.5 s openings (were 2.5-3), the beam combo half as likely,
+    // Lightning Strikes, Gale Push and the Tempest Beam less often (part 2's combos had added beams and beam hits)
     phases: [
-      phase(['cleave', 'gust', 'strike'], 16, 10, { steps: ['strike', 'gust'], gaps: [0.4], pause: 2.5 }),
-      phase(['cleave', 'overload', 'gust', 'strike', 'harpies'], 15, 8, { steps: ['strike', 'gust'], gaps: [0.4], pause: 2.5 }, { steps: ['gust', 'strike'], gaps: [0.5], pause: 2.5 }),
-      phase(['cleave', 'overload', 'beam', 'gust', 'strike', 'harpies'], 14, 8, { steps: ['strike', 'gust'], gaps: [0.4], pause: 2.5 }, { steps: ['strike', 'beam'], gaps: [0.4], pause: 3, state: 'planted' }),
+      phase(['cleave', 'gust', 'strike'], 13, 10, { steps: ['strike', 'gust'], gaps: [0.4], pause: 3.5 }),
+      phase(['cleave', 'overload', 'gust', 'strike', 'harpies'], 12, 8, { steps: ['strike', 'gust'], gaps: [0.4], pause: 3.5 }, { steps: ['gust', 'strike'], gaps: [0.5], pause: 3 }),
+      phase(['cleave', 'overload', 'beam', 'gust', 'strike', 'harpies'], 12, 8, { steps: ['strike', 'gust'], gaps: [0.4], pause: 3.5, w: 2 }, { steps: ['strike', 'beam'], gaps: [0.4], pause: 3.5, state: 'planted' }),
     ],
-    close: { gap: 1, moves: ['cleave', 'gust'], hold: true },
+    close: { gap: 1.5, moves: ['cleave', 'gust'], hold: true },
     team: { every: [28, 26, 22], first: 18, moves: [['meteor', 'crystal', 'spread'], ['meteor', 'crystal', 'spread', 'tether'], ['spread', 'crystal', 'tether']] },
     // The fall (J2): crack (warning), fall (inputs frozen), land (frozen, bleed-out paused), enter (the boss drops in,
     // its impact `impact` s later: a shove, no damage); gap: s since the last team-scale mechanic before a fall may start,

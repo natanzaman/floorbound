@@ -65,6 +65,7 @@ export class Game {
     this.floorClears = 0;
     this.gate = { open: false, ready: new Set(), countAt: 0, emptySince: 0 };
     this.fight = null;   // the current Warden attempt, for tracking
+    this.bossKnobs = process.env.BOSS_KNOBS ? JSON.parse(process.env.BOSS_KNOBS) : null; // testing aid (scripts/tuneboss.js): knob overrides per boss, e.g. {"colossus":{"pauseMul":1.2}}
     this.lfgT = 0;
     this.track = () => {}; // set by the server to record play events
     const rr = ([a, b]) => a + Math.random() * (b - a);
@@ -1461,3 +1462,22 @@ installLooks(Game); // character looks: setLook(entity, id), listed in snapshots
 installNamed(Game); // the Named: humans-first rules, friendship, invites by tier (server/named.js); a no-op without a NamedManager
 installRescue(Game); // rescue traps (server/rescue.js); after the Named: its trap-object and crystal wrappers sit outside everyone's
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last
+if (process.env.TUNE_STATS) installTuneStats(Game); // testing aid (scripts/tuneboss.js): log boss moves used and hits taken; outermost
+
+// TUNE_STATS: `[tune] use <boss> <move>` when a boss starts a move (its table key; 'swing' = its basic swing), and
+// `[tune] hit <src>` when a damagePlayer call took HP (dodged / absorbed calls are not hits). scripts/tuneboss.js reads them.
+function installTuneStats(G) {
+  const P = G.prototype, use = (m, k) => console.log(`[tune] use ${m?.type} ${k}`);
+  const wrap = (name, key) => { const orig = P[name]; P[name] = function (m, ...a) { const k = key(m, ...a); if (k) use(m, k); return orig.call(this, m, ...a); }; };
+  wrap('swingStart', () => 'swing');
+  wrap('quakeRing', () => 'quake'); wrap('hornCharge', () => 'charge'); wrap('hornSweep', () => 'sweep');
+  wrap('wardenMove', (m, k) => (['slam', 'spin', 'rock'].includes(k) ? k : null)); // (quake, charge, sweep: counted above)
+  wrap('sovMove', (m, k) => (['geyser', 'volley', 'pools'].includes(k) ? k : null)); wrap('tidalWave', () => 'wave'); wrap('callDeluge', () => 'deluge');
+  wrap('lightningStrikes', () => 'strike'); wrap('galePush', () => 'gust'); wrap('tempestBeam', () => 'beam'); wrap('startOverload', () => 'overload');
+  const hurt = P.damagePlayer;
+  P.damagePlayer = function (p, base, opts = {}) {
+    const hp = p.hp, r = hurt.call(this, p, base, opts);
+    if (p.hp < hp) console.log(`[tune] hit ${opts.src || '?'}`);
+    return r;
+  };
+}

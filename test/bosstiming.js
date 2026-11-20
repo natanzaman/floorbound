@@ -35,6 +35,13 @@ const OLD = {
   TRANSITION: { crack: 3.2, fall: 1.1, land: 2, enter: 1.6, impact: 0.55, gap: 8, after: 3, shove: 7, shoveR: 7 },
   atkCd: { warden: 2, sovereign: 2.4, colossus: 2.3 },
 };
+// J3 part 3 retuned these with scripts/tuneboss.js (README "Tuning bosses"); every other number above is still the
+// pre-J3 one. Paced like OLD: Lightning Strikes and Gale Push repeat after every + their extra wind-up (0.51 / 0.45 s),
+// the Tempest Beam after every + 0.66.
+const TUNED = {
+  COLOSSUS: { strike: { every: [9.01, 8.01, 7.01] }, gust: { every: [13.45, 12.45, 11.45] }, beam: { every: [0, 0, 15.66] } },
+};
+for (const [t, moves] of Object.entries(TUNED)) for (const [k, v] of Object.entries(moves)) Object.assign(OLD[t][k], v);
 {
   same(WARDEN, OLD.WARDEN, 'WARDEN');
   assert.deepEqual(pick(SWEEP, OLD.SWEEP), OLD.SWEEP, 'SWEEP');
@@ -227,8 +234,8 @@ const OLD = {
     const c = g.colossus, q = quiet(() => g.addPlayer(null, 'Ria', 'ranger'));
     q.x = F3.arena.x; q.z = F3.arena.z - 4;
     quiet(() => g.engageColossus(c));
-    assert.deepEqual([c.tm.strike.mult, c.tm.gust.mult, c.tm.close.gap, c.tm.seqs[0].every, c.tm.team.every[0]], [4.4, 4.4, 0.5, 32, 56], 'one fighter: the party override applies');
-    assert.deepEqual([COLOSSUS.strike.mult, TIMED.colossus.close.gap, TIMED.colossus.phases[0].every], [2.2, 1, 16], 'the shared tables are untouched');
+    assert.deepEqual([c.tm.strike.mult, c.tm.gust.mult, c.tm.close.gap, c.tm.seqs[0].every, c.tm.team.every[0]], [4.4, 4.4, 0.75, 26, 56], 'one fighter: the party override applies');
+    assert.deepEqual([COLOSSUS.strike.mult, TIMED.colossus.close.gap, TIMED.colossus.phases[0].every], [2.2, 1.5, 13], 'the shared tables are untouched');
     assert.ok(c.tm.seqs[0].seqs.find(x => x.steps.length > 1).gaps[0] === 0.2, 'combo gaps x gapMul');
   } finally { K.party = keep; delete process.env.F3_TWIST; }
   ok('m.tm: built at the engage; the twist copy\'s moves as they are, or copies with the party-size knobs applied');
