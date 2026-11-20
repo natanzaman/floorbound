@@ -11,7 +11,7 @@ const K = a => { try { const l = keyLabel?.(a); if (l && l !== 'Not bound') retu
 
 export const STEPS = [ // (the Game Menu's Controls & guide lists them too)
   { id: 'move', title: 'Find your feet', text: () => touch() ? 'Drag on the left half of the screen to move. Drag on the right half to look around.' : `Move with ${K('move')} (back walks backwards, left / right strafe). Click the game, then move the mouse to look around. Esc frees the cursor. Prefer right-drag? Change it in Settings.` },
-  { id: 'hit', title: 'First strike', text: () => `Head north out of town and hit a Forest Boar. ${touch() ? 'Tap the big attack button' : `${K('attack')} to attack`}; it aims at the nearest enemy.` },
+  { id: 'hit', title: 'First strike', text: () => `Head north out of town and hit a Forest Boar. ${touch() ? 'Tap the big attack button' : `${K('attack')} to attack`}; it turns you to your locked target, or the nearest enemy (Game Menu → Controls → Combat to change how).` },
   { id: 'dodge', title: 'Dodge', text: () => `A red shape on the ground means an attack is coming. ${touch() ? 'Tap Dodge' : `Press ${K('dodge')}`} to roll through it: you can't be hit mid-roll.` },
   { id: 'kill', title: 'Defeat an enemy', text: () => 'Finish one off. Enemies drop gold, potions and sometimes gear.' },
   { id: 'bag', title: 'Your bag', text: () => touch() ? 'Tap Bag to equip gear. The red Potion button heals you.' : `Press ${K('bag')} to open your bag and equip gear. Press ${K('item1')} to drink a Health Potion.` },
@@ -77,7 +77,7 @@ const TIPS = {
   f3fire: 'Fire is about to break out where the rings glow. Step out before they burn: standing in the flames hurts several times a second.',
   f3sludge: 'Stuck in sludge: it slows you to under half speed and you can\'t roll. Wade out (or jump) before a big hit lands.',
   mvp: 'That was the post-fight card: everyone in the fight sees it after a boss kill or wipe. Titles go to whoever led: Lifeline for revives, Rescuer for freeing trapped partymates, Wall for tanking, Conductor for combos, Last Word for the Last Attack...',
-  menu: () => `${touch() ? 'Tap ☰' : `Press ${K('menu')}`} for the Game Menu: Settings (graphics quality and accessibility too), controls, change character, log out. The game keeps running while it's open.`,
+  menu: () => `${touch() ? 'Tap ☰' : `Press ${K('menu')}`} for the Game Menu: Settings (graphics quality and accessibility too), controls (and Combat: how attacks pick their target, Cleave), change character, log out. The game keeps running while it's open.`,
   tbsync: () => `A partner started a TEAM BURST: ${touch() ? 'tap the prompt' : `press ${K('teamBurst')}`} now to join it. More joiners, bigger burst.`,
   ...Object.fromEntries(Object.entries(COMBOS).map(([k, c]) => [`combo_${k}`, c.tip])),
 };

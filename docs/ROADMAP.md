@@ -643,6 +643,7 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
 | K2 Controls screen (pictures, lists, editing) | `feat/controlsui` | done (hard-review fixes 2a2fc9a) | batch 2026-11-19 | eb1a318 |
 | K3 Accessibility options | `feat/access` | done | batch 2026-11-19 | b9b1607 |
 | K4 Controller verification (scripted gamepad "bots") | `feat/padtest` | done | batch 2026-11-19 | 0bb37d8 |
+| K5 Targeting modes + Cleave (Controls → Combat) | `feat/targeting` | built, awaiting merge | agent targeting | — |
 
 ### Shared contracts for K
 - **Action list** (`shared/controls.js`): every game control has an id, label, group (Move, Camera, Combat, Skills, Items, Social, Menus) and type (`button`, `hold`, `axis`, `toggle`).
@@ -833,6 +834,25 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
 3. It checks **game state** (positions, cooldowns, HP, server events), not frame timing, and runs in CI-like mode (`node test/padtest.mjs` or Python).
 4. A second scripted pad checks the **modifier layer** and **chords**.
 5. **Accept when:** the harness passes on the default controller layout and on a rebound layout. Report coverage: which actions were verified on the pad.
+
+### K5. Targeting modes and Cleave (`feat/targeting`, owner request 2026-11-20)
+Owner: "attacks always go to the nearest enemy even when I'm facing or locked on another". Plan and per-class notes:
+`docs/briefs/targeting.md`. Amends the K3 cut "aim assist strength (attacks already auto-aim)": targeting is now a choice.
+- **Controls → Combat** (fb_controls.combat `{ target, cleave, max }`, synced with the account; `shared/targeting.js`):
+  - **Nearest**; **Locked or nearest** (default: the lock at any distance up to 45 m, no 14 m cutoff); **Cone** (nearest
+    in a 120° cone where the camera looks, a lock inside the cone first, never beside / behind); **Aimed** (no
+    auto-targeting or homing: attacks go where the camera looks; projectiles fly straight with a 0.35 m wider hitbox
+    and hit whatever is on the line; marks / pounces / leaps take the first enemy on the aim line).
+  - **Cleave** on/off (default on) and **Max targets per hit** 1–8 (default 8). On: min(attack limit, max) enemies in
+    the field of view (lock first, then nearest); off: one (the lock if inside, else the nearest).
+- **Data:** `ATTACKS` (base field of view = the old hitArc half-angles; target limit `n`; `aoe` for crowd-control cones),
+  weapon styles' `mods.fov` (x the half-angle; all 1 for now, so balance is unchanged), style steps may carry `n`.
+- **Server:** `{ type: 'tprefs' }` on join and on change, validated; bots never send it and keep the old behaviour.
+  The Ranger's server aim now keeps the locked target when it's in range and in the skill's cone.
+- **Not affected:** spins, slams, ground circles, dashes, projectiles (single-target or piercing by design), Bard chords,
+  Hamstring.
+- **Open for the owner:** per-weapon `fov` values (wider-but-slower weapons), the target limits, whether bots should use
+  the limits too, whether Cleave should also cover spins and slams.
 
 ### K validation with the owner (2026-11-19/20, branch `claude/floorbound-controller-validation-3256da`)
 - **Played by the owner** on a wired SCUF (Xbox One protocol) on a Mac in Chrome: the whole play checklist passed (sticks, combat buttons, D-pad items and revive hold, LB layer, menu focus, rebinds kept across reload and account, unplug/replug, switching device mid-play).
