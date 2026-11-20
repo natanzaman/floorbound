@@ -1,4 +1,4 @@
-# Handoff: controller validation chat 3, 2026-11-19
+# Handoff: controller validation chat 4, 2026-11-20
 
 ## Purpose
 Natan wants to play Floorbound with a real controller. Validate gamepad input + configuration end to end with him
@@ -7,12 +7,12 @@ session local_dbcc11fe-310c-4091-b93a-d3725051310e, the batch-2026-11-19 hub). S
 (K1b, K2, K3, K4 + amendments). Natan reads on his phone: short, outcome-first. Progress log (append-only):
 docs/briefs/progress-controller-validation.md.
 
-## Git (2026-11-20T00:40Z)
+## Git (2026-11-20T07:15Z)
 - Worktree: /Users/natanzamanzadeh/floorbound/.claude/worktrees/floorbound-controller-validation-3256da
-- Branch claude/floorbound-controller-validation-3256da, HEAD 2096215, status clean (node_modules symlink, ignored).
+- Branch claude/floorbound-controller-validation-3256da, HEAD bc6e290, status clean (node_modules symlink, ignored).
 - Base 0bb37d8 (integration branch claude/parallel-worktree-tasks-0648c6, K1b-K4). NOT pushed, NOT merged.
-- Commits: 94cf640 Xbox/PlayStation picture switch; 10a637c WebUSB wired Xbox driver; 96823e2 USB reset on open;
-  afcc519 key hints follow the device + Controls tab follows device; a56fa24 README; 2096215 review fixes.
+- Commits: 94cf640 picture switch; 10a637c WebUSB driver; 96823e2 USB reset; afcc519 key hints follow device;
+  a56fa24 README; 2096215 review fixes; 8eab057 wheel cancel on forced let-go + padtest section 5; bc6e290 progress.
 
 ## What works (Natan confirmed on his SCUF, Mac, Chrome)
 - Wired SCUF via WebUSB (Controls → Connect it, reopens by itself later). Played with it.
@@ -37,18 +37,12 @@ docs/briefs/progress-controller-validation.md.
   fix re-check (Opus medium): all 7 fixed, 4 minors, also fixed (late close race, guide K fallback, WeakMap, test).
 
 ## Next steps
-1. Natan plays the checklist (sent in chat; he replies with failing numbers): sticks/drift/speed; combat RT X Y B RB
-   A LT R3; D-pad items + D-pad↓ interact/revive hold; LB layer (LB+X burst, LB+A cover, LB+Y wheel, LB+B select,
-   LB+↑ Skill Tree, LB+→ Players); menu focus nav; rebind persists across reload + account; unplug/replug; swap mid-play.
-2. Open items sent to Natan, waiting on his "ok" or changes (recommendations): controller picture stays mouse-only;
-   play buttons stay swallowed while a navigable window is open (except Start); bot wheel on blur CANCELS the order
-   (code change needed: today it sends the pointed order, public/botwheel.js); revive hold + Cover verified by a
-   scripted bot party (test/padtest.mjs section 4 style), not by Natan.
-3. Fix failures with fake-pad regression tests; rerun pad + keys tests (browser ones one at a time, ports 38030-38049).
-4. Merge: wait until `git fetch && git merge-base --is-ancestor 0bb37d8 origin/main`; then
-   `git rebase --rebase-merges origin/main`, rerun tests, merge into main,
-   `git push --force-with-lease --force-if-includes origin HEAD:main`. Note validation in ROADMAP K.
-5. Report once to local_dbcc11fe-310c-4091-b93a-d3725051310e (SendMessage, 3-5 lines + this handoff path).
+1-3 DONE (Natan 2026-11-20: "All passed, items ok"; wheel cancel + scripted revive/Cover in 8eab057, reviewed).
+4. Merge: blocked until the base 0bb37d8 is in origin/main (the hub's K1b-K4 integration), or the hub takes this branch
+   into its integration branch. Asked the hub (local_dbcc11fe-310c-4091-b93a-d3725051310e) which. If main: `git fetch &&
+   git merge-base --is-ancestor 0bb37d8 origin/main`, `git rebase --rebase-merges origin/main`, rerun tests, merge into
+   main, `git push --force-with-lease --force-if-includes origin HEAD:main`.
+5. Follow-up: keys.mjs flaky ready(0) timeout in the classic-camera check (keys.mjs:285), fails on 2096215 too.
 
 ## Local server for Natan
 - PORT=38010 START_LEVEL=10 SPAWN_AT=0,150 (PID 10536, restarted 2026-11-20T00:40Z on 2096215), serves public/ from
