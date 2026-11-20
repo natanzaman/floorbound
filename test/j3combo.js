@@ -289,5 +289,31 @@ check('the Colossus\'s fall during an opening: the after state is dropped', () =
   assert.equal(g.openingOf(c), null, 'no opening through the crack');
 });
 
+// ---- 10. (re-check) the step after a swing that landed mid-combo keeps the close-range gap ----
+check('a combo strike, a channel, a swing lands: the combo\'s gust waits close.gap after the swing', () => {
+  const g = quiet(() => new Game());
+  process.env.F3_TWIST = 'calm'; quiet(() => g.newTwist3()); delete process.env.F3_TWIST;
+  const c = g.colossus;
+  for (const [i, cls] of ['guardian', 'ranger'].entries()) { const p = quiet(() => g.addPlayer(null, `P${i}`, cls)); p.x = F3.arena.x + i * 3; p.z = F3.arena.z - 3; c.threat.set(p.id, 1); p.hp = p.maxHp = 1e9; }
+  g.time = 100; c.x = F3.arena.x; c.z = F3.arena.z;
+  quiet(() => g.f3Colossus(c, DT));
+  c.tm = { ...c.tm, seqs: onlyCombo(0, { steps: ['strike', 'gust'], gaps: [0.5], pause: 3 }) };
+  c.phase = 0; c.comboPh = 0; c.comboT = g.time; c.seq = null; c.after = null; c.busyUntil = 0; c.windupAt = 0; c.stunUntil = 0; c.closeAt = -99;
+  c.strikeT = c.gustT = c.ovT = c.harpyT = c.beamT = Infinity; c.btT = Infinity; c.btKey = g.btFight(c); c.atkT = Infinity;
+  const t0 = g.time, steps = [];
+  let bite = null, chan = false;
+  const bt = g.f3Bite.bind(g); g.f3Bite = m => { if (m === c && bite === null) bite = g.time; return bt(m); };
+  const cm = g.colMove.bind(g); g.colMove = (m, k, ...a) => { steps.push([k, g.time]); return cm(m, k, ...a); };
+  const gm = g.galePush.bind(g); g.galePush = (m, ...a) => { steps.push(['gust', g.time]); return gm(m, ...a); };
+  for (let i = 0; i < 300; i++) {
+    tick(g, () => g.f3Colossus(c, DT));
+    if (!chan && c.seq && steps.length && g.time >= steps[0][1] + 0.1) { chan = true; g.btChannel(c, 2); c.atkT = 0; }
+  }
+  const gust = steps.find(s => s[0] === 'gust');
+  assert.ok(chan && bite !== null, `the channel came mid-combo and a swing landed (bite ${bite})`);
+  assert.ok(gust, `the combo's gust ran (${JSON.stringify(steps)})`);
+  assert.ok(gust[1] >= bite + c.tm.close.gap - EPS, `the gust waits close.gap after the swing (+${(gust[1] - t0).toFixed(2)} vs swing +${(bite - t0).toFixed(2)}, gap ${c.tm.close.gap})`);
+});
+
 if (failed) { console.log(`${failed} of ${n} failed`); process.exit(1); }
 console.log(`all ${n} passed`);

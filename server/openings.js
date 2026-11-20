@@ -113,6 +113,7 @@ const methods = {
     if (m.windupAt) return true; // a basic swing started in the channel lands on its telegraph first (no busy hold), then the step
     if (t < q.next) { m.busyUntil = Math.max(m.busyUntil || 0, q.next); return true; }
     const k = q.s.steps[q.i], mv = tm[k];
+    if (!this.closeReady(m, k)) { q.next = (m.closeAt ?? -99) + tm.close.gap; m.busyUntil = Math.max(m.busyUntil || 0, q.next); return true; } // (a swing just landed: no point-blank chaining)
     const end = Math.max(t, run(k) ?? t);
     const every = Array.isArray(mv?.every) ? mv.every[m.phase] : mv?.every;
     if (timers[k] && every > 0) m[timers[k]] = Math.max(m[timers[k]] ?? -Infinity, t + every);
