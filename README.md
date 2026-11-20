@@ -78,7 +78,7 @@ Attacks auto-aim at your locked target, or the nearest enemy. Basic attacks are 
 A misty marsh of dead trees, shallow water and glowing crystals, for levels 11–18. It sits in the same world as Floor 1 (600 m east), with its own camp, field, raid gate and boss court.
 
 - **Unlocking it:** help kill the Horned Warden (anyone who damaged it or healed in the fight). That unlocks Floor 2 for the character for good (saved with the character's stats; anonymous players keep it until they leave). Characters that had already killed the Warden are unlocked automatically.
-- **Getting there:** a **waystone** stands in each town (Town of Beginnings, just south of the fountain; Mirelight Camp, Floor 2's safe zone). Press **F** at it to pick a floor you've unlocked. Right after a Warden kill a glowing **Stairway** also opens at the back of the Warden's chamber for 60 s: step in and press F.
+- **Getting there:** each town's centrepiece is its **waypoint** and glows softly: the fountain in the Town of Beginnings, the campfire in Mirelight Camp (Floor 2's safe zone), the brazier in Windbreak Camp. Walk up to it and press **F** (your interact key; the prompt names it, controller button included) or tap **Warp** to pick a floor you've unlocked. Right after a Warden kill a glowing **Stairway** also opens at the back of the Warden's chamber for 60 s: step in and press F.
 - **Dying on Floor 2** sends you back to Mirelight Camp.
 - The field takes a party from about level 10 to 15; the boss is meant for level 15+ parties.
 
@@ -97,7 +97,7 @@ Behind the Sunken Gate (same ready check as Floor 1's raid gate), the Sovereign 
 
 The broken terraces of a sky temple on a wind-scoured mountaintop, above the cloud sea, in warm late-afternoon light, for levels 21–30 (design: `docs/floor3.md`). It sits 1200 m east of Floor 1 on the same skeleton: Windbreak Camp in the south, the Windswept Steps and the Broken Aqueduct, the Storm Gate, and the Eye of the Storm (the boss plateau, ringed by storm pylons) at the summit.
 
-- **Unlocking it:** help kill the Drowned Sovereign. Right after a Sovereign kill a **Stairway** opens at the back of the Sunken Court for 60 s (step in, press F); otherwise any **waystone** lists Floors 1–3 (Windbreak Camp has its own).
+- **Unlocking it:** help kill the Drowned Sovereign. Right after a Sovereign kill a **Stairway** opens at the back of the Sunken Court for 60 s (step in, press F); otherwise any **waypoint** lists Floors 1–3 (Windbreak Camp's brazier is one too).
 - **Dying on Floor 3** sends you back to Windbreak Camp (a safe zone with a brazier, tents, a Skill Shrine and the Floor 3 Hall stone).
 - Recommended level 21+ for the field, 25+ for the Colossus.
 
@@ -412,9 +412,9 @@ Talents are saved with the character (a `talents` JSONB column, `{ nodeId: rank 
 
 ```
 shared/data.js   classes, skills, mobs, map, collision — used by server AND client
-shared/floor2.js Floor 2: map, waystones, enemies, Sovereign tuning (appended into data.js)
-server/floor2.js Floor 2 AI (Shieldback, Wisp, Lurker, Matron, Sovereign), Sunken Gate, waystones/Stairway
-public/floor2world.js, public/floor2client.js  Floor 2 scene, models, effects, waystone UI
+shared/floor2.js Floor 2: map, waypoints (every floor's), enemies, Sovereign tuning (appended into data.js)
+server/floor2.js Floor 2 AI (Shieldback, Wisp, Lurker, Matron, Sovereign), Sunken Gate, waypoint travel/Stairway
+public/floor2world.js, public/floor2client.js  Floor 2 scene, models, effects, waypoint glows and UI
 shared/floor3.js Floor 3: map, enemies, Colossus tuning and twists (appended into data.js)
 server/floor3.js Floor 3 AI (Ram, Harpy, Acolyte, Sentinel, rares, the Colossus: Overload, Tempest Beam), Storm Gate, Stairway, travel
 public/floor3world.js, public/floor3client.js  Floor 3 scene, models, the Colossus's poses, effects, Overload bar; the Undercroft (its lower area)
@@ -735,7 +735,7 @@ Client performance: `node test/netsmooth.js` (interpolation buffer, late / out-o
 
 Other testing aids: `SPAWN_AT=0,172` spawns players at the chamber gate. `TEST_HOOKS=1` lets a client set its own health (`{ type: 'test', hurt: 0.4 }`, for test/botbrain.js) or gain XP (`{ type: 'test', xp: 850 }`, for the bot level sync in test/playerbots.js and test/shutdown.js). `{ type: 'test', tb: 100 }` sets your team's Team Burst bar (screenshots); `{ type: 'test', mvpCard }` shows you a given post-fight card. `{ type: 'test', trap: 'vines' | 'pillar' | 'crystal', id, hold: 1 }` forces a rescue trap on player `id` (default: you) in your boss room (`hold`: the boss stands still and the trap lasts a minute longer, for screenshots). `WARDEN_TWIST=<id>` forces a Warden twist (see above). `MAX_PLAYERS` caps the server (default 64).
 
-Floor 2: `SPAWN_AT=600,150` spawns at the Sunken Gate (spawning on Floor 2 also unlocks it; deaths respawn there too). The bot party goes to Floor 2 with `FLOOR=2`: from Floor 1 they kill the Warden and take the Stairway (or use the town waystone if already unlocked), farm the Mire until level 15, then fight the Sovereign.
+Floor 2: `SPAWN_AT=600,150` spawns at the Sunken Gate (spawning on Floor 2 also unlocks it; deaths respawn there too). The bot party goes to Floor 2 with `FLOOR=2`: from Floor 1 they kill the Warden and take the Stairway (or use the town fountain waypoint if already unlocked), farm the Mire until level 15, then fight the Sovereign.
 
 ```bash
 START_LEVEL=16 SPAWN_AT=600,150 npm start
@@ -747,7 +747,7 @@ Floor 3: `SPAWN_AT=1200,150` spawns at the Storm Gate (and unlocks Floor 3). Wit
 ```bash
 BOT_SKILL=5 RUNS=2 PORT=5221 node test/floor3boss.js                 # trio at the Storm Gate, Lv 30
 ROLES=guardian,swordsman,cleric,ranger,berserker,bard node test/floor3boss.js   # six bots
-FROM_TOWN=1 node test/floor3boss.js                                  # the whole way: town waystone, the field, the gate, the boss
+FROM_TOWN=1 node test/floor3boss.js                                  # the whole way: the town fountain waypoint, the field, the gate, the boss
 ```
 
 The Named's requests and invitations: `node test/namedquests.js` (`DATABASE_URL=postgresql://postgres:pg@localhost/fb_namedq` adds the Postgres checks). The Named: `node test/named.js` (rules, the manager in process, then a real server; `DATABASE_URL=postgresql://postgres:pg@localhost/fb_named` adds the Postgres checks, `WARDEN=1` has the Hearthward clear the Warden on their own). `/status` reports the last minute's tick times (`tick.p95`), CPU, bytes and who is online by kind (see Performance). Server bots on the in-process channel: `node test/localws.js` (the same messages as on a WebSocket, the 10 Hz rule); `LOCAL=1 node test/wardenskill.js` runs the Warden party as the server's own bots. Test clients join as ordinary players, so the Named walk in on any test server whose players reach the field: a harness that wants a quiet world starts its server with `NAMED_ENABLED=0` (the Warden and Colossus bot runs and `test/botbrain.js` do).

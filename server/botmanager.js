@@ -60,7 +60,7 @@ export class BotManager {
     const lvl = Math.min(MAX_LEVEL, Math.max(1, msg.lvl | 0 || 1));
     p.lvl = lvl; p.xp = 0; p.lvlStart = lvl;
     p.stats.maxLvl = Math.max(p.stats.maxLvl, lvl);
-    if (msg.f2) p.stats.floor2 = 1; // lets Floor 2 / follow bots use the waystones
+    if (msg.f2) p.stats.floor2 = 1; // lets Floor 2 / follow bots use the waypoints
     if (msg.f3) p.stats.floor3 = 1; // Floor 3 too
     g.recompute(p); p.hp = p.maxHp;
     if (msg.named) this.namedJoin?.(p, String(msg.named)); // one of the Named: flagged and outfitted at once (server/named.js)

@@ -182,7 +182,7 @@ export class PlayerBots {
     e.group.configure({ behaviour: M.behaviour, follow });
     e.behaviour = M.behaviour; e.follow = follow; e.partied = true;
     const p = this.mgr.livePlayer(e);
-    if (p && M.behaviour === 'follow') p.stats.floor2 = 1; // followers use the waystones
+    if (p && M.behaviour === 'follow') p.stats.floor2 = 1; // followers use the waypoints
     if (typeof e.b.command === 'function' && p && by) {
       const k = { follow: 'follow', stay: 'stay', field: 'farm', warden: 'boss' }[mode];
       try { e.b.command({ k, by: by.id, byName: by.name, followId: by.id, adm, group: [p.id] }); } catch (err) { console.error('pbot order', err); }

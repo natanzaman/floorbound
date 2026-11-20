@@ -222,7 +222,7 @@ export class Game {
       case 'accept': return this.accept(p, msg.from);
       case 'decline': p.invite = null; return;
       case 'leave': return this.leaveParty(p);
-      case 'warp': return this.warp(p, msg.f); // waystones and the Stairway (server/floor2.js)
+      case 'warp': return this.warp(p, msg.f); // the waypoints (town centrepieces) and the Stairway (server/floor2.js)
       case 'evolve': return this.chooseBranch(p, String(msg.sk), String(msg.br)); // skill evolutions (server/mastery.js)
       case 'talent': return this.talentAction(p, msg); // talent tree: spend / refund / reset (server/talents.js)
     }

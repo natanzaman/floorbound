@@ -78,7 +78,7 @@ export const BotEditMethods = {
     if (follow !== undefined && (behaviour !== e.behaviour || follow !== e.follow)) { // this bot only: one brain per bot
       e.b.configure({ behaviour, follow });
       e.behaviour = behaviour; e.follow = follow; e.partied = true;
-      if (behaviour === 'floor2' || behaviour === 'floor3' || behaviour === 'follow') p.stats.floor2 = 1; // waystones
+      if (behaviour === 'floor2' || behaviour === 'floor3' || behaviour === 'follow') p.stats.floor2 = 1; // waypoints
       if (behaviour === 'floor3' || behaviour === 'follow') p.stats.floor3 = 1;
       if (moving) this.joinParty(p, target); // straight from one party into the other (never left without one)
       // In a party with a player the bot serves that party (it follows them): the matching order makes the new
@@ -167,7 +167,7 @@ export const BotEditMethods = {
         if (body.to === 'player') { this.catchUp(p, this.findPlayerAny(body.name)); break; }
         const [cx, cz, r] = ({ town: [0, 0, 6], gate: [0, 150, 3], camp2: [600, 3, 4], gate2: [600, 150, 3], camp3: [1200, 3, 4], gate3: [1200, 150, 3] })[body.to] || [];
         if (cx === undefined) throw new BotError('Teleport to a player, a town / camp or a raid gate.');
-        if (cx > 300) { p.stats.floor2 = 1; if (cx > 900) p.stats.floor3 = 1; } // (it can use the waystones from there)
+        if (cx > 300) { p.stats.floor2 = 1; if (cx > 900) p.stats.floor3 = 1; } // (it can use the waypoints from there)
         for (let i = 0; i < 12; i++) {
           const a = Math.random() * Math.PI * 2, d = 2 + Math.random() * r;
           const [x, z] = resolveCollision(cx + Math.sin(a) * d, cz + Math.cos(a) * d);

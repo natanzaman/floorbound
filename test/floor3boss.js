@@ -17,7 +17,7 @@ import { threatWatch, threatLine, threatSummary } from './threatwatch.js'; // J4
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SKILL = Number(process.env.BOT_SKILL) || 5, RUNS = Number(process.env.RUNS) || 1, PORT = Number(process.env.PORT) || 5221;
-const FROM_TOWN = !!process.env.FROM_TOWN; // the whole journey: town -> waystone -> Windbreak Camp -> the field -> the Storm Gate -> the boss
+const FROM_TOWN = !!process.env.FROM_TOWN; // the whole journey: town -> the fountain waypoint -> Windbreak Camp -> the field -> the Storm Gate -> the boss
 const LIMIT = Number(process.env.LIMIT) || (FROM_TOWN ? 720 : 360);
 const COLOSSUS = MOB_IDS.indexOf('colossus');
 const TUNE = process.env.TUNE_JSON ? await import('../scripts/tuneboss.js') : null; // the tuning harness's numbers
