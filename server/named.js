@@ -11,8 +11,10 @@
 //    friendship      game.namedFriendship(player, namedId) -> { pts, tier, tierName, left } | null
 //                    game.addFriendship(player, namedId, amount, reason) -> { d, pts, tier, up } | null
 //                    (reason: a GAINS key of shared/named.js, or 'downed'; I3 / I4 call these)
-//    invites         a Named accepts a party invite only by tier (invite), a Sworn friend calls one with
-//                    "/b <name>: come" (botCommand) or the Friends tab; { type: 'named' } messages (handle)
+//    invites         a Named accepts a party invite (by tier only with INVITE_NEEDS_TIER, shared/named.js), a Sworn
+//                    friend calls one with "/b <name>: come" (botCommand) or the Friends tab; { type: 'named' } messages
+//                    (handle). Who may invite, kick, despawn or respawn one: shared/accesslevels.js (ctlBlock; their
+//                    allow lists st.allow, kept in named_chars.allow)
 //
 //  NamedManager         runs them as server bots of their own kind (BotManager entries with e.named: reserved slots
 //    outside MAX_BOTS, not in the Bots tab, never removed by "remove all"):
@@ -26,7 +28,12 @@
 //    plans           each group farms, and now and then goes for the boss of its floor, but only while no human is in
 //                    or near the arena; an invited Hero leaves the Hearthward for your party and goes back when the
 //                    party disbands or after 10 quiet minutes; one Named per human party
-//    persistence     named_chars (level, offset, switch, last seen) and named_friendship (per character); anonymous
+//    despawn         each is unique (never a copy): a permitted player (or an admin) takes one out of the world and
+//                    brings them back later (despawnBy / respawnBy, setEnabled); back, they rejoin the human party they
+//                    left if it still exists with room (a party of two breaks up when they leave: then the same human,
+//                    if they're in no other party), else they roam as before. Despawned survives a restart
+//                    (named_chars.enabled); the party to rejoin is kept in memory (parties don't survive one either)
+//    persistence     named_chars (level, offset, switch, allow list, last seen) and named_friendship (per character); anonymous
 //                    players' friendship lasts for their session
 //
 // Client messages: { type: 'named', op: 'list' | 'invite' | 'call', id }. Replies: { type: 'named', op, list?, msg?,
@@ -45,6 +52,7 @@ import {
   tierIndex, tierAt, tierProgress, lookColor, isNamedName, namedLine, newFriendship, gainFriendship, loseFriendship,
   dailyLeft, canInvite, canSummon, namedLevel, awayLine, nextReset, PRESENCE,
 } from '../shared/named.js';
+import { cleanAllow, accessOf, ACCESS } from '../shared/accesslevels.js'; // who may control them besides access 3+ (st.allow)
 
 export const namedOn = () => process.env.NAMED_ENABLED !== '0';
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -65,10 +73,10 @@ const inHome = (home, p) => floorOf(p.x) === (home?.floor || 1) && !inTown(p.x, 
 // ---------- Postgres (server/db.js makes the tables) ----------
 export function makeNamedStore(q, { adminIds = [] } = {}) {
   return {
-    loadChars: () => q('SELECT id, lvl, lvl_off, enabled, seen_at FROM named_chars'),
-    saveChar: r => q(`INSERT INTO named_chars (id, lvl, lvl_off, enabled, seen_at, updated_at) VALUES ($1, $2, $3, $4, $5, now())
-      ON CONFLICT (id) DO UPDATE SET lvl = EXCLUDED.lvl, lvl_off = EXCLUDED.lvl_off, enabled = EXCLUDED.enabled, seen_at = EXCLUDED.seen_at, updated_at = now()`,
-      [r.id, r.lvl, r.off, r.enabled, r.seenAt ? new Date(r.seenAt) : null]),
+    loadChars: () => q('SELECT id, lvl, lvl_off, enabled, seen_at, allow FROM named_chars'),
+    saveChar: r => q(`INSERT INTO named_chars (id, lvl, lvl_off, enabled, seen_at, allow, updated_at) VALUES ($1, $2, $3, $4, $5, $6, now())
+      ON CONFLICT (id) DO UPDATE SET lvl = EXCLUDED.lvl, lvl_off = EXCLUDED.lvl_off, enabled = EXCLUDED.enabled, seen_at = EXCLUDED.seen_at, allow = EXCLUDED.allow, updated_at = now()`,
+      [r.id, r.lvl, r.off, r.enabled, r.seenAt ? new Date(r.seenAt) : null, JSON.stringify(r.allow || [])]),
     loadFriends: charId => q('SELECT named_id, pts, day, got, chat FROM named_friendship WHERE char_id = $1', [charId]),
     saveFriend: (charId, id, rec) => q(`INSERT INTO named_friendship (char_id, named_id, pts, day, got, chat, updated_at) VALUES ($1, $2, $3, $4, $5, $6, now())
       ON CONFLICT (char_id, named_id) DO UPDATE SET pts = EXCLUDED.pts, day = EXCLUDED.day, got = EXCLUDED.got, chat = EXCLUDED.chat, updated_at = now()`,
@@ -89,7 +97,7 @@ export class NamedManager {
     this.presence = presence && !always; // (PRESENCE: off, they're present whenever a human is on their floor)
     this.pres = Object.fromEntries(Object.keys(GROUPS).map(k => [k, { seen: 0, wakeUntil: 0 }])); // group -> last time a human was near / in its home area; woken until
     this.pending = []; // invites, calls and accepted invitations waiting for a woken Named to come in: { id, hid, kind, at, out }
-    this.chars = new Map(NAMED.slice(0, NAMED_MAX).map(def => [def.id, { def, lvl: 1, off: LEVEL_OFFSET, enabled: true, e: null, pid: 0, seenAt: 0, seenSaved: 0, summonAt: -1e15, hostT: null, dirty: false }]));
+    this.chars = new Map(NAMED.slice(0, NAMED_MAX).map(def => [def.id, { def, lvl: 1, off: LEVEL_OFFSET, enabled: true, allow: [], rejoin: 0, e: null, pid: 0, seenAt: 0, seenSaved: 0, summonAt: -1e15, hostT: null, dirty: false }]));
     this.friends = new Map();   // player key -> Map(named id -> record)
     this.dirtyFr = new Set();   // `${charId}:${namedId}` waiting to be saved
     this.whisperAt = new Map(); // player key -> when the loner last whispered them
@@ -112,6 +120,7 @@ export class NamedManager {
         const st = this.chars.get(r.id);
         if (!st) continue;
         st.lvl = Math.max(st.lvl, Math.min(MAX_LEVEL, r.lvl | 0)); st.off = r.lvl_off | 0; st.enabled = r.enabled !== false;
+        st.allow = cleanAllow(r.allow || []); if (st.e) st.e.allow = st.allow;
         st.seenAt = st.seenSaved = r.seen_at ? new Date(r.seen_at).getTime() : 0;
       }
     } catch (e) { console.error('[named] load failed:', e.message); }
@@ -218,16 +227,21 @@ export class NamedManager {
     for (const st of this.chars.values()) {
       if (!st.dirty) continue;
       st.dirty = false; st.seenSaved = st.seenAt;
-      writes.push(this.store.saveChar({ id: st.def.id, lvl: st.lvl, off: st.off, enabled: st.enabled, seenAt: st.seenAt }).catch(e => { st.dirty = true; console.error('[named] save failed:', e.message); }));
+      writes.push(this.store.saveChar({ id: st.def.id, lvl: st.lvl, off: st.off, enabled: st.enabled, seenAt: st.seenAt, allow: st.allow }).catch(e => { st.dirty = true; console.error('[named] save failed:', e.message); }));
     }
     return Promise.all(writes);
   }
   async flush() { await Promise.allSettled([this.flushFriends(), this.flushChars()]); } // (shutdown: only what's still waiting)
 
   // ---------- invites and calls ----------
+  // Who may control this Named (shared/accesslevels.js: no creator; access 3+, their allow list, else the action's minimum).
+  ctlBlock(h, st, action) { return this.mgr.controlBlock?.(h, { creator: null, allow: st.allow, name: st.def.name }, action) || ''; }
   // Why this human can't invite this Named right now ('' = they can).
   inviteBlock(h, st) {
     const def = st.def, p = this.playerOf(st), g = this.game;
+    const ctl = this.ctlBlock(h, st, 'botInvite');
+    if (ctl) return ctl;
+    if (!st.enabled) return `${def.name} is out of the world (despawned). Respawn them first.`;
     if (!p && !this.resting(st)) return `${def.name} isn't around right now.`;
     if (p && h.party && p.party === h.party) return `${def.name} is already in your party.`;
     const rec = this.peek(h, def.id) || newFriendship();
@@ -244,6 +258,8 @@ export class NamedManager {
   }
   callBlock(h, st) {
     const def = st.def, p = this.playerOf(st), g = this.game, now = this.now();
+    const ctl = this.ctlBlock(h, st, 'botInvite'); // (a call brings them into your party: the invite rule)
+    if (ctl) return ctl;
     if (!p && !this.resting(st)) return `${def.name} isn't around right now.`;
     if (p && h.party && p.party === h.party) return `${def.name} is already with you.`;
     const rec = this.peek(h, def.id) || newFriendship();
@@ -260,7 +276,7 @@ export class NamedManager {
     const why = this.inviteBlock(h, st);
     if (!why) return true;
     const rec = this.peek(h, st.def.id) || newFriendship();
-    const key = !canInvite(st.def, rec.pts) ? 'refuse' : /per party/.test(why) ? 'taken' : /boss fight|party\.$/.test(why) ? 'busy' : '';
+    const key = this.ctlBlock(h, st, 'botInvite') ? '' : !canInvite(st.def, rec.pts) ? 'refuse' : /per party/.test(why) ? 'taken' : /boss fight|party\.$/.test(why) ? 'busy' : '';
     if (key && dist(h, t) < 40) this.say(t, namedLine(st.def, key, { who: h.name }));
     this.game.sys(why, h.id);
     return false;
@@ -349,7 +365,7 @@ export class NamedManager {
     const def = st.def, F = FLOORS[floor] || FLOORS[1];
     const [view] = this.mgr.start([def.cls], [def.name], { lvl: st.lvl, behaviour: F.beh.farm, follow: '', skill: NAMED_SKILL, join: { named: def.id, f2: 1, f3: 1 } });
     const e = this.mgr.bots.find(x => x.bid === view.bid);
-    e.named = def.id; e.b.noBoss = true;
+    e.named = def.id; e.b.noBoss = true; e.allow = st.allow; e.creator = null; // (one of a kind: nobody's creation)
     st.e = e; st.pid = 0; st.hostT = null; st.fresh = true;
   }
   despawn(st) {
@@ -414,13 +430,97 @@ export class NamedManager {
     }
     this.flushChars();
   }
-  setEnabled(id, on) {
-    const st = this.chars.get(id);
+  // Out of the world (on = false) or back (true): the admin page, or a permitted player (despawnBy / respawnBy). Out,
+  // they remember the human party they were in; back, they rejoin it (rejoinHost; then their group wakes at once), else
+  // they roam as before. `by`: the player who brought them back (wakes them too).
+  setEnabled(id, on, by = null) {
+    const st = this.chars.get(id), g = this.game;
     if (!st) return false;
+    if (!on && st.enabled) { const p = this.playerOf(st), host = p && this.hostOf(p); st.rejoin = host ? { party: p.party, host: host.id } : 0; }
+    const was = st.enabled;
     st.enabled = !!on; st.dirty = true;
     if (!on) this.despawn(st);
+    else if (!was) {
+      const host = this.rejoinHost(st.rejoin);
+      st.rejoin = 0;
+      if (host) this.wake(st, host.h, 'rejoin', { party: host.party });
+      else if (isHuman(by)) this.wake(st, by, 'respawn');
+    }
     this.flushChars();
     return true;
+  }
+  // The party a respawned Named goes back to: the one they left, if it's still there with a human, room and no other
+  // Named; or (a party of two breaks up when they leave) the human they were with, still online and in no party: a new
+  // party with them. Else none: they roam. -> { h, party (0: make one with h) } | null
+  rejoinHost(r) {
+    const g = this.game;
+    if (!r) return null;
+    const party = g.parties.get(r.party), h = g.players.get(r.host);
+    if (party) {
+      const host = party.members.map(i => g.players.get(i)).find(isHuman);
+      return host && party.members.length < PARTY_MAX && !this.namedInParty(party).length ? { h: host, party: party.id } : null;
+    }
+    return isHuman(h) && !h.party ? { h, party: 0 } : null;
+  }
+  // A player despawns / respawns one (the Players list): '' or why not.
+  despawnBy(h, id) {
+    const st = this.chars.get(id);
+    if (!st) return 'Nobody by that name.';
+    const why = this.ctlBlock(h, st, 'botDespawn');
+    if (why) return why;
+    if (!st.enabled) return `${st.def.name} is already out of the world.`;
+    const p = this.playerOf(st);
+    const other = this.othersParty(h, p);
+    if (other) return other;
+    if (p && inBossRoom(p) && this.game.activeFightOf?.(p)) return `${st.def.name} is in a boss fight.`;
+    this.setEnabled(id, false);
+    return '';
+  }
+  // Despawning one who is in someone else's party: only access 3+ (no griefing another player's party). '' = fine.
+  othersParty(h, p) {
+    const host = p && this.hostOf(p);
+    if (!host || host.id === h.id || (h.party && p.party === h.party) || accessOf(h) >= ACCESS.overrideBots) return '';
+    return `${p.name} is in ${host.name}'s party.`;
+  }
+  respawnBy(h, id) {
+    const st = this.chars.get(id);
+    if (!st) return 'Nobody by that name.';
+    const why = this.ctlBlock(h, st, 'botRespawn');
+    if (why) return why;
+    if (st.enabled) return `${st.def.name} is already in the world (each of the Named is one of a kind).`;
+    if (this.parked) return 'A show is being filmed: try again after it.';
+    this.setEnabled(id, true, h);
+    return '';
+  }
+  // admin: who may control one besides access 3+ (names or character ids; [] = anyone at the action's minimum)
+  setAllow(id, list) {
+    const st = this.chars.get(id);
+    if (!st) return null;
+    st.allow = cleanAllow(list); st.dirty = true;
+    if (st.e) st.e.allow = st.allow;
+    this.flushChars();
+    return st.allow;
+  }
+  // The Players list's Bots section: each Named, where they are, and what this player may do (ok / why).
+  botRows(h) {
+    const g = this.game;
+    return [...this.chars.values()].map(st => {
+      const def = st.def, p = this.playerOf(st), mine = !!(p && h.party && p.party === h.party);
+      const party = p && g.partyOf(p), host = p && this.hostOf(p);
+      const state = !st.enabled ? 'despawned' : p ? 'online' : this.parked ? 'parked' : this.resting(st) ? 'resting' : 'away';
+      const where = state === 'despawned' ? 'Out of the world (despawned)' : state === 'resting' ? 'Resting at home' : state === 'parked' ? 'Resting (a show is on)' : state === 'away' ? 'Away'
+        : mine ? 'In your party' : host ? `In ${host.name}'s party` : party ? `With ${GROUPS[def.group].name}` : 'Roaming';
+      const c = why => (why ? { ok: false, why } : { ok: true });
+      const ib = mine ? 'Already in your party.' : this.inviteBlock(h, st);
+      const kb = !mine ? 'Not in your party.' : this.ctlBlock(h, st, 'botKick');
+      const db = !st.enabled ? 'Already out of the world.' : this.ctlBlock(h, st, 'botDespawn') || this.othersParty(h, p) || (p && inBossRoom(p) && g.activeFightOf?.(p) ? `${def.name} is in a boss fight.` : '');
+      const rb = st.enabled ? 'Already in the world.' : this.ctlBlock(h, st, 'botRespawn') || (this.parked ? 'A show is being filmed.' : '');
+      return {
+        id: def.id, name: def.name, cls: def.cls, role: def.role, group: def.group, gname: GROUPS[def.group].name, color: lookColor(def),
+        lvl: p?.lvl ?? st.lvl, dead: !!p?.dead, state, where, myParty: mine, lead: host?.name || '',
+        ctl: { invite: c(ib), kick: c(kb), despawn: c(db), respawn: c(rb) },
+      };
+    });
   }
   // admin: set a character's friendship (online: the live record too)
   async setFriendship(charId, id, pts) {
@@ -439,7 +539,7 @@ export class NamedManager {
       on: true, always: this.always, parked: this.parked, humans: this.humans().length, levels: this.levels.list, max: NAMED_MAX,
       chars: [...this.chars.values()].map(st => {
         const p = this.playerOf(st), host = p && this.hostOf(p);
-        return { id: st.def.id, name: st.def.name, cls: st.def.cls, style: p?.style || st.def.style, talents: p ? Object.values(p.talents || {}).reduce((s, r) => s + (r | 0), 0) : 0, group: st.def.group, gname: GROUPS[st.def.group].name, lvl: p?.lvl ?? st.lvl, off: st.off, enabled: st.enabled, online: !!p, area: p ? areaName(p.x, p.z) : '', doing: p ? (p.dead ? 'Down' : st.e.b.goal || '') : '', host: host?.name || '', plan: this.plans[st.def.group].mode };
+        return { id: st.def.id, name: st.def.name, cls: st.def.cls, style: p?.style || st.def.style, talents: p ? Object.values(p.talents || {}).reduce((s, r) => s + (r | 0), 0) : 0, group: st.def.group, gname: GROUPS[st.def.group].name, lvl: p?.lvl ?? st.lvl, off: st.off, enabled: st.enabled, online: !!p, area: p ? areaName(p.x, p.z) : '', doing: p ? (p.dead ? 'Down' : st.e.b.goal || '') : '', host: host?.name || '', plan: this.plans[st.def.group].mode, allow: st.allow };
       }),
     };
   }
@@ -558,6 +658,10 @@ export class NamedManager {
         const why = this.call(h, q.id);
         this.send(h, { op: 'call', ...(why ? { error: why } : { msg: `${name} is on the way.` }), list: this.listFor(h) });
       } else if (q.kind === 'out') this.quests?.join?.(h, st, q.out);
+      else if (q.kind === 'rejoin') { // respawned: back into the party they left (rejoinHost: still there, or with the same human)
+        const party = q.party && this.game.parties.get(q.party);
+        if (party ? party.members.includes(h.id) && party.members.length < PARTY_MAX && !this.namedInParty(party).some(o => o !== p) : !h.party) this.mgr.joinParty(p, h); // (withHost says hello)
+      }
     }
   }
 

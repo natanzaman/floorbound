@@ -2,7 +2,8 @@
 // Hold V (or press the Bots button under the party frames): the cursor is freed, point at an order and release V, or
 // click it. A quick tap of V keeps the wheel open until you click an order or press Esc / V again.
 // Settings → Toggle the bot wheel (toggleMode()): a press opens it, the next press gives the order pointed at (else closes).
-// The chips under the wheel pick who gets the order: all your bots, or one of them.
+// The chips under the wheel pick who gets the order: all your bots, or one of them. Your free bots (made by you, not
+// in your party: roster `cid`) get a chip too; their orders always go by name (the server checks who may give them).
 import { BOT_COMMANDS } from '/shared/bots/social.js';
 
 // keyLabel(action): the key the hint names (input.label: follows the player's bindings). toggleMode(): the hint's wording.
@@ -14,17 +15,21 @@ export function initBotWheel({ send, state, players, log, keyLabel = () => 'V', 
 
   const partyBots = () => (state.party ? [...players.values()].filter(p => p.party === state.party && p.id !== state.myId && state.roster.get(p.id)?.bot) : [])
     .map(p => ({ id: p.id, name: state.roster.get(p.id).name, dead: p.dead }));
+  const freeBots = () => [...state.roster.entries()].filter(([id, r]) => r.bot && r.cid === state.myId && !(state.party && players.get(id)?.party === state.party))
+    .map(([id, r]) => ({ id, name: r.name, dead: !!players.get(id)?.dead, free: true }));
+  const allBots = () => [...partyBots(), ...freeBots()];
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   function render() {
-    const bots = partyBots();
+    const bots = allBots(), party = partyBots();
     if (who && !bots.some(b => b.name === who)) who = '';
+    if (!who && !party.length && bots.length) who = bots[0].name; // only free bots: one at a time
     const cmds = Object.entries(BOT_COMMANDS).filter(([, c]) => c.wheel !== false), n = cmds.length, R = 158;
     el.innerHTML = `<div class="ring">${cmds.map(([id, c], i) => {
       const a = (i / n) * Math.PI * 2 - Math.PI / 2;
       return `<button class="wcmd" data-c="${id}" style="left:${Math.round(Math.cos(a) * R)}px;top:${Math.round(Math.sin(a) * R)}px" ${bots.length ? '' : 'disabled'}><span class="ic">${c.icon}</span>${esc(c.label)}</button>`;
     }).join('')}<div class="hub"><b>${bots.length ? 'ORDERS' : 'NO BOTS'}</b><small>${bots.length ? esc(who || 'all bots') : 'in your party'}</small></div></div>
-    <div class="who">${bots.length ? `<button data-w="" class="${who ? '' : 'on'}">All bots</button>${bots.map(b => `<button data-w="${esc(b.name)}" class="${who === b.name ? 'on' : ''} ${b.dead ? 'dead' : ''}">${esc(b.name)}</button>`).join('')}<button data-c="leave" class="dismiss" title="Ask ${esc(who || 'every bot')} to leave the party">Dismiss</button>`
+    <div class="who">${bots.length ? `${party.length ? `<button data-w="" class="${who ? '' : 'on'}">All bots</button>` : ''}${bots.map(b => `<button data-w="${esc(b.name)}" class="${who === b.name ? 'on' : ''} ${b.dead ? 'dead' : ''}" ${b.free ? 'title="Your bot, roaming outside your party"' : ''}>${esc(b.name)}${b.free ? ' ↗' : ''}</button>`).join('')}${party.length ? `<button data-c="leave" class="dismiss" title="Ask ${esc(who || 'every bot')} to leave the party (it roams on its own)">Leave party</button>` : ''}`
       : `<span>Invite bots from the Players panel (${esc(keyLabel('players'))}), or ask an admin for a party of bots.</span>`}</div>
     <div class="hint">${toggleMode() ? 'Press' : 'Release'} ${esc(keyLabel('botWheel'))}${toggleMode() ? ' again' : ''} on an order or click it · Esc to close · or type /b stay, /b Lyra: heal (/b help)</div>`;
   }
@@ -37,7 +42,7 @@ export function initBotWheel({ send, state, players, log, keyLabel = () => 'V', 
   const isOpen = () => !el.classList.contains('hidden');
   function issue(cmd) {
     const c = BOT_COMMANDS[cmd];
-    if (!c || !partyBots().length) return;
+    if (!c || !allBots().length) return;
     send({ type: 'botcmd', cmd, ...(who ? { name: who } : {}) });
     log(`→ ${who || 'Bots'}: ${c.label}`, 'party');
     close();
@@ -104,7 +109,7 @@ export function initBotWheel({ send, state, players, log, keyLabel = () => 'V', 
       if (!key) return;
       key = false; close();
     },
-    hasBots: () => partyBots().length > 0,
+    hasBots: () => allBots().length > 0,
     point(x, y) { // a stick (x right, y down): highlight the order it points at; release the button (toggle: press it again) to give it (K1b)
       if (!isOpen() || Math.hypot(x, y) < 0.5) return;
       const btns = [...el.querySelectorAll('.wcmd:not([disabled])')], want = Math.atan2(y, x);

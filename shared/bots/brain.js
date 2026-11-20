@@ -253,13 +253,15 @@ function onChat(b, e) {
   if (e.ch === 'p' && e.party === b.party) b.partyChatT = b.t; // someone just spoke: don't talk over them
 }
 
+// e.free: the server checked the sender may order this free bot by name; e.no: party bots the sender may not order.
 function onBotCmd(b, e) {
   const mine = !!e.party && e.party === b.party;
   const named = !!e.name && e.name.toLowerCase() === b.name.toLowerCase();
   if (e.name && !named) return;
-  if (!mine && !(e.adm && named)) return;
+  if (e.no?.includes(b.id)) return;
+  if (!mine && !((e.adm || e.free) && named)) return;
   if (e.tgt) b.locks.set(e.by, e.tgt);
-  const group = named ? [b.id] : partyBots(b);
+  const group = named ? [b.id] : partyBots(b).filter(id => !e.no?.includes(id));
   command(b, { k: e.cmd, by: e.by, byName: e.byName, tgt: e.tgt || b.locks.get(e.by) || 0, group, all: group.length > 1, adm: !mine });
 }
 

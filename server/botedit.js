@@ -1,6 +1,7 @@
 // Live bot editing for the admin page (installed on BotManager in server/botmanager.js):
-//   edit(bid, { name, lvl, skill, behaviour, follow })  rename (unique), level (stats recomputed), capability 1-5,
-//                                                       behaviour / follow target; only ever this one bot (own brain)
+//   edit(bid, { name, lvl, skill, behaviour, follow, allow })  rename (unique), level (stats recomputed), capability 1-5,
+//                                                       behaviour / follow target, allow list ({ id, name } entries, resolved
+//                                                       by the caller); only ever this one bot (own brain)
 //   action(bid, act, body)                              teleport (to: player | town | gate | camp2 | gate2 | camp3 | gate3), kill (stays down until revived),
 //                                                       revive, heal, respawn (as another class: same bot id, settings, party,
 //                                                       owner link and orders), command ({ cmd, name }: a party order from the
@@ -15,6 +16,7 @@ import { floorOf } from '../shared/floor2.js';
 import { BEHAVIOURS } from './botmanager.js';
 import { BOT_COMMANDS } from '../shared/bots/social.js';
 import { isLook } from '../shared/looks.js';
+import { cleanAllow } from '../shared/accesslevels.js';
 
 export class BotError extends Error { constructor(msg, code = 400) { super(msg); this.name = 'BotError'; this.code = code; } }
 const int = (v, lo, hi, what) => {
@@ -59,6 +61,8 @@ export const BotEditMethods = {
       if (rec && lvl !== p.lvl) throw new BotError(`${p.name} was added by ${rec.ownerName} and levels with them.`);
     }
     if (body.skill !== undefined) skill = int(body.skill, 1, 5, 'Capability');
+    let allow; // who may control it besides its creator: resolved entries (server/accounts.js resolveAllow); [] = open
+    if (body.allow !== undefined) allow = cleanAllow(body.allow);
     if (body.behaviour !== undefined && !BEHAVIOURS[body.behaviour]) throw new BotError('Unknown behaviour.');
     behaviour = body.behaviour ?? e.behaviour;
     let target = null, moving = false;
@@ -75,6 +79,7 @@ export const BotEditMethods = {
     if (name !== undefined && name !== p.name) { p.name = name; e.b.name = name; g.rosterDirty = true; }
     if (lvl !== undefined) this.setLevel(e, lvl);
     if (skill !== undefined) e.b.setSkill(skill);
+    if (allow !== undefined) { if (e.named && g.named) g.named.setAllow(e.named, allow); else e.allow = allow; } // (a Named's list is theirs: kept across respawns and restarts)
     if (follow !== undefined && (behaviour !== e.behaviour || follow !== e.follow)) { // this bot only: one brain per bot
       e.b.configure({ behaviour, follow });
       e.behaviour = behaviour; e.follow = follow; e.partied = true;
@@ -128,7 +133,7 @@ export const BotEditMethods = {
     this.bots = this.bots.filter(x => x !== e);
     const view = this.start([cls], [p.name], keep, e.team, e.bid)[0];
     const ne = this.bots.find(x => x.bid === e.bid && x.b !== b);
-    Object.assign(ne, { partied: e.partied, carry, look: e.look }); // (its look goes back on in upkeep)
+    Object.assign(ne, { partied: e.partied, carry, look: e.look, creator: e.creator, allow: e.allow }); // (its look goes back on in upkeep)
     this.bots.splice(this.bots.indexOf(ne), 1); this.bots.splice(Math.max(0, i), 0, ne); // same place in the list
     return view;
   },

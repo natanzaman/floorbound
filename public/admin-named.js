@@ -43,10 +43,11 @@ function render(s, err) {
   if (!s.on) { $('nm-line').textContent = 'Turned off on this server (NAMED_ENABLED=0).'; $('nm-chars').innerHTML = ''; return; }
   if (document.activeElement !== $('nm-off')) $('nm-off').value = s.chars[0]?.off ?? 2;
   $('nm-line').textContent = `${s.humans} player${s.humans === 1 ? '' : 's'} online${s.humans ? '' : ' (the Named only appear while someone is)'}${s.parked ? ' · parked: a director show is running' : ''} · they follow the top characters' levels: ${s.levels.length ? s.levels.join(', ') : 'nobody yet'}`;
-  $('nm-chars').innerHTML = `<table style="width:100%"><thead><tr><th>Name</th><th>Group</th><th>Level</th><th>Where</th><th>Doing</th><th></th></tr></thead><tbody>${s.chars.map(c => `<tr>
+  if (!el.querySelector('#nm-chars input:focus')) $('nm-chars').innerHTML = `<table style="width:100%"><thead><tr><th>Name</th><th>Group</th><th>Level</th><th>Where</th><th>Doing</th><th title="Who may invite, kick, despawn or respawn them (besides access 3+): names or character ids, comma-separated; empty = anyone">Allow</th><th></th></tr></thead><tbody>${s.chars.map(c => `<tr>
     <td><b>${esc(c.name)}</b> <span class="dim">${esc(c.cls)}</span></td><td class="dim">${esc(c.gname)}</td><td>${c.lvl}</td>
     <td>${c.online ? esc(c.area) : `<span class="faint">${c.enabled ? 'not in the world' : 'sent home'}</span>`}</td>
     <td>${c.online ? `${esc(c.doing)}${c.host ? ` <span class="pill team">with ${esc(c.host)}</span>` : ''}` : ''}</td>
+    <td><input data-allow="${c.id}" value="${esc((c.allow || []).map(a => a.name).join(', '))}" placeholder="anyone" style="width:120px" spellcheck="false" /></td>
     <td style="text-align:right">${c.enabled ? `<button class="small danger" data-nm="${c.id}/despawn">Despawn</button>` : `<button class="small" data-nm="${c.id}/spawn">Spawn</button>`}</td></tr>`).join('')}</tbody></table>`;
   $('nm-fr-n').textContent = `(${s.friends.length} character${s.friends.length === 1 ? '' : 's'})`;
   if (!el.querySelector('#nm-friends input:focus')) {
@@ -82,6 +83,7 @@ document.addEventListener('click', ev => {
   if (b.id === 'nm-off-reset' && confirm('Work the Named\'s level out afresh? They may come back lower.')) return act('/offset', { off, reset: true });
 });
 document.addEventListener('change', ev => {
+  if (ev.target?.dataset?.allow) return act(`/${ev.target.dataset.allow}/allow`, { allow: ev.target.value });
   const key = ev.target?.dataset?.fr;
   if (!key) return;
   const [charId, id] = key.split(':');

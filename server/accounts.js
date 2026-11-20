@@ -12,6 +12,7 @@ const q = (...a) => db.q(...a);
 import { CLASSES, MAX_LEVEL } from '../shared/data.js';
 import { isNamedName } from '../shared/named.js';
 import { cleanControls, CONTROLS_MAX_BYTES } from '../shared/controls.js';
+import { cleanAllow, ALLOW_CREATOR, ALLOW_MAX } from '../shared/accesslevels.js';
 
 export const MAX_CHARACTERS = 8;
 const DISCORD_ID = process.env.DISCORD_CLIENT_ID;
@@ -31,9 +32,36 @@ export async function accountFromToken(token) {
   const rows = await q(
     `UPDATE sessions s SET last_used = now() FROM accounts a
      WHERE s.token_hash = $1 AND a.id = s.account_id
-     RETURNING a.id, a.discord_id, a.discord_name, a.discord_avatar`, [sha(token)]);
+     RETURNING a.id, a.discord_id, a.discord_name, a.discord_avatar, a.access_level`, [sha(token)]);
   return rows[0] || null;
 }
+
+// An allow list from what someone typed or sent (shared/accesslevels.js): names or character ids (a comma / newline
+// list, or an array; entries already resolved, { id, name }, are checked again), and 'creator' / 'me' for "Just me".
+// Every name or id must be a saved character (case-insensitive name): an unknown one throws, so a typo never opens a
+// bot up or names a stranger. Returns cleanAllow entries { id, name }. Without accounts only "Just me" (or empty) works.
+export async function resolveAllow(input) {
+  const raw = (Array.isArray(input) ? input : String(input ?? '').split(/[,\n]/)).map(v => (typeof v === 'object' && v ? String(v.id ?? v.name ?? '') : String(v ?? '')).trim()).filter(Boolean);
+  if (raw.length > ALLOW_MAX) throw new AllowError(`At most ${ALLOW_MAX} names.`);
+  const out = [], want = [];
+  for (const v of raw) {
+    if (/^(creator|me|just me|just the creator)$/i.test(v)) out.push({ id: ALLOW_CREATOR });
+    else want.push(v);
+  }
+  if (want.length) {
+    if (!db.enabled) throw new AllowError('Allow lists name saved characters, and this server has no accounts.');
+    const ids = want.filter(v => /^#?\d{1,10}$/.test(v)).map(v => Number(v.replace('#', '')));
+    const names = want.filter(v => !/^#?\d{1,10}$/.test(v)).map(v => v.toLowerCase());
+    const rows = await q('SELECT id, name FROM characters WHERE id = ANY($1::int[]) OR lower(name) = ANY($2::text[])', [ids, names]);
+    for (const v of want) {
+      const n = v.replace('#', ''), r = rows.find(r => (/^\d+$/.test(n) && r.id === Number(n)) || r.name.toLowerCase() === v.toLowerCase());
+      if (!r) throw new AllowError(`No saved character called "${v.slice(0, 20)}".`);
+      out.push({ id: String(r.id), name: r.name });
+    }
+  }
+  return cleanAllow(out);
+}
+export class AllowError extends Error { constructor(msg) { super(msg); this.code = 400; } }
 
 export async function listCharacters(accountId) {
   return q('SELECT id, name, cls, lvl, xp FROM characters WHERE account_id = $1 ORDER BY created_at', [accountId]);

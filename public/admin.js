@@ -11,6 +11,7 @@ import { STYLES, CLASS_STYLES, styleLine } from '/shared/styles.js';
 import { TREES, pointsAt, spentOf } from '/shared/talents.js';
 import { AFFIXES, AFFIX_IDS, SETS, affixText, isTeamAffix, setSlots, bestSetFor } from '/shared/loot.js';
 import { LOOKS } from '/shared/looks.js';
+import { ACCESS_MIN, ACCESS_MAX, ACCESS_ADMIN, ACCESS } from '/shared/accesslevels.js'; // account access levels (permissions)
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -260,6 +261,7 @@ function buildCard(b) {
       <select data-k="respawn" title="Re-add as another class: same bot, name, level, capability, behaviour, party and orders"></select>
       <select data-k="order" title="Give this bot an order, as its party would"></select>
       <select data-k="look" title="Wear a look (shared/looks.js): preview a Named character's appearance on this bot"></select>
+      <input data-k="allow" placeholder="Allow: anyone" title="Who may command, invite or kick this bot besides its creator and access ${ACCESS.overrideBots}+: saved characters' names (or ids), comma-separated; 'me' for just the creator; empty: anyone. Enter to save." style="width:140px" spellcheck="false" />
       <span class="grow"></span>
       <button class="small danger icon" data-a="remove" title="Remove this bot"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>`;
@@ -307,6 +309,9 @@ function buildCard(b) {
     const [cmd, name] = v.split(':');
     post('command', { cmd, name }, `${nm.dataset.v}: ${ORDERS[cmd]}${name ? ` (${name})` : ''}.`);
   };
+  const al = q('allow');
+  al.onkeydown = e => { if (e.key === 'Enter') al.blur(); if (e.key === 'Escape') { al.value = al.dataset.v; al.blur(); } };
+  al.onblur = () => { if (al.value.trim() !== al.dataset.v) patch({ allow: al.value }, r => (r.bot.allow.length ? `${r.bot.name}: allowed ${r.bot.allow.map(a => a.name).join(', ')}.` : `${r.bot.name}: open to anyone.`)); };
   q('look').onchange = () => {
     const v = q('look').value;
     post('look', { look: v }, v ? `${nm.dataset.v} wears ${LOOKS[v].name || v}.` : `${nm.dataset.v}: look removed.`);
@@ -329,7 +334,9 @@ function updateCard(el, b, force = false) {
   q('skilltag').innerHTML = skillTag(b.skill);
   if (q('seg').dataset.v !== String(b.skill)) { q('seg').innerHTML = segHtml(b.skill); q('seg').dataset.v = b.skill; }
   q('where').textContent = b.status === 'online' ? `${b.floor ? `F${b.floor} · ` : ''}${b.area}` : b.status;
-  q('party').innerHTML = (b.party.length ? `<span class="sep">·</span> party: ${esc(b.party.join(', '))}` : '') + (b.owner ? ` <span class="sep">·</span> added by ${esc(b.owner)} (levels with them)` : '');
+  q('party').innerHTML = (b.party.length ? `<span class="sep">·</span> party: ${esc(b.party.join(', '))}` : '') + (b.owner ? ` <span class="sep">·</span> added by ${esc(b.owner)} (levels with them)` : b.creator ? ` <span class="sep">·</span> made by ${esc(b.creator)}` : '');
+  const al = q('allow'), av = (b.allow || []).map(a => a.name).join(', ');
+  if (!focused(al) && al.dataset.v !== av) { al.value = av; al.dataset.v = av; }
   const pct = b.maxHp ? Math.round((b.hp / b.maxHp) * 100) : 0;
   q('hpbar').style.width = `${pct}%`;
   el.querySelector('.hp').classList.toggle('low', pct < 35);
@@ -403,7 +410,7 @@ function renderPlayers() {
   const lo = +$('p-lmin').value || 1, hi = +$('p-lmax').value || MAX_LEVEL;
   let rows = pData.players.filter(p => (pStatus === 'all' || (pStatus === 'online') === p.online) && (!c || p.cls === c) && p.lvl >= lo && p.lvl <= hi
     && (!s || p.name.toLowerCase().includes(s) || p.account.toLowerCase().includes(s)));
-  const val = (p, k) => (k === 'online' ? (p.online ? 1 : 0) : k === 'lastSeen' || k === 'created' ? new Date(p[k]).getTime() : k === 'area' ? p.area || '' : k === 'cls' ? clsName(p.cls) : p[k]);
+  const val = (p, k) => (k === 'access' ? (p.admin ? ACCESS_ADMIN : p.access) : k === 'online' ? (p.online ? 1 : 0) : k === 'lastSeen' || k === 'created' ? new Date(p[k]).getTime() : k === 'area' ? p.area || '' : k === 'cls' ? clsName(p.cls) : p[k]);
   rows.sort((a, b) => { const x = val(a, sort.k), y = val(b, sort.k); const r = typeof x === 'string' ? x.localeCompare(y) : x - y; return sort.asc ? r : -r; });
   for (const th of document.querySelectorAll('#tab-players th[data-sort]')) { th.classList.toggle('sorted', th.dataset.sort === sort.k); th.classList.toggle('asc', sort.asc); }
   const on = pData.players.filter(p => p.online).length;
@@ -412,10 +419,16 @@ function renderPlayers() {
     <td><span class="who">${clsIcon(p.cls)}<b>${esc(p.name)}</b></span></td>
     <td><span class="cls-name" style="--cc:${clsColor(p.cls)}">${esc(clsName(p.cls))}</span></td>
     <td><span class="lv">${p.lvl}</span><span class="lvbar"><i style="width:${Math.round((p.lvl / MAX_LEVEL) * 100)}%;background:${clsColor(p.cls)}"></i></span></td>
-    <td>${esc(p.account)}${p.admin ? ' <span class="pill adm">ADMIN</span>' : ''}</td><td>${p.online ? '<span class="pill on">online</span>' : '<span class="pill">offline</span>'}</td>
+    <td>${esc(p.account)}${p.admin ? ' <span class="pill adm">ADMIN</span>' : ''}</td>
+    <td>${p.admin ? `<span class="pill adm" title="Admins count as ${ACCESS_ADMIN}">${ACCESS_ADMIN}</span>` : `<select class="acc" data-acct="${p.accountId}" title="Access level for account #${p.accountId} (all its characters). ${ACCESS.overrideBots}+ controls any bot.">${Array.from({ length: ACCESS_MAX - ACCESS_MIN + 1 }, (_, i) => i + ACCESS_MIN).map(v => `<option value="${v}" ${v === p.access ? 'selected' : ''}>${v}</option>`).join('')}</select>`}</td>
+    <td>${p.online ? '<span class="pill on">online</span>' : '<span class="pill">offline</span>'}</td>
     <td>${p.online ? `F${p.floor} · ${esc(p.area)}${p.party.length ? ` <span class="dim">(party: ${esc(p.party.join(', '))})</span>` : ''}` : '<span class="faint">—</span>'}</td>
-    <td>${p.online ? 'now' : ago(p.lastSeen)}</td><td class="dim">${date(p.created)}</td></tr>`).join('') || '<tr><td colspan="8" class="dim" style="text-align:center;padding:30px">No characters match.</td></tr>';
-  for (const tr of $('p-rows').querySelectorAll('tr[data-id]')) tr.onclick = () => openEditor(+tr.dataset.id);
+    <td>${p.online ? 'now' : ago(p.lastSeen)}</td><td class="dim">${date(p.created)}</td></tr>`).join('') || '<tr><td colspan="9" class="dim" style="text-align:center;padding:30px">No characters match.</td></tr>';
+  for (const tr of $('p-rows').querySelectorAll('tr[data-id]')) tr.onclick = e => { if (!e.target.closest('select.acc')) openEditor(+tr.dataset.id); };
+  for (const sel of $('p-rows').querySelectorAll('select.acc')) sel.onchange = () => { // an account's access level (every character of it)
+    const id = +sel.dataset.acct, level = +sel.value;
+    act(() => api(`/api/admin/accounts/${id}/access`, { method: 'POST', body: { level } }), `Account #${id}: access level ${level}.`).then(r => { if (r) { for (const p of pData.players) if (p.accountId === id) p.access = level; renderPlayers(); } else renderPlayers(); });
+  };
   $('p-extra').innerHTML = `<h2>Not in the list</h2><div class="dim">${pData.anon.length ? `Anonymous (unsaved) players online: ${pData.anon.map(a => `<span style="color:${clsColor(a.cls)}">${esc(a.name)}</span> (Lv ${a.lvl} ${esc(clsName(a.cls))}, ${esc(a.area)})`).join(', ')}.` : 'No anonymous players online.'} ${pData.bots} bot${pData.bots === 1 ? '' : 's'} online (see the Bots tab).</div>`;
 }
 

@@ -1,13 +1,13 @@
-// Player-owned bots ("Bots in game"): the setups, behaviours, capability labels and premade loadouts.
+// Player-made bots ("Bots in game"): the setups, behaviours, capability labels and premade loadouts.
 // Shared by the server (server/playerbots.js applies them) and the client (public/playerbots.js shows them).
 // Everything is derived from CLASSES / BRANCHES, so classes added later appear automatically.
 import { CLASSES, MAX_LEVEL } from './data.js';
 import { MASTERY, BRANCHES } from './mastery.js';
 import { BOT_SKILLS, BOT_SKILL_DEFAULT } from './botskill.js';
 
-export const PLAYER_BOT_MAX = 3; // per player (the server reads PLAYER_BOT_MAX from the environment)
+// No per-player cap (owner decision 2026-11-20): only the server's MAX_BOTS (server/botmanager.js, default 30).
 
-// What an owner can tell a bot to do. `behaviour` / `follow` are the BotManager settings each one maps to:
+// What a creator can tell a bot to do (in their party, or roaming free: 'follow' then walks after them, not in a party). `behaviour` / `follow` are the BotManager settings each one maps to:
 // 'stay' is a follower with no one to follow, so it holds its ground and only fights what comes close.
 export const MODES = {
   follow: { name: 'Follow me', doing: 'Following', behaviour: 'follow', follow: true },

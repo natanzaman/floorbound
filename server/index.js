@@ -24,6 +24,7 @@ import { NamedQuests, makeQuestStore } from './namedquests.js'; // the Named's r
 import { TICK_RATE, inArena } from '../shared/data.js';
 import { floorOf, inArena2 } from '../shared/floor2.js';
 import { inArena3 } from '../shared/floor3.js';
+import { clampAccess } from '../shared/accesslevels.js'; // account access levels (permissions, not character levels)
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 3000;
@@ -129,6 +130,7 @@ function onConnection(ws) {
       }
       const p = game.addPlayer(ws, c.name, c.cls, { charId: c.id, accountId: acct.id, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats, mastery: c.mastery, talents: c.talents });
       admin.isAdmin(acct).then(v => { p.admin = v; }).catch(() => {}); // admins can order any bot (botcmd with a name)
+      p.access = clampAccess(acct.access_level); // access level 1-5 (shared/accesslevels.js; admins count as 5)
       return p;
     }
     if (bots.isBotJoin(msg)) return bots.addBotPlayer(ws, msg); // server-run bot (server/botmanager.js)

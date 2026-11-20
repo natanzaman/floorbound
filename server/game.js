@@ -506,21 +506,43 @@ export class Game {
   // ---------- parties ----------
   partyOf(p) { return p.party ? this.parties.get(p.party) : null; }
 
-  // An order for the bots in the sender's party (the command wheel). Admins can also order any bot by name.
+  // An order for the bots in the sender's party (the command wheel), or by name for one bot: a party member, or a free
+  // bot (not in a party with a human; the Named excepted) the sender may control. Admins can also order any bot by name.
+  // Who may control which bot: game.botControl (server/botmanager.js, shared/accesslevels.js). Party orders skip the
+  // bots the sender may not order (`no`); a free bot's order carries `free`.
   // Bots read it from the snapshot's events (shared/bots/brain.js) and check the party themselves.
   botCommand(p, msg) {
     const cmd = String(msg.cmd || '');
     let name = msg.name ? String(msg.name).slice(0, 16) : '';
     if (!BOT_COMMANDS[cmd]) return false;
-    if (!p.party && !(p.admin && name)) { this.sys('Invite some bots into your party first.', p.id); return false; }
-    if (name && p.party) { // a party member by full name, else by a unique start of it ("/b ly: heal" is Lyra)
-      const lower = name.toLowerCase(), mates = this.partyOf(p).members.filter(id => id !== p.id).map(id => this.players.get(id)).filter(Boolean);
-      const hit = mates.find(o => o.name.toLowerCase() === lower) || (c => (c.length === 1 ? c[0] : null))(mates.filter(o => o.name.toLowerCase().startsWith(lower)));
-      if (hit) name = hit.name;
-      else if (!p.admin) { this.sys(`No bot called "${name}" in your party.`, p.id); return false; }
+    const party = this.partyOf(p), mates = party ? party.members.filter(id => id !== p.id).map(id => this.players.get(id)).filter(Boolean) : [];
+    const block = o => (o?.bot && this.botControl?.(p, o, 'botCommand')) || '';
+    const pick = list => { // by full name, else by a unique start of it ("/b ly: heal" is Lyra)
+      const lower = name.toLowerCase();
+      return list.find(o => o.name.toLowerCase() === lower) || (c => (c.length === 1 ? c[0] : null))(list.filter(o => o.name.toLowerCase().startsWith(lower)));
+    };
+    let free = false, no = null;
+    if (name) {
+      let hit = party ? pick(mates) : null;
+      if (!hit && !p.admin) { hit = pick(this.freeBots(p)); free = !!hit; }
+      if (hit) {
+        const why = block(hit);
+        if (why) { this.sys(why, p.id); return false; }
+        name = hit.name;
+      } else if (!p.admin) { this.sys(`No bot called "${name}" in your party${party ? '' : ', and no free bot by that name'}.`, p.id); return false; }
+    } else if (!party) { this.sys('Invite some bots into your party first, or order one of your free bots by name: /b <name>: <order>.', p.id); return false; }
+    else {
+      const bots = mates.filter(o => o.bot);
+      no = bots.filter(o => block(o)).map(o => o.id);
+      if (no.length && no.length === bots.length) { this.sys(block(bots[0]), p.id); return false; }
     }
-    this.events.push({ t: 'botcmd', by: p.id, byName: p.name, party: p.party || 0, cmd, ...(name ? { name } : {}), tgt: p.target || 0, ...(p.admin ? { adm: 1 } : {}) });
+    this.events.push({ t: 'botcmd', by: p.id, byName: p.name, party: p.party || 0, cmd, ...(name ? { name } : {}), tgt: p.target || 0, ...(p.admin ? { adm: 1 } : {}), ...(free ? { free: 1 } : {}), ...(no?.length ? { no } : {}) });
     return name || true;
+  }
+  // Bots that roam free of any human's party (a party of bots only counts as free), the Named excepted: they keep to their own plans.
+  freeBots(p) {
+    const human = pid => pid && this.parties.get(pid)?.members.some(id => !this.players.get(id)?.bot);
+    return [...this.players.values()].filter(o => o.bot && !o.named && o !== p && !human(o.party));
   }
 
   // A /b chat line (shared/bots/social.js parseBotChat): help, an error, or an order. Never shown as chat.
