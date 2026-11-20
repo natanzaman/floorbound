@@ -1,0 +1,46 @@
+tuneboss: 6 cells x 2 runs, 2 at a time, ports 37480-37481
+  done warden 3p s5: 2/2 kills, 85s (84-85) (189s in)
+  done warden 6p s5: 2/2 kills, 137s (132-141) (294s in)
+  done sovereign 3p s5: 2/2 kills, 141s (119-163) (495s in)
+  done sovereign 6p s5: 2/2 kills, 130s (119-141) (576s in)
+  done colossus 3p s5: 2/2 kills, 103s (97-108) (721s in)
+  done colossus 6p s5: 2/2 kills, 125s (121-128) (846s in)
+
+== warden (per fight; kill time over kills; opening used: share of 0.5s opening slices with a melee hit on the boss, of the opening s per fight)
+party  skill  n  kills  kill time       downs  deaths  melee deaths  dmg melee/rng/heal  opening used       quake              
+3      5      2  2/2    85s (84-85)     0.5    0.0     0.0           83%/0%/17%          41% of 8s (2.5x)   rings cleared 99%  
+6      5      2  2/2    137s (132-141)  1.5    0.5     0.0           55%/37%/8%          36% of 20s (6.0x)  rings cleared 96%  
+  ability (hits/uses per fight)   3p s5           6p s5           
+  swing (warden cleave)           4.0/4.0 (1.00)  5.0/3.5 (1.43)  
+  slam (warden slam)              1.0/7.5 (0.13)  1.0/14.5 (0.07) 
+  quake (warden quake)            0.5/6.0 (0.08)  3.0/10.5 (0.29) 
+  charge (warden charge)          0.5/6.5 (0.08)  1.0/6.5 (0.15)  
+  sweep (warden sweep)            0.5/1.0 (0.50)  0.5/3.0 (0.17)  
+  spin (warden spin)              0.0/3.0 (0.00)  0.0/5.0 (0.00)  
+  rock (rockfall)                 1.0/4.5 (0.22)  0.5/8.0 (0.06)  
+  other hits per fight: thornbind 12.3, hound bite 10.5, meteor 6.0, tether 3.0, spitter thorn 1.8, spread 1.5
+
+== sovereign (per fight; kill time over kills; opening used: share of 0.5s opening slices with a melee hit on the boss, of the opening s per fight)
+party  skill  n  kills  kill time       downs  deaths  melee deaths  dmg melee/rng/heal  opening used       tidal wave              
+3      5      2  2/2    141s (119-163)  3.5    3.0     1.5           85%/0%/15%          56% of 16s (6.0x)  waves rolled 62 hit 26  
+6      5      2  2/2    130s (119-141)  3.5    1.0     0.0           63%/31%/6%          90% of 5s (2.0x)   waves rolled 65 hit 11  
+  ability (hits/uses per fight)   3p s5           6p s5           
+  swing (sovereign trident)       15.0/20.5 (0.73)7.5/13.0 (0.58) 
+  geyser (sovereign geyser)       2.5/19.0 (0.13) 1.5/17.0 (0.09) 
+  wave (tidal wave)               9.0/8.5 (1.06)  5.0/6.0 (0.83)  
+  volley (sovereign orb)          4.5/4.0 (1.13)  0.0/1.5 (0.00)  
+  pools (mire pool)               7.0/9.0 (0.78)  6.0/6.0 (1.00)  
+  deluge (the deluge)             4.5/1.0 (4.50)  1.0/1.0 (1.00)  
+  other hits per fight: drowning pillar 11.8, thrall bite 10.5, meteor 3.5, tether 2.5, spread 2.3
+
+== colossus (per fight; kill time over kills; opening used: share of 0.5s opening slices with a melee hit on the boss, of the opening s per fight)
+party  skill  n  kills  kill time       downs  deaths  melee deaths  dmg melee/rng/heal  opening used       beam / overload                        
+3      5      2  2/2    103s (97-108)   0.0    0.0     0.0           89%/0%/11%          43% of 12s (3.5x)  beam hit 3/6 · overloads stopped 3/4   
+6      5      2  2/2    125s (121-128)  1.0    0.0     0.0           64%/31%/5%          67% of 14s (4.0x)  beam hit 4/27 · overloads stopped 3/3  
+  ability (hits/uses per fight)   3p s5           6p s5           
+  swing (colossus hammerfall)     7.5/10.0 (0.75) 11.5/10.5 (1.10)
+  strike (colossus lightning)     0.0/10.5 (0.00) 0.0/11.0 (0.00) 
+  gust (gale push)                0.0/5.0 (0.00)  0.0/6.5 (0.00)  
+  beam (tempest beam)             1.0/1.0 (1.00)  1.5/2.5 (0.60)  
+  overload (thunderclap)          0.0/4.0 (0.00)  0.0/5.0 (0.00)  
+  other hits per fight: spread 4.8, harpy strike 4.5, fire 1.8, harpy dive 1.3
