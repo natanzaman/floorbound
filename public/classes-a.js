@@ -250,17 +250,17 @@ export function initClassesA(ctx) {
       case 'chop':
         if (e.sty === 'twinaxes') { // two quick crossing hatchet arcs
           anim(e.id, 'twinaxes', e.n);
-          fx.arc(ox, oz, e.f + (e.n % 2 ? 0.3 : -0.3), e.r, 1.0, e.fin ? 0xfdba74 : 0xffedd5);
-          if (e.fin) fx.arc(ox, oz, e.f - 0.3, e.r * 0.9, 1.0, 0xfb923c);
+          fx.arc(ox, oz, e.f + (e.n % 2 ? 0.3 : -0.3), e.r, e.h ?? 1.0, e.fin ? 0xfdba74 : 0xffedd5);
+          if (e.fin) fx.arc(ox, oz, e.f - 0.3, e.r * 0.9, e.h ?? 1.0, 0xfb923c);
           sfx.play('hatchet', at, mine); break;
         }
         if (e.sty === 'warhammer') { // a heavy dull arc and dust; the third blow cracks the ground all around
           anim(e.id, 'warhammer', e.n);
           if (e.fin) { fx.ring(ox, oz, e.r, 0xa16207, 0.55); fx.ring(ox, oz, e.r * 0.55, 0xfde68a, 0.4); fx.sparks(ox, 0.3, oz, 20, 0xa8a29e, 0.3, 8); sfx.play('boom', at, mine * 0.8); if (e.id === me()) shake(0.25); }
-          else { fx.arc(ox, oz, e.f, e.r, 1.2, 0xd6d3d1); fx.sparks(ox + Math.sin(e.f) * e.r * 0.7, 0.4, oz + Math.cos(e.f) * e.r * 0.7, 8, 0xa8a29e, 0.22, 4); }
+          else { fx.arc(ox, oz, e.f, e.r, e.h ?? 1.2, 0xd6d3d1); fx.sparks(ox + Math.sin(e.f) * e.r * 0.7, 0.4, oz + Math.cos(e.f) * e.r * 0.7, 8, 0xa8a29e, 0.22, 4); }
           sfx.play('hammer', at, mine); break;
         }
-        anim(e.id, 'chop', e.n); fx.arc(ox, oz, e.f, e.r, 1.1, e.fin ? 0xfca5a5 : 0xfee2e2); sfx.play('axe', at, mine * (e.fin ? 1.3 : 1)); if (e.fin && e.id === me()) shake(0.08); break;
+        anim(e.id, 'chop', e.n); fx.arc(ox, oz, e.f, e.r, e.h ?? 1.1, e.fin ? 0xfca5a5 : 0xfee2e2); sfx.play('axe', at, mine * (e.fin ? 1.3 : 1)); if (e.fin && e.id === me()) shake(0.08); break;
       case 'cleave': anim(e.id, 'cleave'); fx.arc(ox, oz, e.f, e.r, e.h, e.rage > 60 ? 0xef4444 : e.rage > 25 ? 0xf87171 : 0xfecaca); fx.arc(ox, oz, e.f, e.r * 0.7, e.h, 0xfff1f2); sfx.play('axe', at, mine * 1.3); if (e.id === me()) shake(0.1); break;
       case 'whirl': if (!e.n) anim(e.id, 'whirl'); fx.ring(ox, oz, e.r, 0xf87171, 0.35); fx.arc(ox, oz, e.f + e.n * 2, e.r, Math.PI, 0xfecaca); sfx.play('axe', at, mine); break;
       case 'execute': anim(e.id, 'execute'); fx.arc(ox, oz, e.f, e.r, e.h, 0x7f1d1d); fx.arc(ox, oz, e.f, e.r * 0.8, e.h * 0.6, 0xef4444); sfx.play('axe', at, mine * 1.4); if (e.id === me()) shake(0.15); break;

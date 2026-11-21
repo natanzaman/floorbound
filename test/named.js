@@ -446,7 +446,17 @@ console.log('# review fixes');
   ok(cairn.party === nat.party && g.partyOf(nat).members.length === 6 && g.partyOf(nat).members.filter(id => g.players.get(id)?.named).length === 3, 'Cairn accepts: six, three of them Named');
   tv.invite = pend; g.accept(tv, nat.id);
   ok(tv.party !== nat.party && !tv.invite && g.partyOf(nat).members.length === 6, 'an old invite accepted with the party full: turned away (invite cleared)');
-  for (const h of [bea, cid]) { g.leaveParty(h); g.removePlayer(h); }
+  // accepting counts only the party, not other open invites: 4 in it, invites out to Tovin and Sennet, a human joins
+  g.leaveParty(cairn); g.leaveParty(mb); tick(1);
+  const sn = P('sennet');
+  g.invite(nat, tv.id); g.invite(nat, sn.id);
+  ok(g.partyOf(nat).members.length === 4 && tv.invite?.from === nat.id && sn.invite?.from === nat.id, 'four in the party, invites out to Tovin and Sennet');
+  const dov = human('Dov', 10); g.invite(nat, dov.id); g.accept(dov, nat.id);
+  g.accept(tv, nat.id);
+  ok(tv.party === nat.party && g.partyOf(nat).members.length === 6, 'a human joins (five), Tovin accepts: the last place is his (not refused for Sennet\'s open invite)');
+  g.accept(sn, nat.id);
+  ok(sn.party !== nat.party && !sn.invite && g.partyOf(nat).members.length === 6, 'Sennet accepts after: full, turned away');
+  for (const h of [bea, cid, dov]) { g.leaveParty(h); g.removePlayer(h); }
   g.leaveParty(nat); tick(1);
   // nice-to-have: a failed call doesn't spend the cooldown
   clock.t += RULES.summonCd * 1000 + 1000;

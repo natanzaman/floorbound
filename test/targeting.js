@@ -305,6 +305,11 @@ const fan = k => Array.from({ length: k }, (_, i) => wolf(Math.sin(-0.8 + (1.6 *
   zerk.style = 'warhammer';
   const A = g.atkFov(zerk, 'cleave', { r: 4.2, half: 1.6 });
   assert.ok(Math.abs(A.half - 1.6 * 1.2) < 1e-9 && A.aoe && A.n === 8, 'Warhammer: the Cleave skill sweeps x1.2 wider, still aoe with its own 8');
+  // the chop's swing effect carries the arc it hit with (the client draws e.h)
+  for (const [style, want] of [['warhammer', 1.44], ['twinaxes', 0.9], [null, 1.1]]) {
+    reset(); zerk.style = style; use(zerk, 'chop');
+    assert.equal(ev('fx', e => e.k === 'ca' && e.v === 'chop' && e.id === zerk.id)[0]?.h, want, `${style || 'greataxe'} chop: h ${want}`);
+  }
   zerk.style = null;
   g.removePlayer(guard);
   ok('weapon field of view: mods.fov widens slow arcs and narrows quick ones; Cleave cap and Cone filter unchanged');

@@ -146,9 +146,11 @@ export class NamedManager {
     return party ? party.members.map(id => this.game.players.get(id)).find(isHuman) || null : null;
   }
   // Room in h's party for one more of the Named ('' = room): several may join one party (owner 2026-11-21), never past
-  // PARTY_MAX, counting the other Named who hold h's invite (they could accept at any moment).
-  partyRoom(h, st) {
+  // PARTY_MAX. Inviting or calling also counts the other Named who hold h's invite (they could accept at any moment);
+  // accepting doesn't (that would refuse one with room left; game.joinParty caps the party anyway).
+  partyRoom(h, st, accepting = false) {
     const party = this.game.partyOf(h), size = party?.members.length || 1;
+    if (accepting) return size >= PARTY_MAX ? 'Your party is full.' : '';
     const open = this.online().filter(o => { const q = o !== st && this.playerOf(o); return q && q.invite?.from === h.id && !(party && q.party === party.id); }).length;
     return size + open >= PARTY_MAX ? 'Your party is full.' : '';
   }
@@ -242,7 +244,7 @@ export class NamedManager {
   // Who may control this Named (shared/accesslevels.js: no creator; access 3+, their allow list, else the action's minimum).
   ctlBlock(h, st, action) { return this.mgr.controlBlock?.(h, { creator: null, allow: st.allow, name: st.def.name }, action) || ''; }
   // Why this human can't invite this Named right now ('' = they can).
-  inviteBlock(h, st) {
+  inviteBlock(h, st, accepting = false) { // (accepting: the Named is taking h's invite now)
     const def = st.def, p = this.playerOf(st);
     const ctl = this.ctlBlock(h, st, 'botInvite');
     if (ctl) return ctl;
@@ -251,7 +253,7 @@ export class NamedManager {
     if (p && h.party && p.party === h.party) return `${def.name} is already in your party.`;
     const rec = this.peek(h, def.id) || newFriendship();
     if (!canInvite(def, rec.pts)) return `${def.name} only joins ${art(TIERS[tierAt(def.trust.invite)].name)} (you: ${TIERS[tierIndex(rec.pts)].name}).`;
-    return (p && this.freeBlock(h, st, p)) || this.partyRoom(h, st);
+    return (p && this.freeBlock(h, st, p)) || this.partyRoom(h, st, accepting);
   }
   freeBlock(h, st, p) { // busy rules, the same for an invite and a call
     const def = st.def, host = this.hostOf(p);
@@ -274,11 +276,11 @@ export class NamedManager {
     if (h.dead || h.downed) return 'Wait until you are back on your feet.';
     return (p && this.freeBlock(h, st, p)) || this.partyRoom(h, st);
   }
-  // game.invite(h, a Named): true = let the invite through (the bot accepts it).
-  onInvite(h, t) {
+  // game.invite(h, a Named) and game.accept (accepting): true = let the invite / acceptance through.
+  onInvite(h, t, accepting = false) {
     const st = this.stOf(t);
     if (!st) return true;
-    const why = this.inviteBlock(h, st);
+    const why = this.inviteBlock(h, st, accepting);
     if (!why) return true;
     const rec = this.peek(h, st.def.id) || newFriendship();
     const key = this.ctlBlock(h, st, 'botInvite') ? '' : !canInvite(st.def, rec.pts) ? 'refuse' : /boss fight|party\.$/.test(why) ? 'busy' : '';
@@ -929,7 +931,7 @@ export function installNamed(Game) {
   });
   wrap('accept', function (orig, p, fromId) {
     const N = this.named, from = N && this.players.get(fromId);
-    if (p?.named && isHuman(from) && p.invite?.from === fromId && !N.onInvite(from, p)) { p.invite = null; return; } // (things changed since the invite: the party filled up, they're busy)
+    if (p?.named && isHuman(from) && p.invite?.from === fromId && !N.onInvite(from, p, true)) { p.invite = null; return; } // (things changed since the invite: the party filled up, they're busy)
     const out = orig.call(this, p, fromId);
     if (from?.named && isHuman(p) && p.party && p.party === from.party) N.onAccept(p, from);
     return out;

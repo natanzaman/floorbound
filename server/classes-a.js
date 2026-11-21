@@ -125,10 +125,11 @@ const SKILLS = {
     p.combo = c.t - p.lastBasic < C.combo ? (p.combo + 1) % 3 : 0;
     p.lastBasic = c.t;
     const fin = p.combo === 2, ring = fin && C.fin.ring;
-    g.fxA(p, 'chop', { s: 'chop', n: p.combo, r: ring || C.r, fin: fin ? 1 : 0, sty: g.styleNum(p, 'chop', null) ? p.style : undefined });
+    const A = ring ? null : g.atkFov(p, fin ? 'chopFin' : 'chop', { r: C.r, half: C.half }); // (the style's mods.fov widens / narrows it)
+    g.fxA(p, 'chop', { s: 'chop', n: p.combo, r: ring || C.r, ...(A ? { h: r2(A.half) } : {}), fin: fin ? 1 : 0, sty: g.styleNum(p, 'chop', null) ? p.style : undefined });
     const opts = { heavy: C.heavy ? C.heavy[p.combo] : true, knock: fin ? C.fin.knock : 0.3, frac: fin ? C.fin.frac : C.frac || null };
     if (ring) g.hitCircle(p, p.x, p.z, ring, c.atk * C.mult[p.combo], opts); // Warhammer: the third blow smashes all around
-    else { const A = g.atkFov(p, fin ? 'chopFin' : 'chop', { r: C.r, half: C.half }); g.hitArc(p, A.r, A.half, c.atk * C.mult[p.combo], { ...opts, atk: A }); }
+    else g.hitArc(p, A.r, A.half, c.atk * C.mult[p.combo], { ...opts, atk: A });
     return g.raging(p) ? p.brA.haste : 1; // Bloodrage / Frenzy: faster swings
   },
   cleave(g, p, c) {

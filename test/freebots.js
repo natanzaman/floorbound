@@ -35,6 +35,7 @@ async function until(fn, ms = 5000, what = 'condition') {
 }
 
 // ---------------- in process ----------------
+if (DB) await (await import('../server/db.js')).migrate(); // (the allow-list checks below read characters: on a brand-new database the tables come first)
 {
   const g = new Game();
   g.track = () => {};
