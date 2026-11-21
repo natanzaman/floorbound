@@ -86,9 +86,9 @@ await check('forced swings', async () => {
   return 'the director\'s forced swings (Sovereign trident, Colossus hammerfall) arm the fight table\'s cooldown (cooldownMul)';
 });
 
-// ---- 2. The Colossus's fight health (finding 3: x ~0.72, verified with scripts/tuneboss.js) ----
+// ---- 2. The Colossus's fight health (finding 3: x ~0.80, verified with scripts/tuneboss.js) ----
 await check('colossus hp', async () => {
-  assert.deepEqual([COLOSSUS.hpBase, COLOSSUS.hpPer, COLOSSUS.hpExp, COLOSSUS.hpLvl], [5750, 4550, 1.9, 0.05]);
+  assert.deepEqual([COLOSSUS.hpBase, COLOSSUS.hpPer, COLOSSUS.hpExp, COLOSSUS.hpLvl], [6400, 5050, 1.9, 0.05]);
   assert.equal(MOBS.colossus.hp, 16000, 'the MOBS entry is not the fight health (left alone)');
   const g = quiet(() => new Game());
   process.env.F3_TWIST = 'calm'; quiet(() => g.newTwist3()); delete process.env.F3_TWIST;
@@ -96,9 +96,9 @@ await check('colossus hp', async () => {
   for (const [name, cls, lvl] of party) { const p = quiet(() => g.addPlayer(null, name, cls)); p.lvl = lvl; p.x = F3.arena.x + 2; p.z = F3.arena.z - 4; }
   const c = g.colossus; quiet(() => g.engageColossus(c));
   const weight = party.reduce((s, [, cls]) => s + (COLOSSUS.hpRole[CLASSES[cls].role] ?? 1), 0), over = 30 - MOBS.colossus.level;
-  assert.equal(c.maxHp, Math.round((5750 + 4550 * Math.pow(weight, 1.9)) * (1 + 0.05 * over)), 'engage health = the formula');
+  assert.equal(c.maxHp, Math.round((6400 + 5050 * Math.pow(weight, 1.9)) * (1 + 0.05 * over)), 'engage health = the formula');
   assert.equal(c.hp, c.maxHp);
-  return `the Colossus engages at (5750 + 4550 x weight^1.9) x (1 + 0.05 x levels over): ${c.maxHp} for a 3-player party`;
+  return `the Colossus engages at (6400 + 5050 x weight^1.9) x (1 + 0.05 x levels over): ${c.maxHp} for a 3-player party`;
 });
 
 // ---- 3. Client: opening glows are disposed; a callout once per opening ----
