@@ -202,6 +202,7 @@ export class Game {
       case 'test': // testing aid (TEST_HOOKS=1 only): { hurt: fraction } sets your health, { xp } gives XP, for the bot tests
         if (process.env.TEST_HOOKS && msg.hurt > 0 && msg.hurt <= 1 && !p.dead) p.hp = Math.max(1, Math.round(p.maxHp * msg.hurt));
         if (process.env.TEST_HOOKS && msg.xp > 0) this.giveXp(p, Math.min(1e6, msg.xp | 0)); // { xp }: level up (bot level sync tests)
+        if (process.env.TEST_HOOKS && msg.ward != null) p.testWard = !!msg.ward; // { ward: 1 }: nothing hurts you (input tests: a slow headless run never gets bitten down mid-check)
         return;
       case 'invite': return this.invite(p, msg.id);
       case 'ready': return this.toggleReady(p);
@@ -886,7 +887,7 @@ export class Game {
 
   // peril: a perilous attack (Horn Sweep): only dodge i-frames or a parry avoid it; no damage reduction, jumping doesn't help.
   damagePlayer(p, base, { ground = false, src = '?', peril = false, mob = null } = {}) {
-    if (p.dead || inTown(p.x, p.z)) return;
+    if (p.dead || p.testWard || inTown(p.x, p.z)) return;
     if (this.time < p.iframeUntil) { this.evadeHit(p, src, mob); return; } // may be a perfect dodge
     if (ground && !peril && this.time >= p.airFrom && this.time < p.airUntil) { this.events.push({ t: 'evade', id: p.id, to: p.id, k: 'jump' }); return; }
     if (!peril && this.purified(p, src, base)) return; // Miracle (server/mastery.js)

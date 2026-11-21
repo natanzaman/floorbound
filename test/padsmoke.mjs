@@ -103,6 +103,7 @@ try {
   await p.click('.cls[data-id=guardian]');
   await p.click('#enter');
   await p.waitForFunction(() => window.__fb?.state?.joined && window.__fb.state.inv, null, { timeout: 60000 });
+  await p.evaluate(() => window.__fb.send({ type: 'test', ward: 1 })); // (TEST_HOOKS: the wolves can't bite us down mid-check on a slow run)
 
   // ---- helpers: presses are held for N polled frames (__fb.input.frames) ----
   const S = (fn, arg) => p.evaluate(fn, arg);

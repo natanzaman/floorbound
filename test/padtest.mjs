@@ -47,6 +47,7 @@ async function mainFlow(tag, port, rebind) {
   }
   // ---- join by pad ----
   await P.join(`Pad${tag[0]}`, 'guardian');
+  await P.ward();
   assert.equal(await S(() => window.__fb.state.cls), 'guardian');
   ok(tag, 'joined by pad (character select: d-pad, A picks the class, A on Enter)');
 
@@ -148,7 +149,8 @@ async function mainFlow(tag, port, rebind) {
   await frames(3); m = await mark(); // (the swing in flight is over; now watch 1.5 s of real time AND of frames: nothing new may be sent)
   const f0 = await S(() => window.__fb.input.frames);
   await sleep(1500); // (no state to poll: the point is that nothing happens during this window)
-  assert.ok(await S(f => window.__fb.input.frames - f, f0) >= 5, 'frames kept polling during the window');
+  // ... and at least 5 polled frames (a loaded box draws fewer than that in 1.5 s: the window waits for them)
+  await P.p.waitForFunction(f => window.__fb.input.frames - f >= 5, f0, { timeout: 20000 }).catch(() => { throw new Error('frames kept polling during the window'); });
   assert.equal((await sent(m, 'skill')).length, 0, 'releasing stops (no skill message in 1.5 s)');
   ok(tag, 'attack while held, stops on release');
   C('attack', 'hold sends basic attacks, release stops');
@@ -173,9 +175,10 @@ async function mainFlow(tag, port, rebind) {
   C('dodge', 'sends dodge; the roll starts, then ends');
   await P.p.waitForFunction(() => performance.now() > window.__fb.state.jumpReady, null, { timeout: 5000 });
   await P.watch('air', 's.air');
+  const tJump = await S(() => performance.now());
   m = await mark(); await tap('jump', 1);
   assert.equal((await sent(m, 'jump')).length, 1, 'jump sent');
-  assert.ok(await S(() => window.__fb.state.jumpPress > performance.now() - 1500), 'jump state: jumpPress set');
+  assert.ok(await S(t => window.__fb.state.jumpPress >= t, tJump), 'jump state: jumpPress set'); // (set by this press: a slow run can take seconds between)
   // (the airborne state read here is the client's own state.air: the server has no jump state a client can read)
   await P.p.waitForFunction(() => window.__w_air === true, null, { timeout: 5000 }).catch(() => { throw new Error('jump: never airborne (state.air never set)'); });
   C('jump', 'sends jump; client goes airborne (state.air)');
@@ -298,6 +301,7 @@ async function chords(port) {
   const { S, frames, mark, sent, press, ready, keepAlive, clearTarget } = P;
   const C = (action, how) => cov.mark(tag, action, how);
   await P.join('Chords', 'guardian');
+  await P.ward();
   try {
     await P.addBots(['swordsman', 'cleric'], 'stay', 3);
     assert.ok(await S(() => !!window.__fb.state.party), 'in a party with bots');

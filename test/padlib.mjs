@@ -54,7 +54,13 @@ export async function openPad(browser, base, { onError } = {}) {
   P.sent = (m, type) => S(([m, t]) => window.__sent.slice(m).filter(o => o.type === t), [m, type]);
   P.btn = (name, down, value = 1) => S(([i, d, v]) => { const b = window.__pad.pad.buttons[i]; b.pressed = d; b.value = d ? v : 0; }, [BTN[name], down, value]);
   P.axes = a => S(a => { window.__pad.pad.axes = a; }, a);
-  P.press = async (names, k = 2) => { for (const nm of names) await P.btn(nm, true); await P.frames(k); for (const nm of [...names].reverse()) await P.btn(nm, false); await P.frames(2); };
+  // One button: pressed and released in the page, held for exactly k polled frames (from the script, the round trips could
+  // hold it past the d-pad's 400 ms repeat delay on a loaded box, and a menu step would move twice).
+  P.press = async (names, k = 2) => {
+    if (names.length === 1) await S(([i, k]) => new Promise(res => { const b = window.__pad.pad.buttons[i], f0 = window.__fb.input.frames; b.pressed = true; b.value = 1; const f = () => { if (window.__fb.input.frames >= f0 + k) { b.pressed = false; b.value = 0; res(); } else requestAnimationFrame(f); }; requestAnimationFrame(f); }), [BTN[names[0]], k]);
+    else { for (const nm of names) await P.btn(nm, true); await P.frames(k); for (const nm of [...names].reverse()) await P.btn(nm, false); }
+    await P.frames(2);
+  };
   // watch: a page-side frame loop that records whether state-expression `expr` (a function of the game state) was ever true
   // within 8 s, so a short-lived state (a roll, a jump) can't fall between the script's polls. saw(k) reads it.
   P.watch = (k, expr) => S(([k, src]) => { const f = new Function('s', `return (${src})`); window[`__w_${k}`] = false; const t0 = performance.now(); const loop = () => { if (f(window.__fb.state)) window[`__w_${k}`] = true; if (performance.now() - t0 < 8000) requestAnimationFrame(loop); }; loop(); }, [k, expr]);
@@ -63,12 +69,28 @@ export async function openPad(browser, base, { onError } = {}) {
   P.isOpen = id => S(id => window.__fb.panels.isOpen(id), id);
   P.visible = id => S(id => { const el = document.getElementById(id); return !!el && !el.classList.contains('hidden'); }, id);
   P.keepAlive = () => S(() => window.__fb.send({ type: 'test', hurt: 1 })); // (wolves bite: top up between checks)
+  P.ward = () => S(() => window.__fb.send({ type: 'test', ward: 1 })); // (TEST_HOOKS: nothing hurts us, so a slow run never gets bitten down mid-check)
   P.ready = slot => p.waitForFunction(s => performance.now() > window.__fb.state.ready[s] + 50, slot, { timeout: 60000 });
   P.clearTarget = () => S(() => { window.__fb.state.lock = 0; window.__fb.state.focus = 0; });
   P.st = () => S(() => { const s = window.__fb.state; return { x: s.x, z: s.z, yaw: s.yaw, pitch: s.pitch, hp: s.hp, maxHp: s.maxHp, lock: s.lock, moveDir: s.moveDir, dead: s.dead }; });
   P.goTo = async (key, dir = 'Down', max = 30) => { // d-pad until the focus is on key
     for (let i = 0; i < max; i++) { if ((await P.cur()).key === key) return; await P.press([dir], 1); }
     assert.equal((await P.cur()).key, key, `reached ${key} with ${dir}`);
+  };
+  // d-pad toward an element on screen (by where it is from the focused one) until the focus is on it: a grid such as the
+  // class cards, whatever the starting focus and however many cards a row holds
+  P.seek = async (sel, key, max = 16) => {
+    for (let i = 0; i < max; i++) {
+      if ((await P.cur()).key === key) return;
+      const dir = await S(sel => {
+        const a = document.querySelector('.nav-focus')?.getBoundingClientRect(), b = document.querySelector(sel).getBoundingClientRect();
+        if (!a) return 'Down';
+        const dx = (b.left + b.right - a.left - a.right) / 2, dy = (b.top + b.bottom - a.top - a.bottom) / 2;
+        return Math.abs(dy) > Math.abs(dx) * 0.5 && Math.abs(dy) > 4 ? (dy > 0 ? 'Down' : 'Up') : dx > 0 ? 'Right' : 'Left';
+      }, sel);
+      await P.press([dir], 1);
+    }
+    assert.equal((await P.cur()).key, key, `reached ${key}`);
   };
   // the pad as the game has it set up: which button(s) an action uses (a chord is ['LB', 'X'])
   P.keys = action => S(a => (window.__fb.input.bindings('pad')[a]?.[0] || '').split('+').filter(Boolean), action);
@@ -85,8 +107,7 @@ export async function openPad(browser, base, { onError } = {}) {
     await P.plugIn();
     assert.equal((await P.cur()).layer, 'login', 'character select is driven by the pad');
     await S(n => { document.getElementById('name').value = n; }, name);
-    await P.press(['Down']);
-    await P.goTo(`BUTTON?id=${cls}`, 'Right', 8).catch(() => P.goTo(`BUTTON?id=${cls}`, 'Left', 8));
+    await P.seek(`.cls[data-id=${cls}]`, `BUTTON?id=${cls}`);
     await P.press(['A']);
     assert.ok(await S(c => document.querySelector(`.cls[data-id=${c}]`).classList.contains('sel'), cls), `A picks ${cls}`);
     await P.goTo('#enter');

@@ -25,10 +25,11 @@ Plans: `docs/briefs/bots-access.md`, `docs/briefs/waypoint.md`, `docs/briefs/tar
 - **Eye checks:** the colour-blind telegraph palettes; UI-scale caps for the Hall, Smith and skill-point windows; the opening glow and callout.
 - **Controller:** the controller picture on the Controls screen is mouse-only; Smith, Hall and Players stay mouse-only.
 
-## Small follow-ups
-- `test/keys.mjs` classic-camera check (around line 285) sometimes times out at `ready(0)`; it fails on older code too. `padsmoke.mjs` / `padtest.mjs` are load-sensitive: run them alone.
-- Controls sync: if a rebind in browser A is closed within 800 ms, then B edits, then A comes back, A's older copy wins (needs a server timestamp).
-- `shared/floor3.js` forced hammerfall (director/testing only) and `server/staging.js` still read `def.atkCd`, not the J3 tables.
+## Small follow-ups (done 2026-11-21)
+- Flaky browser tests: on slow runs the test player was bitten down by wolves mid-check, so `keys.mjs`, `padsmoke.mjs` and `padtest.mjs` sections 1-3 now send `{ type: 'test', ward: 1 }` (TEST_HOOKS: nothing hurts you). A pad press is held for exactly k polled frames inside the page (no d-pad repeat overshoot), joining by pad walks to the class card by where it is (`P.seek`), the V tap is retried when a long frame makes it look like a hold, and the jump and "frames kept polling" checks no longer assume a frame rate. With 6 runs at once: keys 6/6 (3/6 before), padsmoke 3/3, padtest sections 1-3 3/3 (0/3 before). Sections 4-5 (the Warden fight, the real revive) are real-time: still run them alone.
+- Controls sync: newest change wins. Each change carries when it was made on the server's clock (`accounts.settings_at`); an older one that arrives late gets 409 and takes the newer copy.
+- Forced boss swings (the Floor 3 hammerfall, staging's trident) use the fight table through `forceSwing` (server/openings.js): the cd with rage, the wind-up and the swing mark.
+- `test/bots.js` retired.
 
 ## Still open from earlier
 - **F7** film work (Episode 1 tuning, Episode 2/3 cue sheets). Paused by the owner.

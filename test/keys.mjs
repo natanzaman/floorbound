@@ -42,6 +42,7 @@ try {
   await p.click('.cls[data-id=guardian]'); // Guardian: has guard (R) and Cover (C) too
   await p.click('#enter');
   await p.waitForFunction(() => window.__fb?.state?.joined && window.__fb.state.inv, null, { timeout: 60000 });
+  await p.evaluate(() => window.__fb.send({ type: 'test', ward: 1 })); // (TEST_HOOKS: the wolves can't bite us down mid-check on a slow run)
 
   // ---- helpers ----
   const frames = k => p.evaluate(k => new Promise(r => { let i = 0; const f = () => (++i >= k ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), k);
@@ -52,7 +53,10 @@ try {
   const menuOpen = () => visible('gamemenu');
   const tap = async (code, k = 2) => { await p.keyboard.down(code); await frames(k); await p.keyboard.up(code); await frames(2); };
   const lastLog = () => S(() => document.getElementById('log').lastElementChild?.textContent || '');
-  const ready = slot => p.waitForFunction(s => performance.now() > window.__fb.state.ready[s] + 50, slot, { timeout: 20000 });
+  const ready = slot => p.waitForFunction(s => performance.now() > window.__fb.state.ready[s] + 50, slot, { timeout: 20000 }).catch(async e => {
+    const d = await S(s => { const st = window.__fb.state, now = performance.now(); return { now: Math.round(now), ready: st.ready.map(r => Math.round(r - now)), lastPress: st.lastPress.map(r => Math.round(now - r)), skills: window.__sent.slice(-400).filter(o => o.type === 'skill').length, hp: st.hp, dead: st.dead, frames: window.__fb.input.frames, menu: !document.getElementById('gamemenu').classList.contains('hidden') }; }, slot).catch(x => x.message);
+    throw new Error(`ready(${slot}) timed out: ${JSON.stringify(d)}`);
+  });
   const fakeMouse = (type, init) => S(([type, init]) => dispatchEvent(new MouseEvent(type, { bubbles: true, ...init })), [type, init]);
   const keepAlive = () => S(() => window.__fb.send({ type: 'test', hurt: 1 })); // (wolves bite: top up between checks)
   const clearTarget = () => S(() => { window.__fb.state.lock = 0; window.__fb.state.focus = 0; });
@@ -204,8 +208,15 @@ try {
   assert.ok(await visible('botwheel'), 'holding V opens the wheel');
   await sleep(450); await p.keyboard.up('KeyV'); await frames(2);
   assert.ok(!(await visible('botwheel')), 'releasing a held V on nothing closes it');
-  await p.keyboard.down('KeyV'); await p.keyboard.up('KeyV'); await frames(2);
-  assert.ok(await visible('botwheel'), 'a quick tap keeps it open');
+  { // (a tap is under 350 ms as the page sees it; on a loaded box a long frame can land between the down and the up: tap again)
+    await S(() => { if (window.__vgap) return; window.__vgap = { d: 0, gap: 0 }; addEventListener('keydown', e => { if (e.code === 'KeyV' && !e.repeat) window.__vgap.d = performance.now(); }, true); addEventListener('keyup', e => { if (e.code === 'KeyV') window.__vgap.gap = performance.now() - window.__vgap.d; }, true); });
+    for (let i = 0; ; i++) {
+      await p.keyboard.down('KeyV'); await p.keyboard.up('KeyV'); await frames(2);
+      const gap = await S(() => window.__vgap.gap);
+      if (gap < 300 || i >= 4) { assert.ok(await visible('botwheel'), `a quick tap keeps it open (down to up ${Math.round(gap)} ms)`); break; }
+      if (await visible('botwheel')) await tap('Escape'); // (that one counted as a hold: start over)
+    }
+  }
   await tap('KeyV');
   assert.ok(!(await visible('botwheel')), 'V again closes it');
   let mw = await mark();
