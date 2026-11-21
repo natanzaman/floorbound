@@ -117,7 +117,11 @@ CORVIN Breaks the Warden.
 
 PELL runs in and drives his spear home: the Last Attack `[F4 slow motion]`. The Warden falls.
 
-JUNO throws her arms up in a Cheer, then lowers them. PELL walks to where BRAM fell and kneels. He picks up **Bram's Buckle** `[F3 keepsake item]`.
+JUNO throws her arms up in a Cheer, then lowers them.
+
+CUT TO: the Town of Beginnings, empty. The old well in the square. **A bright light emits from the well**: it starts to glow, and keeps glowing. The way up is open `[F4 wide; the well wakes]`.
+
+CUT BACK TO: the arena. PELL walks to where BRAM fell and kneels. He picks up **Bram's Buckle** `[F3 keepsake item]`.
 
 **PELL:** He told me to stay behind him.
 
@@ -143,7 +147,7 @@ Then, far above, **a bell**. Once, deep, long. Every player in the tower stops a
 
 **PELL:** Floor two. I'll take the front.
 
-They walk to the waystone `[F4 wide, crane up]`.
+They walk to the well, glowing now: the way up `[F4 wide, crane up]`.
 
 Title card: **FLOOR 1 CLEARED** / *ninety-nine bells to go* `[F4]`. FADE OUT.
 

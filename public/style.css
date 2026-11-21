@@ -182,6 +182,9 @@ input { font: inherit; }
   text-shadow: 0 0 18px rgba(250,204,21,.7), 0 3px 8px #000; transition: opacity .15s, transform .15s; white-space: nowrap; }
 #callout small { display: block; font-size: 38%; letter-spacing: .04em; font-weight: 700; color: #fff; margin-top: 2px; }
 #callout.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+/* the well waking (public/wellwake.js): a clean picture for its short shot; the banner (the Tower Bell) stays, the line sits low */
+body.well-shot #hud > :not(#banner):not(#callout), body.well-shot #labels, body.well-shot #crosshair { visibility: hidden !important; }
+body.well-shot #callout { top: 72%; white-space: normal; }
 
 #sound-btn { right: 110px; }
 .touch #sound-btn { right: 190px; }

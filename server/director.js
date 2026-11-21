@@ -647,6 +647,7 @@ const VERBS_RUN = {
   letterbox(c) { this.game.cine('letterbox', { on: c.on !== false }); },
   clean(c) { this.game.cine('clean', { on: c.on !== false }); },
   light(c) { this.game.cine('light', { light: c.to }); },
+  wake(c) { this.game.cine('wake', { on: c.on !== false }); },
   bell(c) { this.game.ringBell(c.floor ?? 1, { auto: false }); },
   mvp(c) { if (!this.game.showMvp({ secs: c.secs })) this.log('! mvp: no boss fight has ended yet.'); },
 };

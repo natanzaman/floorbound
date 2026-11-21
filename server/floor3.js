@@ -8,7 +8,7 @@ import {
   F3, F3_SPAWNS, GATE3, STAIRWAY3, COLOSSUS, RAM, HARPY, ACOLYTE, SENTINEL, F3_TWISTS, F3_TWIST_IDS, FLOOR_NAMES,
   inArena3, inCamp3, inGateZone3, onFloor3,
 } from '../shared/floor3.js';
-import { floorUnlocked, floorOf, nearWaypoint } from '../shared/floor2.js';
+import { floorUnlocked, floorOf, nearAwakeWaypoint } from '../shared/floor2.js';
 import { lastAttackItem3, rollRarity, SLOTS } from '../shared/items.js';
 import { rollGear } from '../shared/loot.js'; // drops and the Stormforged set: data in shared/loot.js (LOOT)
 import { AREA_COLLIDERS } from '../shared/arenas.js'; // the Undercroft's pillars and walls (multi-area fights, server/arenas.js)
@@ -623,7 +623,7 @@ export const F3Methods = {
     for (const id of ids) {
       const p = this.players.get(id);
       if (!p) continue;
-      if (!floorUnlocked(p.stats, 3)) this.sys('Floor 3 — The Gale Spires is open to you. Step into the Stairway (F), or use a waypoint (the town fountain or a camp fire).', p.id);
+      if (!floorUnlocked(p.stats, 3)) this.sys('Floor 3 — The Gale Spires is open to you. Step into the Stairway (F), or use a waypoint (the town well or a camp fire).', p.id);
       p.stats.floor3 = 1; p.dirty = true; this.invChanged(p);
     }
     this.portal3 = { x: STAIRWAY3.x, z: STAIRWAY3.z, until: this.time + STAIRWAY3.secs };
@@ -763,7 +763,7 @@ export function installFloor3(Game) {
     f = f | 0;
     const t = this.time, atStair3 = this.portal3 && t < this.portal3.until && Math.hypot(p.x - this.portal3.x, p.z - this.portal3.z) < STAIRWAY3.use;
     if (f !== 3 || p.dead) return warp.call(this, p, f);
-    const ws = nearWaypoint(p.x, p.z, 0.5);
+    const ws = nearAwakeWaypoint(p.stats, p.x, p.z, 0.5);
     if (!ws && !atStair3) return;
     if (!floorUnlocked(p.stats, 3)) return this.sys('Floor 3 is sealed. Help defeat the Drowned Sovereign to open it.', p.id);
     if (!atStair3 && floorOf(p.x) === 3) return this.sys('You are already on Floor 3.', p.id);

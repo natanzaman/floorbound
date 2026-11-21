@@ -18,7 +18,7 @@ const take = (g, op) => { const e = g.events.filter(x => x.t === 'cine' && (!op 
   const p = g.addPlayer(null, 'Bram', 'guardian');
   const m = g.addMob('wolf', 0, 70);
   g.events = [];
-  assert.deepEqual(g.cineState(), { shot: null, light: null, letterbox: false, clean: false, black: false, title: null });
+  assert.deepEqual(g.cineState(), { shot: null, light: null, letterbox: false, clean: false, black: false, title: null, wake: false });
   ok('fresh state is the normal picture');
 
   for (const shot of SHOTS) assert.equal(g.cine('shot', { shot, target: { pid: p.id }, secs: 2 }), true);
@@ -68,6 +68,9 @@ const take = (g, op) => { const e = g.events.filter(x => x.t === 'cine' && (!op 
   g.cine('light', { to: 'eclipse' }); assert.equal(g.cineState().light, 'eclipse');
   g.cine('light', { light: null }); assert.equal(g.cineState().light, null);
   ok('letterbox, clean, light and fade are kept (light also as a plain string or `to`)');
+  g.cine('wake', { on: true }); assert.equal(g.cineState().wake, true);
+  assert.deepEqual(take(g, 'wake')[0], { t: 'cine', op: 'wake', on: true });
+  ok('wake (the film view\'s sleeping well lights up) is kept');
 
   take(g);
   g.time = 100;
@@ -84,7 +87,7 @@ const take = (g, op) => { const e = g.events.filter(x => x.t === 'cine' && (!op 
 
   g.cine('letterbox', { on: true }); g.cine('shot', { shot: 'wide', target: { x: 0, z: 0 } });
   g.cine('reset');
-  assert.deepEqual(g.cineState(), { shot: null, light: null, letterbox: false, clean: false, black: false, title: null });
+  assert.deepEqual(g.cineState(), { shot: null, light: null, letterbox: false, clean: false, black: false, title: null, wake: false });
   assert.equal(take(g, 'reset').length, 1);
   ok('reset puts the picture back to normal');
 }
@@ -122,7 +125,7 @@ const take = (g, op) => { const e = g.events.filter(x => x.t === 'cine' && (!op 
   assert.ok(cm, 'spectator got a cine message');
   const types = sp.msgs.map(m => m.type);
   assert.ok(types.indexOf('welcome') < types.indexOf('cine'));
-  assert.deepEqual(cm.state, { shot: { shot: 'orbit', target: { x: -9, z: 3 }, secs: 2 }, light: 'eclipse', letterbox: true, clean: false, black: false, title: null });
+  assert.deepEqual(cm.state, { shot: { shot: 'orbit', target: { x: -9, z: 3 }, secs: 2 }, light: 'eclipse', letterbox: true, clean: false, black: false, title: null, wake: false });
   ok('a spectator joining gets the current shot, light and letterbox');
 
   game.cine('title', { text: 'DAY 41', secs: 3 });

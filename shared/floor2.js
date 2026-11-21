@@ -45,13 +45,19 @@ export function areaName2(x, z) {
 // character has unlocked. r: the centrepiece's collision radius (its obstacle: the fountain in data.js, the campfire
 // below, the brazier in floor3.js); use: how close you need to stand (past r + the player's 0.5 m). Floor 1's 4.4 stops
 // short of the Merchant's reach (shared/items.js MERCHANT at 9, 3, r 4 + 1), which wins the interact key there.
+// wakes: the waypoint is dormant (just scenery: no glow, label or warp) until the character has that floor (or a higher one) unlocked
+// (floorUnlocked below, the same check the warp and the bots use). woke: the line shown when it wakes for you
+// (public/wellwake.js: a short camera shot of it lighting up). Floor 1's well wakes with your first Warden kill.
 export const WAYPOINTS = [
-  { floor: 1, x: 0, z: 0, r: 3, use: 4.4, kind: 'fountain', name: 'Town of Beginnings' }, // (WORLD.town's centre)
+  { floor: 1, x: 0, z: 0, r: 3, use: 4.4, kind: 'fountain', name: 'Town of Beginnings', wakes: 2, woke: ['THE WELL AWAKENS', 'A bright light emits from the well.'] }, // (WORLD.town's centre; the owner calls it the well)
   { floor: 2, x: F2.camp.x, z: F2.camp.z, r: 1.3, use: 3.2, kind: 'campfire', name: 'Mirelight Camp' },
   WAYPOINT3, // Floor 3: Windbreak Camp's brazier
 ];
-// pad: extra reach (the server allows a little for lag).
+// pad: extra reach (the server allows a little for lag). nearWaypoint is only where you stand; nearAwakeWaypoint also
+// needs it awake for that character (stats: p.stats on the server, state.inv.life on the client).
 export const nearWaypoint = (x, z, pad = 0) => WAYPOINTS.find(w => Math.hypot(x - w.x, z - w.z) < w.use + pad);
+export const waypointAwake = (w, stats) => !!w && (!w.wakes || WAYPOINTS.some(o => o.floor >= w.wakes && floorUnlocked(stats, o.floor))); // (that floor or any above it)
+export const nearAwakeWaypoint = (stats, x, z, pad = 0) => { const w = nearWaypoint(x, z, pad); return waypointAwake(w, stats) ? w : undefined; };
 // Old names (the separate waystone crystals were removed 2026-11-20): kept so older callers still work.
 export const WAYSTONES = WAYPOINTS;
 export const nearWaystone = nearWaypoint;

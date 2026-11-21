@@ -5,14 +5,15 @@
 //   shot      { shot, target, from, secs }  target/from: { pid } | { mid } | { x, z } (or [x, z]); secs: move time, 0 = cut
 //   slowmo    { secs, scale }               title { text, sub, secs }   fade { to: 'black' | 'in', secs }
 //   letterbox { on }   clean { on }   light { light: 'eclipse' | 'day' | null }   reset (everything back to normal)
+//   wake      { on }   the film view's sleeping waypoints (Floor 1's well) light up, or go back to sleep (public/wellwake.js)
 export const SHOTS = ['close_up', 'medium', 'wide', 'over_shoulder', 'follow', 'orbit', 'crane', 'pov', 'eyes', 'free']; // pov / eyes: a character's own view (F8)
-export const CINE_OPS = ['shot', 'slowmo', 'title', 'fade', 'letterbox', 'clean', 'light', 'reset'];
+export const CINE_OPS = ['shot', 'slowmo', 'title', 'fade', 'letterbox', 'clean', 'light', 'wake', 'reset'];
 const LIGHTS = ['eclipse', 'day'];
 
 const num = (v, def, lo, hi) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : def; };
 const r2 = v => Math.round(v * 100) / 100;
 const flag = v => v === undefined || v === null ? true : !(v === false || v === 'off' || v === 0 || v === 'false');
-const fresh = () => ({ shot: null, light: null, letterbox: false, clean: false, black: false, title: null });
+const fresh = () => ({ shot: null, light: null, letterbox: false, clean: false, black: false, title: null, wake: false });
 
 const methods = {
   // A shot target as the client wants it: { pid } a player, { mid } a mob, { x, z } a point. The director resolves
@@ -66,6 +67,7 @@ const methods = {
       }
       case 'letterbox': S.letterbox = flag(data.on); ev = { on: S.letterbox }; break;
       case 'clean': S.clean = flag(data.on); ev = { on: S.clean }; break;
+      case 'wake': S.wake = flag(data.on); ev = { on: S.wake }; break;
       case 'light': {
         const v = data.light ?? data.to ?? data.set ?? data.k ?? data.mode ?? null;
         S.light = LIGHTS.includes(v) ? v : null;
@@ -84,7 +86,7 @@ const methods = {
     if (S.title && this.time >= S.title.until) S.title = null;
     const shot = S.shot ? (({ at, ...s }) => s)(S.shot) : null;
     const title = S.title ? { text: S.title.text, ...(S.title.sub ? { sub: S.title.sub } : {}), secs: r2(S.title.until - this.time) } : null;
-    return { shot, light: S.light, letterbox: S.letterbox, clean: S.clean, black: S.black, title };
+    return { shot, light: S.light, letterbox: S.letterbox, clean: S.clean, black: S.black, title, wake: !!S.wake };
   },
 };
 

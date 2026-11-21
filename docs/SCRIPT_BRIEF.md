@@ -38,7 +38,7 @@ Keep it **in the spirit of SAO with original characters, names and places**. The
 | `town_square` | the plaza north of the fountain |
 | `fountain` | around the town fountain (actors stand in a ring) |
 | `merchant`, `smith`, `skill_shrine`, `hall_of_clearers` | in front of each (actors stand in a row facing it) |
-| `waypoint` | the town fountain, which is the town's waypoint (a ring, like `fountain`; `waystone` is its old name and still works) |
+| `well`, `waypoint` | the town fountain (the story calls it the well), which is the town's waypoint once Floor 1 falls (a ring, like `fountain`; `waystone` is its old name and still works) |
 | `north_road` | the road out of town to the fields |
 | `raid_gate` | before the Warden's raid gate (inside its ready zone) |
 | `arena_edge`, `arena_center` | the Warden's arena: just inside, facing the centre; the centre |
@@ -62,7 +62,7 @@ A target can also be an **actor id** (walk to them, face them), **`warden`**, **
 - **Body:** speech bubbles above heads (`say`); emotes (`cheer`, `block`, `cast`, `hit`, `die`); poses (`kneel`, `sit`, `bow`).
 - **Die:** a scripted death stays down (no respawn) until revived. During a show nobody else dies: actors never drop below 10% health unless a cue kills them.
 - **Staging:** force a boss move now, reserve a boss's Last Attack for one actor, set the Warden's twist (or none), spawn a labelled mob, give a keepsake item (no stats, can't be sold or dropped).
-- **Picture:** camera shots, slow motion, title cards, fades, letterbox, a clean feed (no HUD), day/Eclipse light.
+- **Picture:** camera shots, slow motion, title cards, fades, letterbox, a clean feed (no HUD), day/Eclipse light, the town's well waking.
 
 ## Constraints that make it actable
 - **Few words per line.** Bubbles hold 2–5 s (1.6 s + 0.07 s per character), so aim for about 12 words or fewer.
@@ -144,6 +144,7 @@ scenes:
 | | `fade` | `to*` (`in`, `black`), `secs` | |
 | | `letterbox`, `clean` | `on` (default true) | clean = no HUD (nameplates, bars and bubbles stay) |
 | | `light` | `to*` (`day`, `eclipse`) | (or per scene: `light:`) |
+| | `wake` | `on` (default true) | the film view's well wakes: its waypoint glow fades up from nothing (`on: false` or a stop puts it back to sleep). Until then it's dark, as it is for a player before their first Warden kill |
 | World | `bell` | `floor` (default 1) | the Tower Bell |
 | Team | `mvp` | `secs` (how long it stays up; default 25) | shows the last boss fight's post-fight MVP card to everyone, the film view included (a show gets no card otherwise) |
 

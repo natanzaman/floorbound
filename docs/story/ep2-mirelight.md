@@ -22,7 +22,7 @@ Lanterns over black water. TAMSIN sits by the tents `[F5 sit]`. PELL stands at t
 
 **CORVIN:** Sunken Gate's past the Drowned Wood. Two days, if we level.
 
-SABLE and DAX walk in from the waystone. SABLE's twin axes are on her back; DAX's drum on his arm.
+SABLE and DAX step out of the glow at the camp fire (the camp's waypoint: they came up through the well). SABLE's twin axes are on her back; DAX's drum on his arm.
 
 **SABLE:** You're the ones who rang the bell.
 
