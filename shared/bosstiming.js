@@ -78,11 +78,12 @@ export const BOSS_TIMING = {
       vines: { table: 'RESCUE', name: 'Thornbind', wind: 1.4, hits: 3, max: 14, tick: 0.5, dot: 0.018, hold: 1.5, reach: 2.6, leash: 3.6, shape: 'trap', avoid: AVOID(['none']), posture: 0, after: idle() },
     },
     // combos: a slam and a Quake Ring, then it stands exposed; later a charge or the spin leads in. J3 part 3 (scripts/
-    // tuneboss.js): openings 3-3.5 s (were 2.5-3), close-range moves 1.5 s apart (were 1)
+    // tuneboss.js): openings 3-3.5 s (were 2.5-3), close-range moves 1.5 s apart (were 1). 2026-11-21: the Horn Sweep
+    // also ends a combo in phases 2 and 3 (slam or charge, then the Sweep): on its own timer it fired ~2.5 times a fight
     phases: [
       phase(['cleave', 'slam', 'quake', 'sweep'], 16, 11, { steps: ['slam', 'quake'], gaps: [0.4], pause: 3.5 }),
-      phase(['cleave', 'slam', 'quake', 'sweep', 'hounds', 'charge'], 15, 7, { steps: ['slam', 'quake'], gaps: [0.4], pause: 3.5 }, { steps: ['charge', 'slam'], gaps: [0.3], pause: 3 }),
-      phase(['cleave', 'slam', 'quake', 'sweep', 'hounds', 'charge', 'spin', 'rock'], 13, 6, { steps: ['spin', 'slam', 'quake'], gaps: [0.3, 0.4], pause: 3.5 }, { steps: ['charge', 'spin'], gaps: [0.3], pause: 3 }),
+      phase(['cleave', 'slam', 'quake', 'sweep', 'hounds', 'charge'], 15, 7, { steps: ['slam', 'quake'], gaps: [0.4], pause: 3.5 }, { steps: ['charge', 'slam'], gaps: [0.3], pause: 3 }, { steps: ['slam', 'sweep'], gaps: [0.5], pause: 3, w: 2 }),
+      phase(['cleave', 'slam', 'quake', 'sweep', 'hounds', 'charge', 'spin', 'rock'], 13, 6, { steps: ['spin', 'slam', 'quake'], gaps: [0.3, 0.4], pause: 3.5 }, { steps: ['charge', 'spin'], gaps: [0.3], pause: 3 }, { steps: ['charge', 'sweep'], gaps: [0.4], pause: 3.5, w: 2 }),
     ],
     close: { gap: 1.5, moves: ['cleave', 'spin', 'sweep'], hold: true },
     team: { every: [26, 22, 18], first: 16, moves: [['meteor', 'vines', 'spread'], ['meteor', 'vines', 'spread', 'tether'], ['meteor', 'vines', 'spread', 'tether']] },

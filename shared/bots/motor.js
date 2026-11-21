@@ -82,6 +82,11 @@ export function waveDodge(b) {
   const eta = waveEta(b, now);
   if (eta > 0.22 || eta < -0.08 || b.roll || b.dodgeCd > 0) return false;
   const w = b.waves.find(w => { const r = (now - w.start) * w.sp; return r - w.w <= d2(b.x, b.z, w.x, w.z); });
+  // Hugging the boss, the roll into it goes nowhere (its body is in the way), so the i-frames alone must outlast the
+  // whole band passing: roll later then. (Rolled at 0.22 s, the band's back edge caught us just after the i-frames:
+  // Riptide's second wall, right behind the first, hit the melee this way.)
+  const boss = b.mobs?.find(m => m.def?.boss), room = d2(b.x, b.z, w.x, w.z) - (boss?.def.radius ?? 2.5) - 0.4;
+  if (room < 2.5 && eta > Math.max(0.1, DODGE.iframes - (2 * w.w) / w.sp - 0.05)) return false;
   roll(b, Math.atan2(w.x - b.x, w.z - b.z));
   return true;
 }

@@ -19,9 +19,8 @@ Plans: `docs/briefs/bots-access.md`, `docs/briefs/waypoint.md`, `docs/briefs/tar
   (light aim assist); Cleave doesn't cover spins, slams or chords; no per-player cap on free bots.
 
 ## Owner calls waiting (nothing is blocked on them)
-- **Melee share on bosses:** the J3 timing tables did not raise it. Options: a bigger `OPENING.dmg`, or bots that use openings more.
-- **Colossus length:** fight HP is now x0.72 (`hpBase` 5750, `hpPer` 4550 in `shared/floor3.js`): about 105–125 s at bot skill 5. x0.80 (6400 / 5050) if it should run longer.
-- **Riptide twist** wipes 6-bot parties on the Sovereign (older than J3). **Horn Sweep** is rare.
+- **Boss rebalance, 2026-11-21 (`claude/project-thread-7n6amu`, owner rule: only if harder and cleaner):** the Horn Sweep now also ends a weighted combo in Warden phases 2 and 3 (slam or charge, then the Sweep): ~2.5 → ~3.7 per fight, Warden 95 s / 0 deaths → 120 s / 1 death (6 bots, skill 5). Colossus fight HP x0.80 (6400 / 5050). Riptide: bots hugging the Sovereign rolled too early (the boss blocks the roll, the band outlasts the i-frames), so the second wall hit them; bots now roll later there (`shared/bots/motor.js` waveDodge): wave hits 22 → 12 per fight, deaths 10 → 5. The boss itself is unchanged.
+- **Melee share on bosses:** still open. A bigger `OPENING.dmg` was not done: it shortens fights (easier). Bots using openings more is the remaining option (bot-only).
 - **Eye checks:** the colour-blind telegraph palettes; UI-scale caps for the Hall, Smith and skill-point windows; the opening glow and callout.
 - **Controller:** the controller picture on the Controls screen is mouse-only; Smith, Hall and Players stay mouse-only.
 

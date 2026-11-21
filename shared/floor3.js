@@ -132,8 +132,8 @@ export const COLOSSUS = {
   phases: [0.66, 0.33],
   // Health scales with the fighters who walk in (like the Warden): (hpBase + hpPer * weight^hpExp) * (1 + hpLvl * avg
   // levels above 28); weight = the sum of role weights. Damage = atk * (1 + atkPer * fighters above 3). J3 review:
-  // hpBase / hpPer x ~0.72 (was 8000 / 6300) for a ~2 min fight at bot skill 5 (scripts/tuneboss.js).
-  hpBase: 5750, hpPer: 4550, hpExp: 1.9, hpLvl: 0.05, atkPer: 0.12,
+  // hpBase / hpPer x ~0.80 (was 8000 / 6300; x0.72 until 2026-11-21) for a ~2+ min fight at bot skill 5 (scripts/tuneboss.js).
+  hpBase: 6400, hpPer: 5050, hpExp: 1.9, hpLvl: 0.05, atkPer: 0.12,
   hpRole: { Tank: 0.7, Healer: 0.6, Support: 0.8, Damage: 1.2 },
   // Its moves (cleave, strike, gust, overload, harpies, beam), paced and knobbed: shared/bosstiming.js.
   ...movesOf(TIMED.colossus),
