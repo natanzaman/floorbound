@@ -38,7 +38,7 @@ Editing / dismissing a player bot (Bots tab) stays creator / admin, plus access 
   (`bid` or `named`) and `despawn` / `respawn` (`named`); `list` adds `named` rows and per-row `ctl` (invite / kick /
   despawn / respawn: ok or why) and `where` (your party / X's party / roaming / resting / despawned).
 - Named: `despawnBy` / `respawnBy` (permission, never mid boss fight); `setEnabled(false)` remembers a human party,
-  `setEnabled(true)` rejoins it through `wake(..., 'rejoin')` if it still exists with room and no other Named; admin
+  `setEnabled(true)` rejoins it through `wake(..., 'rejoin')` if it still exists with room (other Named in it are fine since 2026-11-21); admin
   `POST /api/admin/named/:id/allow`.
 - Admin: `POST /api/admin/accounts/:id/access { level }` (live players updated), players list shows each account's
   level; `PATCH /api/admin/bots/:bid { allow }`; bot views carry `creator` and `allow`.

@@ -2,7 +2,8 @@
 //   in process  orders by name to a free bot, allow lists (party orders skip the bots you may not order), creator and
 //               access 3+ overrides, plain invites to a bot gated the same way; the Named: list rows, invites with no
 //               tier (INVITE_NEEDS_TIER = false), despawn / respawn by a player (permission, never a copy, back into
-//               the party they left; that party gone: they roam), kick
+//               the party they left; that party gone: they roam), kick; several of the Named in one party (invite
+//               two, one despawns and rejoins beside the other, the party limit: no rejoining a full party)
 //   server      a real server on PORT (default 3741): a bot added without joining the party roams and farms; no
 //               per-player cap; invite it from the list (it joins), kick it (it roams), /b orders to a free bot; the
 //               list's Named rows: invite a Stranger's way, despawn and respawn (rejoins your party)
@@ -34,6 +35,7 @@ async function until(fn, ms = 5000, what = 'condition') {
 }
 
 // ---------------- in process ----------------
+if (DB) await (await import('../server/db.js')).migrate(); // (the allow-list checks below read characters: on a brand-new database the tables come first)
 {
   const g = new Game();
   g.track = () => {};
@@ -163,6 +165,31 @@ async function until(fn, ms = 5000, what = 'condition') {
   g.invite(cy, cairn().id); g.accept(cairn(), cy.id); tick(1);
   pb.namedOp(cy, 'kick', 'cairn', false); tick(1);
   ok(!cairn().party, 'kick him from the party: back on his own');
+
+  // several of the Named in one party (owner 2026-11-21), within the party limit
+  const hal = () => nm.playerOf(nm.chars.get('halvard')), NP = id => nm.playerOf(nm.chars.get(id));
+  const opWhy = (op, id) => { try { pb.namedOp(cy, op, id, false); return ''; } catch (e) { return e.message; } };
+  opWhy('invite', 'cairn'); g.accept(cairn(), cy.id);
+  opWhy('invite', 'halvard'); g.accept(hal(), cy.id); tick(1);
+  const pc = cy.party;
+  ok(pc && cairn().party === pc && hal().party === pc && g.partyOf(cy).members.length === 3, 'Cy invites Cairn and Halvard from the list: both in her party');
+  ok(pb.list(cy).named.find(r => r.id === 'maribel').ctl.invite.ok, 'the list still offers a third');
+  nm.despawnBy(cy, 'halvard'); tick(1);
+  ok(!hal() && g.parties.get(pc) && cairn().party === pc && nm.chars.get('halvard').rejoin?.party === pc, 'Halvard despawns: Cairn and the party stay');
+  nm.respawnBy(cy, 'halvard'); tick(3);
+  ok(hal()?.party === pc && cairn().party === pc && [...g.players.values()].filter(p => p.named === 'halvard').length === 1, 'respawned, Halvard rejoins beside Cairn (one of him only)');
+  opWhy('invite', 'maribel'); g.accept(NP('maribel'), cy.id); opWhy('invite', 'tovin'); g.accept(NP('tovin'), cy.id);
+  g.leaveParty(bob); g.invite(cy, bob.id); g.accept(bob, cy.id); tick(1);
+  ok(g.partyOf(cy)?.members.length === 6 && g.partyOf(cy).members.filter(id => g.players.get(id)?.named).length === 4, 'Cy, Bob and four of the Named: a full party');
+  ok(/full/.test(pb.list(cy).named.find(r => r.id === 'sennet').ctl.invite.why || '') && /full/.test(opWhy('invite', 'sennet')) && NP('sennet').party !== pc, 'a fifth: the party is full (list and invite)');
+  nm.despawnBy(cy, 'tovin'); tick(1);
+  const dee = human('Dee'); g.invite(cy, dee.id); g.accept(dee, cy.id);
+  ok(g.partyOf(cy).members.length === 6 && !NP('tovin'), 'Tovin despawned, Dee takes his place: six again');
+  nm.respawnBy(cy, 'tovin'); tick(3);
+  ok(NP('tovin') && NP('tovin').party !== pc && g.partyOf(cy).members.length === 6, 'respawned into a full party: Tovin doesn\'t rejoin it (back with the Hearthward)');
+  for (const id of [...(g.parties.get(pc)?.members || [])]) g.leaveParty(g.players.get(id));
+  g.removePlayer(dee); tick(2);
+  ok(!cy.party && !cairn().party && ['halvard', 'maribel', 'tovin', 'sennet'].every(id => NP(id).party && NP(id).party === hal().party), 'the party breaks up: Cairn alone, the Hearthward together again');
 
   // kick: never out of a boss fight
   const { inArena } = await import('../shared/data.js');

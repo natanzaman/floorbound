@@ -8,12 +8,15 @@ Plans: `docs/briefs/bots-access.md`, `docs/briefs/waypoint.md`, `docs/briefs/tar
 - **Targeting (ROADMAP K5):** Settings → Controls → Combat: Nearest / Locked or nearest (default) / Cone 120° / Aimed, Cleave on/off, max targets 1–8. Per-attack field of view and target limits in `shared/targeting.js`; skill messages carry the camera yaw (`look`) for the server's Cone filter. Bots send no prefs and play as before.
 - **Bots + access levels:** Bots section in the Players list (invite, kick, Named despawn/respawn, creator allow-list editor), "Join my party" checkbox, free-roaming bots with a creator, no per-player cap (`MAX_BOTS` 30 global), `accounts.access_level` 1–5 (admins 5) with the admin-page picker, rules in `shared/accesslevels.js` (`canControlBot`). Allow lists hold saved character ids only. `INVITE_NEEDS_TIER = false` in `shared/named.js`.
 
-## Owner calls from the 2026-11-20 batch
-- Ranger in Locked or nearest with no lock uses the old crosshair pick (fixed in review); OK?
-- Attack target limits (basic swings 4, finishers 6, Berserker Cleave 8, thrusts 3): right? Should bots use them?
-- Which weapons get a wider/narrower attack field of view (all 1 now)? Should Cleave cover spins/slams/chords?
-- Aimed mode: a lock still turns the camera (light aim assist). Keep?
-- One Named per party still applies; allow several? One player can fill all 30 bot slots with free bots; add a per-player cap on free bots?
+## Owner calls from the 2026-11-20 batch: decided 2026-11-21 (`feat/tweaks`, brief `docs/briefs/tweaks-2026-11-21.md`)
+- **Several of the Named per party: yes.** Any of the five can join one party, up to the normal 6 (open invites count);
+  each is still one of a kind. Despawn / respawn rejoins a party that has other Named in it (room permitting).
+- **Weapon field of view: done as recommended** (`mods.fov` in `shared/styles.js`): Mace & Shield and Halberd x1.15,
+  Warhammer x1.2; Dual Blades and Twin Daggers x0.85, Twin Axes and Rapier x0.9; everything else 1. Values and reasoning:
+  `docs/briefs/targeting.md`.
+- **Unchanged (kept as is):** target limits (basic swings 4, finishers 6, Berserker Cleave 8, thrusts 3); bots keep the
+  old behaviour (no limits); the Ranger crosshair pick in Locked or nearest; Aimed mode's lock still turns the camera
+  (light aim assist); Cleave doesn't cover spins, slams or chords; no per-player cap on free bots.
 
 ## Owner calls waiting (nothing is blocked on them)
 - **Melee share on bosses:** the J3 timing tables did not raise it. Options: a bigger `OPENING.dmg`, or bots that use openings more.

@@ -12,7 +12,7 @@
 //  outreach    at Friend and above a Hero may message a free, online player to come farming or raiding (Accept /
 //              Decline): OUTREACH.cd per Named per player, OUTREACH.gap between any two, none from a Named you turned
 //              down this session, none during a director show, none while you or they are in a boss fight. Accept:
-//              they join your party (the usual busy, one-per-party and party-full rules) and come to you.
+//              they join your party (the usual busy and party-full rules) and come to you.
 //  phrasing    phrase(def, req, player, moment) is the canned line (shared/namedquests.js phraseRequest). I3 sets
 //              quests.phraser = async (def, req, player, moment) => text (server/ai/namedtalk.js phrase()): an offer
 //              is shown once phrased (and its line kept on the offer, then the request: never phrased twice); the
@@ -325,7 +325,7 @@ export class NamedQuests {
     if (now - (o.per[def.id] ?? -1e15) < OUTREACH.cd * 1000) return 'cooldown';
     if (np && (this.nm.hostOf(np) || np.dead || np.downed || inBossRoom(np) || g.activeFightOf?.(np))) return 'busy';
     const party = g.partyOf(h);
-    if (this.nm.namedInParty(party).length || (party?.members.length || 1) >= PARTY_MAX) return 'party';
+    if ((party?.members.length || 1) >= PARTY_MAX) return 'party'; // (a full party; other Named in it are fine)
     return '';
   }
   outreach(humans, now) {
@@ -382,10 +382,7 @@ export class NamedQuests {
     }
     return this.join(h, st, kind);
   }
-  joinBlock(h, st, np) {
-    const g = this.game;
-    return (np && this.nm.freeBlock(h, st, np)) || (this.nm.namedInParty(g.partyOf(h)).length || this.nm.namedInvited(h, st) ? 'One of the Named per party.' : (g.partyOf(h)?.members.length || 1) >= PARTY_MAX ? 'Your party is full.' : '');
-  }
+  joinBlock(h, st, np) { return (np && this.nm.freeBlock(h, st, np)) || this.nm.partyRoom(h, st); } // (several Named per party: owner 2026-11-21)
   // An accepted invitation: the Named joins the player's party and comes to them. Returns '' or why not.
   join(h, st, kind) {
     const g = this.game, np = this.nm.playerOf(st);

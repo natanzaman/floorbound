@@ -17,8 +17,24 @@ account copy holds only those values.
   Hamstring, the Berserker's Cleave skill (a 180° sweep), all-round ring basics. `round: true`: all around you, Cone
   mode's filter doesn't apply (ring basics, Feedback). Class tunes (BERSERKER_TUNE,
   LANCE, SONG) and style steps keep their own `r` / `half`.
-- Weapon styles: `mods.fov` (x the half-angle of every arc attack of that style). All styles 1 today (no balance
-  change); the hook is there for wider-but-slower weapons. A style step can carry its own `n`.
+- Weapon styles: `mods.fov` (x the half-angle of every arc attack of that style). A style step can carry its own `n`.
+  Values (owner 2026-11-21, "recommended"; rule of thumb: wider swings with slower attacks, narrower with quicker
+  ones), judged by each style's basic-attack cooldown against its class default:
+
+  | Style | Basic cd (default) | fov | Arcs it touches |
+  | --- | --- | --- | --- |
+  | Mace & Shield | 0.95 s (Bash 0.7) | 1.15 | its arc blows (the 3rd: 1.4 -> 1.61 rad) |
+  | Halberd | 0.7 s sweeps (Thrust 0.6) | 1.15 | its arc sweeps (the 3rd: 1.5 -> 1.73 rad) |
+  | Warhammer | 1.25 s (Chop 0.85) | 1.2 | chop 1.2 -> 1.44 rad, Cleave skill 1.6 -> 1.92, Executioner 0.6 -> 0.72 |
+  | Dual Blades | 0.4 s (Slash 0.55) | 0.85 | its arc steps, Burst Combo (6 hits), Starburst / Finisher |
+  | Twin Daggers | 0.4 s (Shot 0.6) | 0.85 | its arc steps |
+  | Twin Axes | 0.55 s (Chop 0.85) | 0.9 | chop 1.0 -> 0.9 rad, Cleave skill, Executioner |
+  | Rapier | 0.6 s thrusts (precise) | 0.9 | Burst Combo and its evolutions (its basic is a line) |
+  | defaults; Spear & Shield, Glaive, Mace & Tome, Wand, Crossbow, War Drum, Flute | | 1 | none / lines, rings, bolts |
+
+  Glaive is slower (0.7 s) but has no arc attacks (thrust lines; Hamstring and the chords keep their own half), so a
+  multiplier would change nothing. Defaults stay the baseline. Cleave (the cap) and Cone (the filter) run after the
+  arc in `capHits` and never read fov; test/targeting.js checks both on a widened Mace swing.
 - Pure functions: `pickTarget` (the four modes), `crosshairPick` (moved from public/classes-a.js `pick`), `inCone`,
   `capTargets` (lock first, then nearest, or nearest the aim line), `rayPick`
   (first enemy along a line, for aimed marks / leaps), `cleanPrefs`, `attackFov`.
@@ -69,6 +85,7 @@ Server (server/targeting.js + small hooks):
 ## Tests
 - test/targeting.js: pure pickTarget (4 modes, cone edge, lock behind you, far lock), capTargets, cleanPrefs; server
   cleave on / off / cap, aimed straight arrows (no homing, walk-in hit, padded hitbox), lock preference in aimA, bots
-  without prefs unchanged.
+  without prefs unchanged; style fov (Mace hits at 1.08 rad, Dual Blades misses at 0.92, the cap and Cone filter on a
+  widened swing, Warhammer's Cleave skill).
 - Regression: combat, classes-a, classes-b, styles, controls, controlsync, bots, wardenskill quick run.
 - test/targeting.py (Playwright): Combat options on the Controls screen, persist across reload.
