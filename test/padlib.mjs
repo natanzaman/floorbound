@@ -54,10 +54,11 @@ export async function openPad(browser, base, { onError } = {}) {
   P.sent = (m, type) => S(([m, t]) => window.__sent.slice(m).filter(o => o.type === t), [m, type]);
   P.btn = (name, down, value = 1) => S(([i, d, v]) => { const b = window.__pad.pad.buttons[i]; b.pressed = d; b.value = d ? v : 0; }, [BTN[name], down, value]);
   P.axes = a => S(a => { window.__pad.pad.axes = a; }, a);
-  // One button: pressed and released in the page, held for exactly k polled frames (from the script, the round trips could
-  // hold it past the d-pad's 400 ms repeat delay on a loaded box, and a menu step would move twice).
+  // A d-pad direction: pressed and released in the page, held for exactly k polled frames (from the script, the round trips
+  // could hold it past the d-pad's 400 ms repeat delay on a loaded box, and a menu step would move twice). Other buttons
+  // keep the script-side hold (a play button held a little longer, as a person would).
   P.press = async (names, k = 2) => {
-    if (names.length === 1) await S(([i, k]) => new Promise(res => { const b = window.__pad.pad.buttons[i], f0 = window.__fb.input.frames; b.pressed = true; b.value = 1; const f = () => { if (window.__fb.input.frames >= f0 + k) { b.pressed = false; b.value = 0; res(); } else requestAnimationFrame(f); }; requestAnimationFrame(f); }), [BTN[names[0]], k]);
+    if (names.length === 1 && ['Up', 'Down', 'Left', 'Right'].includes(names[0])) await S(([i, k]) => new Promise(res => { const b = window.__pad.pad.buttons[i], f0 = window.__fb.input.frames; b.pressed = true; b.value = 1; const f = () => { if (window.__fb.input.frames >= f0 + k) { b.pressed = false; b.value = 0; res(); } else requestAnimationFrame(f); }; requestAnimationFrame(f); }), [BTN[names[0]], k]);
     else { for (const nm of names) await P.btn(nm, true); await P.frames(k); for (const nm of [...names].reverse()) await P.btn(nm, false); }
     await P.frames(2);
   };
