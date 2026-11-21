@@ -19,6 +19,7 @@
 // The snapshot carries w.op = [[boss id, state index, s left, s total]] while any opening is on (late joiners see it).
 import { OPENING, AFTER_STATES, isOpening, fightTable, pickCombo } from '../shared/bosstiming.js';
 import { inFlankReach } from '../shared/threat.js';
+import { BITE, PACE } from '../shared/data.js';
 
 const STATS = !!process.env.OPEN_STATS; // bot runs: log each opening (s, melee hits, who used it)
 const r1 = v => Math.round(v * 10) / 10;
@@ -147,6 +148,14 @@ const methods = {
   },
   /** Its basic swing starts now and lands after `wind` s. */
   swingStart(m, wind) { this.closeLanded(m, SWING[m.type], this.time + wind); },
+  /** A basic swing forced now (the director's boss_move, testing aids): the same wind-up, rest and no-chaining as the boss's
+   *  own swing, read from its fight table (m.tm, else `base`: the table before the fight scaled it). */
+  forceSwing(m, base) {
+    const t = this.time, A = (m.tm || base)[SWING[m.type]], [r, h] = BITE[m.type];
+    m.windupAt = t + A.wind; this.swingStart(m, A.wind); m.busyUntil = Math.min(m.busyUntil || 0, t);
+    m.atkT = t + A.cd * (m.phase === 2 ? A.rage : 1) + A.wind * (1 - 1 / PACE); // as the boss's AI: the table's cd (+ rage), the paced extra wind-up
+    this.events.push({ t: 'wind', id: m.id, d: A.wind, f: Math.round(m.face * 100) / 100, r, h });
+  },
 
   // ---------- snapshot / stats ----------
   openSnap() {

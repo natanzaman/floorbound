@@ -809,15 +809,10 @@ export function installFloor3Moves(Game) {
     const fighters = [...this.players.values()].filter(p => !p.dead && inArena3(p.x, p.z));
     let v = targetId != null ? this.players.get(targetId | 0) : null;
     if (!v || v.dead) v = fighters.sort((a, b) => dist(a, m) - dist(b, m))[0] || null;
-    const t = this.time, C = COLOSSUS;
+    const t = this.time, C = m.tm || COLOSSUS; // the fight's table (party-size knobs), as its own AI uses
     if (v) m.face = angleTo(m.x, m.z, v.x, v.z);
     switch (move) {
-      case 'hammerfall': {
-        const [r, h] = BITE.colossus;
-        m.windupAt = t + C.cleave.wind; m.atkT = t + (m.tm?.cleave?.cd ?? m.def.atkCd) + C.cleave.wind; m.busyUntil = Math.min(m.busyUntil || 0, t);
-        this.events.push({ t: 'wind', id: m.id, d: C.cleave.wind, f: r2(m.face), r, h });
-        return true;
-      }
+      case 'hammerfall': this.forceSwing(m, COLOSSUS); return true; // its basic swing, timed by the fight table (server/openings.js)
       case 'lightning': this.lightningStrikes(m, fighters, v || m); return true;
       case 'gale_push': if (!v) return false; m.gustT = t + C.gust.every[m.phase]; this.galePush(m, v); return true;
       case 'overload': if (m.ov) return false; this.startOverload(m, fighters); return true;

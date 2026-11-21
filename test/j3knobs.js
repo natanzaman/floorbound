@@ -80,10 +80,15 @@ await check('forced swings', async () => {
     g.time = 41; m.busyUntil = 45; m.windupAt = 0; // (a hold in place: the forced swing releases it)
     assert.equal(quiet(() => g.forceBossMove(m, move, p.id)), true, `${boss}: ${move} forced`);
     assert.ok(m.busyUntil <= 41, `${boss}: the forced ${move} isn't held (busyUntil ${m.busyUntil})`);
-    const extra = boss === 'sovereign' ? S.sweep.wind * (1 - 1 / PACE) : S.cleave.wind; // (each forced swing's own wind-up term)
+    const extra = m.tm[key].wind * (1 - 1 / PACE); // the paced extra wind-up, as the boss's own swing
     near(m.atkT - 41, m.tm[key].cd + extra, `${boss}: the forced ${move} arms the table's cooldown`);
+    near(m.windupAt - 41, m.tm[key].wind, `${boss}: the forced ${move} winds up for the table's wind`);
+    assert.ok(m.closeAt > 41, `${boss}: the forced ${move} counts as a swing (no point-blank chaining)`);
+    m.phase = 2; m.windupAt = 0; g.time = 50; // the last phase: the table's rage
+    quiet(() => g.forceBossMove(m, move, p.id));
+    near(m.atkT - 50, m.tm[key].cd * m.tm[key].rage + extra, `${boss}: the forced ${move} in the last phase uses the rage cd`);
   }
-  return 'the director\'s forced swings (Sovereign trident, Colossus hammerfall) arm the fight table\'s cooldown (cooldownMul)';
+  return 'the director\'s forced swings (Sovereign trident, Colossus hammerfall) use the boss\'s own swing timing: the table\'s cd (cooldownMul, rage), wind-up and swing mark';
 });
 
 // ---- 2. The Colossus's fight health (finding 3: x ~0.72, verified with scripts/tuneboss.js) ----

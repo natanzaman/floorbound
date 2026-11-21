@@ -2,7 +2,7 @@
 // and revives, damage floors, twist overrides, labelled spawns and keepsake items. Mixed into Game (installStaging at the
 // end of game.js). Small hooks elsewhere: game.js calls lastAttackHeld (damageMob, killMob) and protectHit (damagePlayer),
 // and killMob keeps a staged mob down (no respawn) until clearStaging; newTwist (server/twists.js) reads this.twistOverride.
-import { WORLD, WARDEN, SWEEP, MOBS, BITE, PACE, inArena, angleTo } from '../shared/data.js';
+import { WORLD, WARDEN, SWEEP, MOBS, inArena, angleTo } from '../shared/data.js';
 import { SOVEREIGN, floorOf, inArena2 } from '../shared/floor2.js';
 import { SLOTS, keepsakeItem } from '../shared/items.js';
 import { TWISTS } from '../shared/twists.js';
@@ -32,7 +32,7 @@ const methods = {
       if (!v) v = [...this.players.values()].filter(p => !p.dead && ring(p)).sort((a, b) => dist(a, m) - dist(b, m))[0] || null;
     }
     if (m.type === 'warden') {
-      const W = this.twistW || WARDEN;
+      const W = m.tm || this.twistW || WARDEN; // the fight's table (party-size knobs), as its own AI uses
       if (v) m.face = angleTo(m.x, m.z, v.x, v.z);
       switch (move) {
         case 'horn_sweep':
@@ -69,7 +69,7 @@ const methods = {
       return false;
     }
     if (m.type === 'sovereign') {
-      const S = SOVEREIGN;
+      const S = m.tm || this.sovS || SOVEREIGN;
       if (v) m.face = angleTo(m.x, m.z, v.x, v.z);
       switch (move) {
         case 'tidal_wave':
@@ -83,12 +83,9 @@ const methods = {
           this.f2Circle(m, v.x, v.z, G.r, G.wind, m.def.atk * G.mult, 'geyser');
           return true;
         }
-        case 'trident': { // its sweep: the red wedge wind-up, resolved by its own AI (f2Sovereign)
-          const [r, h] = BITE.sovereign;
-          m.windupAt = t + S.sweep.wind; m.atkT = t + (m.tm?.sweep?.cd ?? m.def.atkCd) + S.sweep.wind - S.sweep.wind / PACE; m.busyUntil = Math.min(m.busyUntil || 0, t); // atkT: the fight table's cd (cooldownMul)
-          this.events.push({ t: 'wind', id: m.id, d: S.sweep.wind, f: r2(m.face), r, h });
+        case 'trident': // its sweep: the red wedge wind-up, resolved by its own AI (f2Sovereign); timed by the fight table (server/openings.js)
+          this.forceSwing(m, this.sovS || SOVEREIGN);
           return true;
-        }
         case 'deluge':
           if (!this.deluge) {
             this.callDeluge(m); // its wind-up and flood line, then the flood
