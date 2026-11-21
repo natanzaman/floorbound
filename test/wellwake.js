@@ -24,6 +24,7 @@ const at = (p, w) => { p.x = w.x; p.z = w.z + w.r + 0.9; };
   assert.equal(waypointAwake(well, {}), false); assert.equal(waypointAwake(well, undefined), false);
   assert.equal(waypointAwake(well, { wardenKills: 1 }), true); assert.equal(waypointAwake(well, { floor2: 1 }), true);
   assert.equal(waypointAwake(fire, {}), true);
+  assert.equal(waypointAwake(well, { floor3: 1 }), true, 'a higher floor open (dev/admin paths) wakes it too');
   assert.equal(nearWaypoint(0, 3.9), well, 'still the spot');
   assert.equal(nearAwakeWaypoint({}, 0, 3.9), undefined, 'but asleep without Floor 2');
   assert.equal(nearAwakeWaypoint({ floor2: 1 }, 0, 3.9), well);

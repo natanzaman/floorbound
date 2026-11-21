@@ -21,8 +21,12 @@ Builds on `docs/briefs/waypoint.md` (the town centrepieces are the waypoints).
   column, callout **THE WELL AWAKENS / A bright light emits from the well.**, dip, back to you (3.8 s). Then the
   one-time `waypoint` guide tip.
   - Skip: any fresh key, click, tap or pad button (that press does nothing else). Movement and attacks pause during it.
-  - Busy (dead, downed, rooted, falling, Game Menu, a live boss within 40 m): **queued** until free, up to 90 s and only
+  - Busy (dead, downed, rooted, falling, Game Menu, the MVP card, typing in chat, hit or hurt in the last 4 s, a live
+    boss within 40 m): **queued** until free, up to 90 s and only
     while still on Floor 1; otherwise dropped and the glow simply fades in. Anything coming up mid-shot ends it.
+  - The MVP card (5 s after a kill) is held while the shot plays and shows right after it. The waypoint tip comes once
+    you're free and no other tip is up (a shot cut short by going down: once you're up). The well also wakes for a
+    character with a higher floor open (dev/admin flags). Function keys and Ctrl/Cmd/Alt shortcuts don't skip.
   - Reduce motion: still frame of the well (dip cuts, no push-in, no light column).
   - Joining with Floor 2 already open: no shot. Spectators: waypoints lit. Film view: sleeps until the director's
     `wake` cue (new cine op + director verb), cleared by `reset`.

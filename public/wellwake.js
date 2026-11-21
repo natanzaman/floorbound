@@ -5,7 +5,8 @@
 // with its `woke` line ("A bright light emits from the well.") in the callout style, then back to you.
 //   - Skippable: any key, click, tap or pad button (that press does nothing else). Never traps you: it ends on its own
 //     after LEN s, and at once if the Game Menu opens or you go down.
-//   - Not while you're dead, downed, rooted, falling into an arena or near a live boss: it waits until you're free (up to
+//   - Not while you're dead, downed, rooted, falling into an arena, fighting (main.js busy: hit or hurt in the last
+//     few seconds, the Game Menu, the MVP card, typing in chat) or near a live boss: it waits until you're free (up to
 //     QUEUE s, and only while you're still on that waypoint's floor), else it's dropped and the glow just fades in.
 //   - Reduce motion: a still frame of the well (gentle dip-to-black cuts, no push-in).
 //   - Spectators see every waypoint lit; the film view follows the director's `wake` cue (server/cine.js) instead.
@@ -22,7 +23,7 @@ const GLOW = [0.55, 2.4]; // s into the shot: the glow fades up from nothing ove
 const BOSS_NEAR = 40; // m: a live boss this close means you're still in a fight
 const ease = u => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
 
-export function initWellWake({ camera, state, mobs, fx, sfx, occluders = [], calm = () => false, busy = () => false, callout, tip, onStart = () => {}, film = false }) {
+export function initWellWake({ camera, state, mobs, fx, sfx, occluders = [], calm = () => false, busy = () => false, tipFree = () => true, callout, tip, onStart = () => {}, film = false }) {
   const n = WAYPOINTS.length;
   const asleep = () => WAYPOINTS.map(w => (w.wakes ? 0 : 1)); // (until we know your character: the sleeping ones stay dark)
   const lit = asleep(), flare = new Array(n).fill(0);
@@ -30,6 +31,7 @@ export function initWellWake({ camera, state, mobs, fx, sfx, occluders = [], cal
   let pending = null;      // { i, at, until }: a shot waiting to play
   let shot = null;         // { i, t, w, az, calm, beam, said }
   let eatUntil = 0;        // ms: the skip press is swallowed (keys, clicks)
+  let owedTip = 0;         // s: the waypoint tip is due from then (0: none)
   const filmWake = { on: false, k: 0 };
 
   const fade = document.createElement('div');
@@ -41,7 +43,7 @@ export function initWellWake({ camera, state, mobs, fx, sfx, occluders = [], cal
   const awakeNow = () => WAYPOINTS.map(w => waypointAwake(w, stats()));
 
   // ---------- the unlock ----------
-  function reset() { if (shot) end(); base = null; pending = null; asleep().forEach((v, i) => { lit[i] = v; }); }
+  function reset() { if (shot) end(true); owedTip = 0; base = null; pending = null; asleep().forEach((v, i) => { lit[i] = v; }); }
   function inv() {
     if (state.spectator || !state.inv) return;
     const now = awakeNow();
@@ -73,19 +75,20 @@ export function initWellWake({ camera, state, mobs, fx, sfx, occluders = [], cal
     onStart();
     document.body.classList.add('well-shot');
   }
-  function end() {
+  function end(aborted = false) { // aborted: cut short (downed, died, disconnected): the tip waits until you're free
     if (!shot) return;
     const i = shot.i;
     lit[i] = 1; flare[i] = 0;
     fade.style.transition = `opacity ${DIP}s ease`; fade.style.opacity = '0';
     shot = null;
     document.body.classList.remove('well-shot');
-    tip?.('waypoint'); // (once: how travel works, now there's somewhere to go)
+    owedTip = performance.now() / 1000 + (aborted ? 0 : 0.5); // the waypoint tip (once: how travel works), when you're free and no other tip is up (the MVP card comes first)
   }
   function skip() { if (!shot) return false; eatUntil = performance.now() + 150; end(); return true; }
 
   // any fresh key, click, tap or pad button skips (and does nothing else)
-  addEventListener('keydown', e => { if (shot && !e.repeat && !/^(Shift|Control|Alt|Meta)/.test(e.code) && !(e.target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName))) { skip(); e.preventDefault(); } }, true);
+  // (browser and function keys pass: F5, F12, Ctrl/Cmd/Alt shortcuts neither skip nor get stopped)
+  addEventListener('keydown', e => { if (shot && !e.repeat && !/^(Shift|Control|Alt|Meta|F\d+$)/.test(e.code) && !e.ctrlKey && !e.metaKey && !e.altKey && !(e.target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName))) { skip(); e.preventDefault(); } }, true);
   addEventListener('pointerdown', () => { if (shot) skip(); }, true);
   const onPad = (name, down) => (down && shot ? skip() : false);
   const swallow = () => !!shot || performance.now() < eatUntil; // the input gate: no actions while it plays
@@ -108,13 +111,14 @@ export function initWellWake({ camera, state, mobs, fx, sfx, occluders = [], cal
       return null;
     }
     for (let i = 0; i < n; i++) if (lit[i] > 0 && lit[i] < 1 && !(shot?.i === i) && !(pending?.i === i)) lit[i] = Math.min(1, lit[i] + dt / 1.5); // (fading in without a shot)
+    if (owedTip && now >= owedTip && !shot && !pending && free() && tipFree()) { owedTip = 0; tip?.('waypoint'); }
     if (pending && !shot) {
       const w = WAYPOINTS[pending.i];
       if (now > pending.until || floorOf(state.x) !== w.floor || !state.joined) { lit[pending.i] = 0.001; pending = null; } // dropped: it just fades in
       else if (now >= pending.at && free()) start(pending.i);
     }
     if (!shot) return null;
-    if (!state.joined || state.dead || state.downed || busy()) { end(); return null; } // never trap you: anything comes up, it ends
+    if (!state.joined || state.dead || state.downed || busy()) { end(true); return null; } // never trap you: anything comes up, it ends
     const s = shot, w = s.w;
     s.t += dt;
     const t = s.t;
@@ -148,5 +152,5 @@ export function initWellWake({ camera, state, mobs, fx, sfx, occluders = [], cal
 
   // floor2client.js: per waypoint 0-1 (0 = dormant: no glow), and the burst as it wakes.
   const glow = () => ({ lit, flare });
-  return { inv, reset, frame, glow, swallow, onPad, skip, filmCue, get active() { return !!shot; }, get pending() { return pending ? { ...pending } : null; }, get view() { return shot ? { t: shot.t, i: shot.i, calm: shot.calm } : null; } };
+  return { inv, reset, frame, glow, swallow, onPad, skip, filmCue, get active() { return !!shot; }, get holdTip() { return !!(shot || pending || owedTip); }, get pending() { return pending ? { ...pending } : null; }, get view() { return shot ? { t: shot.t, i: shot.i, calm: shot.calm } : null; } };
 }

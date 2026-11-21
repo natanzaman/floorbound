@@ -118,8 +118,8 @@ const mobs = new Map();
 let boss = null;
 const cine = initCine({ camera, state, players, mobs, slowMotion: (a, b) => slowMotion(a, b, { force: true }), twists, occluders, wake: (on, late) => wellWake.filmCue(on, late) }); // public/cine.js
 // The well awakens (wellwake.js): Floor 1's well sleeps until your Floor 2 opens, then a short shot of it lighting up.
-const wellWake = initWellWake({ camera, state, mobs, fx, sfx, occluders, film: cine.film, calm: () => settings.reduceMotion, callout: (a, b, c) => callout(a, b, c), tip: id => guide.tip(id),
-  busy: () => gmenu.isOpen() || rescue.rooted() || arenas.frozen(), onStart: () => { keys.clear(); attackHeld = false; combat.guard(false); stick.active = false; stick.dx = stick.dy = 0; panels.close(); } });
+const wellWake = initWellWake({ camera, state, mobs, fx, sfx, occluders, film: cine.film, calm: () => settings.reduceMotion, callout: (a, b, c) => callout(a, b, c), tip: id => guide.tip(id), tipFree: () => !$('tip').classList.contains('show'),
+  busy: () => gmenu.isOpen() || rescue.rooted() || arenas.frozen() || mvp.isOpen() || performance.now() - state.lastCombat < 4000 || document.activeElement === $('chat-input'), onStart: () => { keys.clear(); attackHeld = false; combat.guard(false); stick.active = false; stick.dx = stick.dy = 0; panels.close(); } });
 // Floor 2 — The Glimmering Mire (floor2client.js): world, the waypoints (town centrepieces), Stairway, hazards and its events.
 const f2 = initFloor2Client({
   scene, sun, occluders, fx, sfx, state, mobs, players, isTouch, calm: () => settings.reduceMotion, tip: id => guide.tip(id), wake: wellWake,
@@ -404,7 +404,7 @@ const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, 
 // skill combos between players and the Team Burst: chain counters, setup hints, the party bar, T to sync (public/teamplay.js)
 const teamplay = initTeamplay({ state, players, mobs, fx, sfx, floatNum, project, send, guide, isTouch, callout: (a, b, c) => callout(a, b, c), shake: a => shake(a), $ });
 // the post-fight MVP card: every fighter's numbers and titles after a boss kill or wipe (public/mvp.js)
-const mvp = initMvp({ state, guide });
+const mvp = initMvp({ state, guide, hold: () => wellWake.active }); // (the well's shot first, then the card; the shot waits while the card is up)
 
 // ---------------- networking ----------------
 // Snapshots are drawn ~100 ms in the past, between the two around that moment (shared/netsmooth.js); the delay grows a

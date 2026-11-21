@@ -2,7 +2,8 @@
 # town's well has no prompt, label, glow or warp; the first Warden kill (TEST_HOOKS clear 1) plays the shot: the camera
 # cuts to the well, "A bright light emits from the well." shows, the glow fades up, then the camera comes back and
 # interact opens the waypoint. Then: the floor2 flag path (TEST_HOOKS unlock 3) with Reduce motion (a still frame) and
-# a skip (the key does nothing else), and a shot that waits while the Game Menu is open.
+# a skip (the key does nothing else; F12 passes), the MVP card held until the shot ends, a shot that waits while the
+# Game Menu is open, and one cut short (going down) whose tip waits until you're free.
 # Usage: python3 test/wellwake.py   (starts its own server; PORT=xxxx to pick the port, default 4371)
 import json, math, os, subprocess, time
 from playwright.sync_api import sync_playwright
@@ -62,15 +63,23 @@ try:
         p.wait_for_function("() => /A bright light emits from the well\\./.test(document.getElementById('callout').textContent) && document.getElementById('callout').classList.contains('show')", timeout=20000)
         l1 = lit(p); frames(p, 6); l2 = lit(p)
         assert 0 <= l1 <= l2 and S(p, "() => !__fb.wellWake.view.calm")
-        ok('the Warden kill: the camera cuts to the well, "A bright light emits from the well." shows, the glow fades up')
+        S(p, "() => __fb.handleEvent({ t: 'mvp', ids: [__fb.state.myId], d: 0, card: { result: 'kill', boss: 'The Horned Warden', floor: 1, secs: 60, rows: [{ id: __fb.state.myId, name: 'Wren', cls: 'swordsman', lvl: 10 }] } })")
+        time.sleep(1); frames(p, 3)
+        assert S(p, "() => __fb.wellWake.active && !document.getElementById('mvp')"), 'the MVP card waits for the shot'
+        p.keyboard.press('F12'); frames(p, 2)
+        assert S(p, "() => __fb.wellWake.active"), 'function keys pass (no skip)'
+        ok('the Warden kill: the camera cuts to the well, "A bright light emits from the well." shows, the glow fades up; the MVP card waits; F12 passes')
         p.wait_for_function("() => !__fb.wellWake.active", timeout=60000)
         frames(p, 3)
         assert cam_me(p) < 16, f'camera back on you ({cam_me(p)})'
+        p.wait_for_function("() => !!document.getElementById('mvp')", timeout=10000)
+        assert not S(p, "() => /Waypoint/.test(document.getElementById('tip').textContent)"), 'no tip under the card'
+        S(p, "() => __fb.mvp.close()"); frames(p, 2)
         assert lit(p) == 1 and wp_label(p) and S(p, "() => __fb.interactKind()") == 'warp'
-        assert 'Waypoint' in S(p, "() => document.getElementById('tip').textContent"), 'the waypoint tip after the shot'
+        p.wait_for_function("() => document.getElementById('tip').classList.contains('show') && /Waypoint/.test(document.getElementById('tip').textContent)", timeout=30000)  # (after the card and its own tip)
         p.keyboard.press('KeyF'); frames(p, 4)
         assert S(p, "() => !document.getElementById('warp').classList.contains('hidden') && /Travel/.test(document.getElementById('warp').innerHTML)")
-        ok('it ends on its own: camera back on you, the well glows, the waypoint tip, interact opens the waypoint')
+        ok('it ends on its own: camera back on you, then the MVP card, then the waypoint tip; the well glows, interact opens the waypoint')
         p.close()
 
         # ---- 2. the floor2 flag, Reduce motion, skip ----
@@ -105,7 +114,13 @@ try:
         p.keyboard.press('Escape'); frames(p, 3)
         p.wait_for_function("() => __fb.wellWake.active", timeout=20000)
         ok('while you are busy (the Game Menu here; downed / near a boss the same) the shot waits, then plays')
-        S(p, "() => __fb.wellWake.skip()")
+        t0 = S(p, "() => { __fb.send({ type: 'test', tp: [0, 70] }); setTimeout(() => __fb.send({ type: 'test', down: 1, secs: 4 }), 150); return __fb.wellWake.view.t; }")  # (out of town: no damage in town)
+        p.wait_for_function("() => !__fb.wellWake.active", timeout=20000)
+        assert S(p, "() => __fb.state.dead || !!__fb.state.downed || performance.now() - __fb.state.lastCombat < 6000"), 'going down cuts it short'
+        assert not S(p, "() => document.getElementById('tip').classList.contains('show') && /Waypoint/.test(document.getElementById('tip').textContent)"), 'no tip while down'
+        p.wait_for_function("() => !__fb.state.dead && !__fb.state.downed", timeout=60000)
+        p.wait_for_function("() => document.getElementById('tip').classList.contains('show') && /Waypoint/.test(document.getElementById('tip').textContent)", timeout=30000)
+        ok('a shot cut short (going down here; a disconnect the same) gives the waypoint tip only once you are up and free')
         p.close()
 
         # ---- 4. spectators: lit; the film view: dark until the director's wake cue ----

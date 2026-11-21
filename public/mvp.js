@@ -103,7 +103,7 @@ export function cardHtml(card, myId = 0) {
     <div class="mv-ft"><span>Click, tap or Esc to close</span><div class="mv-tm"><span></span></div></div></div>`;
 }
 
-export function initMvp({ state, guide }) {
+export function initMvp({ state, guide, hold = () => false }) { // hold(): not now (the well's shot, wellwake.js): it shows once that's over
   const style = document.createElement('style'); style.textContent = CSS; document.head.appendChild(style);
   let el = null, timer = 0, wait = 0;
 
@@ -145,7 +145,8 @@ export function initMvp({ state, guide }) {
     const mine = e.all || (!state.spectator && e.ids?.includes(state.myId));
     if (!mine || !e.card?.rows?.length) return true;
     clearTimeout(wait);
-    wait = setTimeout(() => show(e.card, e.secs || 25), (e.d || 0) * 1000);
+    const go = () => { if (hold()) wait = setTimeout(go, 250); else show(e.card, e.secs || 25); };
+    wait = setTimeout(go, (e.d || 0) * 1000);
     return true;
   }
   return { event, close, isOpen: () => !!el };

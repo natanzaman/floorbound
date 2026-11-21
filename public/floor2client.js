@@ -241,7 +241,7 @@ export function initFloor2Client(ctx) {
     const on2 = onFloor2(state.x);
     const wp = !state.spectator && state.joined && !state.dead ? nearWp() : null;
     world.update(dt, on2, !!data.del, onFloor3(state.x), { near: wp?.floor ?? 0, calm: !!ctx.calm?.(), ...ctx.wake?.glow() });
-    if (wp && unlocked(2) && !ctx.wake?.pending && !ctx.wake?.active) ctx.tip?.('waypoint'); // (once: how travel works, when there's somewhere to go; the well's shot gives it at its end)
+    if (wp && unlocked(2) && !ctx.wake?.holdTip) ctx.tip?.('waypoint'); // (once: how travel works, when there's somewhere to go; the well's shot gives it at its end)
     for (const o of orbs.values()) { const p = o.g.position; p.x += (o.x - p.x) * Math.min(1, dt * 14); p.z += (o.z - p.z) * Math.min(1, dt * 14); p.y = 1.2 + Math.sin(t * 8 + o.x) * 0.1; o.g.rotation.y += dt * 3; }
     for (const p of pools.values()) { p.t += dt; p.disc.material.opacity = p.armed ? 0.42 + Math.sin(p.t * 4) * 0.08 : 0.15 + 0.2 * Math.min(1, p.t); p.edge.material.color.setHex(p.armed ? 0xe879f9 : 0xc084fc); }
     for (const m of ripples) if (m.visible) { const k = (t * (m.userData.hot ? 3 : 1.2)) % 1; m.scale.setScalar(0.6 + k * (m.userData.hot ? 2.4 : 1.4)); m.material.opacity = 0.65 * (1 - k); }
