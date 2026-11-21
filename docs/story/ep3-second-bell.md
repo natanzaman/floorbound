@@ -92,6 +92,6 @@ TAMSIN opens the Count. She looks at it a long time. She closes it.
 
 **JUNO:** You keep saying that.
 
-They walk to the waystone together `[F4 wide, crane]`.
+They walk to the well together `[F4 wide, crane]`.
 
 Title card: **FLOOR 2 CLEARED** / *ninety-eight bells to go* · **END OF SEASON 1**. FADE OUT.

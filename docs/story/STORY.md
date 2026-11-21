@@ -21,12 +21,13 @@ Files:
 - **The bells.** When a floor is cleared for the first time, a bell rings through the whole tower, every floor at once. One bell per floor. A hundred bells and the doors open. (In the game: the Tower Bell, see ROADMAP F6.)
 - **Death is real.** Health at zero and you're gone, here and outside. The game respawns characters, but the story never shows a respawn: on film, a fallen character just never comes back.
 - **The Hall of Clearers.** The only place in the tower where names are written. Every party that beats a floor boss is carved there, the fallen included, if they fought.
+- **The well.** The old well in the Town of Beginnings' square is just stone and water until Floor 1 falls. When a party kills the Warden, *a bright light emits from the well*: it is a portal now, a way up to every floor that party has opened. (In the game: Floor 1's waypoint wakes for each character with their first Warden kill.)
 - **The day count.** Players count days since the gates closed. On Day 41 the Floor 1 stone is still blank. Three raids tried. Few came back.
 
 **Places used this season**: all already in the game.
 | Place | Role in the story |
 |---|---|
-| Town of Beginnings (fountain, Smith, Merchant, Skill Shrine, Hall of Clearers, waystone) | Home. Where the party forms, and where names are carved. |
+| Town of Beginnings (the well, Smith, Merchant, Skill Shrine, Hall of Clearers) | Home. Where the party forms, and where names are carved. Its well wakes as the way up once Floor 1 falls. |
 | The fields and Wolf Woods | Where people level, and where the newcomers hid for forty days. |
 | The raid gate and the Warden's arena | Floor 1's wall. |
 | Mirelight Camp (Floor 2) | A lantern-lit refuge in the swamp. Night scenes use the Eclipse look. |
@@ -73,7 +74,7 @@ Season question: **can a tower full of strangers become a party?**
 ### Ep 1: First Line (full screenplay: `ep1-first-line.md`)
 1. **Town, Hall of Clearers, day.** The Floor 1 stone is blank. Corvin and Bram. Tamsin and Juno join from the Smith. Pell runs in, Lv 8, begs to come. Bram: *"Stay behind my shield. Every second."*
 2. **Raid gate.** Ready check, 5-second countdown. *"When it spins its horns, you get behind me." / "And if I can't?" / "Then I come to you."*
-3. **Warden's arena, Eclipse.** Live fight through three phases. Phase 3: the Horn Sweep turns on Pell. Bram takes it with Shield Wall and falls. Pell kneels by him. Corvin Breaks the Warden at 10%, *"Switch!"*; Pell lands the Last Attack.
+3. **Warden's arena, Eclipse.** Live fight through three phases. Phase 3: the Horn Sweep turns on Pell. Bram takes it with Shield Wall and falls. Pell kneels by him. Corvin Breaks the Warden at 10%, *"Switch!"*; Pell lands the Last Attack. Far below in the empty town, **a bright light emits from the well**: the way up is open.
 4. **Town, day.** The stone has one line: five names. **The first bell tolls across the tower.** Pell picks up Bram's Buckle. *"Floor two. I'll take the front."*
 
 ### Ep 2: Mirelight

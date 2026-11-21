@@ -33,6 +33,7 @@ import { initLoot } from '/loot.js'; // affixes, set progress, loadouts, item to
 import { initBotWheel } from '/botwheel.js';
 import { initBell } from '/bell.js'; // the Tower Bell and the engraved Hall stones
 import { initCine } from '/cine.js'; // film view camera, titles, fades, letterbox, light (F4)
+import { initWellWake } from '/wellwake.js'; // the well wakes when your Floor 2 opens (a short shot)
 import { initBubbles } from '/bubbles.js';
 import { initThreat } from '/threat.js'; // who bosses target, threat meter, Cover, Pincer tags (G3)
 import { initRevive } from '/revive.js'; // downed + revive (G1)
@@ -115,10 +116,13 @@ const state = {
 const players = new Map(); // id -> entity
 const mobs = new Map();
 let boss = null;
-const cine = initCine({ camera, state, players, mobs, slowMotion: (a, b) => slowMotion(a, b, { force: true }), twists, occluders }); // public/cine.js
+const cine = initCine({ camera, state, players, mobs, slowMotion: (a, b) => slowMotion(a, b, { force: true }), twists, occluders, wake: (on, late) => wellWake.filmCue(on, late) }); // public/cine.js
+// The well awakens (wellwake.js): Floor 1's well sleeps until your Floor 2 opens, then a short shot of it lighting up.
+const wellWake = initWellWake({ camera, state, mobs, fx, sfx, occluders, film: cine.film, calm: () => settings.reduceMotion, callout: (a, b, c) => callout(a, b, c), tip: id => guide.tip(id),
+  busy: () => gmenu.isOpen() || rescue.rooted() || arenas.frozen(), onStart: () => { keys.clear(); attackHeld = false; combat.guard(false); stick.active = false; stick.dx = stick.dy = 0; panels.close(); } });
 // Floor 2 — The Glimmering Mire (floor2client.js): world, the waypoints (town centrepieces), Stairway, hazards and its events.
 const f2 = initFloor2Client({
-  scene, sun, occluders, fx, sfx, state, mobs, players, isTouch, calm: () => settings.reduceMotion, tip: id => guide.tip(id),
+  scene, sun, occluders, fx, sfx, state, mobs, players, isTouch, calm: () => settings.reduceMotion, tip: id => guide.tip(id), wake: wellWake,
   send: o => send(o), banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a),
   log: (a, b) => log(a, b), shake: a => shake(a), project: (x, y, z) => project(x, y, z), hallOpen: () => !$('hall').classList.contains('hidden'),
 });
@@ -431,6 +435,7 @@ function onMessage(msg, arrival = performance.now()) {
   }
   if (msg.type === 'welcome') {
     Object.assign(state, { myId: msg.id, x: msg.x, z: msg.z, seq: msg.seq, joined: true, aiOn: !!msg.ai, charId: msg.charId || 0 }); // ai: AI companions are on (H3); charId 0: anonymous (not saved)
+    wellWake.reset(); // (the next inv says which waypoints are awake for this character: no shot for those)
     friends.on = !!msg.named; pbots.setTab(friends, friends.on); // the Friends tab only when the Named are on (NAMED_ENABLED=0: none)
     setTimeout(layoutChips, 50);
     $('login').classList.add('hidden'); $('hud').classList.remove('hidden');
@@ -456,7 +461,7 @@ function onMessage(msg, arrival = performance.now()) {
   if (mastery.onMessage(msg)) return; // skill mastery
   if (pbots.onMessage(msg)) return; // player-owned bots (Players panel → Bots tab)
   if (friends.onMessage(msg)) return; // the Named (Players panel → Friends tab)
-  if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); smith.render(); return; }
+  if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); smith.render(); wellWake.inv(); return; }
   if (msg.type === 'hall') { state.hallData = msg; renderHall(); bell.hall(msg); return; }
   if (msg.type === 'snap') {
     const busy = msg.w.events.some(e => e.t === 'clear' || e.t === 'lvl');
@@ -918,7 +923,8 @@ function removeEntity(e) {
 // The gate: nothing but the overlay before you join; under the Game Menu only Esc (no moving, attacking or hotkeys;
 // the game itself keeps running).
 const input = createInput({ isTouch, settings, save: saveSettings, notify: t => { log(t, 'sys'); padToast(t); }, ask: (t, answer) => padToast(t, answer),
-  gate: a => a === 'perfOverlay' || (state.joined && (a === 'menu' || !gmenu.isOpen())) });
+  gate: a => a === 'perfOverlay' || (state.joined && !wellWake.swallow() && (a === 'menu' || !gmenu.isOpen())) }); // (the well's shot: a press skips it and does nothing else)
+input.onPad((name, down) => wellWake.onPad(name, down));
 setKeySource(input, isTouch); // (public/keyname.js: every prompt reads the active device's bindings when drawn)
 // Controller toasts (input.js): a short note, or the one-time "Controller detected" question (A / B answer it too).
 function padToast(text, answer) {
@@ -2132,13 +2138,13 @@ function frame(now) {
   if (state.joined && !state.dead && !state.spectator && !arenas.frozen()) { // (frozen: falling / landing in a boss arena)
     // movement input
     let ix = 0, iz = 0;
-    const typing = document.activeElement === $('chat-input') || gmenu.isOpen() || nav.active(); // (the Game Menu blocks movement too; so does a window the left stick is navigating)
+    const typing = document.activeElement === $('chat-input') || gmenu.isOpen() || nav.active() || wellWake.active; // (the Game Menu blocks movement too; so does a window the left stick is navigating, and the well's shot)
     if (!typing) {
       const mv = input.axis('move'); ix += mv.x; iz += mv.y;
       if (input.held('turnLeft')) state.yaw += dt * 2;
       if (input.held('turnRight')) state.yaw -= dt * 2; // (not while E revives a downed partymate in reach or cuts one free of vines)
     }
-    if (stick.active && !gmenu.isOpen()) { ix += stick.dx; iz -= stick.dy; }
+    if (stick.active && !gmenu.isOpen() && !wellWake.active) { ix += stick.dx; iz -= stick.dy; }
     const mag = Math.min(1, Math.hypot(ix, iz));
     state.moveDir = null;
     if (mag > 0.08) {
@@ -2185,7 +2191,7 @@ function frame(now) {
       state.x = nx; state.z = nz; state.vel = [mx * state.speed, mz * state.speed]; // (the momentum a jump carries)
       state.face = state.yaw; // keep looking where the camera looks: S walks backwards, A/D strafe (also under camera lock)
     } else { state.speed = 0; state.vel = null; }
-    if (attackHeld && !state.roll && !gmenu.isOpen()) useSkill(0);
+    if (attackHeld && !state.roll && !gmenu.isOpen() && !wellWake.active) useSkill(0);
     combat.frame(); // guarding: face the enemy, drop the guard on a roll
   }
 
@@ -2237,6 +2243,7 @@ function frame(now) {
   camera.position.set(cx - Math.sin(state.yaw) * Math.cos(cp) * cd + sx, 1.6 + ly + Math.sin(cp) * cd + sy, cz - Math.cos(state.yaw) * Math.cos(cp) * cd);
   camera.lookAt(cx, 1.6 + ly, cz);
   const cf = cine.frame(dt, cx, cz); if (cf) [cx, cz] = cf; // film view: the director's shot takes over
+  const ww = wellWake.frame(dt); if (ww) [cx, cz] = ww; // the well waking for you: a short shot of it (wellwake.js)
   if (!state.joined) { // slow orbit behind the login screen
     state.yaw += dt * 0.08;
     camera.position.set(Math.sin(state.yaw) * 40, 22, 30 + Math.cos(state.yaw) * 40);
@@ -2268,4 +2275,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { interactKind, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };
+window.__fb = { interactKind, wellWake, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };

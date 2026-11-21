@@ -16,7 +16,7 @@
 // createBot() returns the bot object: b.configure({ behaviour, follow }), b.command({ k, by, byName, tgt }),
 // b.setSkill(level), b.stop(); b.goal / b.cmd describe what it is doing (admin page).
 import { MOBS, MOB_IDS, CLASS_IDS, PLAYER_SPEED, SPRINT_SPEED, inGateZone, inArena } from '../data.js';
-import { WAYPOINTS, STAIRWAY, inGateZone2, inArena2, floorOf, floorUnlocked } from '../floor2.js';
+import { WAYPOINTS, STAIRWAY, inGateZone2, inArena2, floorOf, floorUnlocked, waypointAwake } from '../floor2.js';
 import { FLOOR_BOSS, FLOOR_X, inGateZone3, inArena3 } from '../floor3.js';
 import { beamDodge, overloadTurn } from './floor3.js'; // Floor 3 reflexes: Tempest Beam jumps, Overload Breaks
 import { arenaTurn } from './arenas.js'; // boss arenas' areas (J2): the fall, cover from the beam
@@ -446,6 +446,7 @@ function travel(b, M) {
   }
   if (b.z > 150 && !b.gateOpen) return false; // shut in the chamber: wait for the next Stairway
   const w = WAYPOINTS.find(w => w.floor === here) || WAYPOINTS[0], ox = FLOOR_X[here] ?? 0;
+  if (!waypointAwake(w, b.life)) return false; // (dormant for this bot: Floor 1's well until Floor 2 is unlocked; the same check as the warp)
   if (b.z > 20 && Math.abs(b.x - ox) > 3) { moveToward(b, ox, b.z - 6); return true; } // back to the road, then south to the camp
   // the near side of the centrepiece: just outside its collision ring (r + 0.8), inside its use distance (R + 0.45 < use)
   const dx = b.x - w.x, dz = b.z - w.z, L = Math.hypot(dx, dz), ux = L > 0.01 ? dx / L : 0, uz = L > 0.01 ? dz / L : 1, R = w.r + 0.8;

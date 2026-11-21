@@ -1,14 +1,14 @@
 // Floor 2 — The Glimmering Mire: client runtime. Snapshot state (gate 2, orbs, pools, burrowed lurkers, the Deluge,
 // the Stairway), Floor 2 events and effects, waypoint travel UI, and atmosphere. main.js wires it in with a few calls.
 import * as THREE from 'three';
-import { F2, GATE2, WAYPOINTS, STAIRWAY, PHASE_TEXT2, inArena2, inGateZone2, nearWaypoint, floorUnlocked, onFloor2, floorOf } from '/shared/floor2.js';
+import { F2, GATE2, WAYPOINTS, STAIRWAY, PHASE_TEXT2, inArena2, inGateZone2, nearAwakeWaypoint, waypointAwake, floorUnlocked, onFloor2, floorOf } from '/shared/floor2.js';
 import { FLOOR_NAMES, onFloor3 } from '/shared/floor3.js';
 import { createFloor2 } from '/floor2world.js';
 import { PACE } from '/shared/data.js';
 import { keyName, keyHtml, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 
 // ctx: { scene, sun, occluders, fx, sfx, state, mobs, players, send, banner, callout, floatNum, log, shake, project, isTouch, hallOpen,
-//        calm (Reduce motion), tip (one-time guide tips) }
+//        calm (Reduce motion), tip (one-time guide tips), wake (public/wellwake.js: which waypoints glow, and how much) }
 export function initFloor2Client(ctx) {
   const { scene, fx, sfx, state, mobs, players } = ctx;
   const world = createFloor2(scene, { sun: ctx.sun, occluders: ctx.occluders });
@@ -37,6 +37,8 @@ export function initFloor2Client(ctx) {
   panel.style.cssText = 'position:absolute;top:30%;left:50%;transform:translateX(-50%);min-width:280px;padding:12px 16px;border-color:rgba(94,234,212,.5);z-index:4';
   document.getElementById('hud').appendChild(panel);
   const unlocked = f => floorUnlocked(state.inv?.life, f);
+  // a waypoint near you that's awake for your character (Floor 1's well sleeps until Floor 2 is open: shared/floor2.js)
+  const nearWp = (pad = 0) => nearAwakeWaypoint(state.inv?.life, state.x, state.z, pad);
   function renderPanel() {
     const here = floorOf(state.x);
     const row = w => {
@@ -218,7 +220,7 @@ export function initFloor2Client(ctx) {
   // ---------- interaction (F) ----------
   function interactKind() {
     if (state.dead || !state.joined || state.spectator) return null;
-    if (nearWaypoint(state.x, state.z)) return 'warp'; // a town's centrepiece (the fountain, a camp's fire)
+    if (nearWp()) return 'warp'; // a town's centrepiece (the well, a camp's fire), once awake for you
     if (data.stair && Math.hypot(state.x - data.stair[0], state.z - data.stair[1]) < STAIRWAY.use) return 'stair';
     return null;
   }
@@ -237,9 +239,9 @@ export function initFloor2Client(ctx) {
   function update(dt) {
     t += dt;
     const on2 = onFloor2(state.x);
-    const wp = !state.spectator && state.joined && !state.dead ? nearWaypoint(state.x, state.z) : null;
-    world.update(dt, on2, !!data.del, onFloor3(state.x), { near: wp?.floor ?? 0, calm: !!ctx.calm?.() });
-    if (wp && unlocked(2)) ctx.tip?.('waypoint'); // (once: how travel works, when there's somewhere to go)
+    const wp = !state.spectator && state.joined && !state.dead ? nearWp() : null;
+    world.update(dt, on2, !!data.del, onFloor3(state.x), { near: wp?.floor ?? 0, calm: !!ctx.calm?.(), ...ctx.wake?.glow() });
+    if (wp && unlocked(2) && !ctx.wake?.pending && !ctx.wake?.active) ctx.tip?.('waypoint'); // (once: how travel works, when there's somewhere to go; the well's shot gives it at its end)
     for (const o of orbs.values()) { const p = o.g.position; p.x += (o.x - p.x) * Math.min(1, dt * 14); p.z += (o.z - p.z) * Math.min(1, dt * 14); p.y = 1.2 + Math.sin(t * 8 + o.x) * 0.1; o.g.rotation.y += dt * 3; }
     for (const p of pools.values()) { p.t += dt; p.disc.material.opacity = p.armed ? 0.42 + Math.sin(p.t * 4) * 0.08 : 0.15 + 0.2 * Math.min(1, p.t); p.edge.material.color.setHex(p.armed ? 0xe879f9 : 0xc084fc); }
     for (const m of ripples) if (m.visible) { const k = (t * (m.userData.hot ? 3 : 1.2)) % 1; m.scale.setScalar(0.6 + k * (m.userData.hot ? 2.4 : 1.4)); m.material.opacity = 0.65 * (1 - k); }
@@ -261,10 +263,10 @@ export function initFloor2Client(ctx) {
       if (inner) { inner.position.y = 1.7 + Math.sin(t * 2.2 + m.id) * 0.25; if (inner.userData.motes) inner.userData.motes.rotation.y += dt * 2.5; }
     }
     if (!state.spectator) {
-      WAYPOINTS.forEach((w, i) => place(wpLabels[i], w.x, LABEL_Y[w.kind] ?? 4, w.z, `Waypoint${wp === w ? `<br><small>${tapping() ? 'tap Warp to open the waypoint' : `Press ${keyHtml('interact')} to open the waypoint`}</small>` : ''}`, 16));
+      WAYPOINTS.forEach((w, i) => !waypointAwake(w, state.inv?.life) ? (wpLabels[i].style.display = 'none') : place(wpLabels[i], w.x, LABEL_Y[w.kind] ?? 4, w.z, `Waypoint${wp === w ? `<br><small>${tapping() ? 'tap Warp to open the waypoint' : `Press ${keyHtml('interact')} to open the waypoint`}</small>` : ''}`, 16));
       if (data.stair) place(stairLabel, data.stair[0], 6.2, data.stair[1], `The Stairway · Floor 2 <small>${Math.ceil(data.stair[2])} s</small>${Math.hypot(state.x - data.stair[0], state.z - data.stair[1]) < STAIRWAY.use ? `<br><small>${tapping() ? 'tap Warp' : `press ${keyHtml('interact')} to climb`}</small>` : ''}`, 40);
       else stairLabel.style.display = 'none';
-      if (!panel.classList.contains('hidden') && !nearWaypoint(state.x, state.z, 0.6)) panel.classList.add('hidden');
+      if (!panel.classList.contains('hidden') && !nearWp(0.6)) panel.classList.add('hidden');
     }
   }
 

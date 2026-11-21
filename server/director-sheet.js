@@ -42,7 +42,8 @@ export const LANDMARKS = {
   skill_shrine: { at: front(SHRINES[0], 2.6), look: [SHRINES[0].x, SHRINES[0].z], floor: 1 },
   hall_of_clearers: { at: front(HALL, 3.6), look: [HALL.x, HALL.z], floor: 1 },
   waypoint: { at: [0, 4.6], look: [0, 0], ring: 4.6, floor: 1 }, // the fountain is the town's waypoint (shared/floor2.js WAYPOINTS)
-  waystone: { at: [0, 4.6], look: [0, 0], ring: 4.6, floor: 1 }, // (old name: Episode 1's sheet walks the party here)
+  well: { at: [0, 4.6], look: [0, 0], ring: 4.6, floor: 1 }, // (what the story calls it)
+  waystone: { at: [0, 4.6], look: [0, 0], ring: 4.6, floor: 1 }, // (old name: still works)
   north_road: { at: [0, 30], floor: 1 },
   raid_gate: { at: [0, 152], look: [0, GATE.z], floor: 1 },
   arena_edge: { at: [WORLD.arena.x, WORLD.arena.z - 20], look: [WORLD.arena.x, WORLD.arena.z], floor: 1 },
@@ -103,6 +104,7 @@ export const VERBS = {
   letterbox: { who: 'none', args: { on: BOOL }, api: 'cine' },
   clean: { who: 'none', args: { on: BOOL }, api: 'cine' },
   light: { who: 'none', req: ['to'], args: { to: en('day', 'eclipse') }, api: 'cine' },
+  wake: { who: 'none', args: { on: BOOL }, api: 'cine' }, // the film view: the town's well lights up (on: false puts it back to sleep)
   // world (F6)
   bell: { who: 'none', args: { floor: NUM }, api: 'ringBell' },
   // team (G5): show the last boss fight's MVP card to everyone (no card shows during a show otherwise)

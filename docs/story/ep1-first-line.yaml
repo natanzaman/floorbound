@@ -121,7 +121,12 @@ scenes:
       - { who: pell, do: fight, target: warden, until: "warden_dead", after: prev }
       - { do: slowmo, secs: 1.5, scale: 0.3, after: prev }
       - { who: juno, do: emote, anim: cheer, after: prev, delay: 1 }
-      - { id: to_bram, who: pell, do: walk_to, to: bram }
+      # far below, the town's well wakes: it's a waypoint now (the shot a player gets on their first Warden kill)
+      - { do: camera, shot: wide, target: well, secs: 0, after: prev }
+      - { do: wake, on: true }
+      - { do: title, text: "THE WELL AWAKENS", sub: "A bright light emits from the well.", secs: 3, delay: 0.6 }
+      - { do: wait, secs: 3.6 }
+      - { id: to_bram, who: pell, do: walk_to, to: bram, after: prev }
       - { do: camera, shot: medium, target: pell }
       - { who: pell, do: pose, k: kneel, after: to_bram }
       - { who: pell, do: give_item, name: "Bram's Buckle", slot: charm, desc: "The clasp of Bram's shield. Nobody gets left at the stop.", after: prev }
@@ -146,9 +151,9 @@ scenes:
       - { do: camera, shot: wide, target: hall_of_clearers }
       - { who: tamsin, do: pose, k: none, after: prev, delay: 3 }
       - { who: tamsin, do: say, text: "The first bell.", hold: 3, after: prev }
-      - { who: pell, do: face, to: waystone, after: prev }
+      - { who: pell, do: face, to: well, after: prev }
       - { who: pell, do: say, text: "Floor two. I'll take the front.", after: prev }
-      - { who: [corvin, tamsin, juno, pell], do: walk_to, to: waystone, after: prev }
-      - { do: camera, shot: crane, target: waystone }
+      - { who: [corvin, tamsin, juno, pell], do: walk_to, to: well, after: prev }
+      - { do: camera, shot: crane, target: well }
       - { do: title, text: "FLOOR 1 CLEARED", sub: "ninety-nine bells to go", secs: 4, after: prev }
       - { do: fade, to: black, secs: 2, after: prev }

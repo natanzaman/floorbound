@@ -35,7 +35,7 @@ const SHOTS = {
 };
 const RISE = { dist: 4, camY: 6, lookY: 0.15, secs: 3 }; // a POV whose character is down
 
-export function initCine({ camera, state, players, mobs, slowMotion, twists, occluders = [] }) {
+export function initCine({ camera, state, players, mobs, slowMotion, twists, occluders = [], wake = () => {} }) { // wake(on, late): the film view's sleeping waypoints (wellwake.js)
   const S = { markers: true, shot: null, t: 0, u: 1, dur: 0, az: null, from: null, last: null, active: false, fov: BASE_FOV, hidden: null, down: 0, base: null, side: null, off: null, spin: 0, chk: 0, flip: 0, d: 0, clr: 0, hb: null };
   const pos = new THREE.Vector3(), look = new THREE.Vector3(), want = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: BASE_FOV };
   const known = new Map(); // last seen place of each target (a mob that died and vanished keeps its spot)
@@ -112,7 +112,8 @@ body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-
       case 'letterbox': if (film) letterbox(e.on); break;
       case 'clean': if (film) clean(e.on); break;
       case 'shot': if (film) shot(e, late); break;
-      case 'reset': light(null); fade('in', late ? 0 : 1); title(''); unsay(); letterbox(false); clean(false); if (film) shot({ shot: 'free', secs: 1.5 }); break;
+      case 'wake': if (film) wake(e.on, late); break; // the town's well lights up (or goes back to sleep) on the director's cue
+      case 'reset': if (film) wake(false, true); light(null); fade('in', late ? 0 : 1); title(''); unsay(); letterbox(false); clean(false); if (film) shot({ shot: 'free', secs: 1.5 }); break;
     }
   }
   function event(e) { if (e.t !== 'cine') return false; apply(e.op, e, false); return true; }
@@ -126,6 +127,7 @@ body.cine-clean #hud > :not(#banner):not(#bubbles):not(.bubbles):not([data-cine-
     apply('clean', { on: st.clean }, true);
     if (st.title) apply('title', st.title, true);
     if (st.shot) apply('shot', st.shot, true);
+    if (st.wake) apply('wake', { on: true }, true);
     return true;
   }
 

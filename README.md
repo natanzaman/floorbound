@@ -80,7 +80,7 @@ Basic attacks are 3-hit combos with a heavy, knockback finisher. You sprint auto
 A misty marsh of dead trees, shallow water and glowing crystals, for levels 11–18. It sits in the same world as Floor 1 (600 m east), with its own camp, field, raid gate and boss court.
 
 - **Unlocking it:** help kill the Horned Warden (anyone who damaged it or healed in the fight). That unlocks Floor 2 for the character for good (saved with the character's stats; anonymous players keep it until they leave). Characters that had already killed the Warden are unlocked automatically.
-- **Getting there:** each town's centrepiece is its **waypoint** and glows softly: the fountain in the Town of Beginnings, the campfire in Mirelight Camp (Floor 2's safe zone), the brazier in Windbreak Camp. Walk up to it and press **F** (your interact key; the prompt names it, controller button included) or tap **Warp** to pick a floor you've unlocked. Right after a Warden kill a glowing **Stairway** also opens at the back of the Warden's chamber for 60 s: step in and press F.
+- **Getting there:** each town's centrepiece is its **waypoint** and glows softly: the well (fountain) in the Town of Beginnings, the campfire in Mirelight Camp (Floor 2's safe zone), the brazier in Windbreak Camp. The well sleeps (no glow, no prompt) until your character has Floor 2 open; the moment it opens (your first Warden kill) a short shot cuts to it as it lights up, "A bright light emits from the well." (skip with any key, click or button; with Reduce motion it's a still frame; it waits while you're downed or near another boss). Walk up to it and press **F** (your interact key; the prompt names it, controller button included) or tap **Warp** to pick a floor you've unlocked. Right after a Warden kill a glowing **Stairway** also opens at the back of the Warden's chamber for 60 s: step in and press F.
 - **Dying on Floor 2** sends you back to Mirelight Camp.
 - The field takes a party from about level 10 to 15; the boss is meant for level 15+ parties.
 
@@ -417,6 +417,7 @@ shared/data.js   classes, skills, mobs, map, collision — used by server AND cl
 shared/floor2.js Floor 2: map, waypoints (every floor's), enemies, Sovereign tuning (appended into data.js)
 server/floor2.js Floor 2 AI (Shieldback, Wisp, Lurker, Matron, Sovereign), Sunken Gate, waypoint travel/Stairway
 public/floor2world.js, public/floor2client.js  Floor 2 scene, models, effects, waypoint glows and UI
+public/wellwake.js     the well waking (Floor 1's waypoint sleeps until your Floor 2 opens; the short shot of it lighting up)
 shared/floor3.js Floor 3: map, enemies, Colossus tuning and twists (appended into data.js)
 server/floor3.js Floor 3 AI (Ram, Harpy, Acolyte, Sentinel, rares, the Colossus: Overload, Tempest Beam), Storm Gate, Stairway, travel
 public/floor3world.js, public/floor3client.js  Floor 3 scene, models, the Colossus's poses, effects, Overload bar; the Undercroft (its lower area)
@@ -454,6 +455,7 @@ public/focusnav.js  controller menu navigation: spatial focus over the top windo
 shared/gamepad.js  pad reading (deadzones, trigger hysteresis, button edges, the LB layer, glyph families; DOM-free); test/gamepad.js, test/padsmoke.mjs (a fake pad in a real browser)
 test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
+test/wellwake.js the well's dormant rule (no warp before Floor 2 opens, warp after), the film's wake cue, Episode 1's sheet; test/wellwake.py: the shot in a browser (Python Playwright)
 test/bubbles.js  speech bubble logic: duration, one per speaker, who sees which line; film subtitle hold (public/bubbles.js)
 test/filmsubs.mjs  film dialogue in a browser: subtitles in the letterbox bar, voice-over files played (needs Playwright for Node)
 test/teamplay.js  combos (each trigger, timeout, chain), Team Burst gauge fill/drain, sync window joining and scaling, team stats

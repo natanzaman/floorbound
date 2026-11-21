@@ -38,7 +38,7 @@ const TIPS = {
   broken: 'BROKEN: the next hit from a different player is a SWITCH for 2.5× damage.',
   loot: 'You found gear! Open your bag (B) to equip it.',
   howl: 'The Alpha howled: nearby wolves are frenzied. Back off or burst them down.',
-  waypoint: () => `Waypoint: each town's glowing centrepiece (the fountain in the Town of Beginnings, the fire at each camp) takes you to any floor you've unlocked. ${touch() ? 'Tap Warp' : `Press ${K('interact')}`} beside it.`,
+  waypoint: () => `Waypoint: each town's glowing centrepiece (the well in the Town of Beginnings, awake once you've beaten the Warden; the fire at each camp) takes you to any floor you've unlocked. ${touch() ? 'Tap Warp' : `Press ${K('interact')}`} beside it.`,
   mats: 'Materials! Take them to the Smith in town to refine or craft gear.',
   affix: 'Bonus stats! Uncommon and better gear rolls 1-3 affixes (the blue lines): crit, haste, skill damage, combo damage, faster revives... Hover an item in the bag to compare. The Smith can reroll one affix.',
   setpiece: 'A SET PIECE! Each boss drops its own 2-3 piece set (better odds if you land the Last Attack). Wear 2 or 3 pieces for set bonuses: your bag shows the progress.',

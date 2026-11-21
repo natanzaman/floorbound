@@ -212,7 +212,9 @@ export function createFloor2(scene, { sun, occluders = [] } = {}) {
   }
 
   let time = 0;
-  // wp: { near: the waypoint you're in reach of (or null), calm: Reduce motion (no pulsing) }
+  // wp: { near: the waypoint you're in reach of (or null), calm: Reduce motion (no pulsing), lit: per waypoint 0-1
+  //       (0: dormant, no glow at all; public/wellwake.js fades a waking one up), flare: per waypoint 0-1 (the burst of
+  //       light as it wakes) }
   function update(dt, onF2, deluged, onF3 = false, wp = {}) {
     time += dt;
     const want = onF2 ? 1 : 0, want3 = onF3 ? 1 : 0;
@@ -222,11 +224,15 @@ export function createFloor2(scene, { sun, occluders = [] } = {}) {
     }
     gate2.update(dt);
     root.visible = cur.k > 0.02 || onF2; // skip drawing the Mire from Floor 1
-    for (const w of waypoints) { // brighter while you're in reach; a slow breathe unless Reduce motion is on
+    waypoints.forEach((w, i) => { // brighter while you're in reach; a slow breathe unless Reduce motion is on
+      const lit = wp.lit ? wp.lit[i] ?? 1 : 1, fl = wp.flare?.[i] || 0;
+      w.g.visible = lit > 0.005;
+      if (!w.g.visible) { w.k = 0; return; }
       w.k += ((wp.near === w.floor ? 1 : 0) - w.k) * Math.min(1, dt * 6);
       const b = wp.calm ? 1 : 0.85 + 0.15 * Math.sin(time * 1.8 + w.floor);
-      w.ring.material.opacity = (0.4 + 0.35 * w.k) * b; w.reach.material.opacity = 0.18 + 0.32 * w.k; w.halo.material.opacity = (0.16 + 0.14 * w.k) * b;
-    }
+      w.ring.material.opacity = ((0.4 + 0.35 * w.k) * b + 0.5 * fl) * lit; w.reach.material.opacity = (0.18 + 0.32 * w.k) * lit;
+      w.halo.material.opacity = ((0.16 + 0.14 * w.k) * b + 0.5 * fl) * lit; w.halo.scale.setScalar(1 + 1.6 * fl);
+    });
     if (stair.visible) { ringM.rotation.z += dt * 0.6; disc.material.opacity = 0.45 + Math.sin(time * 3) * 0.12; column.material.opacity = 0.14 + Math.sin(time * 2) * 0.05; }
     const fire = root.userData.fire; if (fire) { fire.scale.set(1 + Math.sin(time * 9) * 0.08, 1 + Math.sin(time * 7) * 0.15, 1); }
     deluge.userData.k += ((deluged ? 1 : 0) - deluge.userData.k) * Math.min(1, dt * 0.8);

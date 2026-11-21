@@ -3,7 +3,7 @@
 import { BITE, PACE, CLASSES, MOBS, inTown, walkable, resolveCollision, rng, angleTo, wrapAngle } from '../shared/data.js';
 import {
   F2, F2_SPAWNS, F2_MATRONS, GATE2, SOVEREIGN, ORB, WISP, LURK, MATRON, STAIRWAY,
-  inArena2, inCamp2, inGateZone2, nearWaypoint, floorUnlocked, floorOf,
+  inArena2, inCamp2, inGateZone2, nearAwakeWaypoint, floorUnlocked, floorOf,
 } from '../shared/floor2.js';
 import { lastAttackItem2 } from '../shared/items.js';
 
@@ -495,7 +495,7 @@ export const F2Methods = {
     for (const id of m.contributors) {
       const p = this.players.get(id);
       if (!p) continue;
-      if (!floorUnlocked(p.stats, 2)) this.sys('Floor 2 — The Glimmering Mire is open to you. Step into the Stairway (F), or use the waypoint at the town fountain.', p.id);
+      if (!floorUnlocked(p.stats, 2)) this.sys('Floor 2 — The Glimmering Mire is open to you. Step into the Stairway (F), or use the well in the Town of Beginnings: it is a waypoint now.', p.id);
       p.stats.floor2 = 1; p.dirty = true; this.invChanged(p);
     }
     this.portal = { x: STAIRWAY.x, z: STAIRWAY.z, until: this.time + STAIRWAY.secs };
@@ -519,7 +519,7 @@ export const F2Methods = {
   warp(p, f) {
     f = f | 0;
     if (p.dead || (f !== 1 && f !== 2)) return;
-    const t = this.time, ws = nearWaypoint(p.x, p.z, 0.5); // a town's centrepiece (a little extra reach for lag)
+    const t = this.time, ws = nearAwakeWaypoint(p.stats, p.x, p.z, 0.5); // a town's centrepiece, once awake for you (a little extra reach for lag)
     const atStair = f === 2 && this.portal && t < this.portal.until && Math.hypot(p.x - this.portal.x, p.z - this.portal.z) < STAIRWAY.use;
     if (!ws && !atStair) return;
     if (!floorUnlocked(p.stats, f)) return this.sys('Floor 2 is sealed. Help defeat the Horned Warden to open it.', p.id);
