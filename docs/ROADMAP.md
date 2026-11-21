@@ -887,7 +887,7 @@ Owner: "attacks always go to the nearest enemy even when I'm facing or locked on
 - **Perf review fixes (done, efe107c):** empty floors sleep (mob AI only where someone is) and each browser gets only its floor's mobs: CPU 0.028 → 0.005 s/s with nobody on, 0.053 → 0.036 with 4 players + 9 bots in town, 0.088 → 0.068 in the field; bytes 316 → 176 KB/s; plus the stall stutter fix (wall-clock `st`), Auto quality settling, character draw distance / shadows, MSAA only once High held, nameplates after close-ups, the anonymous-leave warning, `@Name` turn-ins on Floors 2–3 (README → Performance).
 - Floor 2 is untested by the owner: do a play pass before any Floor 3 work.
 - Bots ignore Floor 2 specifics? (check during C if cheap)
-- `test/bots.js` is an old standalone smoke bot (records 0 hits): retire or update.
+- `test/bots.js` (an old standalone smoke bot that recorded 0 hits) is retired (2026-11-21): `test/team.js`, `scripts/tuneboss.js` and `test/wardenskill.js` cover bot play.
 
 ## History
 Detailed per-feature notes are in README.md and the git log.

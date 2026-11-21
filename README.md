@@ -454,7 +454,6 @@ public/keyname.js  the key a prompt names for an action on the active device (in
 public/xboxusb.js  WebUSB driver for wired third-party Xbox pads on a Mac (GIP: reset, power on, read; listed by input.readPads); shared/gip.js the packet parser, test/gip.js
 public/focusnav.js  controller menu navigation: spatial focus over the top window marked data-nav, A / B, focus restore by key; test/focusnav.js (DOM-free parts), test/padnav.mjs (a fake pad in a real browser)
 shared/gamepad.js  pad reading (deadzones, trigger hysteresis, button edges, the LB layer, glyph families; DOM-free); test/gamepad.js, test/padsmoke.mjs (a fake pad in a real browser)
-test/bots.js     headless bot players for load/gameplay testing
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
 test/wellwake.js the well's dormant rule (no warp before Floor 2 opens, warp after), the film's wake cue, Episode 1's sheet; test/wellwake.py: the shot in a browser (Python Playwright)
 test/bubbles.js  speech bubble logic: duration, one per speaker, who sees which line; film subtitle hold (public/bubbles.js)
@@ -715,11 +714,10 @@ Then empty floors sleeping and per-floor snapshots (2026-11-19, same box, same r
 ## Testing
 
 ```bash
-npm start                                   # terminal 1
-node test/bots.js 6 60 field                # 6 bots grind the field for 60s
 START_LEVEL=6 npm start                     # start players at Lv 6 (testing aid)
-node test/bots.js 6 90 boss                 # bots party up and fight the Warden
 ```
+
+Headless bots: `test/team.js` (below) runs a real bot party, `scripts/tuneboss.js` and `test/wardenskill.js` run bot boss fights (see Tuning bosses), `scripts/perfbench.js` loads the server. (The old standalone smoke bot `test/bots.js` is retired.)
 
 Watch a role-playing party (tank, DPS, healer) clear the floor, with a spectator camera:
 

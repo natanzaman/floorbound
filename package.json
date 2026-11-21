@@ -4,8 +4,7 @@
   "description": "Co-op browser action RPG prototype: clear the tower floor by floor with friends.",
   "type": "module",
   "scripts": {
-    "start": "node server/index.js",
-    "bots": "node test/bots.js"
+    "start": "node server/index.js"
   },
   "engines": {
     "node": ">=18"
