@@ -11,10 +11,15 @@
 //   After that, every change to fb_controls is uploaded (debounced, one PUT at a time, failed ones retried with
 //   backoff a few times; on pagehide a waiting change goes out with fetch keepalive). Signed out: nothing leaves the
 //   browser and nothing is flagged.
+//   Newest change wins: each change is stamped with when it was made, on the server's clock (fb_controls_at; the
+//   offset comes from the server's `now` in each answer, kept in fb_controls_skew). The server keeps a copy's stamp and
+//   refuses an older change (409, with its newer copy): this browser then takes that copy. So a change left waiting in
+//   a closed tab never replaces another browser's later one when the tab comes back.
 import { syncPlan } from '/shared/controls.js';
 import { controlsStore } from '/input.js';
 
 export const UNSYNCED_KEY = 'fb_controls_unsynced';
+export const AT_KEY = 'fb_controls_at', SKEW_KEY = 'fb_controls_skew';
 // Worth trying again: no answer at all (offline, a deploy restart), a timeout, rate limiting or a server error.
 const retryable = e => !e?.status || e.status === 408 || e.status === 429 || e.status >= 500;
 
@@ -28,12 +33,35 @@ export function createControlSync({ api, signedIn, account = () => null, onApply
   // Refused for good (bad request, too large): sending it again cannot help. 401 is a sign-out, not a refusal.
   const refused = e => !!e?.status && e.status !== 401 && !retryable(e);
   const wait = ms => new Promise(r => setTimeout(r, ms));
+  const get = k => { try { return storage.getItem(k); } catch { return null; } };
+  const put = (k, v) => { try { storage.setItem(k, String(v)); } catch {} };
+  // The server's clock: now + the offset seen in its last answer (`now`, ms).
+  let skew = Number(get(SKEW_KEY)) || 0;
+  const heard = r => { if (Number.isFinite(r?.now)) { skew = r.now - Date.now(); put(SKEW_KEY, Math.round(skew)); } };
+  const serverNow = () => Math.round(Date.now() + skew);
+  // A change's stamp: the server's clock, but always after this browser's last stamp and the last copy it took, so a
+  // skew re-estimate never makes a later change look older than one this browser already saw.
+  const lastAt = () => Number(get(AT_KEY)) || 0;
+  const stamp = () => put(AT_KEY, Math.max(serverNow(), lastAt() + 1));
+  const saw = at => { if (Number.isFinite(at) && at > lastAt()) put(AT_KEY, at); };
+  // The account's copy (a newer change than this browser's) replaces this browser's and takes effect.
+  const apply = c => { quiet = true; try { controlsStore.replace(c); } finally { quiet = false; } onApply(c); };
 
   // One PUT of this browser's fb_controls; the flag clears only when the server took the latest copy (200).
+  // A 409 means the account holds a newer change (another browser's): that copy is applied instead (unless this browser
+  // changed again meanwhile: that change is newer still and goes up next).
   function send(keepalive) {
-    const v = ver;
-    return api('/api/settings', { method: 'PUT', body: JSON.stringify({ settings: controlsStore.get() }), ...(keepalive ? { keepalive: true } : {}) })
-      .then(() => { if (v === ver) mark(false); });
+    const v = ver, at = lastAt() || serverNow();
+    return api('/api/settings', { method: 'PUT', body: JSON.stringify({ settings: controlsStore.get(), at }), ...(keepalive ? { keepalive: true } : {}) })
+      .then(r => { heard(r); if (v === ver) mark(false); }, e => {
+        if (e?.status !== 409 || !e.body?.settings) throw e;
+        heard(e.body);
+        if (v !== ver) return;
+        saw(e.body.at);
+        const plan = syncPlan(controlsStore.get(), e.body.settings);
+        if (plan.use) apply(plan.use);
+        mark(false);
+      });
   }
   // Uploads a change the server never got; waits for a PUT already out first, so they land in order.
   async function flush() {
@@ -70,13 +98,14 @@ export function createControlSync({ api, signedIn, account = () => null, onApply
     try {
       for (let fetched = false; ;) {
         if (!unsynced()) {
-          const { settings } = await retry(() => api('/api/settings'), my);
+          const r = await retry(() => api('/api/settings'), my), { settings } = r;
           if (my !== gen) return;
+          heard(r); saw(r.at);
           fetched = true;
           if (!unsynced()) { // (a change made while the GET was out keeps this browser's copy)
             const plan = syncPlan(controlsStore.get(), settings);
-            if (plan.use) { quiet = true; try { controlsStore.replace(plan.use); } finally { quiet = false; } onApply(plan.use); }
-            else mark(true); // the account has no copy yet: this browser's goes up
+            if (plan.use) apply(plan.use);
+            else { stamp(); mark(true); } // the account has no copy yet: this browser's goes up
           }
         }
         try { await retry(flush, my); break; } catch (e) { // (a pending upload is flushed, never cancelled)
@@ -92,7 +121,7 @@ export function createControlSync({ api, signedIn, account = () => null, onApply
   }
   controlsStore.listen(() => {
     if (quiet || !signedIn()) return;
-    ver++; mark(true); fails = 0;
+    ver++; stamp(); mark(true); fails = 0;
     if (live) schedule();
   });
   globalThis.addEventListener?.('pagehide', () => {

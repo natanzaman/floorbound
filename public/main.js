@@ -212,7 +212,7 @@ const loginMsg = t => { $('login-msg').textContent = t || ''; };
 async function api(path, opts = {}) {
   const r = await fetch(path, { ...opts, headers: { 'content-type': 'application/json', ...(acct.token ? { authorization: `Bearer ${acct.token}` } : {}) } });
   const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw Object.assign(new Error(body.error || 'Something went wrong'), { status: r.status });
+  if (!r.ok) throw Object.assign(new Error(body.error || 'Something went wrong'), { status: r.status, body });
   return body;
 }
 function showPanel(id) { for (const p of ['auth', 'chars', 'create']) $(p).classList.toggle('hidden', p !== id); }

@@ -711,7 +711,7 @@ Same rules as F–J: flock lock, push with `--force-with-lease`.
 - **Account sync:**
   - `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS settings JSONB`, capped at 8 KB, with a `v` field;
   - only bindings and accessibility sync; graphics, camera mode and active device stay local;
-  - on login the server copy wins if present, otherwise local uploads; exception (hard review 2026-11-20): when this browser has changes for this account the server never got (`fb_controls_unsynced`), those go up instead; a pending change of another account is dropped, never uploaded;
+  - on login the server copy wins if present, otherwise local uploads; exception (hard review 2026-11-20): when this browser has changes for this account the server never got (`fb_controls_unsynced`), those go up instead; a pending change of another account is dropped, never uploaded; newest change wins (2026-11-21): each change carries when it was made on the server's clock (`accounts.settings_at`), and an older one that arrives late (a tab closed before its upload, reopened after another browser's change) is refused with 409 and takes the newer copy;
   - unknown ids are dropped, and new actions get their defaults unless the key is taken.
 - **K3 cuts:** "sprint" (sprinting is automatic) and "aim assist strength" (attacks already auto-aim). Reduce-motion is checked inside `shake()` and `slowMotion()`, exempting `cine.js`. The colour-blind telegraph palette and sound cues wait until J merges (telegraph colours are spread across files J is editing).
 - **Touch** is a third, automatic device on the same action bus. The touch HUD hides while a pad is active.

@@ -81,17 +81,29 @@ export async function saveCharacter(p) {
 // Controls that follow the account (roadmap K2): the whole fb_controls object, cleaned (unknown ids dropped), with a
 // `v` field, at most CONTROLS_MAX_BYTES. null: nothing saved yet.
 export async function loadSettings(accountId) {
-  const rows = await q('SELECT settings FROM accounts WHERE id = $1', [accountId]);
-  return rows[0]?.settings ?? null;
+  return (await loadSettingsAt(accountId)).settings;
 }
-// Returns { ok } or { error, code } (400: not a controls object / no v; 413: too big).
-export async function storeSettings(accountId, raw) {
+// { settings, at }: the saved copy and when its change was made (ms, server clock; 0: not known).
+export async function loadSettingsAt(accountId) {
+  const rows = await q('SELECT settings, settings_at FROM accounts WHERE id = $1', [accountId]);
+  return { settings: rows[0]?.settings ?? null, at: Number(rows[0]?.settings_at) || 0 };
+}
+// Returns { ok, settings, at } or { error, code } (400: not a controls object / no v; 413: too big; 409: the saved copy's
+// change is newer than this one, with that copy as { settings, at }). `at`: when the change was made (ms, server clock,
+// as the browser estimates it); a change from the future counts as now. No `at` (an older page): saved, as now.
+export async function storeSettings(accountId, raw, at) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !Number.isInteger(raw.v)) return { error: 'Not a controls object.', code: 400 };
   if (Buffer.byteLength(JSON.stringify(raw)) > CONTROLS_MAX_BYTES) return { error: 'Settings too big.', code: 413 };
   const clean = cleanControls(raw);
   if (Buffer.byteLength(JSON.stringify(clean)) > CONTROLS_MAX_BYTES) return { error: 'Settings too big.', code: 413 };
-  await q('UPDATE accounts SET settings = $2 WHERE id = $1', [accountId, JSON.stringify(clean)]);
-  return { ok: true, settings: clean };
+  const now = Date.now(), when = Number.isFinite(at) && at > 0 ? Math.min(Math.round(at), now) : now;
+  // Saved only when no newer change is there (one statement, so two uploads at once can't both win).
+  const rows = await q(`UPDATE accounts SET settings = $2, settings_at = $3 WHERE id = $1 AND (settings_at IS NULL OR settings_at <= $3)
+    RETURNING id`, [accountId, JSON.stringify(clean), when]);
+  if (rows.length) return { ok: true, settings: clean, at: when };
+  const cur = await loadSettingsAt(accountId);
+  if (!cur.at) return { error: 'No such account.', code: 404 };
+  return { error: 'A newer copy is saved.', code: 409, ...cur };
 }
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _.-]{1,14}[A-Za-z0-9]$/;
@@ -141,15 +153,16 @@ export async function handle(req, res, url) {
         characters: await listCharacters(a.id),
       }), true;
     }
-    if (url.pathname === '/api/settings') { // GET: { settings } (null: none yet) · PUT { settings }: save
+    if (url.pathname === '/api/settings') { // GET: { settings, at, now } (null: none yet) · PUT { settings, at }: save (409: a newer copy)
       const a = await accountFromToken(bearer(req));
       if (!a) return json(res, 401, { error: 'signed out' }), true;
-      if (req.method === 'GET') return json(res, 200, { settings: await loadSettings(a.id) }), true;
+      if (req.method === 'GET') return json(res, 200, { ...await loadSettingsAt(a.id), now: Date.now() }), true;
       if (req.method !== 'PUT') return json(res, 405, { error: 'GET or PUT' }), true;
       const body = await readCapped(req, CONTROLS_MAX_BYTES + 512); // (the 8 KB object plus its { "settings": } wrapper)
       if (body.tooBig) return json(res, 413, { error: 'Settings too big.' }), true;
-      const r = await storeSettings(a.id, body.settings);
-      return json(res, r.code || 200, r.error ? { error: r.error } : { ok: true }), true;
+      const r = await storeSettings(a.id, body.settings, body.at);
+      if (r.code === 409) return json(res, 409, { error: r.error, settings: r.settings, at: r.at, now: Date.now() }), true; // (the newer copy, to apply)
+      return json(res, r.code || 200, r.error ? { error: r.error } : { ok: true, at: r.at, now: Date.now() }), true;
     }
     if (url.pathname === '/api/logout' && req.method === 'POST') {
       await q('DELETE FROM sessions WHERE token_hash = $1', [sha(bearer(req))]);

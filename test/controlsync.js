@@ -36,7 +36,8 @@ try {
   const [{ id }] = await db.q('INSERT INTO accounts DEFAULT VALUES RETURNING id');
   assert.equal(await accounts.loadSettings(id), null, 'nothing saved yet');
   const mine = { v: 1, kbm: { jump: ['KeyB', null], nope: ['KeyX', null] }, pad: { jump: ['B', null] }, access: { sens: 1.5, invertY: true }, device: 'pad' };
-  assert.deepEqual(await accounts.storeSettings(id, mine), { ok: true, settings: { v: 1, kbm: { jump: ['KeyB', null] }, pad: { jump: ['B', null] }, access: { sens: 1.5, invertY: true } } });
+  { const r = await accounts.storeSettings(id, mine); assert.ok(Math.abs(r.at - Date.now()) < 5000, 'stamped now'); delete r.at;
+    assert.deepEqual(r, { ok: true, settings: { v: 1, kbm: { jump: ['KeyB', null] }, pad: { jump: ['B', null] }, access: { sens: 1.5, invertY: true } } }); }
   assert.deepEqual(await accounts.loadSettings(id), { v: 1, kbm: { jump: ['KeyB', null] }, pad: { jump: ['B', null] }, access: { sens: 1.5, invertY: true } }, 'unknown ids and local-only keys dropped');
   assert.equal((await accounts.storeSettings(id, { kbm: {} })).code, 400, 'no v: refused');
   assert.equal((await accounts.storeSettings(id, [1])).code, 400, 'not an object: refused');
@@ -45,13 +46,29 @@ try {
   assert.deepEqual((await accounts.loadSettings(id)).kbm, { jump: ['KeyB', null] }, 'a refused save leaves the old copy');
   ok('storeSettings / loadSettings: cleaned, needs v, 8 KB cap, refusals change nothing');
 
+  // ---- newest change wins (a server timestamp): an older change that arrives late is refused with the newer copy ----
+  const cols2 = await db.q(`SELECT data_type FROM information_schema.columns WHERE table_name = 'accounts' AND column_name = 'settings_at'`);
+  assert.deepEqual(cols2, [{ data_type: 'bigint' }]);
+  { const t0 = Date.now();
+    await db.q('UPDATE accounts SET settings_at = $2 WHERE id = $1', [id, t0 - 10000]); // (the copy above: made 10 s ago)
+    assert.equal((await accounts.storeSettings(id, { v: 1, kbm: { jump: ['KeyC', null] } }, t0 - 1000)).ok, true, 'a change older than now, newer than the copy: saved');
+    const late = await accounts.storeSettings(id, { v: 1, kbm: { jump: ['KeyD', null] } }, t0 - 5000);
+    assert.equal(late.code, 409, 'an older change: 409');
+    assert.deepEqual(late.settings.kbm, { jump: ['KeyC', null] }, 'with the newer copy'); assert.equal(late.at, t0 - 1000);
+    assert.deepEqual((await accounts.loadSettings(id)).kbm, { jump: ['KeyC', null] }, 'and changes nothing');
+    const fut = await accounts.storeSettings(id, { v: 1, kbm: { jump: ['KeyE', null] } }, t0 + 3600e3);
+    assert.ok(fut.ok && fut.at <= Date.now(), 'a change from the future counts as now');
+    assert.ok((await accounts.storeSettings(id, { v: 1, kbm: { jump: ['KeyF', null] } })).ok, 'no stamp (an older page): saved as now');
+    assert.deepEqual((await accounts.loadSettings(id)).kbm, { jump: ['KeyF', null] }); }
+  ok('storeSettings: stamped with when the change was made; an older change is refused (409) with the newer copy');
+
   // ---- the routes ----
   srv = spawn(process.execPath, ['server/index.js'], { cwd: root, env: { ...process.env, PORT: String(PORT), NAMED_ENABLED: '0' }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((res, rej) => { srv.stdout.on('data', d => /localhost:\d+/.test(d) && res()); srv.on('exit', rej); setTimeout(res, 8000); });
   assert.equal((await call('GET', '/api/settings')).status, 401, 'signed out: 401');
   const { token } = (await call('POST', '/api/guest')).body;
   assert.ok(token);
-  assert.deepEqual((await call('GET', '/api/settings', token)).body, { settings: null }, 'a new account has no copy');
+  assert.deepEqual({ ...(await call('GET', '/api/settings', token)).body, now: 0 }, { settings: null, at: 0, now: 0 }, 'a new account has no copy');
   // login with no account copy: this browser's goes up
   const local = { v: 1, kbm: { jump: ['KeyB', null], gone: ['KeyQ', null] } };
   let plan = syncPlan(local, (await call('GET', '/api/settings', token)).body.settings);
@@ -73,6 +90,13 @@ try {
   assert.equal((await call('POST', '/api/settings', token, { settings: { v: 1 } })).status, 405, 'only GET and PUT');
   assert.deepEqual((await call('GET', '/api/settings', token)).body.settings.kbm, { jump: ['KeyM', null] }, 'refusals leave the copy alone');
   ok('GET / PUT /api/settings: signed in only, login rule (local uploads, then the account copy wins), 8 KB cap, v required');
+  { const g = (await call('GET', '/api/settings', token)).body;
+    assert.ok(g.at > 0 && Math.abs(g.now - Date.now()) < 5000, 'GET answers the copy\'s stamp and the server\'s clock');
+    const late = await call('PUT', '/api/settings', token, { settings: { v: 1, kbm: { jump: ['KeyO', null] } }, at: g.at - 1 });
+    assert.equal(late.status, 409); assert.deepEqual(late.body.settings.kbm, { jump: ['KeyM', null] }); assert.equal(late.body.at, g.at);
+    const put = await call('PUT', '/api/settings', token, { settings: g.settings, at: g.now });
+    assert.equal(put.status, 200); assert.ok(put.body.at >= g.at && put.body.now > 0); }
+  ok('GET / PUT /api/settings: stamps; an older change gets 409 and the newer copy');
 
   // ---- in the browser (public/controlsync.js): on sign-in the account copy replaces this browser's and takes effect;
   // a later rebind uploads. (Skipped without Playwright.)
@@ -204,6 +228,24 @@ try {
     assert.equal(await serverJump('KeyR', 8000, tokB), 'KeyR', 'a later rebind uploads (live)');
     assert.deepEqual(errors, []);
     ok('browser: a change refused for good (413) is dropped at login; the account copy applies and syncing goes on');
+    // (i) newest change wins (NEXT.md follow-up): a rebind in this tab never reached the server (closed within the
+    // debounce), another browser then changes the account's copy, and this tab comes back: the other browser's later
+    // change stays and this tab takes it. The converse: a waiting change made after the other browser's still goes up.
+    await sleep(1500); // (the live rebind above is saved; nothing waiting)
+    const tB = Date.now();
+    assert.equal((await call('PUT', '/api/settings', tokB, { settings: { v: 1, kbm: { jump: ['KeyL', null] } }, at: tB })).status, 200);
+    await seedReload({ fb_controls: JSON.stringify({ v: 1, kbm: { jump: ['KeyK', null] } }), fb_controls_unsynced: '?', fb_controls_at: String(tB - 30000) });
+    await p.waitForFunction(() => JSON.parse(localStorage.getItem('fb_controls')).kbm.jump?.[0] === 'KeyL', null, { timeout: 15000 }).catch(() => {});
+    await sleep(500);
+    assert.equal(await jumpOf(tokB), 'KeyL', "the other browser's later change is kept");
+    assert.equal(await jumpLocal(), 'KeyL', 'this tab takes it'); assert.equal(await jumpLive(), 'KeyL');
+    assert.equal(await flagNow(), null, 'and its older change is dropped');
+    await seedReload({ fb_controls: JSON.stringify({ v: 1, kbm: { jump: ['KeyK', null] } }), fb_controls_unsynced: '?', fb_controls_at: String(Date.now()) });
+    assert.equal(await serverJump('KeyK', 8000, tokB), 'KeyK', 'a waiting change newer than the account copy still uploads');
+    await sleep(500);
+    assert.equal(await jumpLocal(), 'KeyK'); assert.equal(await flagNow(), null);
+    assert.deepEqual(errors, []);
+    ok('browser: newest change wins: an older waiting change never replaces another browser\'s later one; a newer one goes up');
   } else console.log('  (browser part skipped: no Playwright)');
 
   // ---- review fixes: prototype names and odd binding strings are never stored; the body cap is the 8 KB cap (+512) ----
