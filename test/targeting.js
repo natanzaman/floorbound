@@ -1,7 +1,7 @@
 // Targeting modes and cleave (shared/targeting.js, server/targeting.js): the pure picker for all four modes (cone edge,
 // a lock behind you, a far lock), the cleave cap, settings cleaning; then in-process server checks: cleave on / off /
 // capped, per-skill limits, bots unchanged, aimed straight-line arrows (no homing, walk-in hits, padded hitbox), the
-// lock preference in the Ranger's server aim, aimed marks.
+// lock preference in the Ranger's server aim, aimed marks; weapon styles' fov (mods.fov) on the hit arc.
 // Usage: node test/targeting.js
 import assert from 'node:assert/strict';
 import { pickTarget, crosshairPick, capTargets, cleanPrefs, inCone, rayPick, attackFov, ATTACKS, CONE_HALF, DEFAULT_PREFS, AIM_PAD } from '../shared/targeting.js';
@@ -9,6 +9,7 @@ import { cleanControls, combatSetting } from '../shared/controls.js';
 import { Game } from '../server/game.js';
 import { CLASSES } from '../shared/data.js';
 import { newMastery } from '../shared/mastery.js';
+import { STYLES, STYLE_IDS } from '../shared/styles.js';
 
 let n = 0;
 const ok = name => console.log(`  ok ${++n} - ${name}`);
@@ -261,6 +262,52 @@ const fan = k => Array.from({ length: k }, (_, i) => wolf(Math.sin(-0.8 + (1.6 *
   reset(); const side2 = wolf(4, 0.5); use(ranger, 'mark');
   assert.ok(side2.markA, 'no prefs: the old pick (anything close by)');
   ok('marks: aimed along the line, cone stays in the cone, bots unchanged');
+}
+
+// weapon styles' field of view (mods.fov, owner 2026-11-21): slower arcs wider, quicker narrower; Cleave cap and Cone
+// filter unchanged on a widened arc
+{
+  // the data: modest, slow heavy arcs > 1, quick ones < 1, styles without arcs (lines, rings, bolts, bows) 1
+  const fov = id => STYLES[id].mods?.fov ?? 1;
+  for (const id of STYLE_IDS) assert.ok(fov(id) >= 0.85 && fov(id) <= 1.2, `${id}: a modest multiplier`);
+  for (const id of ['mace', 'halberd', 'warhammer']) assert.ok(fov(id) > 1, `${id}: slow, heavy arcs swing wider`);
+  for (const id of ['dual', 'daggers', 'twinaxes', 'rapier']) assert.ok(fov(id) < 1, `${id}: quick, precise ones narrower`);
+  for (const id of STYLE_IDS.filter(id => STYLES[id].def)) assert.equal(fov(id), 1, `${id}: the class default is the baseline`);
+  for (const id of ['spear', 'tome', 'wand', 'crossbow', 'glaive', 'drum', 'flute']) assert.equal(fov(id), 1, `${id}: no arcs (or no swing): 1`);
+  const cd = (id, base) => STYLES[id].basic?.cd ?? base * (STYLES[id].mods?.basicCd ?? 1);
+  assert.ok(cd('mace', 0.7) > 0.7 && cd('warhammer', 0.85) > 0.85 && cd('dual', 0.55) < 0.55 && cd('daggers', 0.6) < 0.6 && cd('twinaxes', 0.85) < 0.85, 'wider goes with slower, narrower with quicker');
+
+  const guard = g.addPlayer(null, 'Bran', 'guardian'); guard.lvl = 10; g.recompute(guard);
+  const swingAt = (p, style, angles, o = {}) => {
+    reset();
+    Object.assign(guard, { x: X, z: Z, face: 0, dead: false, cds: [0, 0, 0, 0], combo: 0, lastBasic: -9, target: 0, tprefs: null, aimYaw: null });
+    p.style = style;
+    const ws = angles.map(a => wolf(Math.sin(a) * 2.4, Math.cos(a) * 2.4));
+    if (o.prefs) prefs(p, o.prefs);
+    g.handle(p, { type: 'skill', slot: 0, face: 0, ...(o.look === undefined ? {} : { look: o.look }) });
+    const hit = hitIds(p);
+    return ws.map(w => hit.has(w.id));
+  };
+  // Mace & Shield (x1.15): its first blow's half-angle 1.0 rad becomes 1.15
+  assert.deepEqual(swingAt(guard, 'mace', [1.08, 1.2]), [true, false], 'Mace & Shield: a wolf at 1.08 rad (outside 1.0, inside 1.15) is hit, 1.2 is not');
+  assert.equal(ev('fx', e => e.k === 'sty' && e.id === guard.id)[0]?.h, 1.15, 'the swing effect shows the wider arc');
+  // Dual Blades (x0.85): 1.0 rad becomes 0.85
+  assert.deepEqual(swingAt(sword, 'dual', [0.8, 0.92]), [true, false], 'Dual Blades: 0.8 rad is hit, 0.92 (inside 1.0, outside 0.85) is not');
+  // the Cleave cap on a widened arc
+  const spread = [-1.1, -0.7, -0.35, 0, 0.35, 0.7, 1.1];
+  assert.equal(swingAt(guard, 'mace', spread, { prefs: { cleave: true, max: 8 } }).filter(Boolean).length, ATTACKS.styleArc.n, 'Cleave on: the arc basic\'s own limit (4) still caps a widened swing');
+  assert.equal(swingAt(guard, 'mace', spread, { prefs: { cleave: true, max: 2 } }).filter(Boolean).length, 2, 'max targets still caps it');
+  assert.equal(swingAt(guard, 'mace', spread, { prefs: { cleave: false } }).filter(Boolean).length, 1, 'Cleave off: one');
+  assert.equal(swingAt(guard, 'mace', spread).filter(Boolean).length, 7, 'bots (no prefs): every enemy in the wider swing');
+  // the Cone filter on a widened arc: looking 0.6 rad left, the wolf at +1.08 rad is in the swing but outside the cone
+  assert.deepEqual(swingAt(guard, 'mace', [1.08, 0], { prefs: { mode: 'cone' }, look: -0.6 }), [false, true], 'Cone: a widened swing still skips what is outside the camera cone');
+  // the Berserker's Cleave skill takes the style's multiplier too, and stays an area sweep with its own limit
+  zerk.style = 'warhammer';
+  const A = g.atkFov(zerk, 'cleave', { r: 4.2, half: 1.6 });
+  assert.ok(Math.abs(A.half - 1.6 * 1.2) < 1e-9 && A.aoe && A.n === 8, 'Warhammer: the Cleave skill sweeps x1.2 wider, still aoe with its own 8');
+  zerk.style = null;
+  g.removePlayer(guard);
+  ok('weapon field of view: mods.fov widens slow arcs and narrows quick ones; Cleave cap and Cone filter unchanged');
 }
 
 console.log(`targeting: all ${n} checks passed`);

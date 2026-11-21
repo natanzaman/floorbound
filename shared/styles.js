@@ -15,6 +15,11 @@ export const STYLE_IDS = ['sword', 'dual', 'rapier', 'shield', 'mace', 'spear', 
 //   ring/arc steps may also add `discord` (Bard: Discord stacks on every enemy hit) and `sweet` ([from m, x damage] for
 //   enemies whose near edge is that far away: the Lancer's tip-of-reach bonus).
 // mods: numeric tweaks read by game.js and the class files through styleNum(p, key, default).
+//   fov: x the half-angle of the style's arc attacks (server/targeting.js atkFov: arc basics, slash / chop, Burst Combo
+//   and its evolutions, the Cleave skill, Executioner). Owner's rule (2026-11-21): wider swings go with slower attacks,
+//   narrower with quicker ones. Slow, heavy arcs (Mace 0.95 s, Halberd 0.7 s sweeps, Warhammer 1.25 s) 1.15-1.2; quick
+//   or precise ones (Dual Blades 0.4 s, Twin Daggers 0.4 s, Twin Axes 0.55 s, Rapier) 0.85-0.9; the defaults and every
+//   style without arcs (lines, rings, bolts, bows: Spear & Shield, Glaive, Tome's ring, Wand, Crossbow, Drum, Flute) 1.
 // The newer classes (Ranger, Berserker, Lancer, Bard) implement their basic attacks in server/classes-a.js / classes-b.js;
 // a style there either has `basic` steps (it replaces the class attack: Twin Daggers, Halberd, Drum) or tunes the class
 // attack through mods: basicCd (x the basic attack's cooldown) and arrow / chop / thrust / bolt (overrides merged over
@@ -30,7 +35,7 @@ export const STYLES = {
     desc: 'Fast 4-hit combo with lighter hits. The 4th is a double strike with extra posture damage.',
     passive: 'Each Switch you land cuts your skill cooldowns by 0.5 s.',
     tweak: 'Burst Combo strikes 6 times.',
-    mods: { burstHits: 6, switchCdr: 0.5 },
+    mods: { burstHits: 6, switchCdr: 0.5, fov: 0.85 },
     basic: {
       cd: 0.4, window: 0.9, aim: 6, threat: 1,
       steps: [
@@ -46,7 +51,7 @@ export const STYLES = {
     desc: 'Thrusting 3-hit combo with longer reach that pierces a line. +10% critical chance.',
     passive: 'Perfect-dodge counters deal 40% more damage.',
     tweak: 'Rush is a longer lunge (12 m instead of 8 m).',
-    mods: { rushSteps: 24, counterDmg: 1.4, crit: 0.1 },
+    mods: { rushSteps: 24, counterDmg: 1.4, crit: 0.1, fov: 0.9 },
     basic: {
       cd: 0.6, window: 1.0, aim: 7, threat: 1,
       steps: [
@@ -66,7 +71,7 @@ export const STYLES = {
     desc: 'Slow, heavy blunt combo with big posture damage; the third blow sends out a shockwave.',
     passive: 'Breaks you cause last 1.2 s longer (0.6 s on bosses).',
     tweak: 'Ground Slam radius +20%.',
-    mods: { slamR: 1.2, breakBonus: [1.2, 0.6] },
+    mods: { slamR: 1.2, breakBonus: [1.2, 0.6], fov: 1.15 },
     basic: {
       cd: 0.95, window: 1.4, aim: 6, threat: 2.5,
       steps: [
@@ -139,7 +144,7 @@ export const STYLES = {
     desc: 'Melee instead of the bow: a fast 4-hit dagger combo (0.4 s); the 4th is a double stab.',
     passive: 'Dagger hits have a 12% chance to put a 4 s Hunter\'s Mark on the enemy.',
     tweak: 'Disengage is ready again whenever you kill an enemy.',
-    mods: { markChance: [0.12, 4], killReset: 'disengage' },
+    mods: { markChance: [0.12, 4], killReset: 'disengage', fov: 0.85 },
     basic: {
       cd: 0.4, window: 0.9, aim: 5, threat: 1,
       steps: [
@@ -160,14 +165,14 @@ export const STYLES = {
     desc: 'A faster 3-hit combo (0.55 s) with lighter hits and less posture damage (only the third swing is heavy).',
     passive: 'You build Rage 30% faster.',
     tweak: 'Cleave strikes twice (the second sweep at 60%).',
-    mods: { basicCd: 0.65, chop: { r: 3.1, half: 1.0, mult: [0.9, 0.9, 1.4], heavy: [false, false, true], fin: { knock: 1.6, frac: [0.06, 0.02] } }, rageGain: 1.3, cleaveTwin: 0.6 },
+    mods: { basicCd: 0.65, chop: { r: 3.1, half: 1.0, mult: [0.9, 0.9, 1.4], heavy: [false, false, true], fin: { knock: 1.6, frac: [0.06, 0.02] } }, rageGain: 1.3, cleaveTwin: 0.6, fov: 0.9 },
   },
   warhammer: {
     cls: 'berserker', name: 'Warhammer', noun: 'Warhammer',
     desc: 'The slowest swings (1.25 s), every blow heavy with a posture chunk; the third smashes the ground all around you.',
     passive: 'Breaks you cause last 1 s longer (0.5 s on bosses).',
     tweak: 'Leap Slam (and its evolutions) lands in a 35% wider ring.',
-    mods: { basicCd: 1.45, chop: { r: 3.5, half: 1.2, mult: [2.0, 2.0, 3.0], frac: [0.05, 0.015], fin: { knock: 3, frac: [0.16, 0.05], ring: 3.8 } }, breakBonus: [1.0, 0.5], leapR: 1.35 },
+    mods: { basicCd: 1.45, chop: { r: 3.5, half: 1.2, mult: [2.0, 2.0, 3.0], frac: [0.05, 0.015], fin: { knock: 3, frac: [0.16, 0.05], ring: 3.8 } }, breakBonus: [1.0, 0.5], leapR: 1.35, fov: 1.2 },
   },
   // ---------- Lancer ----------
   lance: {
@@ -179,7 +184,7 @@ export const STYLES = {
     desc: 'Sweeping arcs instead of lines (4 m, the third 4.6 m and wide); still +30% at the tip of the reach.',
     passive: 'The hooked blade slows every enemy you hit by 25% for 2 s (half on bosses).',
     tweak: 'Sweep radius +30%.',
-    mods: { hookSlow: [0.25, 2], sweepR: 1.3 },
+    mods: { hookSlow: [0.25, 2], sweepR: 1.3, fov: 1.15 },
     basic: {
       cd: 0.7, window: 1.1, aim: 5.5, threat: 1,
       steps: [

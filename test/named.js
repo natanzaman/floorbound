@@ -1,7 +1,7 @@
 // The Named (docs/ROADMAP.md I1): shared/named.js rules, server/named.js in process, then a real server.
 //   pure        tiers, daily caps (10:00 UTC reset), talk's own cap, the one loss, invite / call thresholds, level rule
 //   in process  presence (only with a human online, parked during a show), their own bot kind, level + premade gear,
-//               invites by tier, one Named per party, going home (disband, 10 quiet minutes), Sworn calls + cooldown,
+//               invites by tier, several Named per party, going home (disband, 10 quiet minutes), Sworn calls + cooldown,
 //               every friendship source, the loss, humans-first rules (killing blow, XP / loot, MVP), clears apart in
 //               the Hall, boss plans (never near a human), the loner's raid whisper, persistence through a store,
 //               tracking, the kill switch
@@ -174,7 +174,10 @@ function world({ store = null, presence = false } = {}) { // (presence: PRESENCE
   ok(['maribel', 'tovin', 'sennet'].map(P).every(p => p.party && p.party !== nat.party && p.party === P('maribel').party) && g.partyOf(P('maribel')).members.length === 3, 'and leaves the Hearthward, who carry on as three');
   ok(g.events.some(e => e.t === 'chat' && e.id === hp.id), 'with a line as he joins');
   set(nat, 'maribel', 90);
-  ok(!inv(nat, 'maribel') && /One of the Named per party/.test(sys(nat).join()), 'one Named per human party');
+  ok(inv(nat, 'maribel'), 'a second Named: the invite goes out (several per party, owner 2026-11-21)');
+  g.accept(P('maribel'), nat.id); tick(1);
+  ok(P('maribel').party === nat.party && hp.party === nat.party && g.partyOf(nat).members.length === 3, 'Maribel joins too: two of the Named in your party');
+  ok(P('tovin').party === P('sennet').party && g.partyOf(P('tovin')).members.length === 2, 'the Hearthward carry on as two');
   const ann = human('Ann', 9);
   set(ann, 'halvard', 90);
   ok(!inv(ann, 'halvard') && /in Natan's party/.test(sys(ann).join()), 'someone else can\'t invite him away');
@@ -412,7 +415,7 @@ function world({ store = null, presence = false } = {}) { // (presence: PRESENCE
   ok(!isNamedName(fake.name), 'an anonymous player can\'t take one of their names');
 }
 
-// ---- review fixes (2026-11-18): one Named per party, quiet clears, names, boss help, humans first, plans ----
+// ---- review fixes (2026-11-18): several Named per party (2026-11-21), quiet clears, names, boss help, humans first, plans ----
 console.log('# review fixes');
 {
   const { g, mgr, nm, clock, human, tick, P, sys, set } = world();
@@ -420,23 +423,30 @@ console.log('# review fixes');
   const at = (p, x, z) => { p.x = x; p.z = z; };
   const near = (p, q) => at(p, q.x + 2, q.z);
   const hp = P('halvard'), mb = P('maribel'), tv = P('tovin'), cairn = P('cairn');
-  // #2: two invites out before either accepts
+  // #2 (owner 2026-11-21: several of the Named per party): two invites out before either accepts: both join
   set(nat, 'halvard', 40); set(nat, 'maribel', 40); near(nat, hp);
   g.invite(nat, hp.id); g.invite(nat, mb.id);
   ok(hp.invite?.from === nat.id && mb.invite?.from === nat.id, 'two invites out at once');
-  g.accept(hp, nat.id); g.events = [];
-  g.accept(mb, nat.id);
-  ok(hp.party === nat.party && mb.party !== nat.party && !mb.invite && /One of the Named per party/.test(sys(nat).join()) && g.events.some(e => e.t === 'chat' && e.id === mb.id), 'review #2: the second to accept is turned away (invite cleared, the "taken" line)');
+  g.accept(hp, nat.id); g.accept(mb, nat.id);
+  ok(hp.party === nat.party && mb.party === nat.party && g.partyOf(nat).members.length === 3 && !mb.invite, 'both accept: two of the Named in one party');
   g.leaveParty(nat); tick(1);
-  // an invite out, then a Sworn call
-  set(nat, 'tovin', 90); g.invite(nat, mb.id);
-  ok(/One of the Named per party/.test(nm.call(nat, 'tovin')) && (!nat.party || tv.party !== nat.party), 'review #2: a Sworn call while another Named has your invite: refused');
-  mb.invite = null;
-  // a call, then an old invite accepted
-  g.invite(nat, mb.id); mb.invite.from = nat.id; const pend = { ...mb.invite }; mb.invite = null;
-  ok(nm.call(nat, 'tovin') === '' && tv.party === nat.party, 'the call goes through once nothing is pending');
-  mb.invite = pend; g.accept(mb, nat.id);
-  ok(mb.party !== nat.party && !mb.invite, 'review #2: an invite accepted after a call: turned away');
+  ok(!nat.party && hp.party === mb.party && hp.party === tv.party && g.partyOf(hp).members.length === 4, 'you leave: the two left together regroup with the Hearthward');
+  // the party limit: 3 humans + 2 Named, an invite out to Cairn: full for anyone else
+  const bea = human('Bea', 10), cid = human('Cid', 10);
+  g.invite(nat, bea.id); g.accept(bea, nat.id); g.invite(nat, cid.id); g.accept(cid, nat.id);
+  g.invite(nat, hp.id); g.accept(hp, nat.id); g.invite(nat, mb.id); g.accept(mb, nat.id);
+  ok(g.partyOf(nat).members.length === 5, 'three humans and two of the Named: five');
+  set(nat, 'tovin', 90); set(nat, 'cairn', 90); set(nat, 'sennet', 90);
+  g.invite(nat, tv.id); const pend = tv.invite && { ...tv.invite }; tv.invite = null; // (an invite Tovin will accept late)
+  g.invite(nat, cairn.id);
+  ok(cairn.invite?.from === nat.id && !!pend, 'an invite out to Cairn (and an old one to Tovin, put aside)');
+  ok(/party is full/.test(nm.call(nat, 'tovin')) && tv.party !== nat.party, 'a Sworn call with five in the party and an invite out: full');
+  ok(/party is full/.test(nm.inviteBlock(nat, nm.chars.get('sennet'))), 'and no more invites');
+  g.accept(cairn, nat.id);
+  ok(cairn.party === nat.party && g.partyOf(nat).members.length === 6 && g.partyOf(nat).members.filter(id => g.players.get(id)?.named).length === 3, 'Cairn accepts: six, three of them Named');
+  tv.invite = pend; g.accept(tv, nat.id);
+  ok(tv.party !== nat.party && !tv.invite && g.partyOf(nat).members.length === 6, 'an old invite accepted with the party full: turned away (invite cleared)');
+  for (const h of [bea, cid]) { g.leaveParty(h); g.removePlayer(h); }
   g.leaveParty(nat); tick(1);
   // nice-to-have: a failed call doesn't spend the cooldown
   clock.t += RULES.summonCd * 1000 + 1000;

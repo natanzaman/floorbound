@@ -27,7 +27,8 @@
 //                    Gear, mastery and talents are the premade setup for that level (shared/playerbots.js)
 //    plans           each group farms, and now and then goes for the boss of its floor, but only while no human is in
 //                    or near the arena; an invited Hero leaves the Hearthward for your party and goes back when the
-//                    party disbands or after 10 quiet minutes; one Named per human party
+//                    party disbands or after 10 quiet minutes; several of the Named may join one human party (owner
+//                    2026-11-21), never past PARTY_MAX (partyRoom)
 //    despawn         each is unique (never a copy): a permitted player (or an admin) takes one out of the world and
 //                    brings them back later (despawnBy / respawnBy, setEnabled); back, they rejoin the human party they
 //                    left if it still exists with room (a party of two breaks up when they leave: then the same human,
@@ -144,9 +145,13 @@ export class NamedManager {
     const party = this.game.partyOf(p);
     return party ? party.members.map(id => this.game.players.get(id)).find(isHuman) || null : null;
   }
-  namedInParty(party) { return party ? party.members.map(id => this.game.players.get(id)).filter(o => o?.named) : []; }
-  // another Named with h's invite still open (it could accept at any moment)
-  namedInvited(h, st) { return this.online().some(o => o !== st && this.playerOf(o)?.invite?.from === h.id); }
+  // Room in h's party for one more of the Named ('' = room): several may join one party (owner 2026-11-21), never past
+  // PARTY_MAX, counting the other Named who hold h's invite (they could accept at any moment).
+  partyRoom(h, st) {
+    const party = this.game.partyOf(h), size = party?.members.length || 1;
+    const open = this.online().filter(o => { const q = o !== st && this.playerOf(o); return q && q.invite?.from === h.id && !(party && q.party === party.id); }).length;
+    return size + open >= PARTY_MAX ? 'Your party is full.' : '';
+  }
   humanIn(ids) { for (const id of ids) if (isHuman(this.game.players.get(id))) return true; return false; }
   say(p, text) { if (p && text) this.game.events.push({ t: 'chat', id: p.id, from: p.name, text, ch: 's', x: r2(p.x), z: r2(p.z) }); }
   send(h, o) { if (h?.ws?.readyState === 1) h.ws.send(JSON.stringify({ type: 'named', ...o })); }
@@ -238,7 +243,7 @@ export class NamedManager {
   ctlBlock(h, st, action) { return this.mgr.controlBlock?.(h, { creator: null, allow: st.allow, name: st.def.name }, action) || ''; }
   // Why this human can't invite this Named right now ('' = they can).
   inviteBlock(h, st) {
-    const def = st.def, p = this.playerOf(st), g = this.game;
+    const def = st.def, p = this.playerOf(st);
     const ctl = this.ctlBlock(h, st, 'botInvite');
     if (ctl) return ctl;
     if (!st.enabled) return `${def.name} is out of the world (despawned). Respawn them first.`;
@@ -246,7 +251,7 @@ export class NamedManager {
     if (p && h.party && p.party === h.party) return `${def.name} is already in your party.`;
     const rec = this.peek(h, def.id) || newFriendship();
     if (!canInvite(def, rec.pts)) return `${def.name} only joins ${art(TIERS[tierAt(def.trust.invite)].name)} (you: ${TIERS[tierIndex(rec.pts)].name}).`;
-    return (p && this.freeBlock(h, st, p)) || (this.namedInParty(g.partyOf(h)).length ? 'One of the Named per party.' : (g.partyOf(h)?.members.length || 1) >= PARTY_MAX ? 'Your party is full.' : '');
+    return (p && this.freeBlock(h, st, p)) || this.partyRoom(h, st);
   }
   freeBlock(h, st, p) { // busy rules, the same for an invite and a call
     const def = st.def, host = this.hostOf(p);
@@ -257,7 +262,7 @@ export class NamedManager {
     return '';
   }
   callBlock(h, st) {
-    const def = st.def, p = this.playerOf(st), g = this.game, now = this.now();
+    const def = st.def, p = this.playerOf(st), now = this.now();
     const ctl = this.ctlBlock(h, st, 'botInvite'); // (a call brings them into your party: the invite rule)
     if (ctl) return ctl;
     if (!p && !this.resting(st)) return `${def.name} isn't around right now.`;
@@ -267,7 +272,7 @@ export class NamedManager {
     const left = st.summonAt + RULES.summonCd * 1000 - now;
     if (left > 0) return `${def.name} was called away a moment ago. Try again in ${Math.ceil(left / 60000)} min.`;
     if (h.dead || h.downed) return 'Wait until you are back on your feet.';
-    return (p && this.freeBlock(h, st, p)) || (this.namedInParty(g.partyOf(h)).length || this.namedInvited(h, st) ? 'One of the Named per party.' : (g.partyOf(h)?.members.length || 1) >= PARTY_MAX ? 'Your party is full.' : '');
+    return (p && this.freeBlock(h, st, p)) || this.partyRoom(h, st);
   }
   // game.invite(h, a Named): true = let the invite through (the bot accepts it).
   onInvite(h, t) {
@@ -276,7 +281,7 @@ export class NamedManager {
     const why = this.inviteBlock(h, st);
     if (!why) return true;
     const rec = this.peek(h, st.def.id) || newFriendship();
-    const key = this.ctlBlock(h, st, 'botInvite') ? '' : !canInvite(st.def, rec.pts) ? 'refuse' : /per party/.test(why) ? 'taken' : /boss fight|party\.$/.test(why) ? 'busy' : '';
+    const key = this.ctlBlock(h, st, 'botInvite') ? '' : !canInvite(st.def, rec.pts) ? 'refuse' : /boss fight|party\.$/.test(why) ? 'busy' : '';
     if (key && dist(h, t) < 40) this.say(t, namedLine(st.def, key, { who: h.name }));
     this.game.sys(why, h.id);
     return false;
@@ -449,8 +454,8 @@ export class NamedManager {
     this.flushChars();
     return true;
   }
-  // The party a respawned Named goes back to: the one they left, if it's still there with a human, room and no other
-  // Named; or (a party of two breaks up when they leave) the human they were with, still online and in no party: a new
+  // The party a respawned Named goes back to: the one they left, if it's still there with a human and room (other
+  // Named in it are fine); or (a party of two breaks up when they leave) the human they were with, still online and in no party: a new
   // party with them. Else none: they roam. -> { h, party (0: make one with h) } | null
   rejoinHost(r) {
     const g = this.game;
@@ -458,7 +463,7 @@ export class NamedManager {
     const party = g.parties.get(r.party), h = g.players.get(r.host);
     if (party) {
       const host = party.members.map(i => g.players.get(i)).find(isHuman);
-      return host && party.members.length < PARTY_MAX && !this.namedInParty(party).length ? { h: host, party: party.id } : null;
+      return host && party.members.length < PARTY_MAX ? { h: host, party: party.id } : null;
     }
     return isHuman(h) && !h.party ? { h, party: 0 } : null;
   }
@@ -660,7 +665,7 @@ export class NamedManager {
       } else if (q.kind === 'out') this.quests?.join?.(h, st, q.out);
       else if (q.kind === 'rejoin') { // respawned: back into the party they left (rejoinHost: still there, or with the same human)
         const party = q.party && this.game.parties.get(q.party);
-        if (party ? party.members.includes(h.id) && party.members.length < PARTY_MAX && !this.namedInParty(party).some(o => o !== p) : !h.party) this.mgr.joinParty(p, h); // (withHost says hello)
+        if (party ? party.members.includes(h.id) && party.members.length < PARTY_MAX : !h.party) this.mgr.joinParty(p, h); // (withHost says hello)
       }
     }
   }
@@ -924,7 +929,7 @@ export function installNamed(Game) {
   });
   wrap('accept', function (orig, p, fromId) {
     const N = this.named, from = N && this.players.get(fromId);
-    if (p?.named && isHuman(from) && p.invite?.from === fromId && !N.onInvite(from, p)) { p.invite = null; return; } // (things changed since the invite: one Named per party)
+    if (p?.named && isHuman(from) && p.invite?.from === fromId && !N.onInvite(from, p)) { p.invite = null; return; } // (things changed since the invite: the party filled up, they're busy)
     const out = orig.call(this, p, fromId);
     if (from?.named && isHuman(p) && p.party && p.party === from.party) N.onAccept(p, from);
     return out;

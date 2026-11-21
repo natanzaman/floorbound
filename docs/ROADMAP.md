@@ -43,7 +43,16 @@ Done and live:
 - **Every bot is in the Players list** (Players tab → Bots), the Named included, with Invite to party and where it is; Kick out of your party; Despawn / Respawn for the Named (each one of a kind; back, they rejoin the party they left, or the same player when a party of two broke up; else they roam). Despawned survives a restart.
 - **Access levels** 1-5 per account (`accounts.access_level`, set by devs on the admin page; never the character level). Everyone 1, admins count as 5. `shared/accesslevels.js` `ACTION_MIN` gives each gated action a minimum (all 1 now; raising one is one line); `ACCESS.overrideBots` = 3.
 - **Who may control a bot** (command, invite, kick, despawn / respawn): the creator; else access 3+; else, if the bot has an allow list, only those on it; else anyone at the action's minimum. One pure function (`canControlBot`), unit-tested. Allow lists hold saved characters' ids (security review 2026-11-20: never display names), editable by the creator from the Players list. Nobody despawns a Named out of another player's party (access 3+ excepted). A creator's bots that are lent to another party or in a boss fight outlive the 60 s grace until free. Renaming / skill / behaviour / Dismiss stay with the creator (or access 3+).
-- **The Named's invites need no tier** (`INVITE_NEEDS_TIER = false` in `shared/named.js`; the old gate is one flag away); friendship is otherwise unchanged, Sworn calls keep their tier, and one Named per party stays.
+- **The Named's invites need no tier** (`INVITE_NEEDS_TIER = false` in `shared/named.js`; the old gate is one flag away); friendship is otherwise unchanged and Sworn calls keep their tier. ~~One Named per party stays.~~ Replaced on 2026-11-21 (below).
+
+## Owner decisions (2026-11-21): the 2026-11-20 batch's questions (`feat/tweaks`, brief `docs/briefs/tweaks-2026-11-21.md`)
+- **Several of the Named per party:** yes, up to the normal party size (6); each is still one of a kind.
+- **Weapon attack field of view:** the recommended `mods.fov` values (wider swings with slower attacks, narrower with
+  quicker ones): Mace & Shield, Halberd x1.15; Warhammer x1.2; Dual Blades, Twin Daggers x0.85; Twin Axes, Rapier x0.9;
+  the rest 1 (`docs/briefs/targeting.md`).
+- **Kept as is:** target limits (basic swings 4, finishers 6, Berserker Cleave 8, thrusts 3); bots keep the old
+  behaviour; the Ranger crosshair pick; Aimed mode's lock still turns the camera; Cleave doesn't cover spins, slams or
+  chords; no per-player cap on free bots.
 
 ## Tasks
 **Status 2026-11-20: A–K are done and merged** (specs kept below for reference), except F7 (film work, paused by the owner). What to do next and the owner calls waiting: `docs/NEXT.md`.
@@ -386,7 +395,7 @@ Same rules as F/G/H (flock lock, push with `--force-with-lease`).
   - **Pacing targets:** a Hero at Ally in about 2 sessions and Friend in about 5; the loner at Friend in about 8–10.
 - **I1.5 invites and summons:**
   - An invited Hero leaves the Heroes for your party, and returns on disband or after 10 min idle.
-  - One Named per human party.
+  - ~~One Named per human party.~~ Several allowed, up to the party size (owner 2026-11-21).
   - Sworn summons are first-come, with a 10 min cooldown.
 - **I1.5b (new):** at Friend, the loner whispers you an invite (a canned line) when he heads for a boss and you're online. At most 1 per hour, and none after a decline in that session.
 - **I1.8 also accept when:**

@@ -134,7 +134,6 @@ const LINES = {
   heroes: {
     refuse: ["We don't know you well enough yet, {who}. Fight beside us a while.", 'Not yet, {who}. Earn it in the field first.'],
     busy: ['Bad timing, {who}. Ask me after this.', "I'm in the middle of something, {who}."],
-    taken: ['One of us at a time, {who}. The others hold the line.'],
     join: ['With you, {who}.', "Right. Let's go, {who}."],
     called: ['You called, {who}. Here.', 'On my way was the easy part. What do you need, {who}?'],
     home: ["Quiet out here. I'm heading back to the others.", 'Back to the Hearthward for me. Call if you need us.'],
@@ -143,7 +142,6 @@ const LINES = {
   loner: {
     refuse: ['No.', 'I hunt alone.', "Don't ask me that again."],
     busy: ['Later.'],
-    taken: ['You already have company.'],
     join: ['Fine. Keep up.'],
     called: ['You called. I came.'],
     home: ["We're done here."],
@@ -212,9 +210,9 @@ export function loseFriendship(rec, def, kind = 'downed') {
 }
 
 // Invites (owner decision 2026-11-20): anyone may invite any of the Named, from the Players list's Bots section or the
-// Friends tab; their other rules stay (one per party, busy, party full). INVITE_NEEDS_TIER = true brings back the old
-// gate (each one's trust.invite tier: a Hero from Ally, the loner from Friend). Friendship is otherwise unchanged, and a
-// Sworn call (canSummon) keeps its tier. (inviteGate: the live switch, which tests flip.)
+// Friends tab; their other rules stay (busy, party full; several may join one party: owner 2026-11-21).
+// INVITE_NEEDS_TIER = true brings back the old gate (each one's trust.invite tier: a Hero from Ally, the loner from
+// Friend). Friendship is otherwise unchanged, and a Sworn call (canSummon) keeps its tier. (inviteGate: the live switch, which tests flip.)
 export const INVITE_NEEDS_TIER = false;
 export const inviteGate = { needsTier: INVITE_NEEDS_TIER };
 export const canInvite = (def, pts) => !inviteGate.needsTier || tierIndex(pts) >= tierAt(def.trust.invite);

@@ -312,7 +312,7 @@ export class PlayerBots {
     if (rec) { Object.assign(rec, { partied: false, mode: 'field', inParty: 0, wantParty: false }); this.setMode(e, 'field', '', {}); }
     else this.mgr.roam(e);
   }
-  // The Named (server/named.js): invite (their own rules: one per party, busy; INVITE_NEEDS_TIER), kick, despawn, respawn.
+  // The Named (server/named.js): invite (their own rules: party room, busy; INVITE_NEEDS_TIER), kick, despawn, respawn.
   namedOp(p, op, id, admin) {
     const N = this.game.named;
     if (!N) fail('The Named are not in this world.');
