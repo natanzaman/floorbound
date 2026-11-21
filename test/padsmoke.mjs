@@ -114,7 +114,7 @@ try {
   const press = async (names, k = 3) => { for (const nm of names) await btn(nm, true); await frames(k); for (const nm of [...names].reverse()) await btn(nm, false); await frames(2); };
   const axes = a => S(a => { window.__pad.pad.axes = a; }, a);
   const keepAlive = () => S(() => window.__fb.send({ type: 'test', hurt: 1 }));
-  const ready = slot => p.waitForFunction(s => performance.now() > window.__fb.state.ready[s] + 50, slot, { timeout: 60000 });
+  const ready = slot => p.waitForFunction(s => { const st = window.__fb.state, t = performance.now(); return t > st.ready[s] + 50 || (t >= st.ready[s] && t - st.lastPress[s] > 400); }, slot, { timeout: 60000 });
   const toast = () => S(() => { const el = document.getElementById('padtoast'); return el && !el.classList.contains('hidden') ? el.textContent : null; });
 
   // ---- plugging it in: the one-time prompt; A switches ----

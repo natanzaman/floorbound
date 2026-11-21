@@ -53,7 +53,9 @@ try {
   const menuOpen = () => visible('gamemenu');
   const tap = async (code, k = 2) => { await p.keyboard.down(code); await frames(k); await p.keyboard.up(code); await frames(2); };
   const lastLog = () => S(() => document.getElementById('log').lastElementChild?.textContent || '');
-  const ready = slot => p.waitForFunction(s => performance.now() > window.__fb.state.ready[s] + 50, slot, { timeout: 20000 }).catch(async e => {
+  // Ready: past the client's cooldown with a margin, or already past it when the server set it (a snapshot puts a cooldown
+  // the server has finished at the moment it arrived, 20 times a second: the 50 ms margin alone could keep missing).
+  const ready = slot => p.waitForFunction(s => { const st = window.__fb.state, t = performance.now(); return t > st.ready[s] + 50 || (t >= st.ready[s] && t - st.lastPress[s] > 400); }, slot, { timeout: 20000 }).catch(async e => {
     const d = await S(s => { const st = window.__fb.state, now = performance.now(); return { now: Math.round(now), ready: st.ready.map(r => Math.round(r - now)), lastPress: st.lastPress.map(r => Math.round(now - r)), skills: window.__sent.slice(-400).filter(o => o.type === 'skill').length, hp: st.hp, dead: st.dead, frames: window.__fb.input.frames, menu: !document.getElementById('gamemenu').classList.contains('hidden') }; }, slot).catch(x => x.message);
     throw new Error(`ready(${slot}) timed out: ${JSON.stringify(d)}`);
   });
@@ -187,7 +189,7 @@ try {
   for (const [code, id, name] of [['Digit5', 'tonic', 'Tonic'], ['Digit6', 'draught', 'Draught']]) {
     m = await mark(); await tap(code);
     if (inv[id] > 0) assert.deepEqual((await sent(m, 'use')).map(o => o.id), [id], `${code} uses ${id}`);
-    else assert.match(await lastLog(), new RegExp(name, 'i'), `${code} tries the ${id} (none left)`);
+    else assert.match(await S(() => [...document.getElementById('log').children].slice(-6).map(c => c.textContent).join(' | ')), new RegExp(name, 'i'), `${code} tries the ${id} (none left)`); // (the last few lines: a world message can land after it)
   }
   ok('4 5 6 use the potion, tonic and draught');
 
@@ -213,7 +215,7 @@ try {
     for (let i = 0; ; i++) {
       await p.keyboard.down('KeyV'); await p.keyboard.up('KeyV'); await frames(2);
       const gap = await S(() => window.__vgap.gap);
-      if (gap < 300 || i >= 4) { assert.ok(await visible('botwheel'), `a quick tap keeps it open (down to up ${Math.round(gap)} ms)`); break; }
+      if (gap < 300 || i >= 9) { assert.ok(await visible('botwheel'), `a quick tap keeps it open (down to up ${Math.round(gap)} ms)`); break; }
       if (await visible('botwheel')) await tap('Escape'); // (that one counted as a hold: start over)
     }
   }

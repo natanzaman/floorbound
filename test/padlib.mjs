@@ -71,7 +71,7 @@ export async function openPad(browser, base, { onError } = {}) {
   P.visible = id => S(id => { const el = document.getElementById(id); return !!el && !el.classList.contains('hidden'); }, id);
   P.keepAlive = () => S(() => window.__fb.send({ type: 'test', hurt: 1 })); // (wolves bite: top up between checks)
   P.ward = () => S(() => window.__fb.send({ type: 'test', ward: 1 })); // (TEST_HOOKS: nothing hurts us, so a slow run never gets bitten down mid-check)
-  P.ready = slot => p.waitForFunction(s => performance.now() > window.__fb.state.ready[s] + 50, slot, { timeout: 60000 });
+  P.ready = slot => p.waitForFunction(s => { const st = window.__fb.state, t = performance.now(); return t > st.ready[s] + 50 || (t >= st.ready[s] && t - st.lastPress[s] > 400); }, slot, { timeout: 60000 });
   P.clearTarget = () => S(() => { window.__fb.state.lock = 0; window.__fb.state.focus = 0; });
   P.st = () => S(() => { const s = window.__fb.state; return { x: s.x, z: s.z, yaw: s.yaw, pitch: s.pitch, hp: s.hp, maxHp: s.maxHp, lock: s.lock, moveDir: s.moveDir, dead: s.dead }; });
   P.goTo = async (key, dir = 'Down', max = 30) => { // d-pad until the focus is on key
