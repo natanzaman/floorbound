@@ -15,6 +15,8 @@ assert.equal(PRESETS.high.antialias, true); assert.equal(PRESETS.low.antialias, 
 assert.ok(PRESETS.low.charDist < PRESETS.medium.charDist && PRESETS.medium.charDist < PRESETS.high.charDist, 'character draw distance rises with the level (review #7)');
 assert.deepEqual(LEVELS.map(l => PRESETS[l].charDist), [70, 100, 140]);
 assert.ok(LEVELS.every(l => PRESETS[l].charShadow === 25), 'characters cast shadows within 25 m');
+assert.ok(!PRESETS.low.post && !PRESETS.low.trails && !PRESETS.low.fx3d, 'Low: no bloom, trails or 3D skill effects (the visuals pass costs it nothing)');
+assert.ok(PRESETS.medium.post && PRESETS.high.post && PRESETS.medium.fx3d && PRESETS.high.fx3d && PRESETS.medium.trails <= PRESETS.high.trails, 'Medium / High: bloom, 3D effects, trails');
 
 // starting level
 assert.equal(startLevel('low'), 'low');
