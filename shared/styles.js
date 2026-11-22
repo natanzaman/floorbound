@@ -316,3 +316,8 @@ export function styleLine(it) {
   if (!s) return '';
   return s.def ? s.name : `${s.name}: ${s.passive}`;
 }
+
+// Two weapons, swap mid-fight (docs/briefs/combat-quickwins.md 3): inv.eq.weapon2 holds a second weapon of your class;
+// the swap action trades it with the worn one (server/weaponswap.js). cd: s between swaps; busy: no swap this soon after
+// a skill press (mid-skill). Only the worn weapon gives stats and the style; cooldowns carry over; a swap is a chain step.
+export const SWAP = { cd: 1, busy: 0.35, step: 'swap' };

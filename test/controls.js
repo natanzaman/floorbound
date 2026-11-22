@@ -78,10 +78,10 @@ const H = (...k) => new Set(k);
   assert.equal(r(H('Down'), 'Down', undefined, 'pad'), 'interact');
   assert.equal(r(H('Down'), 'Down', H('downedAlly'), 'pad'), 'revive');
   // two-key chord, either order
-  const Z = { ...K, cover: ['KeyZ+KeyN', null] };
-  assert.equal(resolve(Z, H('KeyZ', 'KeyN'), { code: 'KeyN' })?.action, 'cover');
-  assert.equal(resolve(Z, H('KeyZ', 'KeyN'), { code: 'KeyZ' })?.action, 'cover');
-  assert.equal(resolve(Z, H('KeyN'), { code: 'KeyN' }), null);
+  const Z = { ...K, cover: ['KeyZ+KeyL', null] };
+  assert.equal(resolve(Z, H('KeyZ', 'KeyL'), { code: 'KeyL' })?.action, 'cover');
+  assert.equal(resolve(Z, H('KeyZ', 'KeyL'), { code: 'KeyZ' })?.action, 'cover');
+  assert.equal(resolve(Z, H('KeyL'), { code: 'KeyL' }), null);
   ok('resolve: codes not characters, alt slots, Ctrl/Cmd chords beat plain clicks, contexts, the pad LB layer, two-key chords');
 }
 
@@ -117,20 +117,20 @@ const H = (...k) => new Set(k);
   assert.equal(check(K, 'kbm', 'jump', 0, 'KeyW,KeyA,KeyS,KeyD').error, 'axis');
   assert.equal(check(K, 'kbm', 'move', 0, 'KeyW').error, 'axis');
   // chords without timing windows
-  assert.equal(check(K, 'kbm', 'cover', 0, 'KeyR+KeyN').error, 'chord', 'R guards, so it can\'t be a chord member');
-  assert.equal(check(K, 'kbm', 'cover', 0, 'Shift+KeyN').error, 'chord', 'Shift dodges, so no Shift chords');
+  assert.equal(check(K, 'kbm', 'cover', 0, 'KeyR+KeyL').error, 'chord', 'R guards, so it can\'t be a chord member');
+  assert.equal(check(K, 'kbm', 'cover', 0, 'Shift+KeyL').error, 'chord', 'Shift dodges, so no Shift chords');
   assert.ok(check(K, 'kbm', 'cover', 0, 'Ctrl+KeyZ').ok, 'Ctrl has no action: Ctrl+Z is fine');
-  assert.ok(check(K, 'kbm', 'cover', 0, 'KeyZ+KeyN').ok, 'Z and N are free: Z+N is fine');
-  const withChord = assign(K, 'kbm', 'cover', 0, 'KeyZ+KeyN').bindings;
+  assert.ok(check(K, 'kbm', 'cover', 0, 'KeyZ+KeyL').ok, 'Z and L are free: Z+L is fine');
+  const withChord = assign(K, 'kbm', 'cover', 0, 'KeyZ+KeyL').bindings;
   assert.equal(check(withChord, 'kbm', 'jump', 0, 'KeyZ').error, 'chord', 'Z is held for a chord: it can\'t get its own action');
-  assert.ok(check(withChord, 'kbm', 'jump', 0, 'KeyN').ok, 'N (the chord\'s trigger) may keep an action of its own');
+  assert.ok(check(withChord, 'kbm', 'jump', 0, 'KeyL').ok, 'L (the chord\'s trigger) may keep an action of its own');
   assert.equal(check(K, 'kbm', 'jump', 0, 'Ctrl').error, 'chord', 'Ctrl is held for the select chords: no action of its own');
   // conflicts: one key per control and one control per key
   assert.deepEqual(check(K, 'kbm', 'jump', 0, 'KeyB').conflicts, [{ action: 'bag', slot: 0 }]);
   assert.deepEqual(check(K, 'kbm', 'jump', 0, 'KeyI').conflicts, [{ action: 'bag', slot: 1 }], 'alt slots are conflict-checked');
   assert.deepEqual(check(K, 'kbm', 'jump', 0, 'KeyW').conflicts, [{ action: 'move', slot: 0 }], 'a key inside the WASD axis');
   assert.deepEqual(check(K, 'kbm', 'move', 1, 'KeyI,KeyJ,KeyK,KeyL').conflicts.map(c => c.action).sort(), ['attack', 'bag', 'skillTree'], 'an axis over taken keys');
-  assert.ok(check(K, 'kbm', 'jump', 0, 'KeyG').ok, 'a free key');
+  assert.ok(check(K, 'kbm', 'jump', 0, 'KeyH').ok, 'a free key');
   assert.deepEqual(check(K, 'kbm', 'jump', 0, 'KeyE').conflicts, [{ action: 'turnRight', slot: 0 }], 'E is turn-right (revive overlays it, not jump)');
   assert.ok(check(K, 'kbm', 'revive', 0, 'KeyQ').ok, 'a context action shares keys freely');
   ok('check: reserved and fixed keys, kbm-only, pad slots and LB, axes, chord members, conflicts incl. alt slots and axis keys');
@@ -177,8 +177,8 @@ const H = (...k) => new Set(k);
   assert.equal(loadBindings('kbm', { jump: ['F5', null] }).jump[0], null, 'a reserved key from a save is unbound');
   assert.equal(loadBindings('kbm', { jump: ['Escape', null] }).jump[0], null, 'Esc from a save is unbound');
   // a saved chord whose member has a default single action: the default yields
-  const C = loadBindings('kbm', { teamBurst: ['KeyF+KeyG', null] });
-  assert.equal(C.teamBurst[0], 'KeyF+KeyG'); assert.equal(C.interact[0], null);
+  const C = loadBindings('kbm', { teamBurst: ['KeyF+KeyH', null] });
+  assert.equal(C.teamBurst[0], 'KeyF+KeyH'); assert.equal(C.interact[0], null);
   assert.equal(loadBindings('pad', { skill1: ['A', null] }).jump[0], null, 'pad: Jump yields A to the saved Skill 1');
   ok('loadBindings: saved changes win over defaults on the same key; refused saved bindings unbind');
 

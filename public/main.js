@@ -29,6 +29,7 @@ import { initClassesB } from '/classes-b.js';
 import { initClassesA } from '/classes-a.js';
 import { initStyles } from '/styles.js';
 import { initPlayerBots } from '/playerbots.js';
+import { initGuilds } from '/guilds.js'; // guilds: the Guild tab, invite card, /g chat, the Registrar (docs/briefs/guilds.md)
 import { initNamed, talkTo } from '/named.js'; // the Friends tab: the Named and your friendship with them
 import { snapPoses, poseFrame } from '/poses.js'; // kneel / sit / bow (F5)
 import { initTalents } from '/talents.js';
@@ -46,6 +47,9 @@ import { createControlSync } from '/controlsync.js'; // fb_controls follows the 
 import { setKeySource, keyText, keyHtml, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 import { initBossTeam } from '/bossteam.js'; // boss team mechanics: STACK, SPREAD, tether (G4)
 import { initOpenings } from '/openings.js'; // boss openings: weak point, OPENING tag (J3)
+import { initBossParts } from '/bossparts.js'; // breakable boss parts: pips under the boss bar, callouts
+import { initMobRoles } from '/mobroles.js'; // role enemies' tags and the Hexer's channel; the weapon swap's sound
+import { initClutch } from '/clutch.js'; // Last Stand, the finisher's slow motion
 import { initRescue } from '/rescue.js'; // rescue traps: vines, Drowning Pillar, storm crystal (J1)
 import { initDuels } from '/duels.js'; // solo and team duels: the challenge picker, the duel bar, rings, results
 import { initTeamplay } from '/teamplay.js'; // combo counters, the Team Burst bar and sync window (G2)
@@ -364,7 +368,7 @@ const keyLabel = a => input.label(a);
 const controlsText = () => {
   if (isTouch && input.device !== 'pad') return 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion. ☰: the Game Menu.';
   const L = keyLabel, pad = input.device === 'pad';
-  return `${L('move')} move · ${pad ? `${L('look')} to look` : 'mouse to look (click to capture, Esc frees it; Settings for classic)'} · ${L('attack')} attack · ${L('skill1')} ${L('skill2')} ${L('skill3')} skills · ${L('skillTree')} skill tree · ${L('dodge')} dodge · ${L('jump')} jump${state.cls === 'guardian' ? ` · ${L('guard')} guard / parry · ${L('cover')} cover an ally` : ''} · ${L('item1')} ${L('item2')} ${L('item3')} items · ${L('bag')} bag · ${L('interact')} interact · ${L('players')} party · ${L('teamBurst')} Team Burst · ${L('botWheel')} bot orders · ${L('selectAimed')} select · ${L('menu')} menu${pad ? '' : ` · ${L('perfOverlay')} performance`} · Game Menu → Controls to change them`;
+  return `${L('move')} move · ${pad ? `${L('look')} to look` : 'mouse to look (click to capture, Esc frees it; Settings for classic)'} · ${L('attack')} attack · ${L('skill1')} ${L('skill2')} ${L('skill3')} skills · ${L('skillTree')} skill tree · ${L('dodge')} dodge · ${L('jump')} jump${state.cls === 'guardian' ? ` · ${L('guard')} guard / parry · ${L('cover')} cover an ally` : ''} · ${L('item1')} ${L('item2')} ${L('item3')} items · ${L('bag')} bag · ${L('interact')} interact · ${L('players')} party · ${L('teamBurst')} Team Burst · ${L('weaponSwap')} swap weapons · ${L('botWheel')} bot orders · ${L('selectAimed')} select · ${L('menu')} menu${pad ? '' : ` · ${L('perfOverlay')} performance`} · Game Menu → Controls to change them`;
 };
 // Leave the game from the Game Menu: back to character select ('char'; anonymous: the name / class screen), signed out
 // ('logout'), or out of the spectator view ('spectate'). A clean reload with no automatic rejoin; the server saves
@@ -417,6 +421,8 @@ const looks = initLooks({ players, mobs }); // character looks: the Named's own 
 const pbots = initPlayerBots({ $, send, state, players, log: (a, b) => log(a, b), sfx, rerender: () => { lobby.html = ''; renderPlayers(); }, refresh: () => renderPlayers() });
 const friends = initNamed({ $, send, state, log: (a, b) => log(a, b), sfx, banner: (a, b) => banner(a, b) }); // public/named.js
 // (the Friends tab is added on welcome, only when the server runs the Named: msg.named)
+const guilds = initGuilds({ $, send, state, log: (a, b) => log(a, b), sfx, project: (...a) => project(...a), keyHtml, tapping, tip: id => guide.tip(id), openTab: id => { $('players').classList.remove('hidden'); pbots.select(id); lobby.html = ''; renderPlayers(); } }); // public/guilds.js
+pbots.addTab(guilds); // the Guild tab
 // talent trees + the Skill Tree window (K): progression track, talents, abilities (public/talents.js)
 const talents = initTalents({ state, players, fx, sfx, send, floatNum, mastery, guide, isTouch, $ });
 const loot = initLoot({ state, send, $, styleTitle: it => styles.title(it), fx, sfx, guide, players, floatNum: (...a) => floatNum(...a) });
@@ -427,6 +433,9 @@ const revive = initRevive({ state, players, send: o => send(o), project: (x, y, 
 // boss team mechanics: the gold STACK circle, SPREAD rings, tether beams, first-time prompts (public/bossteam.js)
 // rescue traps: telegraphs, the pillar's beam, your trapped banner, "Hold E to cut free", markers (public/rescue.js)
 const openings = initOpenings({ state, mobs, guide, callout: (a, b, c) => callout(a, b, c) });
+const bossParts = initBossParts({ state, mobs, fx, sfx, guide, callout: (a, b, c) => callout(a, b, c) });
+const mobRoles = initMobRoles({ state, mobs, fx, sfx, guide, floatNum: (...a) => floatNum(...a) });
+const clutch = initClutch({ state, players, fx, sfx, callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a), slowMotion: (a, b) => slowMotion(a, b) });
 const duels = initDuels({ state, players, scene, send: o => send(o), sfx, callout: (a, b, c) => callout(a, b, c), banner: (a, b) => banner(a, b), tip: id => guide.tip(id) }); // public/duels.js
 const rescue = initRescue({ state, players, mobs, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), callout: (a, b, c) => callout(a, b, c), isTouch, revive, keyLabel });
 const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a) });
@@ -497,6 +506,7 @@ function onMessage(msg, arrival = performance.now()) {
   if (mastery.onMessage(msg)) return; // skill mastery
   if (pbots.onMessage(msg)) return; // player-owned bots (Players panel → Bots tab)
   if (friends.onMessage(msg)) return; // the Named (Players panel → Friends tab)
+  if (guilds.onMessage(msg)) return; // guilds: the Guild tab's replies and guild chat (public/guilds.js)
   if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); smith.render(); life.render(); wellWake.inv(); return; }
   if (msg.type === 'life') { life.onMsg(msg); return; } // life classes (public/life.js)
   if (msg.type === 'hall') { state.hallData = msg; renderHall(); bell.hall(msg); return; }
@@ -579,6 +589,7 @@ function onSnapshot({ st, me, w }, arrival) {
   }
   for (const [id, e] of mobs) if (!seenM.has(id) && !e.dying) { removeEntity(e); mobs.delete(id); if (e === boss) boss = null; }
   openings.snap(w.op); // bosses' openings (public/openings.js)
+  bossParts.snap(w.bp); // boss parts (public/bossparts.js)
   looks.snap(w.looks); // who wears a look (after the entities and their weapon styles are in step)
   renderPlayersThrottled();
 }
@@ -609,6 +620,9 @@ function handleEvent(e) {
   if (styles.event(e)) return; // weapon styles: styled basic attacks
   if (revive.event(e)) return; // downed / revive
   if (academy.event(e)) return; // the Academy: trials, drills, graduation
+  if (bossParts.event(e)) return; // boss parts broken, the Colossus kneels
+  if (mobRoles.event(e)) return; // plate, shield, the Hexer's channel; weapon swaps
+  if (clutch.event(e)) return; // Last Stand, the finisher
   switch (e.t) {
     case 'tp':
       if (e.id === me) { // the server moved you: the game position jumps, the drawn one slides there (or snaps if far)
@@ -806,7 +820,7 @@ function handleEvent(e) {
     }
     case 'die': {
       sfx.play('shatter', { x: e.x, z: e.z });
-      if (e.b && Math.hypot(e.x - state.x, e.z - state.z) < 60) slowMotion(0.7, 0.3); // the Warden falls
+      if (e.b && Math.hypot(e.x - state.x, e.z - state.z) < 60) { slowMotion(0.7, 0.3); state.bossFallSlow = e.id; } // the Warden falls (the finisher's beat that follows doesn't play it twice: public/clutch.js)
       if (state.lock === e.id) state.lock = 0;
       const bm = mobs.get(e.id);
       if (bm?.model.anim && !bm.dying) { // the boss collapses first, then shatters
@@ -879,6 +893,7 @@ function handleEvent(e) {
       if (e.s === 'open') { sfx.play('gate', { x: 0, z: 161 }, 1.5); if (Math.abs(state.x) < 30 && state.z > 120) banner('THE RAID GATE OPENS', 'The Horned Warden awaits'); }
       break;
     case 'invite': if (e.to === me) showInvite(e.from, e.name); break;
+    case 'ginvite': guilds.onEvent(e); break; // a guild invite card (public/guilds.js)
     case 'mind': if (bubbles.mind(e) && !state.spectator && !e.ch) guide.tip('botmind'); break; // an AI companion is thinking about a line said to it (H3)
     case 'chat': // ch 'p': party chat (only your party sees it), 's': say (heard within 40 m)
       if (bubbles.chat(e) && e.id !== me && !state.spectator) guide.tip('bubbles'); // a bubble over the speaker's head (same rules as the log)
@@ -1034,6 +1049,7 @@ input.on('botWheel', e => { // bot command wheel; with Settings → Toggle the b
   else if (!e.down) wheel.keyup(); else if (!e.repeat) wheel.keydown(e.event);
 });
 onPress('teamBurst', e => { if (!e.repeat) teamplay.press(); }); // Team Burst: start it (full bar) or join the sync window
+onPress('weaponSwap', e => { if (!e.repeat && state.joined && !state.spectator) send({ type: 'swap' }); }); // swap to the 2nd weapon (server/weaponswap.js)
 onPress('players', () => $('players-btn').click());
 onPress('bag', () => toggleBag());
 onPress('interact', () => interact());
@@ -1427,6 +1443,7 @@ function interactKind() {
   if (smith.near()) return 'smith';
   if (academy.atLectern()) return 'lectern'; // the lectern behind the Academy (public/academy.js)
   if (academy.near()) return 'academy'; // the Academy (public/academy.js)
+  if (guilds.near()) return 'guild'; // the Guild Registrar (public/guilds.js)
   if (mastery.near()) return 'shrine'; // Skill Shrine (public/mastery.js)
   if (ground.near()) return 'pickup';
   { const lk = life.interactKind(); if (lk) return lk; } // gathering spots, the Life Hall, garden, fire, bench
@@ -1441,6 +1458,7 @@ function interact() {
   else if (k === 'smith') { smith.toggle(); sfx.play('ui'); }
   else if (k === 'lectern') academy.readLectern();
   else if (k === 'academy') academy.toggle();
+  else if (k === 'guild') { guilds.open(); sfx.play('ui'); }
   else if (k === 'shrine') talents.toggle();
   else if (k === 'pickup') { send({ type: 'pickup', id: ground.near() }); }
   else if (life.interact(k)) { /* public/life.js */ }
@@ -1449,6 +1467,7 @@ function interact() {
 }
 
 // ---------------- titles & Hall of Clearers ----------------
+const guildTag = r => (r?.g ? `<small class="gtag">[${esc(r.g)}]</small> ` : ''); // a guild member's tag (roster rows carry g: server/guilds.js)
 const titleTag = id => { const t = TITLE_BY_ID[id]; return t ? `<small class="ttl" style="color:${t.color}">${t.name}</small>` : ''; };
 let titleAt = 0;
 function titleBanner(name, delay = 0) { // queue so several titles (e.g. after a Warden kill) each get their moment
@@ -1467,7 +1486,7 @@ function ago(iso) {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
   return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)}m ago` : s < 86400 ? `${Math.floor(s / 3600)}h ago` : fmtDate(iso);
 }
-const hallParty = r => r.players.map(p => `<span title="Lv${p.lvl} ${p.rk ? `${esc(p.rk)} ` : ''}${CLASSES[p.cls]?.name || ''}">${esc(p.name)}${p.rk ? ` <small class="rk">${esc(p.rk)}</small>` : ''}</span>`).join(', ') || '—'; // rk: the class rank carved beside the name (the Academy)
+const hallParty = r => r.players.map(p => `<span title="Lv${p.lvl} ${p.rk ? `${esc(p.rk)} ` : ''}${CLASSES[p.cls]?.name || ''}">${p.g ? `<small class="gtag">[${esc(p.g)}]</small> ` : ''}${esc(p.name)}${p.rk ? ` <small class="rk">${esc(p.rk)}</small>` : ''}</span>`).join(', ') || '—'; // rk: the class rank carved beside the name (the Academy); g: the guild tag
 const hallMeta = r => `${esc(r.lastAttack || '?')} took the Last Attack · ${r.deaths} death${r.deaths === 1 ? '' : 's'}`;
 function renderHall() {
   const el = $('hall');
@@ -1542,6 +1561,7 @@ function renderBag() {
     }).join('')}</div>`;
   } else if (near) h += `<div class="it"><span class="nm"><small>You're at the merchant.</small></span><button data-a="shop">Trade</button></div>`;
   h += `<h4>Equipped</h4>${SLOTS.map(sl => row(inv.eq[sl], sl, inv.eq[sl] ? `<button data-a="unequip" data-s="${sl}">Remove</button>` : '')).join('')}`;
+  h += row(inv.eq.weapon2, '2nd weapon', inv.eq.weapon2 ? `<button data-a="swap" title="Swap (${esc(keyLabel('weaponSwap'))}): only the worn weapon counts">Swap</button><button data-a="unequip" data-s="weapon2">Remove</button>` : ''); // a spare weapon (server/weaponswap.js)
   const st = inv.stats;
   h += `<div class="stats"><span>Damage ${st.atk}</span><span>Health ${st.maxHp}</span><span>Crit ${st.crit}%</span><span>Cooldowns −${st.haste}%</span><span>Switch +${st.sw}%</span><span>Damage taken −${st.dr}%</span></div>`;
   h += loot.setsHtml(inv) + loot.loadoutsHtml(inv); // set progress and loadouts (public/loot.js)
@@ -1552,7 +1572,7 @@ function renderBag() {
     const cmp = it.slot !== 'charm' && cur ? (diff > 0 ? ` <span class="up">▲${diff}</span>` : diff < 0 ? ` <span class="down">▼${-diff}</span>` : '') : !cur ? ' <span class="up">new</span>' : '';
     const usable = !it.cls || it.cls === state.cls;
     if (it.ks) return keepsakeRow(it, it.slot, `<button data-a="equip" data-u="${it.u}">Wear</button>`); // keepsakes: no sell, drop or delete
-    return `<div class="it" data-tu="${it.u}"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${loot.setTag(it)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}${styles.tag(it)}${loot.lines(it)}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}<button data-a="drop" data-u="${it.u}" title="Drop on the ground for anyone to pick up">Drop</button><button class="del" data-a="discard" data-u="${it.u}" title="Delete for good">Delete</button></div>`;
+    return `<div class="it" data-tu="${it.u}"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${loot.setTag(it)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}${styles.tag(it)}${loot.lines(it)}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${usable && it.slot === 'weapon' ? `<button data-a="equip2" data-u="${it.u}" title="Carry it as your 2nd weapon: swap with ${esc(keyLabel('weaponSwap'))}, even mid-fight">2nd</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}<button data-a="drop" data-u="${it.u}" title="Drop on the ground for anyone to pick up">Drop</button><button class="del" data-a="discard" data-u="${it.u}" title="Delete for good">Delete</button></div>`;
   }).join('') : '<div class="it empty"><span class="nm"><small>Nothing yet. Enemies drop gear; the Warden always does.</small></span></div>';
   { // materials, each with Drop / Delete
     const have = inv.mats || {}, ids = MAT_IDS.filter(k => have[k] > 0);
@@ -1583,6 +1603,8 @@ $('bag').addEventListener('click', e => {
   if (a === 'buy') send({ type: 'buy', i: +b.dataset.i });
   if (a === 'sell') send({ type: 'sell', u: +b.dataset.u });
   if (a === 'equip') send({ type: 'equip', u: +b.dataset.u });
+  if (a === 'equip2') send({ type: 'equip2', u: +b.dataset.u }); // the 2nd weapon slot (server/weaponswap.js)
+  if (a === 'swap') send({ type: 'swap' });
   if (a === 'drop') send({ type: 'drop', u: +b.dataset.u });
   if (a === 'dropStack') send({ type: 'dropStack', kind: b.dataset.k, id: b.dataset.id, n: e.shiftKey ? 9999 : 1 });
   if (a === 'discardStack') { // two clicks, like gear
@@ -1664,18 +1686,19 @@ $('sound-btn').textContent = sfx.on ? 'Sound on' : 'Sound off';
 $('sound-btn').onclick = () => { sfx.unlock(); $('sound-btn').textContent = sfx.toggle() ? 'Sound on' : 'Sound off'; };
 $('lock-btn').onpointerdown = e => { e.preventDefault(); cycleLock(); };
 canvas.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
-$('chat-btn').onclick = () => { const t = prompt('Say something (/p party, /s nearby, /b bot orders: /b help, /duel name, /sit /kneel /bow /stand)'); if (t) sendChat(t); };
-// Chat channels: "/p text" party, "/s text" say (nearby); anything else goes to everyone ("/b ..." bot orders: the server
+$('chat-btn').onclick = () => { const t = prompt('Say something (/p party, /s nearby, /g guild, /b bot orders: /b help, /duel name, /sit /kneel /bow /stand)'); if (t) sendChat(t); };
+// Chat channels: "/p text" party, "/s text" say (nearby), "/g text" guild (server/guilds.js); anything else goes to everyone ("/b ..." bot orders: the server
 // reads them, shared/bots/social.js parseBotChat; they never show as chat).
 function sendChat(raw) {
   let t = String(raw || '').trim(), ch;
-  const m = t.match(/^\/(p|party|s|say)\s+([\s\S]*)$/i);
+  const m = t.match(/^\/(p|party|s|say|g|guild)\s+([\s\S]*)$/i);
   if (m) { ch = m[1][0].toLowerCase(); t = m[2].trim(); }
   if (t) send({ type: 'chat', text: t, ...(ch ? { ch } : {}) });
 }
 $('players-btn').onclick = () => { $('players').classList.toggle('hidden'); lobby.html = ''; renderPlayers(); };
 function renderPlayers() {
   if ($('players').classList.contains('hidden')) return;
+  $('players').toggleAttribute('data-nav', pbots.tab === 'guild'); // the Guild tab is pad-driven (the Registrar opens it; public/focusnav.js)
   const nNamed = [...state.roster.values()].filter(r => r.named).length; // the Named have the Friends tab (public/named.js)
   const nBots = [...state.roster.values()].filter(r => r.bot && !r.named).length, nReal = state.roster.size - nBots - nNamed;
   if (pbots.tab !== 'players') return pbots.render($('players'), nReal, nBots); // Bots / Friends tab (public/playerbots.js)
@@ -1690,7 +1713,7 @@ function renderPlayers() {
     const lfgTag = (p ? (p.buffs || 0) & 4 : o?.[3]) ? '<span class="tag">LFG</span>' : '';
     const pf = p ? floorOf(p.tx ?? p.x) : o?.[2] || 1, floorTag = pf > 1 ? `<span class="tag f2">F${pf}</span>` : '';
     const up = p ? !p.dead : o ? !o[4] : false;
-    rows.push(`<div class="p"><span>${looks.swatch(id)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? o?.[1] ?? 1} ${esc(academy.rosterLabel(r))}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}${up ? `<button data-duel="${id}" title="Challenge to a duel">Duel</button>` : ''}</div>`);
+    rows.push(`<div class="p"><span>${looks.swatch(id)}${guildTag(r)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? o?.[1] ?? 1} ${esc(academy.rosterLabel(r))}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}${up ? `<button data-duel="${id}" title="Challenge to a duel">Duel</button>` : ''}</div>`);
   }
   const meE = players.get(state.myId), seeking = !!((meE?.buffs || 0) & 4);
   const lfgBtn = `<button class="lfg ${seeking ? 'on' : ''}">${state.party ? (seeking ? 'Recruiting via party finder ✓' : 'Recruit with party finder') : seeking ? 'Searching for a party… (cancel)' : 'Find party'}</button>`;
@@ -1740,7 +1763,7 @@ let hudT = 0;
 function updateHud(now) {
   if (now - hudT < 100) return; hudT = now;
   const name = state.roster.get(state.myId)?.name || '';
-  const meHtml = `${esc(name)}${titleTag(state.roster.get(state.myId)?.title)}`;
+  const meHtml = `${guildTag(state.roster.get(state.myId))}${esc(name)}${titleTag(state.roster.get(state.myId)?.title)}`;
   if ($('me-name').innerHTML !== meHtml) $('me-name').innerHTML = meHtml;
   setText($('me-lvl'), `Lv ${state.lvl} ${academy.label()}`); // (an Initiate: "Initiate · Sword")
   const pct = (state.hp / state.maxHp) * 100;
@@ -1771,6 +1794,7 @@ function updateHud(now) {
     combat.bossBar(boss);
     threat.bossBar(boss); // who it's after, my threat meter
     openings.bossBar(boss); // OPENING · EXPOSED · 2 s
+    bossParts.bossBar(boss); // part pips, KNEELING
     setText($('boss-phase'), onF3 ? f3.phaseText() : onF2 ? f2.phaseText() : ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '');
     if (!onF3) twists.bossLine($('boss-phase'), onF2); // the Warden's twist, or the Sovereign's on Floor 2
   }
@@ -1795,7 +1819,7 @@ function updateHud(now) {
     }
     if (btn.dataset.slot === 'guard') { btn.classList.toggle('on', combat.guarding); continue; }
     if (btn.dataset.slot === 'cover') { threat.coverCd(btn); continue; }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'academy' ? (academy.inTrial() ? 'Leave' : 'Enter') : a === 'lectern' ? 'Read' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : a?.startsWith('life-') ? life.actLabel(a) : state.meReady ? 'Unready' : 'Ready'); continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'guild' ? 'Guild' : a === 'academy' ? (academy.inTrial() ? 'Leave' : 'Enter') : a === 'lectern' ? 'Read' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : a?.startsWith('life-') ? life.actLabel(a) : state.meReady ? 'Unready' : 'Ready'); continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : { cd: slot === 4 ? academy.sig()?.cd || 1 : mastery.cd(slot) }; // mastery/branch cooldowns; slot 4: the signature skill
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
@@ -2094,7 +2118,7 @@ function animateEntity(e, dt) {
     setShown(e.label, true);
     const tr = `translate(${p[0].toFixed(1)}px, ${p[1].toFixed(1)}px) translate(-50%, -100%)`;
     if (tr !== e.label.tr) { e.label.tr = tr; e.label.el.style.transform = tr; }
-    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${looks.plate(e, e.def.name)}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}${openings.tag(e)}` : `<span class="lv">Lv${e.lvl}</span>${looks.plate(e, `${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}${academy.plateTag(state.roster.get(e.id))}`)}`;
+    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${looks.plate(e, e.def.name)}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}${openings.tag(e)}` : `<span class="lv">Lv${e.lvl}</span>${looks.plate(e, `${guildTag(state.roster.get(e.id))}${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}${academy.plateTag(state.roster.get(e.id))}`)}`;
     if (txt !== e.label.text) { e.label.text = txt; e.label.nm.innerHTML = txt; }
     const pct = Math.round((e.hp / e.maxHp) * 100);
     if (pct !== e.label.pct) { e.label.pct = pct; e.label.fill.style.width = `${pct}%`; }
@@ -2287,6 +2311,7 @@ function frame(now) {
   smith.frame(vdt);
   life.frame(vdt);
   academy.frame(); // the Academy's label, the trial HUD, the Ward Post
+  guilds.frame(); // the Guild Registrar's label
   ground.frame(vdt, isTouch);
   mastery.frame(vdt, now); // Skill Shrines, evolved-skill auras
   classesA.frame(vdt, now); // arrows, marks, Rage bars

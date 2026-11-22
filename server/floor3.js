@@ -162,8 +162,9 @@ export const F3Methods = {
   // Grounded / Overload. Returns the damage to apply (0 = fully absorbed).
   f3DamageMod(m, p, base) {
     const t = this.time;
-    if (m.aloft && m.state !== 'grounded' && dist(m, p) < HARPY.rangedD + m.def.radius) {
-      base *= HARPY.aloft;
+    const swoop = m.def.swoopHit && (m.state === 'dive' || (t >= p.airFrom && t < p.airUntil)); // a Gale Harrier: in its swoop, or hit from a jump
+    if (m.aloft && m.state !== 'grounded' && !swoop && dist(m, p) < HARPY.rangedD + m.def.radius) {
+      base *= m.def.aloft ?? HARPY.aloft; // (the Gale Harrier: 0, out of melee reach)
       this.events.push({ t: 'f3fx', k: 'aloft', id: m.id, to: p.id });
     }
     if (m.def.armor && t >= m.crackedUntil && t >= m.staggerUntil) {

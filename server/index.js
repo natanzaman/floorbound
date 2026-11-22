@@ -27,6 +27,7 @@ import { inArena3 } from '../shared/floor3.js';
 import { clampAccess } from '../shared/accesslevels.js'; // account access levels (permissions, not character levels)
 import { WEAPONS, isWeapon } from '../shared/academy.js'; // Initiates pick a weapon (docs/briefs/academy.md)
 import { carveRanks } from './academy.js';
+import { makeGuildStore } from './guilds.js'; // guilds in Postgres (docs/briefs/guilds.md); in memory without a database
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 3000;
@@ -53,8 +54,8 @@ setInterval(() => { crashes = Math.max(0, crashes - 5); }, 60000).unref();
 const game = new Game();
 game.track = track.record;
 // Hall of Clearers (DB insert + in-memory cache); the engraved stones update live. Each name's class rank is carved
-// beside it (server/academy.js carveRanks).
-game.onClear = rec => { hall.add(carveRanks(game, rec)); broadcastHall(); };
+// beside it (server/academy.js carveRanks), and each clearer's guild tag (server/guilds.js guildTagClear).
+game.onClear = rec => { hall.add(game.guildTagClear(carveRanks(game, rec))); broadcastHall(); };
 const spectators = new Set(); // watch-only clients (?spectate=1)
 // The server's own bots (admin, player-added, the Named) talk to it through in-process sockets (server/localws.js):
 // no JSON or loopback socket per bot per tick. BOT_TRANSPORT=ws puts them back on real WebSockets (benchmarks, tests).
@@ -313,8 +314,10 @@ async function shutdown(sig) {
       save: async () => {
         if (db.enabled) await Promise.allSettled([...game.players.values()].filter(p => p.charId).map(p => accounts.saveCharacter(p)));
         await track.flush().catch(() => {});
-        await aiMinds.flush(); // AI memories + spend (server/ai/store.js)
-        await named?.flush(); // friendship still waiting to be saved (server/named.js)
+        // (each flush on its own: one that fails doesn't keep the others from saving)
+        await Promise.resolve().then(() => aiMinds.flush()).catch(e => console.error('shutdown: AI flush', e)); // AI memories + spend (server/ai/store.js)
+        await Promise.resolve().then(() => named?.flush()).catch(e => console.error('shutdown: named flush', e)); // friendship still waiting to be saved (server/named.js)
+        await game.guildFlush(); // guild progress still waiting to be saved (server/guilds.js)
       },
     });
   } catch (e) { console.error('shutdown', e); }
@@ -325,6 +328,7 @@ async function shutdown(sig) {
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => void shutdown(sig));
 
 admin.init({ game, bots });
+accounts.onCharacterDeleted(id => game.guildCharGone(id)); // a deleted character leaves its guild (server/guilds.js)
 if (process.env.TEST_HOOKS) globalThis.floorbound = { game, bots, playerBots, localHub }; // testing aid: a test that imports this file reaches the live objects (test/localws.js)
 const aiMinds = installAI({ game, bots, server });
 installDirectorAdmin({ server, director: game.director }); // /api/admin/director (admin page: Director tab)
@@ -334,6 +338,7 @@ db.migrate()
   .then(() => hall.load())
   .then(() => { game.hadFirstClear = hall.hasFirst(); game.hadFirstClear2 = hall.hasFirst(2); game.hadFirstClear3 = hall.hasFirst(3); })
   .then(() => { if (db.enabled) aiMinds.useStore(aiStore(db.q)); }) // (async, never blocks or fails startup)
+  .then(() => (db.enabled ? game.useGuildStore(makeGuildStore(db.q, db.tx, accounts.charLock)) : null)) // every guild, loaded once (server/guilds.js)
   .then(() => { if (db.enabled && named) { named.quests.useStore(makeQuestStore(db.q)); return named.useStore(makeNamedStore(db.q, { adminIds: (process.env.ADMIN_DISCORD_IDS || '').split(',').map(s => s.trim()).filter(Boolean) })); } })
   .then(() => server.listen(PORT, () => {
     console.log(`Floorbound running on http://localhost:${PORT}${db.enabled ? ' (accounts on' + (accounts.discordOn() ? ', Discord sign-in on' : '') + ')' : ''}`);

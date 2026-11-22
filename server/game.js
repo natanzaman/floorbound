@@ -45,11 +45,16 @@ import { installMvp } from './mvp.js'; // post-fight MVP card (G5)
 import { installLoot } from './loot.js';
 import { installLooks } from './looks.js'; // character looks: setLook, w.looks (I2)
 import { installDuels } from './duels.js'; // solo and team duels: challenges, stand-ins, rules, w.du (docs/briefs/duels.md)
+import { installGuilds } from './guilds.js'; // guilds: ranks, invites, bank + vault, weekly quests, /g chat, tags (docs/briefs/guilds.md)
 import { installTargeting } from './targeting.js'; // targeting modes + cleave (player settings, Controls → Combat)
 import { installLife } from './life.js'; // life classes: gathering, the garden, cooking, alchemy, meals (docs/briefs/life-classes.md)
 import { GARDEN } from '../shared/life.js';
 import { installAcademy } from './academy.js'; // Initiates, class trials, drills, ranks, cohorts (docs/briefs/academy.md)
 import { installSubclasses } from './subclasses.js'; // subclasses at level 15, signature skills in slot 5 (docs/briefs/subclasses.md)
+import { installBossParts } from './bossparts.js'; // breakable boss parts (docs/briefs/combat-quickwins.md)
+import { installMobRoles } from './mobroles.js'; // enemies that force a role: armoured, shielded, flyer, caster
+import { installWeaponSwap } from './weaponswap.js'; // a second weapon, swapped mid-fight
+import { installClutch } from './clutch.js'; // Last Stand, the finisher's slow motion
 import { rollGear } from '../shared/loot.js'; // affixes, boss sets, loadouts, drop tables (H2)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
@@ -87,6 +92,7 @@ export class Game {
     this.initFloor2(); // Floor 2 — The Glimmering Mire (server/floor2.js)
     this.initFloor3(); // Floor 3 — The Gale Spires (server/floor3.js)
     this.initLabs(); // the labyrinths before each boss (server/labyrinth.js)
+    this.guildInit(); // guilds (server/guilds.js): in memory until index.js hands over a store
   }
 
   id() { return this.nextId++; }
@@ -216,6 +222,7 @@ export class Game {
       case 'test': // testing aid (TEST_HOOKS=1 only): { hurt: fraction } sets your health, { xp } gives XP, for the bot tests
         if (process.env.TEST_HOOKS && msg.hurt > 0 && msg.hurt <= 1 && !p.dead) p.hp = Math.max(1, Math.round(p.maxHp * msg.hurt));
         if (process.env.TEST_HOOKS && msg.xp > 0) this.giveXp(p, Math.min(1e6, msg.xp | 0)); // { xp }: level up (bot level sync tests)
+        if (process.env.TEST_HOOKS && msg.gold > 0) { p.gold += Math.min(1e6, msg.gold | 0); this.invChanged(p); } // { gold }: spending money (guild tests)
         if (process.env.TEST_HOOKS && msg.ward != null) p.testWard = !!msg.ward; // { ward: 1 }: nothing hurts you (input tests: a slow headless run never gets bitten down mid-check)
         return;
       case 'invite': return this.invite(p, msg.id);
@@ -934,7 +941,7 @@ export class Game {
     p.lastHurt = this.time; p.lastCombat = this.time;
     this.onHurtA?.(p, amount); // Berserker Rage (server/classes-a.js)
     this.events.push({ t: 'hurt', id: p.id, a: amount, ...(this.bigHit(src) ? { big: 1 } : {}) }); // big: the victim's client hit-stops
-    if (p.hp <= 0 && !this.goDown?.(p, src)) this.killPlayer(p, src); // downed instead, with a partymate nearby (server/revive.js)
+    if (p.hp <= 0 && !this.lastStand?.(p, src, duel) && !this.goDown?.(p, src)) this.killPlayer(p, src); // Last Stand (server/clutch.js); downed instead, with a partymate nearby (server/revive.js)
   }
 
   // A player's death (0 HP, or a downed player bleeding out): XP loss, stats, tracking, `pdie`; respawns in 4 s.
@@ -1326,7 +1333,7 @@ export class Game {
     }
     if (k === 'quake') return this.quakeRing(m);
     if (k === 'charge') return this.hornCharge(m, pick());
-    if (k === 'sweep') return this.hornSweep(m);
+    if (k === 'sweep') return this.partOff?.(m, 'sweep') ? t : this.hornSweep(m); // (broken horns: no Horn Sweep, server/bossparts.js)
     if (k === 'hounds') {
       let alive = 0; for (const h of this.mobs.values()) if (h.temp && !h.totem && !h.dead) alive++; // (Thorn Totems don't count)
       for (let i = 0; i < W.hounds.n && alive < W.hounds.max; i++, alive++) {
@@ -1453,7 +1460,7 @@ export class Game {
     // players list now holds only who is near: [id, lvl, floor, lfg, dead].
     let pl;
     if (this.time >= (this._plT || 0)) { this._plT = this.time + 1; pl = []; for (const p of this.players.values()) pl.push([p.id, p.lvl, floorOf(p.x), p.lfg || this.partyOf(p)?.open ? 1 : 0, p.dead ? 1 : 0]); }
-    const pre = JSON.stringify({ players: 0, mobs: 0, pl, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.(), op: this.openSnap(), du: this.duelsSnap?.(), lb: this.labSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
+    const pre = JSON.stringify({ players: 0, mobs: 0, pl, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.(), op: this.openSnap(), du: this.duelsSnap?.(), lb: this.labSnap(), bp: this.partsSnap() }); // bp: boss parts (server/bossparts.js) // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
     const tail = pre.slice('{"players":0,"mobs":0'.length); // (the first two keys, as written above)
     this.snapParts = { players, mobs, tail, show: !!this.director?.running };
     this.events = [];
@@ -1530,9 +1537,14 @@ installMvp(Game); // the post-fight MVP card from the team stats, downs and deat
 installLoot(Game); // loot and builds: drops from shared/loot.js, gear in p.tal, set rules, loadouts (server/loot.js); after the talents and team play
 installLife(Game); // life classes (server/life.js); after the talents (wraps postureMul), the Smith (wraps forged) and dmgMult
 installLooks(Game); // character looks: setLook(entity, id), listed in snapshots as w.looks (server/looks.js)
+installBossParts(Game); // breakable boss parts: part damage by arc, bonus loot, effects on the fight's table (server/bossparts.js)
+installMobRoles(Game); // role enemies: plate, a shield that breaks, the Hexer's heal channel, Floor 1's Ironhide Boars (server/mobroles.js)
+installWeaponSwap(Game); // inv.eq.weapon2 and the swap (server/weaponswap.js)
+installClutch(Game); // Last Stand and the finisher's slow motion (server/clutch.js)
 installNamed(Game); // the Named: humans-first rules, friendship, invites by tier (server/named.js); a no-op without a NamedManager
 installRescue(Game); // rescue traps (server/rescue.js); after the Named: its trap-object and crystal wrappers sit outside everyone's
 installDuels(Game); // duels (server/duels.js): outside the damage, heal and skill wrappers above, so a stand-in's hits skip them
+installGuilds(Game); // guilds (server/guilds.js): outside the kill, XP and stat wrappers above (quest credit, the XP perk)
 installAcademy(Game); // the Academy: Initiates, trials, drills, ranks, cohorts (server/academy.js); outside the skill, damage and heal wrappers
 installSubclasses(Game); // subclasses (server/subclasses.js); after the Academy (wraps its initPath, swapClass, markPath, pathMsg, academyOp)
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last

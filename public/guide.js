@@ -60,6 +60,7 @@ const TIPS = {
   bubbles: 'Chat lines pop up as speech bubbles over the speaker\'s head: /s is heard nearby, /p by your party. Settings turns bubbles off; the chat log keeps everything.',
   botmind: 'Talk to bots by name in chat: "Lyra, hang back and heal me". They answer in a speech bubble (the dots mean they\'re thinking) and remember how you like to play. /b orders still work as before.',
   bots: () => `Bots in your party take orders: hold ${K('botWheel')} for the order wheel, or type /b stay, /b follow, /b Lyra: heal (one bot). Your bots roaming outside the party take orders by name too. /b help lists them all; ordinary chat never gives orders. Every bot is in the Players list (${K('players')}): invite one to your party, or kick one out to roam.`,
+  guild: 'Guilds: a home for friends, bots and the Named. Found one here or at the Guild Registrar in town (300 gold), invite players (they get a card), your bots and the Named (they accept by themselves). /g text is guild chat. Everyone can deposit gold and store items in the vault; officers and the leader take them out. Three guild quests a week (bots count a quarter) earn guild XP and gold; guild levels unlock perks like more vault slots and bonus XP when you group with a guildmate. Your [TAG] shows on your nameplate.',
   duel: 'A DUEL! Hit your opponent like any enemy (the red ring marks them). First Strike: the first clean hit wins. Half Health: out at half. Last Stand: out at 1 health. Nobody dies and you get your health back after. Stay inside the ring or you forfeit; /yield gives up. Challenge anyone from Players → Duel, or chat /duel name.',
   poses: 'Posed! Chat /kneel, /sit or /bow to strike a pose, /stand (or just move, attack, dodge or jump) to get up.',
   threat: 'Threat: the red arrow (and "→ name" on the boss bar) shows who the boss is after. Your bar under it is your threat vs the top; amber means you are about to pull it off your tank. Ease off for a moment.',
@@ -77,7 +78,7 @@ const TIPS = {
   setme: 'Set me up (V wheel or /b setme): for 30 s your bots open their combo setups on your target for you, and call them out.',
   tbfull: () => `Team Burst ready! ${touch() ? 'Tap the bar' : `Press ${K('teamBurst')}`} to start a 3 s sync window: every partner who joins makes the finisher bigger (solo works too, weaker). Each class adds its own touch (blades, a shield, a heal, a volley, fury, a root, cooldowns back) and every pair of classes has its own named finisher.`,
   // Floor 3 — The Gale Spires (public/floor3client.js)
-  f3air: 'Gale Harpies aloft take only a third of melee damage: shoot them from range, or hit them hard when they land after a dive (grounded: +25%).',
+  f3air: 'Gale Harpies aloft take only a third of melee damage (Gale Harriers none at all): shoot them from range, jump to hit a Harrier, or hit them hard as they swoop or land after a dive (grounded: +25%).',
   f3armor: 'Spire Sentinels are armoured: most damage bounces off until you BREAK them (fill the posture bar). A cracked shell takes full damage for 8 s. Jump or roll its stomp.',
   f3ward: 'A Storm Acolyte is channelling a Wind Ward (the swirling ring): interrupt it with a stun, a Break, Smite or 3 quick hits, or every enemy near it gets a shield.',
   f3ram: 'Crag Ram lane! It charges through and throws you back. Sidestep, roll, or (Guardian) hold guard facing it to stop it dead and stun it.',
@@ -90,6 +91,12 @@ const TIPS = {
   f3sludge: 'Stuck in sludge: it slows you to under half speed and you can\'t roll. Wade out (or jump) before a big hit lands.',
   mvp: 'That was the post-fight card: everyone in the fight sees it after a boss kill or wipe. Titles go to whoever led: Lifeline for revives, Rescuer for freeing trapped partymates, Wall for tanking, Conductor for combos, Last Word for the Last Attack...',
   menu: () => `${touch() ? 'Tap ☰' : `Press ${K('menu')}`} for the Game Menu: Settings (graphics quality and accessibility too), controls (and Combat: how attacks pick their target, Cleave), change character, log out. The game keeps running while it's open.`,
+  // Combat quick wins (docs/briefs/combat-quickwins.md)
+  bparts: 'BOSS PART BROKEN! The pips under the boss bar are its breakable parts: the Warden\'s horns (in front), the Sovereign\'s trident hand (its right side), the Colossus\'s knees (sides and back). Hits from that side wear a part down; melee counts x1.5, ranged x0.5. Each broken part weakens a move, and when the boss dies everyone gets a bonus loot roll per part broken; both knees down and the Colossus kneels, taking +25% damage.',
+  plate: 'Ironhide Boar: its plate turns away 70% of your damage. BREAK it (fill its posture bar: Burst Combo, Ground Slam, heavy finishers) and it takes extra damage while Broken.',
+  bulwark: 'Mire Bulwark: its shield blocks most hits from the front. Get beside or behind it, or BREAK it: the shield stays down for 6 s.',
+  hexer: 'A Mire Hexer is MENDING its allies (the ring): interrupt it with a stun, a Break, an interrupting hit like Smite, a big knock-back or 3 quick hits, and it is stunned for a moment.',
+  wswap: () => `Weapon swap! Only the worn weapon counts (stats and style); ${K('weaponSwap')} trades it with your 2nd weapon (1 s apart, not mid-skill). Cooldowns carry over, and a swap into another style is a step in a skill chain once your next hit lands.`,
   tbsync: () => `A partner started a TEAM BURST: ${touch() ? 'tap the prompt' : `press ${K('teamBurst')}`} now to join it. More joiners, bigger burst.`,
   ...Object.fromEntries(Object.entries(COMBOS).map(([k, c]) => [`combo_${k}`, c.tip])),
 };

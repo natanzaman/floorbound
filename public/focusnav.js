@@ -1,7 +1,7 @@
 // Menu focus navigation for the controller (roadmap K1b): spatial navigation over the window on top.
 //   createFocusNav({ input, panels, order, hooks })
 //     order   where to look, first match wins: element ids, '*' = panels.top(). Only roots marked data-nav are driven
-//             (the v1 windows); the others (Smith, Hall, Players) stay mouse-only and the pad plays on under them.
+//             (the v1 windows); the others (Smith, Hall, Players but its Guild tab) stay mouse-only and the pad plays on under them.
 //     hooks   { id: { back, open } }: back() for B (default: a [data-nav=back] button inside, else panels.close(id));
 //             open() lets B go back to the window that opened this one with A (Game Menu → Settings → B).
 //   tick(now)   once a frame after input.tick(): repeats a held d-pad / left stick, keeps the focus on a live element

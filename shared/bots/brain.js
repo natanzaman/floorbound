@@ -41,6 +41,7 @@ import { comboTurn, burstTurn, setupTurn, chainTurn } from './teamplay.js'; // c
 import { readOpenings, openingTurn, gustDodge } from './openings.js'; // boss openings, Gale Push (J3)
 import { easeOff } from './threat.js'; // DPS ease off near 90% threat (J4)
 import { inYard, ACADEMY } from '../academyyard.js'; // the Academy's trial yard: solo, so followers wait at the door
+import { readParts, roleTurn, roleScore, wantsBreak } from './roles.js'; // boss parts, shields, flyers, casters (docs/briefs/combat-quickwins.md)
 import { readDuels, foeMobs } from '../duels.js'; // duels: only my opponents' stand-ins are targets (server/duels.js)
 
 const BOSS_LVL = { 1: 5, 2: 15, 3: 25 }; // a leader levels on its floor's field until this, then goes for the boss
@@ -135,7 +136,7 @@ function decodeWorld(w) {
   const mobs = [];
   for (const m of w.mobs) {
     const type = MOB_IDS[m[1]], def = MOBS[type];
-    if (def) mobs.push({ id: m[0], type, x: m[2], z: m[3], hp: m[5], maxHp: m[6], engaged: !!(m[7] & 2), enraged: !!(m[7] & 4), winding: !!(m[7] & 16), staggered: !!(m[7] & 32), marked: !!(m[7] & 256), def, tgt: th.get(m[0]) || 0 });
+    if (def) mobs.push({ id: m[0], type, x: m[2], z: m[3], face: m[4], hp: m[5], maxHp: m[6], engaged: !!(m[7] & 2), enraged: !!(m[7] & 4), winding: !!(m[7] & 16), staggered: !!(m[7] & 32), marked: !!(m[7] & 256), def, tgt: th.get(m[0]) || 0 });
   }
   const players = w.players.map(p => ({ id: p[0], x: p[1], z: p[2], face: p[3], hp: p[4], maxHp: p[5], lvl: p[6], cls: CLASS_IDS[p[7]], party: p[8], dead: !!p[9], style: STYLE_IDS[p[11]] || null }));
   d = { mobs, players };
@@ -183,6 +184,7 @@ function onSnap(b, msg) {
   readDowned(b, msg.w.down); // downed players (p.downed, b.downed)
   readRescue(b, msg.w.trap); // trapped players (p.trap, b.trap)
   readOpenings(b, msg.w.op); // bosses' openings (J3)
+  readParts(b, msg.w.bp); // boss parts (b.parts)
   for (const e of perceive(b, msg.w.events)) onEvent(b, e); // (reaction delays / misses below capability 5)
   if (b.t - (b.pruneT || 0) > 5) prune(b);
   think(b);
@@ -549,7 +551,9 @@ function act(b, P, M) {
   if (easeOff(b, tgt, ctx)) b.easeT = b.t; // near 90% threat: keep position, hold attacks (skill 4+)
   else if (setupTurn(b, tgt, ctx) || chainTurn(b, tgt, ctx)) return; // open our setup for a partner (Set me up); keep our skill chain going
   if (b.easeT !== b.t && sigTurn(b, tgt, ctx)) return; // slot 5: a subclass's signature skill (shared/bots/subclass.js)
-  if (!brain.combat || brain.combat(b, tgt, ctx) === false) brainFor('*').combat(b, tgt, ctx);
+  const fight = () => { if (!brain.combat || brain.combat(b, tgt, ctx) === false) brainFor('*').combat(b, tgt, ctx); };
+  if (b.easeT !== b.t && roleTurn(b, tgt, ctx, fight)) return; // melee: a boss part's arc, or round a shield (shared/bots/roles.js)
+  fight();
 }
 
 function makeCtx(b, P, M, tgt, dodge) {
@@ -574,6 +578,7 @@ function makeCtx(b, P, M, tgt, dodge) {
     ctx.mayBreak = slam !== undefined ? b.t - slam < 6 || b.t - slam > 16 : !held || b.t - held.first > 8;
   }
   if (b.ovMob && tgt?.id === b.ovMob) ctx.mayBreak = true; // Overload (Floor 3): everyone Breaks
+  if (wantsBreak(tgt)) ctx.mayBreak = true; // armour and shields that Break (shared/bots/roles.js)
   ctx.peel = b.role === 'tank' && b.mobs.some(m => m.engaged && !m.def.boss && d2(m.x, m.z, b.x, b.z) < 8 + m.def.radius
     && alive.some(p => p.id !== b.id && p.role !== 'tank' && d2(p.x, p.z, m.x, m.z) < m.def.radius + 2.5));
   return ctx;
@@ -628,7 +633,7 @@ function nearest(list, score) {
 // Follower targeting: what the party is fighting. Never starts a fight on its own (no extra packs).
 function assistTarget(b, P, anchor, here, leading) {
   const t = b.t, alive = P.all.filter(p => !p.dead), ax = anchor?.x ?? b.x, az = anchor?.z ?? b.z;
-  const mates = new Set(P.all.map(p => p.id)), bossRoom = inBossRoom(ax, az) || inBossRoom(b.x, b.z);
+  const mates = new Set(P.all.map(p => p.id)), bossRoom = inBossRoom(ax, az) || inBossRoom(b.x, b.z), ranged = basicProfile(b.cls, b.style).kind === 'ranged';
   return nearest(here, m => {
     const dMe = d2(m.x, m.z, b.x, b.z);
     if (d2(m.x, m.z, ax, az) > 18 && dMe > 8) return null;
@@ -653,6 +658,7 @@ function assistTarget(b, P, anchor, here, leading) {
     if (m.marked) s -= 15;
     if (b.role !== 'healer' && switchOpen(b, m)) s -= 30;
     if (m.id === b.tgtId) s -= 10;
+    s += roleScore(b, m, ranged); // flyers, casters mid-heal (shared/bots/roles.js)
     if (leading && m.id !== leading.id && !onMate) return null; // a leader only switches to help someone
     return s;
   });

@@ -15,9 +15,9 @@ const r2 = v => Math.round(v * 100) / 100;
 
 const methods = {
   // A step landed (or a support skill was used): advance p's chain. m: the enemy hit (null for support skills).
-  // Returns the link (or null).
-  chainNote(p, k, m = null) {
-    const t = this.time, { c, link } = chainStep(p.chain || null, p.cls, k, t);
+  // Returns the link (or null). at: when the step happened (a weapon swap is booked at its own time once a hit proves it).
+  chainNote(p, k, m = null, at = this.time) {
+    const t = this.time, { c, link } = chainStep(p.chain || null, p.cls, k, at);
     p.chain = c;
     if (!link) return null;
     const art = link.art;
@@ -56,10 +56,11 @@ export function installChains(Game) {
     const mul = chainMult(p.chain, t);
     const ev0 = this.events.length;
     const out = orig.call(this, m, p, base * mul, opts);
-    if (!k) return out;
+    if (!k && !p.swapPend) return out;
     let landed = false;
     for (let i = ev0; i < this.events.length; i++) { const e = this.events[i]; if (e.t === 'hit' && e.id === m.id && e.by === p.id) { landed = true; break; } }
-    if (landed) this.chainNote(p, k, m);
+    if (landed && p.swapPend) this.swapLanded?.(p, m); // a weapon swap before this hit (server/weaponswap.js)
+    if (landed && k) this.chainNote(p, k, m);
     return out;
   });
 

@@ -167,6 +167,12 @@ Object.assign(DROPS, { // Floor 2
   matron: { gold: [50, 80], item: 1, potion: 0.6, table: 'mireElite' },
   sovereign: { gold: [260, 340], item: 2, potion: 2, table: 'boss2' },
 });
+Object.assign(DROPS, { // enemies that force a role (shared/mobroles.js)
+  ironboar: { gold: [6, 10], item: 0.15, potion: 0.15, table: 'field' },
+  bulwark: { gold: [10, 16], item: 0.16, potion: 0.15, table: 'mire' },
+  hexer: { gold: [9, 15], item: 0.15, potion: 0.15, table: 'mire' },
+  harrier: { gold: [13, 21], item: 0.15, potion: 0.15, table: 'spire' },
+});
 
 
 export const RANDOM_SLOT = rnd => SLOTS[Math.floor(rnd() * SLOTS.length)];

@@ -8,6 +8,7 @@
 // Talents (characters.talents, { nodeId: rank }, shared/talents.js) too: validated against the tree and the level.
 // Access levels (accounts.access_level, 1-5, shared/accesslevels.js): POST /api/admin/accounts/:id/access { level }; the
 // players list shows each account's level. Bots carry their creator and an allow list (PATCH /api/admin/bots/:bid { allow }).
+// Guilds: GET /api/admin/guilds (with members), DELETE /api/admin/guilds/:id (disband).
 import * as db from './db.js';
 import * as accounts from './accounts.js';
 import { CLASSES, MAX_LEVEL, xpToNext, areaName } from '../shared/data.js';
@@ -68,7 +69,10 @@ const partyNames = p => { const pa = p.party && game.parties.get(p.party); retur
 const accountLabel = r => r.discord_name || (r.discord_id ? `discord ${r.discord_id}` : `guest #${r.account_id}`);
 
 // ---------- character model ----------
-async function loadFull(id) {
+// Reads and offline writes of a character run in its save lock (accounts.charLock), in line with the game's saves and
+// guild bank moves.
+function loadFull(id) { return accounts.charLock(id, () => loadFullNow(id)); }
+async function loadFullNow(id) {
   const [r] = await q(`SELECT c.id, c.name, c.cls, c.lvl, c.xp, c.gold, c.inv, c.stats, c.mastery, c.talents, c.path, c.created_at, c.updated_at,
     a.id AS account_id, a.discord_id, a.discord_name, a.is_admin
     FROM characters c JOIN accounts a ON a.id = c.account_id WHERE c.id = $1`, [id]);
@@ -125,13 +129,18 @@ function cleanInv(inv) {
     if (c.slot !== s) throw new Bad(`eq.${s} holds a ${c.slot}.`);
     out.eq[s] = c;
   }
+  if (inv.eq.weapon2 != null) { // the spare weapon (server/weaponswap.js)
+    const c = cleanItem(inv.eq.weapon2, 'eq.weapon2');
+    if (c.slot !== 'weapon') throw new Bad(`eq.weapon2 holds a ${c.slot}.`);
+    out.eq.weapon2 = c;
+  }
   for (const k of Object.keys(inv.cons || {})) if (!CONSUMABLE_IDS.includes(k)) throw new Bad(`Unknown consumable ${k}.`);
   for (const k of CONSUMABLE_IDS) out.cons[k] = int(inv.cons?.[k] ?? 0, 0, 999, `cons.${k}`);
   for (const k of Object.keys(inv.mats || {})) if (!MAT_IDS.includes(k)) throw new Bad(`Unknown material ${k}.`);
   for (const k of MAT_IDS) { const n = int(inv.mats?.[k] ?? 0, 0, 99999, `mats.${k}`); if (n) out.mats[k] = n; }
   const seen = new Set();
   let u = Date.now() % 1e6 + 5e5;
-  for (const it of [...out.bag, ...SLOTS.map(s => out.eq[s]).filter(Boolean)]) {
+  for (const it of [...out.bag, ...SLOTS.map(s => out.eq[s]).filter(Boolean), ...(out.eq.weapon2 ? [out.eq.weapon2] : [])]) {
     if (!Number.isInteger(it.u) || seen.has(it.u)) it.u = ++u;
     while (seen.has(it.u)) it.u = ++u;
     seen.add(it.u);
@@ -158,6 +167,11 @@ function setCls(c, cls, online) {
   if (w?.cls && w.cls !== c.cls) {
     if (c.inv.bag.length >= BAG_SIZE) throw new Bad('Bag full: make room for the old weapon first.');
     c.inv.bag.push(w); c.inv.eq.weapon = null;
+  }
+  const w2 = c.inv.eq.weapon2; // so does a spare weapon (server/weaponswap.js)
+  if (w2?.cls && w2.cls !== c.cls) {
+    if (c.inv.bag.length >= BAG_SIZE) throw new Bad('Bag full: make room for the old spare weapon first.');
+    c.inv.bag.push(w2); c.inv.eq.weapon2 = null;
   }
 }
 
@@ -264,13 +278,13 @@ function maxOut(c) {
     if (old && c.inv.bag.length < BAG_SIZE) c.inv.bag.push(old);
     gear[s].u = freeU(c.inv); c.inv.eq[s] = gear[s];
   }
-  const owns = la => [...c.inv.bag, ...SLOTS.map(s => c.inv.eq[s])].some(it => it?.la === la);
+  const owns = la => [...c.inv.bag, ...SLOTS.map(s => c.inv.eq[s]), c.inv.eq.weapon2].some(it => it?.la === la);
   for (const [la, make] of [[1, lastAttackItem], [2, lastAttackItem2], [3, lastAttackItem3]]) if (!owns(la) && c.inv.bag.length < BAG_SIZE) giveToBag(c, make());
   for (const k of CONSUMABLE_IDS) c.inv.cons[k] = Math.max(c.inv.cons[k] | 0, 20);
 }
 
 function freeU(inv) {
-  const used = new Set([...inv.bag, ...SLOTS.map(s => inv.eq[s]).filter(Boolean)].map(it => it.u));
+  const used = new Set([...inv.bag, ...SLOTS.map(s => inv.eq[s]), inv.eq.weapon2].filter(Boolean).map(it => it.u));
   let u = Date.now() % 1e6 + 7e5;
   while (used.has(u)) u++;
   return u;
@@ -301,7 +315,7 @@ function applyOp(c, op) {
       return;
     }
     case 'editItem': { // { u, ax: [{ k, v, s?, c? }] | 'roll', set: id | null }: an item's affixes and set
-      const it = [...c.inv.bag, ...SLOTS.map(s => c.inv.eq[s])].find(x => x && x.u === (op.u | 0));
+      const it = [...c.inv.bag, ...SLOTS.map(s => c.inv.eq[s]), c.inv.eq.weapon2].find(x => x && x.u === (op.u | 0)); // (the 2nd weapon too)
       if (!it) throw new Bad('No such item.');
       if (it.ks) throw new Bad('Keepsakes have no affixes.');
       if (op.ax === 'roll') { const t = rollAffixes({ ...it, la: 0 }, it.cls || c.cls); it.ax = t.ax; } // fresh affixes by rarity (Last Attack items too)
@@ -340,7 +354,13 @@ function applyOp(c, op) {
 }
 
 async function editCharacter(id, body) {
-  const r = await loadFull(id);
+  const live = await accounts.charLock(id, () => editLocked(id, body));
+  if (live) { live.dirty = false; await accounts.saveCharacter(live); } // (it takes the lock itself)
+  return view(await loadFull(id));
+}
+// → the live player to save once the lock is free, or null (an offline character, written here).
+async function editLocked(id, body) {
+  const r = await loadFullNow(id);
   if (!r) throw new Bad('No such character.', 404);
   let p = liveChar(id);
   // In a class trial the live player wears a loaned kit (class, mastery, talents: server/academy.js p.loan), so an edit
@@ -374,13 +394,11 @@ async function editCharacter(id, body) {
     game.invChanged(p);
     game.rosterDirty = true; // name / title
     game.sys('An admin updated your character.', p.id);
-    p.dirty = false;
-    await accounts.saveCharacter(p);
-  } else {
-    await q('UPDATE characters SET cls = $2, lvl = $3, xp = $4, gold = $5, inv = $6, stats = $7, mastery = $8, talents = $9, path = $10 WHERE id = $1',
-      [id, c.cls, c.lvl, c.xp, c.gold, JSON.stringify(c.inv), JSON.stringify(c.stats), JSON.stringify(c.mastery), JSON.stringify(c.talents), c.path ? JSON.stringify(c.path) : null]);
+    return p;
   }
-  return view(await loadFull(id));
+  await q('UPDATE characters SET cls = $2, lvl = $3, xp = $4, gold = $5, inv = $6, stats = $7, mastery = $8, talents = $9, path = $10 WHERE id = $1',
+    [id, c.cls, c.lvl, c.xp, c.gold, JSON.stringify(c.inv), JSON.stringify(c.stats), JSON.stringify(c.mastery), JSON.stringify(c.talents), c.path ? JSON.stringify(c.path) : null]);
+  return null;
 }
 
 async function deleteCharacter(id) {
@@ -392,7 +410,8 @@ async function deleteCharacter(id) {
     game.rosterDirty = true;
     p.ws.close();
   }
-  const rows = await q('DELETE FROM characters WHERE id = $1 RETURNING id', [id]);
+  const rows = await accounts.charLock(id, () => q('DELETE FROM characters WHERE id = $1 RETURNING id', [id]));
+  if (rows.length) game.guildCharGone?.(id); // its guild hands on the lead, or ends with no player left
   return rows.length > 0;
 }
 
@@ -484,6 +503,12 @@ export async function handle(req, res, url) {
         if (body?.confirm !== r.name) return json(res, 400, { error: 'Type the character name to confirm.' }), true;
         return json(res, 200, { ok: await deleteCharacter(id) }), true;
       }
+    }
+
+    // Guilds (server/guilds.js): every guild with its members; disband one (its bank and vault go with it)
+    if (path === '/api/admin/guilds' && m === 'GET') return json(res, 200, { guilds: game.guildsAdmin() }), true;
+    if ((mm = path.match(/^\/api\/admin\/guilds\/(\d+)$/)) && m === 'DELETE') {
+      return game.guildDisbandAdmin(+mm[1]) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'No such guild.' }), true;
     }
 
     if (path === '/api/admin/bots' && m === 'GET') {
