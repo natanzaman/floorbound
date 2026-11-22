@@ -170,7 +170,7 @@ g.townClock = () => clock;
 g.townRand = () => 0.5;
 g.track = () => {};
 for (const m of g.mobs.values()) { m.dead = true; m.deadUntil = Infinity; } // (no bites mid-test)
-const sysTo = p => g.events.filter(e => e.t === 'sys' && (e.to === p.id || e.to == null)).map(e => e.text);
+const sysTo = p => [...g.events, ...(p.pev || [])].filter(e => e.t === 'sys' && (e.to === p.id || e.to == null)).map(e => e.text); // (pev: private lines, Game.priv)
 const step = secs => { for (let i = 0; i < Math.round(secs * 20); i++) g.update(0.05); };
 const act = (p, msg) => { g.time += 0.2; return g.handle(p, { type: 'town', ...msg }); }; // (past the rate limit)
 const atBoard = (p, f) => { p.x = TOWNS[f].board.x + 1; p.z = TOWNS[f].board.z + 1.5; };

@@ -101,6 +101,17 @@ export const AcademyMethods = {
     return it;
   },
 
+  // The 2nd weapon after a class or weapon change: an Academy weapon goes back (never kept), another class's spare moves
+  // to the bag (it stays put if the bag is full; the swap then says why).
+  tidySpare(p) {
+    const w2 = p.inv?.eq?.weapon2;
+    if (!w2) return;
+    if (w2.ac) p.inv.eq.weapon2 = null;
+    else if (w2.cls && w2.cls !== p.cls && p.inv.bag.length < BAG_SIZE) { p.inv.bag.push(w2); p.inv.eq.weapon2 = null; }
+    else return;
+    this.invChanged(p);
+  },
+
   // ---------- graduation and class changes ----------
   // Graduate an Initiate into cls (checks done by the caller): keep the Initiate class's mastery, open the class, grant
   // the matching weapon, full names and power, the level-3 skill, the talent tree with every banked point.
@@ -111,6 +122,7 @@ export const AcademyMethods = {
     const kept = path.keep[cls]; delete path.keep[cls];
     this.swapClass(p, cls, kept);
     this.armWith(p, cls, INITIATE.gradRarity, gradStyle(cls, path.weapon), true, true); // (yours to keep: not an Academy weapon)
+    this.tidySpare(p);
     this.recompute(p); p.hp = p.maxHp;
     this.markPath(p);
     this.events.push({ t: 'grad', id: p.id, to: p.id, cls });
@@ -126,6 +138,7 @@ export const AcademyMethods = {
     const kept = path.keep[cls]; delete path.keep[cls];
     this.swapClass(p, cls, kept);
     this.armWith(p, cls, 0, gradStyle(cls, path.weapon));
+    this.tidySpare(p);
     this.recompute(p); p.hp = p.maxHp;
     this.markPath(p);
     this.events.push({ t: 'grad', id: p.id, to: p.id, cls, change: 1 });
@@ -143,6 +156,7 @@ export const AcademyMethods = {
       this.swapClass(p, W.base, kept);
     }
     this.armWith(p, W.base, 0, W.style);
+    this.tidySpare(p);
     this.recompute(p);
     this.markPath(p);
     this.sys(`You take up the ${W.name}.`, p.id);

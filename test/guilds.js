@@ -60,7 +60,7 @@ const add = (g, name, extra = {}) => { const p = g.addPlayer(sock(), name, 'swor
 const reply = p => p.ws.out.filter(m => m.type === 'guild').at(-1);
 const act = (g, p, op, o = {}) => { g.handle(p, { type: 'guild', op, ...o }); return reply(p); };
 const run = (g, secs) => { for (let i = 0; i < Math.round(secs * 20); i++) g.update(0.05); };
-const sysTo = (g, p) => g.events.filter(e => e.t === 'sys' && e.to === p.id).map(e => e.text);
+const sysTo = (g, p) => [...g.events, ...(p.pev || [])].filter(e => e.t === 'sys' && e.to === p.id).map(e => e.text); // (pev: private lines, Game.priv)
 {
   const g = fresh();
   const a = add(g, 'Ann'), b = add(g, 'Bo'), c = add(g, 'Cy');
@@ -71,7 +71,7 @@ const sysTo = (g, p) => g.events.filter(e => e.t === 'sys' && e.to === p.id).map
   ok(/costs/.test(act(g, poor, 'create', { name: 'Poor Guild', tag: 'PG' }).error) && poor.gold === 10, 'no guild without the fee');
   ok(!act(g, b, 'invite', { name: 'Cy' }).ok, 'someone outside the guild can\'t invite');
   r = act(g, a, 'invite', { name: 'Bo' });
-  ok(r.ok && b.ginvite?.gid === r.view.guild.id && g.events.some(e => e.t === 'ginvite' && e.to === b.id && e.tag === 'KN'), 'an invite waits on the player (a ginvite card)');
+  ok(r.ok && b.ginvite?.gid === r.view.guild.id && (b.pev || []).some(e => e.t === 'ginvite' && e.to === b.id && e.tag === 'KN') && !g.events.some(e => e.t === 'ginvite'), 'an invite waits on the player (a ginvite card)');
   ok(!act(g, c, 'accept', {}).ok, 'no invite: nothing to accept');
   r = act(g, b, 'accept', { gid: b.ginvite.gid });
   ok(r.ok && g.guildOf(b) === g.guildOf(a) && r.view.guild.rank === RANK.member, 'accepted: a Member');

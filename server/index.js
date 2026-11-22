@@ -335,7 +335,7 @@ async function shutdown(sig) {
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => void shutdown(sig));
 
 admin.init({ game, bots });
-accounts.onCharacterDeleted(id => game.guildCharGone(id)); // a deleted character leaves its guild (server/guilds.js)
+accounts.onCharacterDeleted(id => { game.guildCharGone(id); game.townCharGone?.(id); }); // a deleted character leaves its guild (server/guilds.js) and its town's ballot and office (server/towns.js)
 if (process.env.TEST_HOOKS) globalThis.floorbound = { game, bots, playerBots, localHub }; // testing aid: a test that imports this file reaches the live objects (test/localws.js)
 const aiMinds = installAI({ game, bots, server });
 game.townAI = aiMinds.namedTalk || null; // the Named's election platforms, when the AI mind is on (server/towns.js platformAI)

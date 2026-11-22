@@ -162,16 +162,22 @@ function cleanStats(st) {
 function setCls(c, cls, online) {
   if (!CLASSES[cls]) throw new Bad('Unknown class.');
   if (online) throw new Bad('Change the class while the character is offline.');
+  const old = c.cls;
   c.cls = cls;
-  c.mastery = newMastery(c.mastery, c.cls); // the new class's skills (start fresh)
-  c.talents = {}; // a different tree
+  const keep = c.path?.keep && typeof c.path.keep === 'object' ? c.path.keep : null; // the Academy path: per-class mastery and talents
+  const kept = keep?.[cls] || null;
+  if (keep && old !== cls) { keep[old] = { mastery: c.mastery, talents: c.talents }; delete keep[cls]; }
+  c.mastery = newMastery(kept?.mastery || c.mastery, c.cls); // the new class's skills (kept ones back, else fresh)
+  c.talents = kept?.talents && typeof kept.talents === 'object' ? { ...kept.talents } : {}; // a different tree (sanitised when it loads)
   const w = c.inv.eq.weapon; // a weapon for the old class goes back to the bag
-  if (w?.cls && w.cls !== c.cls) {
+  if (w?.ac && w.cls !== c.cls) c.inv.eq.weapon = null; // (an Academy loan never goes to the bag)
+  else if (w?.cls && w.cls !== c.cls) {
     if (c.inv.bag.length >= BAG_SIZE) throw new Bad('Bag full: make room for the old weapon first.');
     c.inv.bag.push(w); c.inv.eq.weapon = null;
   }
   const w2 = c.inv.eq.weapon2; // so does a spare weapon (server/weaponswap.js)
-  if (w2?.cls && w2.cls !== c.cls) {
+  if (w2?.ac) c.inv.eq.weapon2 = null;
+  else if (w2?.cls && w2.cls !== c.cls) {
     if (c.inv.bag.length >= BAG_SIZE) throw new Bad('Bag full: make room for the old spare weapon first.');
     c.inv.bag.push(w2); c.inv.eq.weapon2 = null;
   }
@@ -413,7 +419,7 @@ async function deleteCharacter(id) {
     p.ws.close();
   }
   const rows = await accounts.charLock(id, () => q('DELETE FROM characters WHERE id = $1 RETURNING id', [id]));
-  if (rows.length) game.guildCharGone?.(id); // its guild hands on the lead, or ends with no player left
+  if (rows.length) { game.guildCharGone?.(id); game.townCharGone?.(id); } // its guild hands on the lead, or ends with no player left
   return rows.length > 0;
 }
 

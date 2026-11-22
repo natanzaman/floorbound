@@ -12,6 +12,9 @@
 //  - Bots equip what they loot when it's clearly better for their role.
 import { inTown, CLASSES } from '../shared/data.js';
 import { SLOTS } from '../shared/items.js';
+import { nodeDef } from '../shared/talents.js';
+// The class a loadout was saved for (older saves carry none: their talents tell).
+const loCls = lo => lo?.cls || Object.keys(lo?.tal || {}).map(id => nodeDef(id)?.cls).find(Boolean) || null;
 import {
   lootFor, sourceOf, rollTable, rollGear, makeSetPiece, pickSetSlot, buildTotals, rerollAffix, rerollCost, affixText,
   gearScore, SETS, SET_KEYS, SKCD_FLOOR,
@@ -88,9 +91,10 @@ export const LootMethods = {
     const L = (p.inv.loadouts ||= []);
     while (L.length < LOADOUTS) L.push(null);
     const label = n => L[n]?.n || `Loadout ${n + 1}`;
+    if ((op === 'save' || op === 'use') && p.loan) return this.sysPriv(p, 'Not during a class trial: the kit is on loan.');
     if (op === 'save') {
       const name = String(msg.name ?? L[i]?.n ?? '').replace(/[<>]/g, '').trim().slice(0, 20) || `Loadout ${i + 1}`;
-      L[i] = { n: name, eq: Object.fromEntries(SLOTS.map(s => [s, p.inv.eq[s]?.u ?? null])), tal: { ...(p.talents || {}) } };
+      L[i] = { n: name, cls: p.cls, eq: Object.fromEntries(SLOTS.map(s => [s, p.inv.eq[s]?.u ?? null])), tal: { ...(p.talents || {}) } };
       this.sys(`Saved ${name}: your worn gear and talents.`, p.id);
       this.track(p, 'loadout', { op, i });
     } else if (op === 'rename') {
@@ -105,7 +109,9 @@ export const LootMethods = {
       if (!lo) return;
       const why = this.loadoutBlock(p);
       if (why) return this.sys(why, p.id);
+      const other = loCls(lo) && loCls(lo) !== p.cls ? loCls(lo) : null;
       const missing = this.applyLoadout(p, lo);
+      if (other) this.sysPriv(p, `${label(i)} was saved as a ${CLASSES[other]?.name || other}: its talents stay as they are, and only gear your class can wear went on.`);
       this.sys(`${label(i)} equipped.${missing.length ? ` Missing: ${missing.join(', ')} (sold or salvaged?).` : ''}`, p.id);
       this.events.push({ t: 'equip', id: p.id });
       this.events.push({ t: 'loadout', to: p.id, id: p.id, i, x: r2(p.x), z: r2(p.z) });
@@ -130,7 +136,8 @@ export const LootMethods = {
       p.inv.eq[slot] = it;
     }
     const same = JSON.stringify(Object.entries(lo.tal || {}).sort()) === JSON.stringify(Object.entries(p.talents || {}).sort());
-    if (lo.tal && !same && this.setTalents) this.setTalents(p, lo.tal); // sanitised; recomputes
+    const mine = !loCls(lo) || loCls(lo) === p.cls; // (another class's talents would sanitise to nothing and wipe yours)
+    if (lo.tal && mine && !same && this.setTalents) this.setTalents(p, lo.tal); // sanitised; recomputes
     else this.recompute(p);
     return missing;
   },

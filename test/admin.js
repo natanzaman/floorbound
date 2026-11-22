@@ -157,6 +157,13 @@ try {
   [db] = await sql('SELECT cls, path FROM characters WHERE id = $1', [off.id]);
   ok(r.status === 200 && db.path === null && db.cls === 'lancer', 'path: cleared (legacy), the class stays');
   r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { cls: 'guardian' });
+  // a graduate's class change keeps each class's talents in path.keep, as the Academy does
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { rawPath: { stage: 'class', weapon: 'sword', trials: { guardian: 1, swordsman: 1 }, keep: { swordsman: { mastery: null, talents: { sw_feet: 1 } } } }, talents: { gu_plate: 1 } });
+  ok(r.status === 200, `a graduated path with a kept Swordsman tree (${JSON.stringify(r.body).slice(0, 120)})`);
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { cls: 'swordsman' });
+  [db] = await sql('SELECT cls, talents, path FROM characters WHERE id = $1', [off.id]);
+  ok(r.status === 200 && db.cls === 'swordsman' && db.talents.sw_feet === 1 && db.path.keep.guardian?.talents?.gu_plate === 1 && !db.path.keep.swordsman, 'admin class change: the kept tree comes back, the old one is kept');
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { rawPath: null, cls: 'guardian' });
 
   // ---------- online edit ----------
   const pc = client({ type: 'join', session: userTok, character: on.id });

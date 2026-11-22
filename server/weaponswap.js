@@ -42,7 +42,7 @@ const methods = {
     const why = this.swapBlock(p);
     if (why) { if (why === 'none') this.sys('No second weapon: equip one as your 2nd weapon from the bag.', p.id); return false; }
     const eq = p.inv.eq, t = this.time, from = p.style || '';
-    if (eq.weapon2.cls && eq.weapon2.cls !== p.cls) return false; // (a class change left a foreign spare: unequip it)
+    if (eq.weapon2.cls && eq.weapon2.cls !== p.cls) { this.sysPriv(p, 'Your 2nd weapon is for another class.'); return false; } // (a class change left a foreign spare: unequip it)
     [eq.weapon, eq.weapon2] = [eq.weapon2, eq.weapon || null];
     p.swapCd = t + SWAP.cd;
     p.combo = 0; p.lastBasic = -9;

@@ -267,8 +267,8 @@ export const GuildMethods = {
     }
     if (this.guildNeedsChar() && !t.charId) fail(`${t.name} isn't playing a saved character, so they can't join a guild.`);
     t.ginvite = { gid: g.id, from: p.id, at: this.time };
-    this.events.push({ t: 'ginvite', to: t.id, gid: g.id, name: g.name, tag: g.tag, from: p.name });
-    this.sys(`${p.name} invites you to the guild [${g.tag}] ${g.name}. Players → Guild to answer.`, t.id);
+    this.priv(t, { t: 'ginvite', gid: g.id, name: g.name, tag: g.tag, from: p.name });
+    this.sysPriv(t, `${p.name} invites you to the guild [${g.tag}] ${g.name}. Players → Guild to answer.`);
     return `You invited ${t.name} to [${g.tag}].`;
   },
   guildBotAnswer(g, p, getPlayer, key) { // a bot or one of the Named accepts after a moment, if nothing changed
@@ -299,7 +299,7 @@ export const GuildMethods = {
     if (!inv) fail('No guild invite.');
     p.ginvite = null;
     const from = this.players.get(inv.from);
-    if (from) this.sys(`${p.name} declined the guild invite.`, from.id);
+    if (from) this.sysPriv(from, `${p.name} declined the guild invite.`);
     return 'Invite declined.';
   },
   guildLeave(p) {
@@ -319,7 +319,7 @@ export const GuildMethods = {
     if (!can(me.rank, 'kick') || m.rank >= me.rank) fail('You can only remove members below your rank.');
     this.guildRemoveMember(g, m.key);
     const t = this.guildPlayerOf(m);
-    if (t && !t.bot) this.sys(`You were removed from [${g.tag}] ${g.name}.`, t.id);
+    if (t && !t.bot) this.sysPriv(t, `You were removed from [${g.tag}] ${g.name}.`);
     this.guildTell(g, `${m.name} was removed from the guild by ${p.name}.`);
     return `${m.name} is out of the guild.`;
   },
@@ -404,6 +404,7 @@ export const GuildMethods = {
     const i = p.inv.bag.findIndex(it => it.u === Number(u));
     if (i < 0) fail('That item isn\'t in your bag.');
     if (p.inv.bag[i].ks) fail('A keepsake stays with you.');
+    if (p.inv.bag[i].ac) fail('An Academy weapon goes back to the Academy, not the vault.');
     if (g.vault.length >= this.guildVaultCap(g)) fail(`The vault is full (${this.guildVaultCap(g)} slots).`);
     const [it] = p.inv.bag.splice(i, 1);
     g.vault.push({ v: ++g.vseq, it, by: p.name });
@@ -431,7 +432,7 @@ export const GuildMethods = {
   // ---------- chat ----------
   guildChat(p, text) {
     const g = this.guildOf(p);
-    if (!g) return void this.sys('You are not in a guild.', p.id);
+    if (!g) return void this.sysPriv(p, 'You are not in a guild.');
     const msg = JSON.stringify({ type: 'gchat', from: p.name, id: p.id, tag: g.tag, text });
     for (const o of this.guildOnline(g)) if (!o.bot && o.ws?.readyState === 1) o.ws.send(msg);
   },
