@@ -9,7 +9,7 @@ import { keyHtml, tapping } from '/keyname.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, flatShading: true, ...opts });
-const fmt = s => (s >= 172800 ? `${Math.round(s / 86400)} days` : s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : s >= 60 ? `${Math.floor(s / 60)}m ${String(Math.round(s % 60)).padStart(2, '0')}s` : `${Math.max(0, Math.round(s))}s`);
+const fmt = s => (s >= 172800 ? `${Math.round(s / 86400)} days` : s >= 3600 ? (s % 3600 < 30 ? `${Math.round(s / 3600)} hours` : `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m`) : s >= 60 ? `${Math.floor(s / 60)}m ${String(Math.round(s % 60)).padStart(2, '0')}s` : `${Math.max(0, Math.round(s))}s`);
 const matName = id => MATS[id]?.name || id;
 const TABS = [['town', 'Town'], ['vote', 'Election'], ['bounty', 'Bounties'], ['steward', 'Steward']];
 const BANNER = { 1: 0x60a5fa, 2: 0x2dd4bf, 3: 0xa5b4fc };
@@ -125,7 +125,7 @@ export function createTowns({ scene, floor1, send, state, project, log, sfx, $, 
     h += `<div class="cost built">${built}</div>`;
     if (t.plots) h += `<p class="hint">Guild hall plots: ${t.plots} (for guilds, coming later).</p>`;
     const r = t.raid;
-    h += `<h4>Raids</h4><p class="hint">${r.on ? '<b class="no">A raid is on now: defend the ward!</b>' : r.due > 0 ? `Scouts expect raiders in about ${fmt(r.due - since())}.` : 'Raiders are gathering: they strike when someone is on this floor.'} ${r.last ? `Last raid ${fmt(r.last.ago)} ago: ${r.last.won ? 'beaten' : 'the ward fell'} (${r.last.xp > 0 ? '+' : ''}${r.last.xp} XP).` : ''} Defend the ward on the town's edge when they come.</p>`;
+    h += `<h4>Raids</h4><p class="hint">${r.on ? '<b class="no">A raid is on now: defend the ward!</b>' : r.due > 0 ? `Scouts expect raiders in about ${fmt(r.due - since() > 7200 ? Math.round((r.due - since()) / 3600) * 3600 : r.due - since())}.` : 'Raiders are gathering: they strike when someone is on this floor.'} ${r.last ? `Last raid ${fmt(r.last.ago)} ago: ${r.last.won ? 'beaten' : 'the ward fell'} (${r.last.xp > 0 ? '+' : ''}${r.last.xp} XP).` : ''} Defend the ward on the town's edge when they come.</p>`;
     return h;
   }
   function tabVote(t, at) {
