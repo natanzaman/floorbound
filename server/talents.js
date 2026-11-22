@@ -422,7 +422,7 @@ export const TalentMethodsNew = {
     if (!p?.tal?.keys.minefield || p.dead) return;
     this.events.push({ t: 'tproc', k: 'minefield', id: p.id, to: p.id, x: r2(tr.x), z: r2(tr.z), r: r2(tr.r) });
     for (const m of [...this.mobs.values()]) {
-      if (!this.targetable(m) || Math.hypot(m.x - tr.x, m.z - tr.z) > tr.r + m.def.radius) continue;
+      if (!this.targetable(m, p) || Math.hypot(m.x - tr.x, m.z - tr.z) > tr.r + m.def.radius) continue;
       this.damageMob(m, p, p.atk * this.dmgMult(p) * K.mult, { sk: tr.sk, heavy: true, frac: K.frac, threat: 0.8 });
     }
   },

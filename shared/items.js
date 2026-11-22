@@ -134,6 +134,14 @@ export const DROPS = {
   thornmother: { gold: [40, 70], item: 1, potion: 1, table: 'rare' },
 };
 
+Object.assign(DROPS, { // the Undercrypt (shared/labyrinth.js): its enemies, its chests (deep: in a far dead end)
+  ghoul: { gold: [3, 6], item: 0.08, potion: 0.12, table: 'field' },
+  tombwarden: { gold: [10, 18], item: 0.25, potion: 0.3, table: 'field' },
+  gravekeeper: { gold: [60, 90], item: 1, potion: 1, table: 'elite' },
+  cryptchest: { gold: [15, 30], item: 1, potion: 0.5, table: 'field' },
+  cryptchestdeep: { gold: [30, 55], item: 1, potion: 1, table: 'elite' },
+});
+
 Object.assign(DROPS, { // Floor 2
   shieldback: { gold: [8, 14], item: 0.13, potion: 0.14, table: 'mire' },
   wisp: { gold: [7, 12], item: 0.11, potion: 0.12, table: 'mire' },

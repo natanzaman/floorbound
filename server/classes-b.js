@@ -200,7 +200,7 @@ const methods = {
           const [cx, cz] = resolveCollision(pr.x, pr.z, 0.1);
           if (cx !== pr.x || cz !== pr.z || !this.walk(pr.x, pr.z)) { pr.ttl = 0; break; } // a tree, rock or wall
           for (const m of this.mobs.values()) {
-            if (!this.targetable(m) || Math.hypot(m.x - pr.x, m.z - pr.z) > (pr.rad ?? SONG.bolt.radius) + m.def.radius) continue;
+            if (!this.targetable(m, owner) || Math.hypot(m.x - pr.x, m.z - pr.z) > (pr.rad ?? SONG.bolt.radius) + m.def.radius) continue;
             this.addDiscord(m, owner, this.styleDiscordN(owner)); // (Flute: every second hit adds 2)
             this.damageMob(m, owner, pr.amount, { threat: 1, tsk: 'sonic' }); // tsk: talents count it as the basic attack
             pr.ttl = 0; pr.hit = m.id;

@@ -8,6 +8,12 @@ Plans: `docs/briefs/bots-access.md`, `docs/briefs/waypoint.md`, `docs/briefs/tar
 - **Targeting (ROADMAP K5):** Settings → Controls → Combat: Nearest / Locked or nearest (default) / Cone 120° / Aimed, Cleave on/off, max targets 1–8. Per-attack field of view and target limits in `shared/targeting.js`; skill messages carry the camera yaw (`look`) for the server's Cone filter. Bots send no prefs and play as before.
 - **Bots + access levels:** Bots section in the Players list (invite, kick, Named despawn/respawn, creator allow-list editor), "Join my party" checkbox, free-roaming bots with a creator, no per-player cap (`MAX_BOTS` 30 global), `accounts.access_level` 1–5 (admins 5) with the admin-page picker, rules in `shared/accesslevels.js` (`canControlBot`). Allow lists hold saved character ids only. `INVITE_NEEDS_TIER = false` in `shared/named.js`.
 
+## Duels (2026-11-22, branch `claude/project-thread-yae5hc`, plan `docs/briefs/duels.md`)
+- Solo or party vs party duels with players, bots and the Named: Players → Duel or `/duel <name>`. Rules First Strike,
+  Half Health (default), Last Stand; nobody dies, health back after; ring, clock, `/yield`. Hard mode pushed off.
+- **Owner calls waiting:** the default rule (Half Health was a guess), `DUEL.pvp` 0.25, the 2 / 3 min clock, whether
+  knockback and stuns should move players in duels (not in v1), a duel ladder.
+
 ## Owner calls from the 2026-11-20 batch: decided 2026-11-21 (`feat/tweaks`, brief `docs/briefs/tweaks-2026-11-21.md`)
 - **Several of the Named per party: yes.** Any of the five can join one party, up to the normal 6 (open invites count);
   each is still one of a kind. Despawn / respawn rejoins a party that has other Named in it (room permitting).

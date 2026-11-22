@@ -3,6 +3,7 @@
 import { CLASSES, PLAYER_SPEED, DODGE, JUMP, SWEEP, walkable, resolveCollision } from '../data.js';
 import { F2, SOVEREIGN, inArena2, onFloor2, floorOf } from '../floor2.js';
 import { FLOOR_X } from '../floor3.js';
+import { labSteer } from '../labyrinth.js'; // the labyrinths' walls (shared/labyrinth.js)
 import { skillReady, pressed, aimNoise, sweepError, quakeError } from '../botskill.js';
 import { brainFor, registerBotHook } from './registry.js';
 import { botStep, botSpeedAt, botCanRoll, arenaEscape, sidestep } from './arenas.js'; // boss arenas' areas (J2): sludge, fire, cover
@@ -22,7 +23,7 @@ export function useSkill(b, slot, face, tid) {
 }
 
 export function moveToward(b, tx, tz, stop = 0.4, speed = PLAYER_SPEED) {
-  [tx, tz] = aimNoise(b, tx, tz); // capability: positioning error in fights
+  [tx, tz] = labSteer(b.x, b.z, ...aimNoise(b, tx, tz)); // capability: positioning error in fights; labyrinths: round the walls (next cell first)
   const dx = tx - b.x, dz = tz - b.z, d = Math.hypot(dx, dz);
   if (d <= stop) return false;
   if (b.airUntil > clock(b)) speed *= JUMP.air; // jumping: air control is a little weaker (shared/data.js airStep)

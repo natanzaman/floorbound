@@ -22,6 +22,8 @@ export const STEPS = [ // (the Game Menu's Controls & guide lists them too)
 ];
 
 const TIPS = {
+  lab: 'The Undercrypt: a maze under the field. Red-glowing grates are spike plates: wait for them to sink, or jump or roll across as they rise. The Gravekeeper in the Ossuary at the heart holds the Horn Key, which unlocks the Chamber Gate. Three layers: the Catacombs, the Drowning Galleries (two bone levers raise the portcullis) and the Ossuary. Light wall torches to mark your way; chests hide in dead ends. In the Galleries the crypt breathes: the torches gutter and the dead climb out, sooner the longer you linger.',
+  labnoise: 'Tomb Wardens sleep until they hear you: wading through the water, lighting torches and fighting all make noise. Keep to dry stone, or throw a bone rattle (interact with nothing in reach) to send them elsewhere.',
   wedge: 'Red wedge: a bite is coming. Step out of it or roll.',
   aim: 'Something is aiming down that red line. Sidestep it.',
   slam: 'Red circle: a ground slam (the Warden rears up, axe overhead). Roll out, or jump just as it lands: you can steer in the air.',
@@ -52,6 +54,7 @@ const TIPS = {
   bubbles: 'Chat lines pop up as speech bubbles over the speaker\'s head: /s is heard nearby, /p by your party. Settings turns bubbles off; the chat log keeps everything.',
   botmind: 'Talk to bots by name in chat: "Lyra, hang back and heal me". They answer in a speech bubble (the dots mean they\'re thinking) and remember how you like to play. /b orders still work as before.',
   bots: () => `Bots in your party take orders: hold ${K('botWheel')} for the order wheel, or type /b stay, /b follow, /b Lyra: heal (one bot). Your bots roaming outside the party take orders by name too. /b help lists them all; ordinary chat never gives orders. Every bot is in the Players list (${K('players')}): invite one to your party, or kick one out to roam.`,
+  duel: 'A DUEL! Hit your opponent like any enemy (the red ring marks them). First Strike: the first clean hit wins. Half Health: out at half. Last Stand: out at 1 health. Nobody dies and you get your health back after. Stay inside the ring or you forfeit; /yield gives up. Challenge anyone from Players → Duel, or chat /duel name.',
   poses: 'Posed! Chat /kneel, /sit or /bow to strike a pose, /stand (or just move, attack, dodge or jump) to get up.',
   threat: 'Threat: the red arrow (and "→ name" on the boss bar) shows who the boss is after. Your bar under it is your threat vs the top; amber means you are about to pull it off your tank. Ease off for a moment.',
   taunted: 'TAUNTED: a Guardian locked the boss on themselves for a few seconds. Everyone else was cut to half their threat; burst now, but watch the meter: whoever is above 90% of the lock when it ends takes the boss.',

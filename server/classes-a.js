@@ -291,14 +291,14 @@ export const ClassesAMethods = {
       if (!p) { a.done = true; this.events.push({ t: 'apend', id: a.id, x: r2(a.x), z: r2(a.z) }); continue; }
       if (a.tg) { // steer gently toward the target picked when fired
         const m = this.mobs.get(a.tg);
-        if (this.targetable(m)) a.a += clamp(wrapAngle(angleTo(a.x, a.z, m.x, m.z) - a.a), -RT.arrow.homing * dt, RT.arrow.homing * dt);
+        if (this.targetable(m, p)) a.a += clamp(wrapAngle(angleTo(a.x, a.z, m.x, m.z) - a.a), -RT.arrow.homing * dt, RT.arrow.homing * dt);
         else a.tg = 0;
       }
       const step = Math.min(a.sp * dt, a.range - a.trav);
       const x1 = a.x + Math.sin(a.a) * step, z1 = a.z + Math.cos(a.a) * step;
       const hits = [];
       for (const m of this.mobs.values()) {
-        if (!this.targetable(m) || a.hit.has(m.id)) continue;
+        if (!this.targetable(m, p) || a.hit.has(m.id)) continue; // (p: duel stand-ins only for p's opponents, server/duels.js)
         const [d, k] = segDist(m.x, m.z, a.x, a.z, x1, z1);
         if (d <= m.def.radius + a.rad) hits.push([k, m]);
       }
@@ -341,7 +341,7 @@ export const ClassesAMethods = {
     const t = this.time;
     for (const tr of list) {
       const owner = this.players.get(tr.owner);
-      const inside = [...this.mobs.values()].filter(m => this.targetable(m) && Math.hypot(m.x - tr.x, m.z - tr.z) <= tr.r + m.def.radius);
+      const inside = [...this.mobs.values()].filter(m => this.targetable(m, owner) && Math.hypot(m.x - tr.x, m.z - tr.z) <= tr.r + m.def.radius);
       if (tr.kind === 'caltrops') {
         for (const m of inside) m.slowA = { until: t + 0.3, v: m.def.boss ? tr.bossSlow : tr.slow };
         if (t >= tr.next) {

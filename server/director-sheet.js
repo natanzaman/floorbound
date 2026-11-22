@@ -93,7 +93,7 @@ export const VERBS = {
   boss_move: { who: 'mob', req: ['move'], args: { move: en(...MOVES), target: TGT }, api: 'forceBossMove' },
   reserve_last_attack: { who: 'none', req: ['target'], args: { target: MOB, for: 'actor?' }, api: 'reserveLastAttack' },
   twists: { who: 'none', req: ['set'], args: { set: en('off', 'random', ...TWIST_IDS) }, api: 'setTwistOverride' },
-  spawn: { who: 'none', req: ['type', 'at', 'label'], args: { type: en(...Object.keys(MOBS).filter(t => !MOBS[t].boss && !MOBS[t].prop)), at: LOC, label: STR }, api: 'spawnMob' },
+  spawn: { who: 'none', req: ['type', 'at', 'label'], args: { type: en(...Object.keys(MOBS).filter(t => !MOBS[t].boss && !MOBS[t].prop && !MOBS[t].duel)), at: LOC, label: STR }, api: 'spawnMob' },
   give_item: { who: 'actors', req: ['name'], args: { name: STR, slot: en('weapon', 'armor', 'charm'), desc: STR }, api: 'giveKeepsake' },
   protect: { who: 'actors', args: { min: NUM }, api: 'protect' },
   // picture (F4)

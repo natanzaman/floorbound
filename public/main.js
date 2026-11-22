@@ -31,6 +31,7 @@ import { snapPoses, poseFrame } from '/poses.js'; // kneel / sit / bow (F5)
 import { initTalents } from '/talents.js';
 import { initLoot } from '/loot.js'; // affixes, set progress, loadouts, item tooltips (H2)
 import { initBotWheel } from '/botwheel.js';
+import { initLabClient } from '/labyrinth.js'; // the labyrinths before each boss (Floor 1: the Undercrypt)
 import { initBell } from '/bell.js'; // the Tower Bell and the engraved Hall stones
 import { initCine } from '/cine.js'; // film view camera, titles, fades, letterbox, light (F4)
 import { initWellWake } from '/wellwake.js'; // the well wakes when your Floor 2 opens (a short shot)
@@ -43,6 +44,7 @@ import { setKeySource, keyText, keyHtml, tapping } from '/keyname.js'; // prompt
 import { initBossTeam } from '/bossteam.js'; // boss team mechanics: STACK, SPREAD, tether (G4)
 import { initOpenings } from '/openings.js'; // boss openings: weak point, OPENING tag (J3)
 import { initRescue } from '/rescue.js'; // rescue traps: vines, Drowning Pillar, storm crystal (J1)
+import { initDuels } from '/duels.js'; // solo and team duels: the challenge picker, the duel bar, rings, results
 import { initTeamplay } from '/teamplay.js'; // combo counters, the Team Burst bar and sync window (G2)
 import { initMvp } from '/mvp.js'; // the post-fight MVP card (G5)
 import { Q, PRESETS, setLevel, startLevel, startAntialias } from '/quality.js'; // graphics quality: Low / Medium / High / Auto
@@ -132,6 +134,9 @@ const f3 = initFloor3Client({
   send: o => send(o), banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a),
   log: (a, b) => log(a, b), shake: a => shake(a), project: (x, y, z) => project(x, y, z), hallOpen: () => !$('hall').classList.contains('hidden'),
 });
+// Labyrinths (labyrinth.js): the Undercrypt's look, stairs, spike plates, the crypt's darkness, the key.
+const lab = initLabClient({ scene, occluders, sun, floor1, fx, sfx, state, players, mobs, send: o => send(o), banner: (a, b) => banner(a, b),
+  callout: (a, b, c) => callout(a, b, c), log: (a, b) => log(a, b), project: (x, y, z) => project(x, y, z), tip: id => guide.tip(id) });
 // Boss arenas with areas (arenas.js): the fall, the lower area's look and rules (sludge, fire, pillars) for prediction.
 const arenas = initArenas({ scene, fx, sfx, state, mobs, players, camera, views: { colossus: f3.world.arena }, tip: id => guide.tip(id),
   banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), shake: a => shake(a) });
@@ -399,6 +404,7 @@ const revive = initRevive({ state, players, send: o => send(o), project: (x, y, 
 // boss team mechanics: the gold STACK circle, SPREAD rings, tether beams, first-time prompts (public/bossteam.js)
 // rescue traps: telegraphs, the pillar's beam, your trapped banner, "Hold E to cut free", markers (public/rescue.js)
 const openings = initOpenings({ state, mobs, guide, callout: (a, b, c) => callout(a, b, c) });
+const duels = initDuels({ state, players, scene, send: o => send(o), sfx, callout: (a, b, c) => callout(a, b, c), banner: (a, b) => banner(a, b), tip: id => guide.tip(id) }); // public/duels.js
 const rescue = initRescue({ state, players, mobs, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), callout: (a, b, c) => callout(a, b, c), isTouch, revive, keyLabel });
 const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a) });
 // skill combos between players and the Team Burst: chain counters, setup hints, the party bar, T to sync (public/teamplay.js)
@@ -493,14 +499,17 @@ function onSnapshot({ st, me, w }, arrival) {
     state.gold = me.gold; state.meReady = me.ready; state.tonic = me.tonic; state.draught = me.draught;
     for (const id of CONSUMABLE_IDS) if (now - (state.ccdPress?.[id] || 0) > 350) state.ccdReady[id] = now + (me.ccd?.[id] || 0) * 1000;
   }
+  if (w.pl) state.others = new Map(w.pl.map(a => [a[0], a])); // everyone online in brief (the Players panel; players only holds who is near)
   if (w.gi) ground.set(w.gi);
   if (w.gate) { state.gate = w.gate; state.gateOpen = !!w.gate[0]; gateMesh.set(state.gateOpen); }
   if (w.f2) f2.snap(w.f2); // on Floor 2, state.gate/gateOpen become Floor 2's gate
   if (w.f3) f3.snap(w.f3); // likewise Floor 3's Storm Gate
+  lab.snap(w.lb); // labyrinths: the server's clock (spike plates), the crypt breathing
   if (w.f3) arenas.snap(w.f3.ar); // boss arenas: which area (and its colliders for prediction), the fall, fire
   state.phase = w.phase || 0;
   twists.snap(w);
   threat.snap(w, me); // boss / elite targets, my threat meter, Cover cooldown
+  duels.snap(w.du); // duels: rings, the duel bar, which stand-ins are my opponents (before the events)
 
   // events first (they may reference mobs that are about to vanish)
   for (const e of w.events) handleEvent(e);
@@ -528,6 +537,7 @@ function onSnapshot({ st, me, w }, arrival) {
   const seenM = new Set();
   for (const a of w.mobs) {
     const [id, ti, x, z, face, hp, maxHp, flags, posture] = a;
+    if (MOBS[MOB_IDS[ti]]?.duel && !duels.showMob(id)) continue; // a duel stand-in: only my live opponents' (public/duels.js)
     seenM.add(id);
     let e = mobs.get(id);
     if (!e) e = addMobEntity(id, MOB_IDS[ti], x, z, face);
@@ -546,10 +556,12 @@ function handleEvent(e) {
   if (cine.event(e)) return; // shots, titles, fades, letterbox, clean feed, light
   if (arenas.event(e)) return; // the fall to a boss's lower area (arenas.js)
   if (f3.onEvent(e)) return; // Floor 3 (floor3client.js)
+  if (lab.onEvent(e)) return; // labyrinths (labyrinth.js)
   f2.onEvent(e);
   if (bell.event(e)) return; // the Tower Bell
   if (bossTeam.event(e)) return; // boss team mechanics (stack / spread / tether)
   if (rescue.event(e)) return; // rescue traps
+  if (duels.event(e)) return; // duels: challenges, countdown, results
   if (teamplay.event(e)) return; // combos, Team Burst
   if (mvp.event(e)) return; // the post-fight MVP card
   if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
@@ -899,7 +911,7 @@ function addMobEntity(id, type, x, z, face) {
   model.group.position.set(x, 0, z);
   model.group.rotation.y = face;
   scene.add(model.group);
-  const e = { id, kind: 'mob', type, def: MOBS[type], model, mats: model.mats, label: MOBS[type]?.boss ? null : makeLabel('mob'), x, z, face, tx: x, tz: z, tface: face, walk: 0, wind: 0, flash: 0, track: new Track(), animAcc: 0 };
+  const e = { id, kind: 'mob', type, def: MOBS[type], model, mats: model.mats, label: MOBS[type]?.boss || MOBS[type]?.duel ? null : makeLabel('mob'), x, z, face, tx: x, tz: z, tface: face, walk: 0, wind: 0, flash: 0, track: new Track(), animAcc: 0 };
   mobs.set(id, e);
   twists.decorate(e); // Thorn Totems
   if (type === 'warden') boss = e;
@@ -944,7 +956,7 @@ input.onLabels(() => labelBar()); // (device, pad kind, picture or bindings chan
 const LEGACY_KEYS = { e: 'revive', q: 'turnLeft', j: 'attack', r: 'guard', v: 'botWheel' };
 const keys = { has: k => (LEGACY_KEYS[k] ? input.held(LEGACY_KEYS[k]) : input.key(k.length === 1 ? `Key${k.toUpperCase()}` : k)), clear: () => input.reset() };
 const panels = createPanels(); // Esc closes the first group; all of them free the cursor while open
-for (const id of ['players', 'bag', 'hall', 'warp', 'smith', 'settings', 'skillsp']) panels.register(id, { esc: true });
+for (const id of ['players', 'bag', 'hall', 'warp', 'smith', 'settings', 'skillsp', 'duel-pick']) panels.register(id, { esc: true });
 for (const id of ['talentsp', 'botwheel', 'botmenu', 'gamemenu']) panels.register(id); // (they close themselves on Esc)
 const stick = { active: false, id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
 let attackHeld = false;
@@ -1247,7 +1259,8 @@ function announceTarget() {
   const m = state.lock && mobs.get(state.lock), p = state.focus && players.get(state.focus);
   const el = $('selmsg');
   el.className = m ? 'foe' : p ? 'ally' : '';
-  el.innerHTML = m ? `Target: <b>${esc(m.def.name)}</b> <small>Lv ${m.def.level ?? ''}</small>` : p ? `Following: <b>${esc(p.name)}</b> <small>Lv ${p.lvl ?? ''}</small>` : 'Target cleared';
+  const du = m?.def.duel && players.get(duels.ownerOf(m.id)); // a duel opponent's stand-in: their name
+  el.innerHTML = du ? `Target: <b>${esc(du.name)}</b> <small>Lv ${du.lvl ?? ''}</small>` : m ? `Target: <b>${esc(m.def.name)}</b> <small>Lv ${m.def.level ?? ''}</small>` : p ? `Following: <b>${esc(p.name)}</b> <small>Lv ${p.lvl ?? ''}</small>` : 'Target cleared';
   el.classList.add('show');
   clearTimeout(selMsgT); selMsgT = setTimeout(() => el.classList.remove('show'), 1800);
 }
@@ -1287,6 +1300,7 @@ function dodge() {
 let tfKey = '';
 function updateTargetFrame(t, isMob) {
   const el = $('target');
+  if (isMob && t?.def?.duel) { const o = players.get(duels.ownerOf(t.id)); if (o) { t = o; isMob = false; } } // a duel opponent: show them, not their stand-in
   if (!t) { if (tfKey) { el.classList.add('hidden'); tfKey = ''; } return; }
   const name = isMob ? t.def.name : t.name;
   const sub = isMob ? `Lv ${t.def.level}${t.def.elite ? ' · Elite' : t.def.boss ? ' · Boss' : ''}${t.staggered ? ' · BROKEN' : ''}` : `Lv ${t.lvl} · ${CLASSES[t.cls].name}`;
@@ -1369,7 +1383,7 @@ function interactKind() {
   if (mastery.near()) return 'shrine'; // Skill Shrine (public/mastery.js)
   if (ground.near()) return 'pickup';
   if (!state.gateOpen && (inGateZone(state.x, state.z) || inGateZone2(state.x, state.z) || inGateZone3(state.x, state.z))) return 'gate';
-  return f3.interactKind() || f2.interactKind(); // the waypoints and the Stairways
+  return lab.interactKind() || f3.interactKind() || f2.interactKind(); // the labyrinths' stairs, the waypoints and the Stairways
 
 }
 function interact() {
@@ -1380,7 +1394,7 @@ function interact() {
   else if (k === 'shrine') talents.toggle();
   else if (k === 'pickup') { send({ type: 'pickup', id: ground.near() }); }
   else if (k === 'gate') { send({ type: 'ready' }); sfx.play('ui'); state.meReady = state.meReady ? 0 : 1; updateGateBox(true); }
-  else if (!f3.interact(k)) f2.interact(k);
+  else if (!lab.interact(k) && !f3.interact(k)) f2.interact(k);
 }
 
 // ---------------- titles & Hall of Clearers ----------------
@@ -1539,13 +1553,13 @@ function updateGateBox(force) {
   const el = $('gatebox');
   const [open, waiting, ready, count] = state.gate;
   const show = !state.spectator && !state.dead && !open && (inGateZone(state.x, state.z) || inGateZone2(state.x, state.z) || inGateZone3(state.x, state.z));
-  const key = `${show}|${waiting}|${ready}|${Math.ceil(count)}|${state.meReady}`;
+  const key = `${show}|${waiting}|${ready}|${Math.ceil(count)}|${state.meReady}|${state.inv?.life?.lab1Keys || 0}`;
   if (key === gateKey && !force) return;
   gateKey = key;
   el.classList.toggle('hidden', !show);
   if (!show) return;
   const gate2 = onFloor2(state.x) || onFloor3(state.x);
-  el.innerHTML = `<b>${onFloor3(state.x) ? 'THE STORM GATE' : gate2 ? 'THE SUNKEN GATE' : 'RAID GATE'}</b><div class="sub">${onFloor3(state.x) ? f3.gateText() : f2.gateText()} · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}</div>`
+  el.innerHTML = `<b>${onFloor3(state.x) ? 'THE STORM GATE' : gate2 ? 'THE SUNKEN GATE' : 'RAID GATE'}</b><div class="sub">${onFloor3(state.x) ? f3.gateText() : f2.gateText()} · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}${gate2 ? '' : lab.gateLine(1)}</div>`
     + (count > 0 ? `<div class="count">${Math.ceil(count)}</div>` : '')
     + `<button class="${state.meReady ? 'on' : ''}">${state.meReady ? 'Ready ✓' : `Ready${isTouch ? '' : ' (F)'}`}</button>`;
   if (!onFloor3(state.x)) twists.gateBox(el, onFloor2(state.x)); // the twist of the boss behind this gate (the Warden's, or the Sovereign's on Floor 2)
@@ -1598,7 +1612,7 @@ $('sound-btn').textContent = sfx.on ? 'Sound on' : 'Sound off';
 $('sound-btn').onclick = () => { sfx.unlock(); $('sound-btn').textContent = sfx.toggle() ? 'Sound on' : 'Sound off'; };
 $('lock-btn').onpointerdown = e => { e.preventDefault(); cycleLock(); };
 canvas.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
-$('chat-btn').onclick = () => { const t = prompt('Say something (/p party, /s nearby, /b bot orders: /b help, /sit /kneel /bow /stand)'); if (t) sendChat(t); };
+$('chat-btn').onclick = () => { const t = prompt('Say something (/p party, /s nearby, /b bot orders: /b help, /duel name, /sit /kneel /bow /stand)'); if (t) sendChat(t); };
 // Chat channels: "/p text" party, "/s text" say (nearby); anything else goes to everyone ("/b ..." bot orders: the server
 // reads them, shared/bots/social.js parseBotChat; they never show as chat).
 function sendChat(raw) {
@@ -1619,11 +1633,12 @@ function renderPlayers() {
     if (r.bot) continue; // bots and the Named: the Bots section (public/playerbots.js listHtml)
     online++;
     if (id === state.myId) continue;
-    const p = players.get(id);
+    const p = players.get(id), o = state.others?.get(id); // (p: near me, drawn; o: [id, lvl, floor, lfg, dead] for anyone)
     const inParty = state.party && p?.party === state.party;
-    const lfgTag = (p?.buffs || 0) & 4 ? '<span class="tag">LFG</span>' : '';
-    const pf = p ? floorOf(p.tx ?? p.x) : 1, floorTag = pf > 1 ? `<span class="tag f2">F${pf}</span>` : '';
-    rows.push(`<div class="p"><span>${looks.swatch(id)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}</div>`);
+    const lfgTag = (p ? (p.buffs || 0) & 4 : o?.[3]) ? '<span class="tag">LFG</span>' : '';
+    const pf = p ? floorOf(p.tx ?? p.x) : o?.[2] || 1, floorTag = pf > 1 ? `<span class="tag f2">F${pf}</span>` : '';
+    const up = p ? !p.dead : o ? !o[4] : false;
+    rows.push(`<div class="p"><span>${looks.swatch(id)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? o?.[1] ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}${up ? `<button data-duel="${id}" title="Challenge to a duel">Duel</button>` : ''}</div>`);
   }
   const meE = players.get(state.myId), seeking = !!((meE?.buffs || 0) & 4);
   const lfgBtn = `<button class="lfg ${seeking ? 'on' : ''}">${state.party ? (seeking ? 'Recruiting via party finder ✓' : 'Recruit with party finder') : seeking ? 'Searching for a party… (cancel)' : 'Find party'}</button>`;
@@ -1641,6 +1656,7 @@ function renderPlayers() {
   pbots.bindList($('players'));
   $('players').querySelector('.lfg').onclick = () => { send({ type: 'lfg' }); sfx.play('ui'); setTimeout(renderPlayers, 150); };
   for (const b of $('players').querySelectorAll('[data-inv]')) b.onclick = () => { send({ type: 'invite', id: +b.dataset.inv }); b.textContent = 'Sent'; b.disabled = true; };
+  for (const b of $('players').querySelectorAll('[data-duel]')) b.onclick = () => { $('players').classList.add('hidden'); duels.challenge(+b.dataset.duel); }; // (the Bots section's Duel buttons too: public/playerbots.js)
   const lv = $('players').querySelector('.leave'); if (lv) lv.onclick = () => send({ type: 'leave' });
 }
 const lobby = { at: 0, offline: [], offOpen: true, html: '' }; // Players panel: offline list + which sections are open
@@ -1727,7 +1743,7 @@ function updateHud(now) {
     }
     if (btn.dataset.slot === 'guard') { btn.classList.toggle('on', combat.guarding); continue; }
     if (btn.dataset.slot === 'cover') { threat.coverCd(btn); continue; }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : state.meReady ? 'Unready' : 'Ready'); continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : state.meReady ? 'Unready' : 'Ready'); continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : { cd: mastery.cd(slot) }; // mastery/branch cooldowns
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
@@ -2030,7 +2046,7 @@ function animateEntity(e, dt) {
     const pct = Math.round((e.hp / e.maxHp) * 100);
     if (pct !== e.label.pct) { e.label.pct = pct; e.label.fill.style.width = `${pct}%`; }
     if (e.kind === 'mob') combat.label(e); // posture bar
-    if (e.kind === 'player') { const c = state.party && e.party === state.party ? 'party' : 'ally'; if (c !== e.label.side) { e.label.side = c; e.label.el.classList.toggle('party', c === 'party'); e.label.el.classList.toggle('ally', c === 'ally'); } }
+    if (e.kind === 'player') { const c = duels.isFoe(e.id) ? 'foe' : state.party && e.party === state.party ? 'party' : 'ally'; if (c !== e.label.side) { e.label.side = c; e.label.el.classList.toggle('party', c === 'party'); e.label.el.classList.toggle('ally', c === 'ally'); e.label.el.classList.toggle('foe', c === 'foe'); } }
     else if (e.def.elite && !e.label.el.classList.contains('elite')) e.label.el.classList.add('elite');
     const isSel = (e.kind === 'mob' ? state.lock : state.focus) === e.id;
     e.label.el.classList.toggle('sel', !!isSel);
@@ -2081,7 +2097,7 @@ let hitStop = 0;
 let sentLock = 0; // the locked mob last reported to the server (`target`)
 const projFx = new Map(); // thorn id -> effect
 let visLag = 0; // ms the drawn characters lag the snapshot clock (slow motion / hit-stop), eased back to 0 afterwards
-const camDir = new THREE.Vector3(), camFrom = new THREE.Vector3();
+const camLow = new THREE.Vector3(), camDir = new THREE.Vector3(), camFrom = new THREE.Vector3();
 function frame(now) {
   requestAnimationFrame(frame);
   const t0 = performance.now(), gap = now - last;
@@ -2164,7 +2180,7 @@ function frame(now) {
       let dx = 0, dz = 0;
       if (mag > 0.08) { const fy = state.yaw; dx = Math.sin(fy) * iz - Math.cos(fy) * ix; dz = Math.cos(fy) * iz + Math.sin(fy) * ix; const l = Math.hypot(dx, dz); dx /= l; dz /= l; }
       const sprint = performance.now() - state.lastCombat > SPRINT_AFTER * 1000 && !combat.guarding;
-      airStep(state.air, dx, dz, (sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult() * arenas.speedMult(), dt);
+      airStep(state.air, dx, dz, (sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult() * arenas.speedMult() * lab.speedMult(), dt);
       let [nx, nz] = resolveCollision(state.x + state.air.x * dt, state.z + state.air.z * dt);
       const gc = !state.gateOpen;
       if (!walkable(nx, nz, gc)) { if (walkable(nx, state.z, gc)) nz = state.z; else if (walkable(state.x, nz, gc)) nx = state.x; else { nx = state.x; nz = state.z; } }
@@ -2176,7 +2192,7 @@ function frame(now) {
       let mx = fwd[0] * iz + right[0] * ix, mz = fwd[1] * iz + right[1] * ix;
       const ml = Math.hypot(mx, mz); mx /= ml; mz /= ml;
       const sprint = performance.now() - state.lastCombat > SPRINT_AFTER * 1000 && !combat.guarding;
-      const want = rescue.moveCap(revive.crawlCap((sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult() * arenas.speedMult(), mag)); // (sludge: arenas.js; trapped: none, rescue.js) // half speed while guarding; talents can add move speed; downed: crawl
+      const want = rescue.moveCap(revive.crawlCap((sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult() * arenas.speedMult() * lab.speedMult(), mag)); // (sludge: arenas.js; trapped: none, rescue.js) // half speed while guarding; talents can add move speed; downed: crawl
       state.speed += (want - state.speed) * Math.min(1, dt * (want > state.speed ? 3 : 10));
       if (rescue.rooted()) state.speed = 0;
       const step = state.speed * dt;
@@ -2234,7 +2250,14 @@ function frame(now) {
   const dir = camDir.set(-Math.sin(state.yaw) * Math.cos(cp), Math.sin(cp), -Math.cos(state.yaw) * Math.cos(cp));
   ray.set(camFrom.set(cx, 1.6, cz), dir); ray.far = state.camDist;
   const hit = ray.intersectObjects(occluders, true)[0];
-  const allowed = hit ? Math.max(2, hit.distance - 0.6) : state.camDist;
+  let allowed = hit ? Math.max(2, hit.distance - 0.6) : state.camDist;
+  if (lab.inLab()) { // the crypt's walls are low enough to look over: keep your body in sight too, not just your head
+    const tx = cx + dir.x * allowed, ty = 1.6 + dir.y * allowed, tz = cz + dir.z * allowed;
+    const len = Math.hypot(tx - cx, ty - 0.7, tz - cz);
+    ray.set(camFrom.set(cx, 0.7, cz), camLow.set((tx - cx) / len, (ty - 0.7) / len, (tz - cz) / len)); ray.far = len;
+    const low = ray.intersectObjects(occluders, true)[0];
+    if (low) allowed = Math.max(2, allowed * low.distance / len - 0.6);
+  }
   camCur += (allowed - camCur) * Math.min(1, dt * (allowed < camCur ? 20 : 3));
   const cd = camCur * (slowMo > 0 ? 1 - 0.22 * Math.sin(Math.PI * (1 - slowMo / slowMoLen)) : 1); // killing-blow zoom
   shakeAmt = Math.max(0, shakeAmt - dt);
@@ -2251,6 +2274,7 @@ function frame(now) {
   }
   sun.position.set(cx + 30, 60, cz - 20); sun.target.position.set(cx, 0, cz);
   floor1.visible = floorOf(cx) === 1; // Floor 1's town, field, chamber and skyline (incl. the tower spire) aren't drawn from Floors 2 and 3
+  lab.update(vdt, me && { x: me.model.group.position.x, z: me.model.group.position.z }); // (after floor1.visible: hides the field from the crypt)
   if (state.joined) treeFader.update(dt, camera.position, cx, cz);
   twists.frame(vdt, cx, cz); // Eclipse darkness
   sfx.listener.x = cx; sfx.listener.z = cz;
@@ -2275,4 +2299,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { interactKind, wellWake, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };
+window.__fb = { interactKind, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };

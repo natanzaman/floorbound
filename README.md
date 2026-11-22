@@ -125,6 +125,16 @@ Health scales with the party's role weight (like the Warden), damage a little wi
 
 A portcullis blocks the corridor to the Warden's chamber. Everyone standing at the gate presses **F** (or taps Ready); when all of them are ready, it counts down 5 seconds and rises. It closes again once the chamber is empty. The Warden scales to the fighters inside when the fight starts: health by the party's size and make-up (each fighter weighted by role, damage dealers most, then raised to a power, so a full party of six with three damage dealers and a Bard faces about 4× the health of a Guardian/Swordsman/Cleric trio), damage by size (+25% per fighter above three), and both by level when the party's average is above 10 (+12% health and +6% damage per level). Slams target one fighter per three in the chamber. Tuning: `WARDEN` in `shared/data.js`. Whoever lands the killing blow gets the **Last Attack Bonus**: the unique *Horn of the Warden* charm.
 
+## The Undercrypt (Floor 1's labyrinth)
+
+A stair in the field, just short of the Chamber Gate, leads down into a three-layer dungeon maze. Its mini-boss holds the **Horn Key**, and the Chamber Gate only counts you ready once someone at the gate has it: one keyholder opens it for the whole party, a character needs it once, and anyone who has already beaten the Warden counts. Plan: `docs/briefs/labyrinths.md`.
+
+- **The Catacombs:** spike plates (wait for them to sink, or jump or roll), Crypt Ghouls, chests (most in dead ends, a few on the way), wall torches you can light to mark your path.
+- **The Drowning Galleries:** flooded cells slow you and are loud. **Tomb Wardens** sleep until they hear noise (wading, lighting torches, fighting); throw a **bone rattle** (interact with nothing in reach) to send them elsewhere. Every so often the crypt breathes: torches gutter and the dead climb out, sooner the longer you stay. Two bone levers raise the portcullis to the way down; pull both together, or alone within the time it takes to run between them.
+- **The Ossuary:** the **Gravekeeper** rings the Grave Bell (jump or roll the low ring) and calls the dead at half health. Its stair up leaves you before the Chamber Gate.
+
+Dying in the Undercrypt brings you back at the last threshold you crossed. Each layer rolls walls, traps, mobs and loot from separate seeds (`shared/labyrinth.js`).
+
 ## Boss team mechanics
 
 With **two or more fighters alive** in the boss room, the Horned Warden and the Drowned Sovereign mix team mechanics into their rotation (one every ~26 s in phase 1, ~22 s in phase 2, ~18 s in phase 3; the first ~15 s in). Solo fights never see them. Rolling and jumping don't dodge them: it's about where you stand.
@@ -217,6 +227,10 @@ The stone itself is engraved: its face carries the names of the latest Floor 1 c
 ## New players and the party finder
 
 New characters get a short step-by-step guide card (move, hit, dodge, kill, bag, party, Switch, raid gate, boss) plus one-time tips the first time they see each attack type. **Find party** puts you in the party finder: solo players are matched together, or into any party that has turned on recruiting.
+
+## Duels
+
+Challenge anyone nearby to a duel: **Players → Duel** (players, bots and the Named; bots accept by themselves), or chat `/duel <name> [first|half|last] [team]`. Pick the rule: **First Strike** (the first clean hit wins), **Half Health** (out at half, the default) or **Last Stand** (out at 1 health). **Party vs party** puts everyone in your party against everyone in theirs. A 3 s countdown, then fight inside the ring (2 min solo, 3 min team; leave the ring for 2 s and you forfeit; `/yield` gives up). Nobody dies, only your own side can heal you, and everyone gets their health back afterwards. Duels work in town too. Player damage against players is a quarter of its damage against monsters. Rules and numbers: `shared/duels.js`; server `server/duels.js` (each fighter carries a stand-in mob so every attack reaches an opponent); client `public/duels.js`; plan `docs/briefs/duels.md`. Tests: `node test/duels.js`, `node test/duelbots.js` (bot duels on a real server), `node test/duels.mjs` (browser).
 
 ## Play tracking
 
@@ -684,7 +698,10 @@ Production runs on Render's free plan: **0.15 vCPU**. Where the CPU goes and wha
 - **10 Hz brains when nobody's watching:** a server bot with no player within 60 m on its floor and not in a boss room or fight (or a show) gets every other snapshot; the skipped tick's events come with the next one and `msg.dt` gives the step. Near players, in boss fights and in shows: 20 Hz as before. `BOT_THINK=20` turns it off.
 - **The Named rest at home** until a player is in the field or near them (The Named → Presence).
 - **Empty floors sleep** (`Game.activeFloors`): mob AI runs only on a floor with a human on it (town included), a server bot out of the safe zones (bot-only parties, farming bots), a boss mid-fight, or anyone during a director show. Elsewhere mobs stand still; respawn timers keep running. Mobs are pushed apart per floor, only where they move. With nobody connected the server doesn't even build snapshots. `WORLD_SLEEP=0` simulates every floor (benchmarks).
-- **Each browser gets only its floor's mobs** (`Game.snapFor`): the rest of the snapshot is the same. Spectators (the film view) and the server's own bots (in process or on a socket) get every floor.
+- **Each browser gets only what is near it** (`Game.viewFor`, `VIEW` in `server/game.js`): players and mobs on its floor within 150 m (kept until 180 m, so nothing pops at the edge), its party and duel wherever they are, and its floor's boss and rare; everyone online comes once a second in a brief list (`pl`: level, floor, LFG, down) for the Players panel; everything during a director show. Spectators (the film view) and the server's own bots (in process or on a socket) get the whole world.
+- **Bots share one decoded world and see like players:** in-process bots decode each snapshot once between them (`decodeWorld` in `shared/bots/brain.js`, read-only), and each keeps only the mobs it could see: its floor within `AWARE` (120 m), its floor's boss, and its current or commanded target.
+- **Obstacle grid:** `resolveCollision` checks only the obstacles in the 8 m cells around a body (same result as the full scan, about 16 times faster; `test/collision.js`).
+- **Static files** (`server/static.js`): gzipped once and kept in memory, ETag + 304, a day's `max-age` for Three.js (served minified); code, pages, models and sounds revalidate on each load (a 304 from the browser's cache when unchanged) so a deploy shows at once. First visit about 1.9 MB instead of 5.3 MB.
 - **Snapshot clock:** `st` is a wall clock stamped at tick time (not the game clock, which steps at most 0.2 s a tick), so a server stall leaves a gap, not seconds of stutter; the client's playout clock also resyncs if every snapshot for a second comes over 2 ticks late (`shared/netsmooth.js`).
 - **`/status`** shows the last minute's tick times (`tick.p50/p95/max`, ms), CPU (`cpu.pct` of one core over the last minute, `cpu.s` in all), snapshot bytes serialised (`bytes.perSec`, `bytes.total`) and who is online by kind (`online.humans/player/admin/named`).
 - **Benchmark:** `node scripts/perfbench.js` starts a server with fake players (moving like a browser) and their bots, waits 15 s, then measures 60 s: CPU seconds per wall second (0.15 = the whole free plan), tick p50/p95, bytes serialised. `HUMANS=4 BOTS=9 SPOT=field` for one run; `EXTRA="BOT_TRANSPORT=ws BOT_THINK=20 NAMED_PRESENCE=0"` runs the old paths.

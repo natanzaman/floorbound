@@ -1,6 +1,5 @@
 // HTTP static server + WebSocket game server.
 import http from 'node:http';
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
@@ -14,6 +13,7 @@ import { BotManager } from './botmanager.js';
 import { makeLocalHub, deepFreeze } from './localws.js'; // in-process sockets for the server's own bots
 import { PlayerBots } from './playerbots.js';
 import { drain } from './shutdown.js';
+import { serveFile } from './static.js'; // static files: gzip, ETag, cache headers
 import { installAI } from './ai/index.js'; // AI companions (off unless AI_PROVIDER + key are set), server/ai/
 import { makeStore as aiStore } from './ai/store.js'; // AI memories + daily spend in Postgres
 import { Director } from './director.js'; // the scene director (filming), server/director.js
@@ -37,7 +37,6 @@ const MOUNTS = [
   ['/shared/', path.join(root, 'shared')],
   ['/', path.join(root, 'public')],
 ];
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json; charset=utf-8', '.glb': 'model/gltf-binary', '.mp3': 'audio/mpeg' };
 
 // A bug in one bot or one event shouldn't take the whole world down (and wipe everyone's bots). Log it and keep going.
 let crashes = 0;
@@ -84,11 +83,7 @@ const server = http.createServer(async (req, res) => {
     const rel = url.slice(prefix.length) || 'index.html';
     const file = path.join(dir, rel);
     if (!file.startsWith(dir)) break;
-    return fs.readFile(file, (err, data) => {
-      if (err) { res.writeHead(404); return res.end('Not found'); }
-      res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });
-      res.end(data);
-    });
+    return serveFile(req, res, file, prefix.startsWith('/vendor/')); // gzip, ETag, cache headers (server/static.js)
   }
   res.writeHead(404); res.end('Not found');
 });
@@ -233,7 +228,7 @@ function tick(dt) {
   const t0 = performance.now();
   game.update(dt);
   if (!game.players.size && !spectators.size) { game.events = []; tickMs[tickN++ % tickMs.length] = performance.now() - t0; return; } // nobody to send to: the world sleeps (game.activeFloors)
-  const world = game.snapshot(); // every floor: the server's own bots and spectators (the film view); browsers get game.snapFor(their floor)
+  const world = game.snapshot(); // every floor: the server's own bots and spectators (the film view); browsers get game.viewFor(them): only what is near
   // st: the server clock (ms) this snapshot is for: clients interpolate on it (shared/netsmooth.js). A monotonic wall clock
   // stamped at tick time: game.time steps at most 0.2 s a tick, so after a longer stall it would trail wall time for good
   // (remote entities stuttered for seconds). LOCKSTEP (frame-by-frame recording) keeps the game clock.
@@ -249,7 +244,7 @@ function tick(dt) {
       const later = p.evLater; p.evLater = null;
       const w = later ? { ...shared, events: [].concat(...later, shared.events) } : shared;
       p.ws.deliver({ type: 'snap', st, me: game.meFor(p), w, ...(later ? { dt: (later.length + 1) / TICK_RATE } : {}) });
-    } else sendCounted(p.ws, `{"type":"snap","st":${st},"me":${JSON.stringify(game.meFor(p))},"w":${p.bot ? world : game.snapFor(floorOf(p.x))}}`); // a human: only their floor's mobs (bandwidth); a bot on a socket: the same world as in process
+    } else sendCounted(p.ws, `{"type":"snap","st":${st},"me":${JSON.stringify(game.meFor(p))},"w":${p.bot ? world : game.viewFor(p)}}`); // a human: only what is near them (Game.viewFor, bandwidth); a bot on a socket: the same world as in process
     if (p.invDirty) { p.invDirty = false; p.ws.send(JSON.stringify(game.invFor(p))); }
     if (p.talentsDirty) { p.talentsDirty = false; p.ws.send(JSON.stringify(game.talentsMsg(p))); } // talent tree: points, ranks
     if (p.masteryDirty && (p.masteryNow || game.time - (p.mSentT || 0) >= 1)) { // skill mastery: at most once a second, at once on a level-up/evolve

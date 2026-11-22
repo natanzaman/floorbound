@@ -9,6 +9,7 @@ import { MOBS } from '/shared/data.js';
 import { makeF2Mob, decorateSovereign } from '/floor2world.js';
 import { makeF3Mob, decorateColossus, F3_POSES, F3_WINDUPS } from '/floor3world.js';
 import { attachClassA } from '/classes-a.js';
+import { makeLabMob } from '/labyrinth.js'; // labyrinth enemies
 import { makePropModel } from '/rescue.js'; // rescue trap objects (J1)
 import { fxCount, segs } from '/quality.js'; // effect density and circle detail (graphics quality)
 import { col, patterned } from '/palette.js'; // telegraph colours + the colour-blind dashed edge (Settings → Accessibility)
@@ -655,8 +656,20 @@ export function makePlayerModel(cls) {
   return { group: g, root, mats, cursor, height, anim: new Animator(root, RIGS[cls]?.idle || 'Idle') };
 }
 
+// A duel stand-in (server/duels.js) rides on an opponent: the player model is theirs; this only marks them as a target.
+function makeDuelMark() {
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.78, 32), new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; body.add(ring);
+  const height = 2.35, cursor = cursorFor(0xef4444, height, 0.18);
+  g.add(cursor);
+  return { group: g, body, legs: [], armR: null, cursor, mats: [], height };
+}
+
 export function makeMobModel(type) {
+  if (MOBS[type]?.lab) return makeLabMob(type); // labyrinth enemies (labyrinth.js)
   if (MOBS[type]?.prop) return makePropModel(type); // trap objects: vines, the pillar's orb, the storm crystal (public/rescue.js)
+  if (MOBS[type]?.duel) return makeDuelMark(); // a duel opponent's stand-in: a red ring at their feet, a red marker over their head
   if (MOBS[type]?.f2) return type === 'sovereign' && ASSETS ? makeSovereignRig() : makeF2Mob(type); // Floor 2 (floor2world.js)
   if (MOBS[type]?.f3) return type === 'colossus' && ASSETS ? makeColossusRig() : makeF3Mob(type); // Floor 3 (floor3world.js)
   if (type !== 'warden' || !ASSETS) return makeBlockMob(type);
@@ -772,11 +785,11 @@ export class Effects {
     return new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false });
   }
 
-  arc(x, z, face, r, half, color = 0xe0f2ff) {
-    const geo = new THREE.RingGeometry(r * 0.35, r, 24, 1, face - Math.PI / 2 - half, half * 2);
+  arc(x, z, face, r, half, color = 0xe0f2ff) { // (a shared unit wedge per width, turned and scaled: no new geometry per swing)
+    const h = Math.round(half * 50) / 50, geo = this.shared(`arc${h}`, () => new THREE.RingGeometry(0.35, 1, 24, 1, -h, h * 2));
     const m = new THREE.Mesh(geo, this.fadeMat(color, 0.85));
-    m.rotation.x = -Math.PI / 2; m.position.set(x, 1.0, z);
-    this.add(m, 0.22 * PACE, (mesh, k) => { mesh.material.opacity = 0.85 * (1 - k); mesh.scale.setScalar(0.85 + k * 0.2); });
+    m.rotation.set(-Math.PI / 2, 0, face - Math.PI / 2); m.position.set(x, 1.0, z);
+    this.add(m, 0.22 * PACE, (mesh, k) => { mesh.material.opacity = 0.85 * (1 - k); mesh.scale.setScalar(r * (0.85 + k * 0.2)); });
   }
 
   ring(x, z, r, color = 0xe0f2ff, life = 0.4) {
