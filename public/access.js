@@ -13,6 +13,8 @@ export const ACCESS_DEFAULTS = {
   highContrast: false, // stronger HUD text and panels
   palette: 'off',     // telegraph colours: 'off' (the game's own) | 'deuter' (red-green) | 'trit' (blue-yellow); see palette.js
   telegraphSound: false, // a short distinct cue when a telegraph starts
+  hideSelfBar: false, // no health / stamina bar over your own character (public/selfbar.js)
+  noHurtFlash: false, // no red pulse on the screen edges when you're hit or low on health
 };
 export const ENUMS = { palette: ['off', 'deuter', 'trit'] }; // string options and their allowed values
 export const RANGES = { sens: [0.3, 3], padSens: [0.3, 3], uiScale: [0.8, 1.5] };

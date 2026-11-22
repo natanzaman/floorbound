@@ -34,6 +34,7 @@ import { initGuilds } from '/guilds.js'; // guilds: the Guild tab, invite card, 
 import { initNamed, talkTo } from '/named.js'; // the Friends tab: the Named and your friendship with them
 import { snapPoses, poseFrame } from '/poses.js'; // kneel / sit / bow (F5)
 import { initTalents } from '/talents.js';
+import { initSelfBar } from '/selfbar.js';
 import { initLoot } from '/loot.js'; // affixes, set progress, loadouts, item tooltips (H2)
 import { injectCss as itemCardCss, cardHtml, rowHtml, openState, ICON, statDelta } from '/itemcard.js'; // compact item cards (bag, merchant, Smith)
 import { initBotWheel } from '/botwheel.js';
@@ -446,6 +447,7 @@ const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, 
 // skill combos between players and the Team Burst: chain counters, setup hints, the party bar, T to sync (public/teamplay.js)
 const teamplay = initTeamplay({ state, players, mobs, fx, sfx, floatNum, project, send, guide, isTouch, callout: (a, b, c) => callout(a, b, c), shake: a => shake(a), $ });
 // the visuals pass (public/vfx.js): weapon trails, 3D skill effects, heavier hits, camera kick, the chain counter, burst traits
+const selfBar = initSelfBar({ state, players, project, settings, hud: $('labels') }); // your bar over your head, hurt feedback (public/selfbar.js)
 const vfx = initVfx({ scene, state, players, mobs, fx, camera, project, bubbles, shake: a => shake(a), calm: () => !!settings.reduceMotion, hud: $('labels') });
 // the post-fight MVP card: every fighter's numbers and titles after a boss kill or wipe (public/mvp.js)
 const mvp = initMvp({ state, guide, hold: () => wellWake.active }); // (the well's shot first, then the card; the shot waits while the card is up)
@@ -807,7 +809,8 @@ function handleEvent(e) {
       if (p) { p.flash = 0.15; const a = p.model.anim; if (a && !a.busy() && !a.dead) a.shot('Hit_A', 1.8);
         if (e.id === me) { state.lastCombat = performance.now(); sfx.play('hurt'); }
         if (e.id === me) {
-          floatNum(p.model.group.position, 2.2, `-${e.a}`, 'hurt');
+          floatNum(p.model.group.position, 2.2, `-${e.a}`, e.big || e.a >= state.maxHp * 0.12 ? 'hurt big' : 'hurt');
+          selfBar.hurt(e.a, e.big);
           if (e.big) { if (!settings.reduceMotion) hitStop = Math.max(hitStop, BIG_HIT_STOP); shake(0.3); } else shake(0.15);
         } else if (state.spectator) floatNum(p.model.group.position, 2.2, `-${e.a}`, 'other hurt');
       }
@@ -2180,7 +2183,10 @@ function animateEntity(e, dt) {
   const enr = e.kind === 'mob' && e.enraged ? (m.anim ? 0.12 : 0.3) + Math.sin(performance.now() / 120) * (m.anim ? 0.06 : 0.15)
     : e.kind === 'mob' && e.frenzy ? 0.1 + Math.sin(performance.now() / 90) * 0.06 : 0;
   const glow = e.flash > 0 ? (e.type === 'warden' ? 0.18 : 0.35) : enr;
-  for (const mt of e.mats) { mt.emissive.setHex(e.flash > 0 && !enr ? 0xffffff : 0xff2200); mt.emissiveIntensity = glow; }
+  if (e.hurtRed > 0) { // you were hit: a short red flash on your own character (public/selfbar.js)
+    e.hurtRed = Math.max(0, e.hurtRed - dt);
+    for (const mt of e.mats) { mt.emissive.setHex(0xff1a1a); mt.emissiveIntensity = 0.15 + e.hurtRed * 2; }
+  } else for (const mt of e.mats) { mt.emissive.setHex(e.flash > 0 && !enr ? 0xffffff : 0xff2200); mt.emissiveIntensity = glow; }
 
   if (e.label) {
     const p = project(g.position.x, g.position.y + m.height + 0.55, g.position.z);
@@ -2380,6 +2386,7 @@ function frame(now) {
   arenas.frame(vdt);
   if (merchantNpc?.anim) merchantNpc.anim.update(vdt);
   smith.frame(vdt);
+  selfBar.frame(dt, performance.now());
   life.frame(vdt);
   towns.frame(vdt); // boards, raid HUD (public/towns.js)
   academy.frame(); // the Academy's label, the trial HUD, the Ward Post
@@ -2457,4 +2464,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { interactKind, life, towns, academy, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent, vfx, post };
+window.__fb = { dodge: () => dodge(), interactKind, life, towns, academy, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent, vfx, post };
