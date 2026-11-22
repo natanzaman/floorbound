@@ -48,6 +48,8 @@ import { initDuels } from '/duels.js'; // solo and team duels: the challenge pic
 import { initTeamplay } from '/teamplay.js'; // combo counters, the Team Burst bar and sync window (G2)
 import { initMvp } from '/mvp.js'; // the post-fight MVP card (G5)
 import { Q, PRESETS, setLevel, startLevel, startAntialias } from '/quality.js'; // graphics quality: Low / Medium / High / Auto
+import { createPost } from '/post.js'; // bloom + tone mapping (Medium / High)
+import { initVfx } from '/vfx.js'; // weapon trails, 3D skill effects, impact flashes, camera kick, chain counter (the visuals pass)
 import { SnapClock, Track, Correction } from '/shared/netsmooth.js'; // interpolation buffer, late snapshots, your own corrections
 import { initPerf } from '/perf.js'; // the diagnostics overlay (F3), the ping chip, Auto quality
 import { makeNetsim } from '/netsim.js'; // test-only bad network (?netsim=120,60,2)
@@ -80,7 +82,11 @@ const MSAA = startAntialias(settings.quality, { touch: isTouch, lastAuto }); // 
 
 // ---------------- renderer & scene ----------------
 const canvas = $('view');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: MSAA, powerPreference: 'high-performance' }); // (antialias: fixed until a reload)
+const POST_OFF = QS.get('post') === '0'; // (tests: ?post=0 draws straight to the canvas at every level)
+// Edge smoothing: with bloom (Medium / High) the scene is drawn into the post target, which carries the MSAA samples;
+// the canvas itself needs them only when post is off for good.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: MSAA && POST_OFF, powerPreference: 'high-performance' }); // (antialias: fixed until a reload)
+const post = createPost(renderer, { samples: MSAA ? 4 : 0 });
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -92,6 +98,7 @@ const fx = new Effects(scene);
 const twists = new TwistClient({ scene, fx, banner: (t, s) => banner(t, s) }); // Warden twists
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
+  if (Q.post && !POST_OFF) post.setSize();
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
 }
@@ -105,6 +112,7 @@ function applyQuality(level, over = null) { // over: Auto's overrides (public/qu
   renderer.shadowMap.enabled = Q.shadows; sun.castShadow = Q.shadows;
   if (sun.shadow.mapSize.x !== Q.shadowSize) { sun.shadow.mapSize.set(Q.shadowSize, Q.shadowSize); sun.shadow.map?.dispose(); sun.shadow.map = null; }
   if (hadShadows !== Q.shadows) scene.traverse(o => { for (const m of [].concat(o.material || [])) m.needsUpdate = true; }); // shaders with / without shadows
+  if (Q.post && !POST_OFF) post.setSize(); else post.release(); // bloom's buffers follow the canvas; Low frees the big one
 }
 applyQuality(Q.level);
 
@@ -175,7 +183,8 @@ async function prewarm() {
   const t0 = performance.now(), n0 = fx.list.length, dummy = new THREE.Object3D();
   fx.arc(0, 0, 0, 2, 1); fx.ring(0, 0, 2); fx.line(0, 0, 1, 1, 0xffffff); fx.zone(0, 0, 2, 1); fx.telegraph(0, 0, 2, 1); fx.wedge(0, 0, 0, 2, 1, 1);
   fx.aimLine(0, 0, 1, 1, 1); fx.lane(0, 0, 1, 1, 1, 1); fx.rock(0, 0, 1); fx.beam(0, 0, 0xffffff); fx.thorn(0, 0, 1, 1, 1); fx.heal(dummy);
-  fx.shatter(0, 0, false); fx.shield(dummy, 1); fx.sparks(0, 1, 0, 4); fx.rareBeam(0, 0);
+  fx.shatter(0, 0, false); fx.shield(dummy, 1); fx.sparks(0, 1, 0, 4); fx.flash(0, 1, 0); fx.rareBeam(0, 0);
+  vfx.warm(true); post.warm(); // the visuals pass: its batches and trails, bloom's passes
   const tex = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); tex.needsUpdate = true;
   fx.add(new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })), 1); // aura motes
   const warm = fx.list.splice(n0);
@@ -192,7 +201,7 @@ async function prewarm() {
     }
   } finally {
     roots.forEach((r, j) => { r.visible = was[j]; });
-    f3.world.arena?.warm(false);
+    f3.world.arena?.warm(false); vfx.warm(false);
     for (const e of warm) { scene.remove(e.mesh); e.mesh.traverse(o => { if (o.material) keepMats.push(o.material); }); }
     for (const m of models) { scene.remove(m.group); m.group.traverse(o => { if (o.material) keepMats.push(o.material); }); }
   }
@@ -409,6 +418,8 @@ const rescue = initRescue({ state, players, mobs, send: o => send(o), project: (
 const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a) });
 // skill combos between players and the Team Burst: chain counters, setup hints, the party bar, T to sync (public/teamplay.js)
 const teamplay = initTeamplay({ state, players, mobs, fx, sfx, floatNum, project, send, guide, isTouch, callout: (a, b, c) => callout(a, b, c), shake: a => shake(a), $ });
+// the visuals pass (public/vfx.js): weapon trails, 3D skill effects, heavier hits, camera kick, the chain counter, burst traits
+const vfx = initVfx({ scene, state, players, mobs, fx, camera, project, bubbles, shake: a => shake(a), calm: () => !!settings.reduceMotion, hud: $('labels') });
 // the post-fight MVP card: every fighter's numbers and titles after a boss kill or wipe (public/mvp.js)
 const mvp = initMvp({ state, guide, hold: () => wellWake.active }); // (the well's shot first, then the card; the shot waits while the card is up)
 
@@ -554,6 +565,7 @@ function handleEvent(e) {
   const me = state.myId;
   if (e.t === 'cine' && (e.op === 'reset' || (e.op === 'fade' && e.to === 'black'))) sfx.hush(); // no voice-over under black or after a stop
   if (cine.event(e)) return; // shots, titles, fades, letterbox, clean feed, light
+  if (vfx.event(e)) return; // the visuals pass looks at every event; it keeps only chain / chainEnd / tcall
   if (arenas.event(e)) return; // the fall to a boss's lower area (arenas.js)
   if (f3.onEvent(e)) return; // Floor 3 (floor3client.js)
   if (lab.onEvent(e)) return; // labyrinths (labyrinth.js)
@@ -1842,6 +1854,7 @@ function hitJuice(m, e) {
   m.flinchAmt = big ? 0.03 : e.h ? 0.16 : 0.12;
   m.flinchPush = big ? 0 : e.h ? 0.35 : 0.22;
   m.flinchX = dx; m.flinchZ = dz;
+  vfx.hit(m, e, dx, dz); // heavy hits and crits: an impact flash, sparks through the far side, recoil, your camera kick
 }
 
 // Slow down visual time (animation and effects only; input and movement keep real time).
@@ -2220,6 +2233,7 @@ function frame(now) {
   threat.frame(now); // threat markers follow the animated models
   for (const e of mobs.values()) animateEntity(e, vdt);
   fx.update(vdt);
+  vfx.frame(dt, vdt); // trails follow the weapons just animated; the 3D effects' batches; the chain counter
   crystal.rotation.y += vdt;
   gateMesh.update(vdt);
   f2.update(vdt);
@@ -2266,6 +2280,7 @@ function frame(now) {
   camera.position.set(cx - Math.sin(state.yaw) * Math.cos(cp) * cd + sx, 1.6 + ly + Math.sin(cp) * cd + sy, cz - Math.cos(state.yaw) * Math.cos(cp) * cd);
   camera.lookAt(cx, 1.6 + ly, cz);
   const cf = cine.frame(dt, cx, cz); if (cf) [cx, cz] = cf; // film view: the director's shot takes over
+  if (!cf && !cine.film && !wellWake.active) vfx.applyKick(camera); // the FOV punch on your big moments (never over a film shot)
   const ww = wellWake.frame(dt); if (ww) [cx, cz] = ww; // the well waking for you: a short shot of it (wellwake.js)
   if (!state.joined) { // slow orbit behind the login screen
     state.yaw += dt * 0.08;
@@ -2291,7 +2306,7 @@ function frame(now) {
   bell.before(camera); // the Tower Bell's camera sway, undone after the render
   const fogN = scene.fog.near, fogF = scene.fog.far; // draw distance (graphics quality): scaled for the render only
   scene.fog.near *= Q.fog; scene.fog.far *= Q.fog;
-  renderer.render(scene, camera);
+  if (Q.post && !POST_OFF) post.render(scene, camera); else renderer.render(scene, camera); // (bloom + tone mapping on Medium / High: public/post.js)
   scene.fog.near = fogN; scene.fog.far = fogF;
   bell.after(camera);
   perf.frame(now, gap, performance.now() - t0, entStats);
@@ -2299,4 +2314,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { interactKind, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };
+window.__fb = { interactKind, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent, vfx, post };

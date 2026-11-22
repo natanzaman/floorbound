@@ -101,6 +101,16 @@ export function initBubbles({ state, players, project, camera, layer, enabled })
       store.say(e.id, e.text, now(), e.hold);
       return true;
     },
+    // a bot's short combat call-out ({ t: 'tcall', id, text }: "Launching!"): a brisk bubble, never in the chat log.
+    // Seen like party chat plus anyone close by. true if it got a bubble.
+    call(e) {
+      const ent = players.get(e?.id), text = String(e?.text || '').trim().slice(0, 40);
+      if (!enabled() || !ent || !text) return false;
+      const g = ent.model?.group?.position;
+      if (!state.spectator && !(state.party && ent.party === state.party) && !(g && Math.hypot(g.x - state.x, g.z - state.z) < SAY_RANGE)) return false;
+      store.say(e.id, text, now(), 1.3).call = true;
+      return true;
+    },
     // an AI mind thinking on / off (main.js `case 'mind'`); true if this viewer sees it
     mind(e) {
       if (!thinkVisible(e, state)) return false;
@@ -134,7 +144,7 @@ export function initBubbles({ state, players, project, camera, layer, enabled })
           layer.appendChild(el);
           rec = { el, n: 0 }; els.set(b.id, rec);
         }
-        if (rec.n !== b.n) { rec.n = b.n; rec.el.textContent = b.text; }
+        if (rec.n !== b.n) { rec.n = b.n; rec.el.textContent = b.text; rec.el.classList.toggle('call', !!b.call); }
         const g = ent?.model?.group;
         const p = g && project(g.position.x, g.position.y + (ent.model.height || 1.8) + 0.55, g.position.z);
         const m = 40; // off screen (or behind the camera): hidden
