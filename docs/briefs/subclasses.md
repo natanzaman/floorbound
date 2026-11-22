@@ -74,8 +74,10 @@
 - It never shows on plates, the Players list or `me.sub` (the class shows).
 
 ## Balance
-`scripts/tuneboss.js --boss sovereign,colossus --party 6 --skills 5 --runs 3` before and after; see the report in the
-merge commit. Bosses are not touched; only the signature skills are tuned.
+`scripts/tuneboss.js --boss sovereign,colossus --party 6 --skills 5 --runs 3` (bots at level 18+, each specialised by
+role) before and after: Sovereign 153 s (145-158) → 147 s (124-165), Colossus 145 s (124-163) → 149 s (127-164), every
+fight a kill. Both within 5%, so no skill was tuned. Bosses are not touched; if a later change moves a fight more than
+10%, tune the signature skills (`n` in `shared/subclasses.js`), not the bosses.
 
 ## Tests
 `node test/subclasses.js`: pure rules, in-process specialise / slot 5 / fee / talents / hidden-path enforcement, bots
