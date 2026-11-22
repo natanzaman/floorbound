@@ -5,7 +5,7 @@ Start every session by reading `docs/NEXT.md` (what to do next, local setup), th
 
 ## Stack
 - **Server:** Node 20, `ws`, authoritative at 20 Hz (`server/index.js` → `server/game.js`).
-  - Feature modules install themselves onto `Game.prototype`: combat, twists, floor2, floor3, arenas, bossteam, rescue, revive, threat, teamplay, mvp, poses, looks, openings (J3 combos, after states, melee openings), mastery, talents, styles, classes-a, classes-b, smith, hall, ground, playerbots.
+  - Feature modules install themselves onto `Game.prototype`: combat, twists, floor2, floor3, arenas, bossteam, rescue, revive, threat, teamplay, chains (skill chains), mvp, poses, looks, openings (J3 combos, after states, melee openings), mastery, talents, styles, classes-a, classes-b, smith, hall, ground, playerbots.
   - Boss timings live in tables (`shared/bosstiming.js`, `shared/pace.js`); `scripts/tuneboss.js` runs bot fights for tuning (README → Tuning bosses).
   - The Named (`shared/named.js`, `server/named.js`): NPC heroes (the Hearthward) and the loner Cairn, a separate bot kind (`e.named`), off with `NAMED_ENABLED=0`. Several may join one party (up to 6); each is unique and can be despawned/respawned.
   - Bots and access levels: bots record a creator and can roam free (not in a party); no per-player cap (`MAX_BOTS` global). `accounts.access_level` 1–5 ("access level", never character level; admins count as 5); per-action minimums and `canControlBot` in `shared/accesslevels.js` (creator → access ≥ 3 → allow list of saved character ids → empty list = anyone). Plan: `docs/briefs/bots-access.md`.
@@ -15,7 +15,7 @@ Start every session by reading `docs/NEXT.md` (what to do next, local setup), th
   - `main.js` wires everything together: HUD, input, prediction, snapshot handling.
   - `world.js`, `floor2world.js` and `floor3world.js` build the scenery.
   - Input: `shared/controls.js` (actions, bindings, rules) → `public/input.js` (keys, mouse, pad; `__fb.input`), `shared/gamepad.js`, `public/focusnav.js` (pad menus), `public/controlsui.js` (Controls screen), `public/controlsync.js` (account copy), `public/keyname.js` (prompts name the active device's key), `public/xboxusb.js` (WebUSB wired pads on Mac).
-  - Feature modules mirror the server ones.
+  - Feature modules mirror the server ones. Visuals pass (`docs/briefs/combos-visuals.md`): `public/vfx.js` (trails, 3D skill effects, camera kick, chain counter), `public/post.js` (bloom + tone mapping, Medium/High), `public/sparks.js`.
 - **Shared** (`shared/`): data and tuning, item, talent, style, mastery and twist tables, and the bot code.
   - `shared/bots/`: brain, motor, registry, social, classes, style.
   - `shared/botskill.js`: capability levels 1–5.

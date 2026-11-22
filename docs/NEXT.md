@@ -8,6 +8,16 @@ Plans: `docs/briefs/bots-access.md`, `docs/briefs/waypoint.md`, `docs/briefs/tar
 - **Targeting (ROADMAP K5):** Settings → Controls → Combat: Nearest / Locked or nearest (default) / Cone 120° / Aimed, Cleave on/off, max targets 1–8. Per-attack field of view and target limits in `shared/targeting.js`; skill messages carry the camera yaw (`look`) for the server's Cone filter. Bots send no prefs and play as before.
 - **Bots + access levels:** Bots section in the Players list (invite, kick, Named despawn/respawn, creator allow-list editor), "Join my party" checkbox, free-roaming bots with a creator, no per-player cap (`MAX_BOTS` 30 global), `accounts.access_level` 1–5 (admins 5) with the admin-page picker, rules in `shared/accesslevels.js` (`canControlBot`). Allow lists hold saved character ids only. `INVITE_NEEDS_TIER = false` in `shared/named.js`.
 
+## Combos 2.0 and the visuals pass (2026-11-22, branch `claude/project-thread-2sti63`, plan `docs/briefs/combos-visuals.md`)
+- Skill chains (x2-x4, named links), self-combos, a setup for every class (Cross Cut, Aftershock, Verdict, Downbeat;
+  every pair of classes has a combo), bots that open setups and call them out, the **Set me up** order, class-flavoured
+  Team Bursts (7 traits, 28 named finishers). Visuals by a Fable agent: weapon trails, pooled sparks, bloom on
+  Medium/High, 3D skill effects, attack accents, camera kick. Fable review: 8 issues, all fixed.
+- Bosses +20% health (Warden) / +35% (Sovereign, Colossus) so fights stay as long (owner's pick). Bot runs, 6 bots,
+  skill 5, `scripts/tuneboss.js` 3 runs each, main → this batch: Warden 99 → 96 s, Sovereign 151 → 158 s, Colossus 137 → 150 s.
+- Not measured: frame cost on a real GPU (headless software rendering: Medium/High frames +9-12%, draw calls +2%).
+  Worth a look on the Mac: trails on the 2H axe and spear, the attack accents, bloom.
+
 ## Duels (2026-11-22, branch `claude/project-thread-yae5hc`, plan `docs/briefs/duels.md`)
 - Solo or party vs party duels with players, bots and the Named: Players → Duel or `/duel <name>`. Rules First Strike,
   Half Health (default), Last Stand; nobody dies, health back after; ring, clock, `/yield`. Hard mode pushed off.

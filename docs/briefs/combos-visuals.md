@@ -134,3 +134,8 @@ reporting combos, chains and bursts per fight; a client frame-cost check before/
 - "Set me up" to a bot outside your party said yes and did nothing: it now asks to be invited first.
 - Client: the chain counter reads the server's `nm`; the Team Burst kick only for joiners; finisher / Break gold turns
   pale ice under the red-green palette (it sat next to the amber danger colour).
+
+## Boss health (owner's pick, 2026-11-22)
+Players hit harder, so bosses got more health to keep fights as long: the Warden x1.2, the Sovereign and the Colossus
+x1.35 (x1.2 still left them 12% shorter). `scripts/tuneboss.js --party 6 --skills 5 --runs 3`, main → this batch:
+Warden 99 → 96 s, Sovereign 151 → 158 s, Colossus 137 → 150 s; no more deaths. Film shows keep their own numbers.

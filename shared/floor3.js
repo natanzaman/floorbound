@@ -132,8 +132,8 @@ export const COLOSSUS = {
   phases: [0.66, 0.33],
   // Health scales with the fighters who walk in (like the Warden): (hpBase + hpPer * weight^hpExp) * (1 + hpLvl * avg
   // levels above 28); weight = the sum of role weights. Damage = atk * (1 + atkPer * fighters above 3). J3 review:
-  // hpBase / hpPer x0.80 on 2026-11-21 (was 8000 / 6300), then x1.2 on 2026-11-22 for Combos 2.0 (players hit harder: skill chains, self-combos, more setups), keeping fights about as long.
-  hpBase: 7680, hpPer: 6060, hpExp: 1.9, hpLvl: 0.05, atkPer: 0.12,
+  // hpBase / hpPer x0.80 on 2026-11-21 (was 8000 / 6300), then x1.35 on 2026-11-22 for Combos 2.0 (players hit harder: skill chains, self-combos, more setups), keeping fights about as long.
+  hpBase: 8640, hpPer: 6820, hpExp: 1.9, hpLvl: 0.05, atkPer: 0.12,
   hpRole: { Tank: 0.7, Healer: 0.6, Support: 0.8, Damage: 1.2 },
   // Its moves (cleave, strike, gust, overload, harpies, beam), paced and knobbed: shared/bosstiming.js.
   ...movesOf(TIMED.colossus),
