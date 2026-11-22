@@ -18,7 +18,8 @@ const CRYPT = { sky: 0x0b0a0e, near: 8, far: 46, gutterFar: 17, hemi: 0.35, sun:
 // The crypt's colours for the shared pieces (each other floor's style module has its own COLORS).
 const CRYPT_COLORS = { chest: 0x4a3424, chestDeep: 0x5a3a1a, band: 0x6b6b6b, bandDeep: 0xd4a017, lever: 0xd8cdb6, leverKnob: 0xe7dcc4, gate: 0x3f3f46, stair: 0x6a625a, plate: 0x24201d, spike: 0x9aa0a6, warn: 0xef4444, flame: 0xffa53a, halo: 0xff7a1a, bracket: 0x2a211a, lure: 0xe7dcc4 };
 const styleOf = L => STYLES[L?.lab?.style] || null;
-const airOf = L => styleOf(L)?.AIR || CRYPT;
+const AIRS = new Map(); // per layer: its floor's air, with any per-layer override (AIR.layers)
+const airOf = L => { if (!L) return CRYPT; if (!AIRS.has(L)) { const A = styleOf(L)?.AIR; AIRS.set(L, A ? { ...A, ...(A.layers?.[L.id] || {}) } : CRYPT); } return AIRS.get(L); };
 const colorsOf = L => styleOf(L)?.COLORS || CRYPT_COLORS;
 const FIELD = { 1: 'the Verdant Field', 2: 'the Glimmering Mire', 3: 'the Gale Spires' };
 const GATE_NAME = { 1: 'the Chamber Gate', 2: 'the Sunken Gate', 3: 'the Storm Gate' };

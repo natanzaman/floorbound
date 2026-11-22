@@ -7,7 +7,8 @@
 // so a layer is about 25 draw calls.
 
 // The air inside: a dark green-teal murk (the Drowned Wood is meant to be ~15 m of sight; the wisps thicken it).
-export const AIR = { sky: 0x0e2220, near: 3, far: 30, gutterFar: 15, hemi: 0.55, sun: 0.3, torch: 0xc8f7a8 };
+// (`layers` is an optional hint the runtime may use: the Heart's clearing wants to be seen across.)
+export const AIR = { sky: 0x0e2220, near: 3, far: 30, gutterFar: 15, hemi: 0.55, sun: 0.3, torch: 0xc8f7a8, layers: { heartwillow: { far: 46, gutterFar: 24 } } };
 // The shared runtime's pieces on this floor: mossy chests, sluice wheels, the root gate, glowcap lanterns, thorn plates.
 export const COLORS = {
   chest: 0x4a4a32, chestDeep: 0x2f5a52, band: 0x7a8a6a, bandDeep: 0x5eead4, lever: 0x3b332c, leverKnob: 0x7dfcf0, gate: 0x4a3b2a,
@@ -26,9 +27,9 @@ const LOW = -0.45, HIGH = -0.12; // the black water's level at low and high tide
 function kit(H) {
   const T = H.THREE, m4 = new T.Matrix4(), q = new T.Quaternion(), s = new T.Vector3(), p = new T.Vector3(), e = new T.Euler(), col = new T.Color(), up = new T.Vector3(0, 1, 0);
   const M = (x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = sx, sz = sx) => new T.Matrix4().compose(new T.Vector3(x, y, z), new T.Quaternion().setFromEuler(new T.Euler(rx, ry, rz)), new T.Vector3(sx, sy, sz));
-  const beam = (ax, ay, az, bx, by, bz, r0, r1, sides = 5) => { // a tapered cylinder from b (radius r1) to a (radius r0)
+  const beam = (ax, ay, az, bx, by, bz, r0, r1, sides = 5, capped = false) => { // a tapered cylinder from b (radius r1) to a (radius r0)
     const d = new T.Vector3(ax - bx, ay - by, az - bz), len = d.length();
-    return [new T.CylinderGeometry(r0, r1, len, sides), new T.Matrix4().compose(new T.Vector3((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2), new T.Quaternion().setFromUnitVectors(up, d.normalize()), new T.Vector3(1, 1, 1))];
+    return [new T.CylinderGeometry(r0, r1, len, sides, 1, !capped), new T.Matrix4().compose(new T.Vector3((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2), new T.Quaternion().setFromUnitVectors(up, d.normalize()), new T.Vector3(1, 1, 1))];
   };
   const merge = parts => { // [[geometry, matrix, colour]] -> one geometry with vertex colours
     const pos = [], rgb = [];
@@ -47,12 +48,17 @@ function kit(H) {
   const put = (im, i, x, y, z, ry = 0, sx = 1, sy = sx, sz = sx, rx = 0, rz = 0) => { m4.compose(p.set(x, y, z), q.setFromEuler(e.set(rx, ry, rz)), s.set(sx, sy, sz)); im.setMatrixAt(i, m4); };
   const tint = (im, i, hex, dl = 0) => im.setColorAt(i, col.set(hex).offsetHSL(0, 0, dl));
   const soft = (c, o) => { const m = H.glow(c, o); m.transparent = true; m.depthWrite = false; m.fog = false; m.blending = T.AdditiveBlending; return m; }; // a glow the mist doesn't hide
-  return { T, M, beam, merge, vmat, inst, put, tint, soft };
+  const disc = () => { // a round patch that fades to nothing at its rim (vertex alpha), lying flat
+    const g = new T.CircleGeometry(1, 14).rotateX(-Math.PI / 2), n = g.attributes.position.count, c = new Float32Array(n * 4).fill(1);
+    for (let i = 1; i < n; i++) c[i * 4 + 3] = 0;
+    g.setAttribute('color', new T.Float32BufferAttribute(c, 4)); return g;
+  };
+  return { T, M, beam, merge, vmat, inst, put, tint, soft, disc };
 }
 
 // ---------- the scenery of one layer ----------
 export function buildTerrain(root, L, H) {
-  const { mat, glow, flat } = H, { T, M, beam, merge, vmat, inst, put, tint, soft } = kit(H);
+  const { mat, glow, flat } = H, { T, M, beam, merge, vmat, inst, put, tint, soft, disc } = kit(H);
   const look = LOOK[L.id] || LOOK.drownedwood, heart = !!L.keeper;
   const C = L.cell, W = L.wall, HT = L.height, S = C - W, { cols, rows } = L, cx = L.x0 + L.w / 2, cz = L.z0 + L.d / 2;
   const r = H.rng(L.seeds.walls + 7), rm = H.rng(L.seeds.walls + 101), TAU = Math.PI * 2;
@@ -107,7 +113,7 @@ export function buildTerrain(root, L, H) {
     const nF = Math.round(Lw / 0.72);
     for (let row = 0; row < 2; row++) for (let k = 0; k < nF; k++) { // the moss curtain: two rows of ragged fronds
       const len = HT - 0.8 - rm() * 1.5;
-      wp.push([new T.CylinderGeometry(0.52, 0.14, len, 4), M(-Lw / 2 + (k + 0.5 + row * 0.5) * Lw / nF, HT - 0.05 - len / 2, (row - 0.5) * 0.8 + (rm() - 0.5) * 0.2, 0, (rm() - 0.5) * 0.8, 0, 1, 1, 0.45), look.moss[(k + row) % 3]]);
+      wp.push([new T.CylinderGeometry(0.52, 0.14, len, 4, 1, true), M(-Lw / 2 + (k + 0.5 + row * 0.5) * Lw / nF, HT - 0.05 - len / 2, (row - 0.5) * 0.8 + (rm() - 0.5) * 0.2, 0, (rm() - 0.5) * 0.8, 0, 1, 1, 0.45), look.moss[(k + row) % 3]]);
     }
   }
   const wallIM = inst(merge(wp), vmat(), walls.length, root); wallIM.receiveShadow = true;
@@ -116,9 +122,9 @@ export function buildTerrain(root, L, H) {
   // trees: at every grid node (the corners of the ways), and more beyond the edge. Great willows, or dead snags in the reeds
   const tp = [];
   if (look.tall) {
-    tp.push([new T.CylinderGeometry(0.6, 1.05, 14, 7), M(0, 7, 0), BARK], [new T.DodecahedronGeometry(1, 0), M(0, 14.3, 0, 0.4, 0.3, 0, 3.4, 1.5, 3.4), 0x1f3026]);
-    for (let k = 0; k < 3; k++) { const a = rm() * TAU, y = 8.4 + k * 1.7, sn = Math.sin(a), cs = Math.cos(a); tp.push([...beam(sn * 3.2, y + 1.6, cs * 3.2, sn * 0.4, y, cs * 0.4, 0.1, 0.24), BARK], [new T.CylinderGeometry(0.5, 0.1, 2.8, 4), M(sn * 2.7, y, cs * 2.7, 0, a, 0, 1, 1, 0.4), look.moss[k]]); }
-    for (let k = 0; k < 7; k++) { const a = k / 7 * TAU + rm(), len = 3.5 + rm() * 2.5; tp.push([new T.CylinderGeometry(0.7, 0.16, len, 4), M(Math.sin(a) * 2.6, 14 - len / 2, Math.cos(a) * 2.6, 0, a, 0, 1, 1, 0.4), look.moss[k % 3]]); } // the crown's weeping fronds
+    tp.push([new T.CylinderGeometry(0.6, 1.05, 16, 7), M(0, 8, 0), BARK], [new T.DodecahedronGeometry(1, 0), M(0, 16.3, 0, 0.4, 0.3, 0, 3.4, 1.5, 3.4), 0x1f3026]); // (everything that overhangs stays above the camera)
+    for (let k = 0; k < 3; k++) { const a = rm() * TAU, y = 10.6 + k * 1.5, sn = Math.sin(a), cs = Math.cos(a); tp.push([...beam(sn * 3.2, y + 1.6, cs * 3.2, sn * 0.4, y, cs * 0.4, 0.1, 0.24), BARK], [new T.CylinderGeometry(0.5, 0.1, 2.8, 4), M(sn * 2.7, y, cs * 2.7, 0, a, 0, 1, 1, 0.4), look.moss[k]]); }
+    for (let k = 0; k < 7; k++) { const a = k / 7 * TAU + rm(), len = 3.5 + rm() * 2; tp.push([new T.CylinderGeometry(0.7, 0.16, len, 4, 1, true), M(Math.sin(a) * 2.6, 16 - len / 2, Math.cos(a) * 2.6, 0, a, 0, 1, 1, 0.4), look.moss[k % 3]]); } // the crown's weeping fronds
   } else {
     tp.push([new T.CylinderGeometry(0.42, 1.0, 6, 7), M(0, 3, 0), BARK], [new T.ConeGeometry(0.42, 1.1, 5), M(0.12, 6.3, 0, 0, 0, 0.25), ROOT], [...beam(1.5, 5.4, 0.4, 0.2, 3.9, 0, 0.07, 0.2), BARK]);
     for (let k = 0; k < 6; k++) { const a = rm() * TAU, hgt = 2 + rm() * 2; tp.push([new T.ConeGeometry(0.14, hgt, 3), M(Math.sin(a) * 1.2, hgt / 2, Math.cos(a) * 1.2, 0, rm() * 3, 0), look.reed[k % 4]]); }
@@ -127,7 +133,7 @@ export function buildTerrain(root, L, H) {
   const trees = [], caps = [];
   for (let i = 0; i <= cols; i++) for (let j = 0; j <= rows; j++) {
     if (L.hall && i > L.hall[0] && i <= L.hall[2] && j > L.hall[1] && j <= L.hall[3]) continue;
-    trees.push([L.x0 + i * C, L.z0 + j * C, 0.95 + r() * 0.25, look.tall ? 1 + r() * 0.5 : 0.4 + r() * 0.75]);
+    trees.push([L.x0 + i * C, L.z0 + j * C, 0.95 + r() * 0.25, look.tall ? 1 + r() * 0.4 : 0.4 + r() * 0.75]);
   }
   for (let k = 0; k < 44; k++) { // the forest beyond
     const side = k % 4, t = r(), o = 6 + r() * 12;
@@ -138,7 +144,12 @@ export function buildTerrain(root, L, H) {
     put(treeIM, i, x, 0, z, r() * TAU, sc, sy, sc); tint(treeIM, i, 0xffffff, -r() * 0.12);
     for (let k = 0; k < 2; k++) { const a = r() * TAU; caps.push([x + Math.sin(a) * 1.25 * sc, 0.25 + r() * 1.5, z + Math.cos(a) * 1.25 * sc]); }
   });
-  H.occluders.push(wallIM, treeIM);
+  // what the camera pulls in for: plain unseen blocks in the walls and trunks (steadier than its ray slipping between reeds)
+  const solid = walls.filter(w => !w[3]), nodes = (cols + 1) * (rows + 1) - (L.hall ? (L.hall[2] - L.hall[0]) * (L.hall[3] - L.hall[1]) : 0);
+  const blockIM = inst(new T.BoxGeometry(1, 1, 1), mat(0, { visible: false }), solid.length + nodes, root);
+  solid.forEach(([x, z, rot], i) => put(blockIM, i, x, HT / 2, z, rot, Lw, HT, W * 0.55));
+  for (let i = 0; i < nodes; i++) put(blockIM, solid.length + i, trees[i][0], 6, trees[i][1], 0, 1.7, 12, 1.7);
+  H.occluders.push(blockIM);
 
   // small things: glowcaps on the roots, ferns in the corners, lantern stakes under the torches
   const capIM = inst(new T.OctahedronGeometry(0.13), glow(TEAL), caps.length, root);
@@ -163,8 +174,8 @@ export function buildTerrain(root, L, H) {
   const cg = [[new T.BoxGeometry(S - 0.3, 0.6, W + 0.3), M(0, -0.29, 0), look.path]];
   for (let k = 0; k < 9; k++) cg.push([new T.CylinderGeometry(0.5 + rm() * 0.2, 0.7, 0.14, 6), M(-S / 2 + 0.9 + (k % 5) * (S - 1.8) / 4 + (rm() - 0.5) * 0.4, 0.02, (k < 5 ? -0.55 : 0.6) + (rm() - 0.5) * 0.3, 0, rm() * 3, 0), k % 2 ? 0x6b7265 : 0x7a8272]);
   const rg = [], nLog = Math.floor((S - 0.3) / 0.72);
-  for (let k = 0; k < nLog; k++) { const x = (k - (nLog - 1) / 2) * 0.72; rg.push([...beam(x + (rm() - 0.5) * 0.08, -0.3, W / 2 + 0.15 + rm() * 0.2, x, -0.3, -W / 2 - 0.15 - rm() * 0.2, 0.33, 0.3, 6), k % 3 ? 0x4a3d2c : 0x5a4a34]); }
-  for (const z of [-0.75, 0.75]) rg.push([new T.BoxGeometry(S - 0.5, 0.07, 0.2), M(0, 0.04, z), 0xa39a5e]);
+  for (let k = 0; k < nLog; k++) { const x = (k - (nLog - 1) / 2) * 0.72; rg.push([...beam(x + (rm() - 0.5) * 0.08, -0.3, W / 2 + 0.15 + rm() * 0.2, x, -0.3, -W / 2 - 0.15 - rm() * 0.2, 0.33, 0.3, 6, true), k % 3 ? 0x6a5a40 : 0x7a6848]); }
+  for (const z of [-0.75, 0.75]) rg.push([new T.BoxGeometry(S - 0.5, 0.07, 0.2), M(0, 0.04, z), 0xb8ad6e]);
   for (const sx of [-1, 1]) rg.push([new T.CylinderGeometry(0.42, 0.42, 0.04, 6), M(sx * (S / 2 - 0.5), 0.07, sx * 0.3), 0x4d7c3a]);
   const causeIM = inst(merge(cg), vmat(), by(0).length, root), raftIM = inst(merge(rg), vmat(), by(1).length, root);
   by(0).forEach((sh, i) => put(causeIM, i, sh.x, 0, sh.z, sh.rot)); by(1).forEach((sh, i) => put(raftIM, i, sh.x, 0, sh.z, sh.rot));
@@ -182,8 +193,9 @@ export function buildTerrain(root, L, H) {
   fly.frustumCulled = false;
   let mist = null;
   if (look.mist) {
-    mist = inst(new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), glow(0x9fd8c8, look.mist), 7, root); mist.frustumCulled = false; mist.renderOrder = 2;
-    for (let i = 0; i < 7; i++) { const sc = 16 + r() * 10; put(mist, i, L.x0 + r() * L.w, 0.6 + i * 0.22, L.z0 + r() * L.d, r() * 3, sc, 1, sc * 0.7); }
+    const mm = glow(0x9fd8c8, look.mist); mm.vertexColors = true;
+    mist = inst(disc(), mm, 9, root); mist.frustumCulled = false; mist.renderOrder = 2;
+    for (let i = 0; i < 9; i++) { const sc = 9 + r() * 7; put(mist, i, L.x0 + r() * L.w, 0.5 + i * 0.2, L.z0 + r() * L.d, r() * 3, sc, 1, sc * 0.65); }
   }
 
   // the landmark. Outer layers: the Heartwillow's glow far beyond the way on, seen through the mist over every wall.
@@ -198,21 +210,22 @@ export function buildTerrain(root, L, H) {
     for (let i = 0; i < 26; i++) { const a = r() * TAU, d = 5 + r() * 8, len = 9 + r() * 9; put(strands, i, Math.sin(a) * d, 31 - len / 2, Math.cos(a) * d, 0, 1, len, 1); }
     pulse.push([colm.material, 0.1], [crown.material, 0.06], [strands.material, 0.14]);
   } else {
-    const zc = L.z0 + L.d + 5.6, hp = [[new T.CylinderGeometry(4.2, 6.2, 30, 9), M(cx, 15, zc), 0x4a4438]];
-    for (const sx of [-1, 1]) for (let k = 0; k < 3; k++) hp.push([...beam(cx + sx * (3 + k), 2.5 + k, zc - 4.2 + k, cx + sx * (9 + k * 4.5), -0.5, L.z0 + L.d + 0.8 + k * 1.6, 0.5, 1.0, 6), ROOT]);
+    const zc = L.z0 + L.d + 5.6, hp = [[new T.CylinderGeometry(3.6, 6.2, 44, 9), M(cx, 22, zc), 0x4a4438]];
+    const feet = []; // (its ground roots sit in the mist like everything else down there)
+    for (const sx of [-1, 1]) for (let k = 0; k < 3; k++) feet.push([...beam(cx + sx * (3 + k), 2.5 + k, zc - 4.2 + k, cx + sx * (9 + k * 4.5), -0.5, L.z0 + L.d + 0.8 + k * 1.6, 0.5, 1.0, 6), ROOT]);
     for (const sx of [-1, 1]) for (const near of [0, 1]) { // root arches over the clearing (their feet land outside it)
-      const a = [cx + sx * 3.5, 10, zc - 4.5], b = [sx > 0 ? L.x0 + L.w + 1.6 : L.x0 - 1.6, -0.6, L.z0 + (near ? 23 : 8)], c = [(a[0] + b[0]) / 2 + sx * 4, 19 - near * 3, (a[2] + b[2]) / 2];
+      const a = [cx + sx * 3.5, 13, zc - 4.5], b = [sx > 0 ? L.x0 + L.w + 1.6 : L.x0 - 1.6, -0.6, L.z0 + (near ? 23 : 8)], c = [(a[0] + b[0]) / 2 + sx * 4, 26 - near * 3, (a[2] + b[2]) / 2];
       const at = t => [0, 1, 2].map(k => (1 - t) * (1 - t) * a[k] + 2 * t * (1 - t) * c[k] + t * t * b[k]);
       for (let k = 0; k < 7; k++) { const p0 = at(k / 7), p1 = at((k + 1) / 7); hp.push([...beam(...p0, ...p1, 0.8 - k * 0.07, 0.72 - k * 0.07, 6), k % 2 ? ROOT : 0x352e26]); }
     }
-    const willow = new T.Mesh(merge(hp), vmat()); willow.castShadow = true; root.add(willow);
+    const willow = new T.Mesh(merge(hp), vmat({ fog: false })); willow.castShadow = true; root.add(willow, new T.Mesh(merge(feet), vmat())); // (it looms through the mist)
     const lit = c => { const m = glow(c); m.fog = false; return m; };
     const hollow = new T.Mesh(new T.OctahedronGeometry(1), lit(GLOW)); hollow.position.set(cx, 2.7, L.z0 + L.d - 0.45); hollow.scale.set(1.5, 3.3, 0.4); root.add(hollow);
     const halo = new T.Mesh(new T.SphereGeometry(4.2, 10, 8), soft(GLOW, 0.14)); halo.position.set(cx, 3, L.z0 + L.d - 0.6); halo.scale.set(1, 1.4, 0.5); root.add(halo);
     const veins = inst(new T.BoxGeometry(0.16, 1, 0.1), lit(0xa7f3d0), 7, root);
-    for (let i = 0; i < 7; i++) { const a = (i - 3) * 0.3 + (r() - 0.5) * 0.1, len = 7 + r() * 9; const rad = 6.28 - (5.5 + len / 2) / 15; put(veins, i, cx + Math.sin(a) * rad, 5.5 + len / 2, zc - Math.cos(a) * rad, -a, 1, len, 1, 0.066); }
+    for (let i = 0; i < 7; i++) { const a = (i - 3) * 0.3 + (r() - 0.5) * 0.1, len = 8 + r() * 14; const rad = 6.3 - (5.5 + len / 2) * 0.059; put(veins, i, cx + Math.sin(a) * rad, 5.5 + len / 2, zc - Math.cos(a) * rad, -a, 1, len, 1, 0.059); }
     const strands = inst(new T.CylinderGeometry(0.34, 0.07, 1, 4), soft(0xb8f5a0, 0.2), 70, root);
-    for (let i = 0; i < 70; i++) { const a = r() * TAU, d = Math.sqrt(r()) * 18, top = 19 + r() * 6, len = top - 7.5 - r() * 4; put(strands, i, cx + Math.sin(a) * d, top - len / 2, cz + 3 + Math.cos(a) * d * 0.9, r() * 3, 1, len, 1); }
+    for (let i = 0; i < 70; i++) { const a = r() * TAU, d = Math.sqrt(r()) * 18, top = 21 + r() * 6, len = top - 11 - r() * 4; put(strands, i, cx + Math.sin(a) * d, top - len / 2, cz + 3 + Math.cos(a) * d * 0.9, r() * 3, 1, len, 1); }
     const pool = flat(1, 1, wadeMat, cx, 0.028, cz - 1); pool.geometry = new T.CircleGeometry(12.5, 30);
     const rim = flat(1, 1, glow(0x5eead4, 0.4), cx, 0.034, cz - 1); rim.geometry = new T.RingGeometry(12.4, 12.7, 48);
     for (let k = 0; k < 18; k++) { const a = r() * TAU, d = 3 + r() * 9; pads.push([cx + Math.sin(a) * d, 0.04, cz - 1 + Math.cos(a) * d]); }
@@ -251,14 +264,14 @@ export function buildEntry(parent, lab, H) {
   const E = lab.entry, g = new T.Group(); g.position.set(E.x, 0, E.z); parent.add(g);
   const pool = new T.Mesh(new T.PlaneGeometry(3.6, 4.4), glow(0x04100e)); pool.rotation.x = -Math.PI / 2; pool.position.y = 0.04; g.add(pool);
   for (let k = 0; k < 4; k++) { const sp = new T.Mesh(new T.BoxGeometry(3.2, 0.06, 0.7), mat(0x3c4a44 - k * 0x0a0c0b)); sp.position.set(0, 0.05, 1.4 - k * 0.8); g.add(sp); }
-  const ap = [[new T.DodecahedronGeometry(1, 0), M(0, 4.5, -2.1, 0.3, 0.5, 0, 1.5, 0.9, 1.1), BARK], [...beam(0.5, 10, -3, 0, 4.5, -2.1, 0.45, 0.85, 6), BARK]];
+  const EB = 0x554a3b, ER = 0x43392e, ap = [[new T.DodecahedronGeometry(1, 0), M(0, 5.3, -2.1, 0.3, 0.5, 0, 2.1, 1.25, 1.6), EB], [...beam(0.9, 13, -3.6, 0, 5.3, -2.1, 0.55, 1.15, 7), EB], [...beam(-2.6, 10.5, -3.2, 0.3, 8, -2.6, 0.12, 0.4), EB]];
   for (const sx of [-1, 1]) {
-    ap.push([...beam(sx * 0.6, 4.3, -2.1, sx * 2.5, -0.3, -1.9, 0.45, 0.7, 6), BARK], [...beam(sx * 0.9, 3.9, -2.3, sx * 3.3, -0.3, -2.9, 0.2, 0.34), ROOT], [...beam(sx * 1.6, 2.6, -1.9, sx * 2.2, -0.3, 0.6, 0.12, 0.26), ROOT]);
-    ap.push([new T.DodecahedronGeometry(1, 0), M(sx * 2.4, 0.1, 0.2, rm() * 3, rm() * 3, 0, 0.6, 0.35, 2.2), 0x34463a]); // mossy banks either side of the steps
-    for (let k = 0; k < 3; k++) { const len = 1.1 + rm() * 0.8; ap.push([new T.CylinderGeometry(0.4, 0.1, len, 4), M(sx * (0.7 + k * 0.5), 4.1 - k * 0.25 - len / 2, -2.0 + (rm() - 0.5) * 0.3, 0, (rm() - 0.5) * 0.6, 0, 1, 1, 0.45), k % 2 ? 0x5f7f4a : 0x4f6f45]); }
+    ap.push([...beam(sx * 0.8, 5, -2.1, sx * 3.1, -0.3, -1.8, 0.6, 1.0, 7), EB], [...beam(sx * 1.1, 4.6, -2.5, sx * 4.0, -0.3, -3.4, 0.25, 0.45), ER], [...beam(sx * 1.3, 4.4, -1.7, sx * 2.7, -0.3, 1.5, 0.22, 0.42, 6), ER], [...beam(sx * 2.3, 2.2, -1.9, sx * 3.6, -0.3, 0.2, 0.12, 0.26), ER]);
+    ap.push([new T.DodecahedronGeometry(1, 0), M(sx * 2.5, 0.1, 0.3, rm() * 3, rm() * 3, 0, 0.7, 0.4, 2.3), 0x3f5a3a]); // mossy banks either side of the steps
+    for (let k = 0; k < 4; k++) { const len = 1.3 + rm() * 1.1; ap.push([new T.CylinderGeometry(0.5, 0.1, len, 4, 1, true), M(sx * (0.9 + k * 0.55), 4.9 - k * 0.5 - len / 2, -2.0 + (rm() - 0.5) * 0.3, 0, (rm() - 0.5) * 0.6, 0, 1, 1, 0.45), k % 2 ? 0x6f8f5a : 0x5f7f4a]); }
   }
   const arch = new T.Mesh(merge(ap), vmat()); arch.castShadow = true; g.add(arch);
-  for (const [x, y, z] of [[-2.1, 0.5, -1.4], [2.3, 0.9, -1.7], [-1.2, 3.4, -1.8], [1.9, 0.35, 1.0], [-2.4, 0.4, 0.9]]) { const c = new T.Mesh(new T.OctahedronGeometry(0.14), glow(TEAL)); c.position.set(x, y, z); c.scale.y = 1.6; g.add(c); }
+  for (const [x, y, z] of [[-2.7, 0.6, -1.3], [2.9, 1.0, -1.5], [-1.5, 3.9, -1.7], [2.6, 0.4, 1.2], [-2.8, 0.45, 1.0], [0.5, 6.6, -1.4]]) { const c = new T.Mesh(new T.OctahedronGeometry(0.14), glow(TEAL)); c.position.set(x, y, z); c.scale.y = 1.6; g.add(c); }
   const ring = new T.Mesh(new T.RingGeometry(E.use - 0.25, E.use, 48), glow(0x5eead4, 0.35)); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; g.add(ring);
   return { g, ring };
 }
@@ -274,7 +287,7 @@ export function makeMob(type, H) {
   const g = new T.Group(), body = new T.Group(); g.add(body);
   const legs = []; let armR = null, height = 2;
   if (type === 'mirelurker') { // a hunched heap of mud and roots: low head, long root arms, a spine of snags
-    const mud = 0x4a4230, dark = 0x33301f;
+    const mud = 0x5c5238, dark = 0x423c28;
     for (const sx of [-1, 1]) legs.push(part(box(0.3, 0.62, 0.34), dark, sx * 0.28, 0.31, 0, body));
     part(new T.DodecahedronGeometry(0.62, 0), mud, 0, 1.02, 0.08, body, 0.5).scale.set(1.2, 0.85, 1.05);
     for (let k = 0; k < 5; k++) part(new T.ConeGeometry(0.09, 0.6 + (k % 3) * 0.22, 4), ROOT, (k - 2) * 0.2, 1.62 - Math.abs(k - 2) * 0.1, -0.28, body, -0.5, (2 - k) * 0.22);
