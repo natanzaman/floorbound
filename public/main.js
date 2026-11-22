@@ -565,6 +565,8 @@ function handleEvent(e) {
   const me = state.myId;
   if (e.t === 'cine' && (e.op === 'reset' || (e.op === 'fade' && e.to === 'black'))) sfx.hush(); // no voice-over under black or after a stop
   if (cine.event(e)) return; // shots, titles, fades, letterbox, clean feed, light
+  if (e.t === 'chain' && e.id === me && !state.spectator) guide.tip('chain'); // first skill chain: what it is (public/guide.js)
+  if (e.t === 'tcall' && e.party && e.party === state.party && !state.spectator) guide.tip('setme'); // a party bot called out a setup: the Set me up order
   if (vfx.event(e)) return; // the visuals pass looks at every event; it keeps only chain / chainEnd / tcall
   if (arenas.event(e)) return; // the fall to a boss's lower area (arenas.js)
   if (f3.onEvent(e)) return; // Floor 3 (floor3client.js)
