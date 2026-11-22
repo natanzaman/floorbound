@@ -723,6 +723,7 @@ function makeDuelMark() {
 }
 
 export function makeMobModel(type) {
+  if (MOBS[type]?.look) return lookAlike(MOBS[type]); // role enemies (shared/mobroles.js): an existing model, scaled and tinted
   if (MOBS[type]?.lab) return makeLabMob(type); // labyrinth enemies (labyrinth.js)
   if (MOBS[type]?.academy) return makeAcademyMob(type); // the Academy's training enemies (academy.js)
   if (MOBS[type]?.prop) return makePropModel(type); // trap objects: vines, the pillar's orb, the storm crystal (public/rescue.js)
@@ -734,6 +735,22 @@ export function makeMobModel(type) {
   const cursor = cursorFor(0xef4444, height, 0.3);
   g.add(cursor);
   return { group: g, root, mats, cursor, height, anim: new Animator(root, '2H_Melee_Idle'), legs: [] };
+}
+
+// A mob drawn as another's model (def.look), scaled (lookScale) and tinted (lookTint) on its own copies of the materials.
+function lookAlike(def) {
+  const md = makeMobModel(def.look), k = def.lookScale || 1;
+  md.group.scale.multiplyScalar(k); md.height = (md.height || 1.5) * k;
+  if (def.lookTint != null) {
+    const tint = new THREE.Color(def.lookTint), swap = new Map();
+    md.group.traverse(o => {
+      if (!o.isMesh || !o.material || Array.isArray(o.material) || o === md.cursor) return;
+      if (!swap.has(o.material)) { const c = o.material.clone(); c.color?.lerp(tint, 0.45); swap.set(o.material, c); }
+      o.material = swap.get(o.material);
+    });
+    if (Array.isArray(md.mats)) md.mats = md.mats.map(m => swap.get(m) || m);
+  }
+  return md;
 }
 
 // Floor 2's boss: the mage rig, sea-green and huge, with a crown and a trident head on its staff.

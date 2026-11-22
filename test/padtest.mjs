@@ -327,6 +327,12 @@ async function chords(port) {
     assert.deepEqual((await sent(m, 'skill')).map(o => o.slot), [1], 'X alone: skill 1');
     ok(tag, 'LB+X is Team Burst, X alone is skill 1');
 
+    // LB+Down: swap weapons (Down alone interacts)
+    m = await mark(); await press(['LB', 'Down'], 2);
+    assert.equal((await sent(m, 'swap')).length, 1, 'LB+Down swaps weapons');
+    C('weaponSwap', 'LB+Down sends swap');
+    ok(tag, 'LB+Down swaps weapons');
+
     // LB+A: Cover (Guardian), A alone jumps
     await P.p.waitForFunction(() => performance.now() > window.__fb.state.jumpReady, null, { timeout: 5000 });
     m = await mark(); await press(['LB', 'A'], 2);

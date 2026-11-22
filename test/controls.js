@@ -77,10 +77,10 @@ const H = (...k) => new Set(k);
   assert.equal(r(H('Down'), 'Down', undefined, 'pad'), 'interact');
   assert.equal(r(H('Down'), 'Down', H('downedAlly'), 'pad'), 'revive');
   // two-key chord, either order
-  const Z = { ...K, cover: ['KeyZ+KeyX', null] };
-  assert.equal(resolve(Z, H('KeyZ', 'KeyX'), { code: 'KeyX' })?.action, 'cover');
-  assert.equal(resolve(Z, H('KeyZ', 'KeyX'), { code: 'KeyZ' })?.action, 'cover');
-  assert.equal(resolve(Z, H('KeyX'), { code: 'KeyX' }), null);
+  const Z = { ...K, cover: ['KeyZ+KeyL', null] };
+  assert.equal(resolve(Z, H('KeyZ', 'KeyL'), { code: 'KeyL' })?.action, 'cover');
+  assert.equal(resolve(Z, H('KeyZ', 'KeyL'), { code: 'KeyZ' })?.action, 'cover');
+  assert.equal(resolve(Z, H('KeyL'), { code: 'KeyL' }), null);
   ok('resolve: codes not characters, alt slots, Ctrl/Cmd chords beat plain clicks, contexts, the pad LB layer, two-key chords');
 }
 
@@ -116,13 +116,13 @@ const H = (...k) => new Set(k);
   assert.equal(check(K, 'kbm', 'jump', 0, 'KeyW,KeyA,KeyS,KeyD').error, 'axis');
   assert.equal(check(K, 'kbm', 'move', 0, 'KeyW').error, 'axis');
   // chords without timing windows
-  assert.equal(check(K, 'kbm', 'cover', 0, 'KeyR+KeyX').error, 'chord', 'R guards, so it can\'t be a chord member');
-  assert.equal(check(K, 'kbm', 'cover', 0, 'Shift+KeyX').error, 'chord', 'Shift dodges, so no Shift chords');
+  assert.equal(check(K, 'kbm', 'cover', 0, 'KeyR+KeyL').error, 'chord', 'R guards, so it can\'t be a chord member');
+  assert.equal(check(K, 'kbm', 'cover', 0, 'Shift+KeyL').error, 'chord', 'Shift dodges, so no Shift chords');
   assert.ok(check(K, 'kbm', 'cover', 0, 'Ctrl+KeyZ').ok, 'Ctrl has no action: Ctrl+Z is fine');
-  assert.ok(check(K, 'kbm', 'cover', 0, 'KeyZ+KeyX').ok, 'Z and X are free: Z+X is fine');
-  const withChord = assign(K, 'kbm', 'cover', 0, 'KeyZ+KeyX').bindings;
+  assert.ok(check(K, 'kbm', 'cover', 0, 'KeyZ+KeyL').ok, 'Z and L are free: Z+L is fine');
+  const withChord = assign(K, 'kbm', 'cover', 0, 'KeyZ+KeyL').bindings;
   assert.equal(check(withChord, 'kbm', 'jump', 0, 'KeyZ').error, 'chord', 'Z is held for a chord: it can\'t get its own action');
-  assert.ok(check(withChord, 'kbm', 'jump', 0, 'KeyX').ok, 'X (the chord\'s trigger) may keep an action of its own');
+  assert.ok(check(withChord, 'kbm', 'jump', 0, 'KeyL').ok, 'L (the chord\'s trigger) may keep an action of its own');
   assert.equal(check(K, 'kbm', 'jump', 0, 'Ctrl').error, 'chord', 'Ctrl is held for the select chords: no action of its own');
   // conflicts: one key per control and one control per key
   assert.deepEqual(check(K, 'kbm', 'jump', 0, 'KeyB').conflicts, [{ action: 'bag', slot: 0 }]);

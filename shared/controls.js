@@ -31,6 +31,7 @@ export const ACTIONS = [
   { id: 'guard', label: 'Guard / parry (Guardian)', group: 'Combat', type: 'hold' },
   { id: 'cover', label: 'Cover an ally (Guardian)', group: 'Combat', type: 'button' },
   { id: 'teamBurst', label: 'Team Burst', group: 'Combat', type: 'button' },
+  { id: 'weaponSwap', label: 'Swap weapons (2nd weapon slot)', group: 'Combat', type: 'button' },
   { id: 'lockNext', label: 'Lock on / next target', group: 'Target', type: 'button' },
   { id: 'selectAimed', label: 'Select what you aim at', group: 'Target', type: 'button' },
   { id: 'clearTarget', label: 'Clear target', group: 'Target', type: 'button' },
@@ -65,6 +66,7 @@ export const DEFAULTS = {
     guard: ['KeyR', null],
     cover: ['KeyC', null],
     teamBurst: ['KeyT', null],
+    weaponSwap: ['KeyX', null],
     lockNext: ['Tab', null],
     selectAimed: ['Ctrl+Mouse0', 'Meta+Mouse0'], // (Cmd on a Mac)
     clearTarget: ['Ctrl+Mouse2', 'Meta+Mouse2'],
@@ -91,7 +93,7 @@ export const DEFAULTS = {
     skill3: ['B', null], selectAimed: ['LB+B', null],
     lockNext: ['R3', null], clearTarget: ['LB+R3', null],
     item1: ['Up', null], item2: ['Left', null], item3: ['Right', null],
-    skillTree: ['LB+Up', null], players: ['LB+Right', null],
+    skillTree: ['LB+Up', null], players: ['LB+Right', null], weaponSwap: ['LB+Down', null],
     interact: ['Down', null], revive: ['Down', null], // (Down: interact; held next to a downed ally: revive)
     bag: ['View', null],
     menu: ['Start', null],

@@ -8,6 +8,24 @@ Plans: `docs/briefs/bots-access.md`, `docs/briefs/waypoint.md`, `docs/briefs/tar
 - **Targeting (ROADMAP K5):** Settings → Controls → Combat: Nearest / Locked or nearest (default) / Cone 120° / Aimed, Cleave on/off, max targets 1–8. Per-attack field of view and target limits in `shared/targeting.js`; skill messages carry the camera yaw (`look`) for the server's Cone filter. Bots send no prefs and play as before.
 - **Bots + access levels:** Bots section in the Players list (invite, kick, Named despawn/respawn, creator allow-list editor), "Join my party" checkbox, free-roaming bots with a creator, no per-player cap (`MAX_BOTS` 30 global), `accounts.access_level` 1–5 (admins 5) with the admin-page picker, rules in `shared/accesslevels.js` (`canControlBot`). Allow lists hold saved character ids only. `INVITE_NEEDS_TIER = false` in `shared/named.js`.
 
+## Combat quick wins, phase 1 (2026-11-22, branch `feat/combat`, plan `docs/briefs/combat-quickwins.md`)
+- **Breakable boss parts** (`shared/bossparts.js`): Warden horns (front; broken: no Horn Sweep, slower horn charge),
+  Sovereign trident hand (its right; slower trident, one geyser fewer), Colossus knees (sides / back; both: it kneels
+  6 s taking +25%, once a fight). Melee hits count x1.5 toward a part, ranged x0.5. Each break: a callout and a bonus
+  loot roll for everyone fighting. Pips under the boss bar. Melee bots at skill 4-5 work the parts. Off in director shows.
+- **Role enemies** (`shared/mobroles.js`, existing models re-tinted): Ironhide Boar (F1, plated until Broken), Mire
+  Bulwark (F2, front shield; a Break drops it 6 s), Mire Hexer (F2, channels a heal; interrupt = stunned), Gale Harrier
+  (F3, melee can't touch it while it hovers; jump, swoop or range).
+- **Two weapons:** a 2nd weapon slot (Bag → 2nd), swap with X / pad LB+Down (1 s apart, not mid-skill; a chain step).
+  Bots don't swap yet.
+- **Clutch:** Last Stand (a lethal hit within 10 s of a perfect dodge or parry: 1 HP, 1.5 s untouchable, once a
+  fight); a 0.8 s slow-motion beat for the fight when a Team Burst or the Last Attack kills a floor boss.
+- Bot runs (6 bots, skill 5, 3 each, `scripts/tuneboss.js`), main → this batch: Warden 110 s → 88 s with the horns, so its
+  health went up x1.22 (`hpBase` 2880 → 3500, `hpPer` 816 → 995 in `shared/data.js`) → 119 s; Sovereign 171 s → 160 s
+  (-6%); Colossus 131 s → 130 s. All 3/3 kills.
+- **Owner calls:** part sizes (8% / 8% / 6% of the boss's health), the Horn Sweep fully off vs a short sweep, whether
+  bots should swap weapons.
+
 ## Combos 2.0 and the visuals pass (2026-11-22, branch `claude/project-thread-2sti63`, plan `docs/briefs/combos-visuals.md`)
 - Skill chains (x2-x4, named links), self-combos, a setup for every class (Cross Cut, Aftershock, Verdict, Downbeat;
   every pair of classes has a combo), bots that open setups and call them out, the **Set me up** order, class-flavoured

@@ -142,7 +142,7 @@ const methods = {
     if (!b || b.dead || !b.engaged || !b.threat.size) return;
     const SW = b.tm?.sweep || SWEEP0; // the fight's table (server/openings.js)
     if (b.sweepFight !== this.fight) { b.sweepFight = this.fight; b.sweepT = t + SW.first; } // a new attempt
-    if (t < b.sweepT || t < b.stunUntil || t < (b.busyUntil || 0) || b.windupAt || !this.closeReady(b, 'sweep')) return;
+    if (t < b.sweepT || t < b.stunUntil || t < (b.busyUntil || 0) || b.windupAt || !this.closeReady(b, 'sweep') || this.partOff?.(b, 'sweep')) return; // (broken horns: server/bossparts.js)
     if (this.quakes?.some(q => q.m === b && q.r < SW.r + 1)) return; // never a Horn Sweep on top of a Quake Ring still near it
     const near = [...this.players.values()].some(p => !p.dead && inArena(p.x, p.z) && dist(p, b) <= SW.r + 4);
     if (!near) { b.sweepT = t + 2; return; }
