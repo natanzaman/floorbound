@@ -12,7 +12,7 @@
 // removePlayer.
 import { CLASSES, MOBS, walkable, angleTo, resolveCollision } from '../shared/data.js';
 import { makeItem, BAG_SIZE } from '../shared/items.js';
-import { newTalents, talentTotals, buildTag } from '../shared/talents.js';
+import { newTalents, talentTotals, buildTag, planAlloc } from '../shared/talents.js';
 import { STYLES } from '../shared/styles.js';
 import {
   WEAPONS, INITIATE, TRIALS, DRILLS, DRILL_REWARD, REVIVE_SECS, REVIVE_R, HEAD_FRIENDSHIP, MEDALS, COHORT,
@@ -113,6 +113,24 @@ export const AcademyMethods = {
     this.invChanged(p);
   },
 
+  // An Initiate plans the first talents of a class their weapon leads to: { op: 'plan', cls, ids } adds ranks in order
+  // (all or nothing, like spendMany), { op: 'plan', cls, clear: 1 } forgets it. Graduating as that class spends it.
+  talentPlan(p, msg) {
+    const path = p.path, cls = String(msg.cls || '');
+    if (!isWeapon(path.weapon) || !WEAPONS[path.weapon].leads.includes(cls)) return this.sys('Your weapon doesn\'t lead to that class.', p.id);
+    const plans = (path.plan ||= {});
+    if (msg.clear) delete plans[cls];
+    else {
+      const ids = Array.isArray(msg.ids) ? msg.ids.slice(0, 40).map(String) : [];
+      if (!ids.length) return;
+      const res = planAlloc(cls, plans[cls] || {}, p.lvl, ids);
+      if (res.error) return this.sys(res.error, p.id);
+      plans[cls] = res.alloc;
+    }
+    if (!Object.keys(plans).length) delete path.plan;
+    p.talentsDirty = true; p.dirty = true;
+  },
+
   // ---------- graduation and class changes ----------
   // Graduate an Initiate into cls (checks done by the caller): keep the Initiate class's mastery, open the class, grant
   // the matching weapon, full names and power, the level-3 skill, the talent tree with every banked point.
@@ -122,6 +140,9 @@ export const AcademyMethods = {
     path.stage = 'class';
     const kept = path.keep[cls]; delete path.keep[cls];
     this.swapClass(p, cls, kept);
+    const planned = !kept?.talents && path.plan?.[cls] ? newTalents(path.plan[cls], cls, p.lvl) : null; // the Initiate's plan for this class
+    delete path.plan;
+    if (planned && Object.keys(planned).length) { p.talents = planned; p.tal = talentTotals(cls, p.talents); p.bt = buildTag(cls, p.talents); }
     this.armWith(p, cls, INITIATE.gradRarity, gradStyle(cls, path.weapon), true, true); // (yours to keep: not an Academy weapon)
     this.tidySpare(p);
     this.recompute(p); p.hp = p.maxHp;
@@ -512,10 +533,15 @@ export function installAcademy(Game) {
   // The talent tree: locked while an Initiate (points bank up), and off during a trial.
   wrap('talentAction', function (orig, p, msg) {
     if (p.loan) return this.sys('Talents are off during a class trial.', p.id);
-    if (isInitiate(p.path)) return this.sys('Your talent tree opens when you graduate at the Academy. Your points are banked.', p.id);
+    if (isInitiate(p.path)) return msg?.op === 'plan' ? this.talentPlan(p, msg) : this.sys('Your talent tree opens when you graduate at the Academy. Your points are banked.', p.id);
     return orig.call(this, p, msg);
   });
-  wrap('talentsMsg', function (orig, p) { const m = orig.call(this, p); if (isInitiate(p.path) || p.loan) m.locked = 1; return m; });
+  wrap('talentsMsg', function (orig, p) {
+    const m = orig.call(this, p);
+    if (isInitiate(p.path) || p.loan) m.locked = 1;
+    if (isInitiate(p.path) && !p.loan) m.plan = p.path.plan || {}; // an Initiate's plans (talentPlan)
+    return m;
+  });
   if (P.autoSpendTalents) wrap('autoSpendTalents', function (orig, p, ...a) { if (isInitiate(p.path)) return; return orig.call(this, p, ...a); });
   wrap('giveXp', function (orig, p, amount) {
     const before = p?.lvl;

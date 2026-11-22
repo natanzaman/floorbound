@@ -377,10 +377,10 @@ export function installTalents(Game) {
 //    addDiscord (Lingering Discord), crescBurst (Cacophony, Bulwark Chord).
 export const TalentMethodsNew = {
   // A short party damage buff (Pack Leader, Warcry): the p.relay slot Relay Strike uses; the stronger one stays.
-  teamBuff(o, v, d) {
+  teamBuff(o, v, d, src = null) { // src { by, sk }: the skill credited with mastery for the extra damage (a signature skill)
     const t = this.time, r = o.relay;
     if (r && t < r.until && r.v > v) return;
-    o.relay = { until: Math.max(t + d, r && r.v === v ? r.until : 0), v };
+    o.relay = { until: Math.max(t + d, r && r.v === v ? r.until : 0), v, ...(src ? { by: src.by, sk: src.sk } : {}) };
   },
   cdCut(p, skId, secs) { const i = slotOf(p, skId); if (i > 0 && p.cds[i] > this.time) p.cds[i] = Math.max(this.time, p.cds[i] - secs); },
   cdReset(p, skId) { const i = slotOf(p, skId); if (i > 0) p.cds[i] = Math.min(p.cds[i], this.time); },

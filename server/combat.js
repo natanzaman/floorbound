@@ -32,6 +32,7 @@ const methods = {
     if (counter) this.events.push({ t: 'counter', id: m.id, by: p.id, to: p.id });
     if (interrupt && !m.def.boss) m.windupAt = 0; // a Smite mid wind-up still interrupts small enemies
     if (t < m.staggerUntil) return; // frozen while broken
+    sk = this.mSk ? this.mSk(p, sk) : sk; // (the signature skill while it runs)
     const max = this.postureCap(m), bi = m.def.boss ? 1 : 0;
     let gain = amount * (heavy ? POSTURE.heavy : 1);
     if (brk) gain += max * POSTURE.brk[bi];

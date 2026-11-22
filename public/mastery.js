@@ -6,6 +6,7 @@ import { CLASSES } from '/shared/data.js';
 import {
   MASTERY, BRANCHES, SHRINES, nearShrine, masteryLevel, masteryProgress, activeBranch, branchDef, skillName, skillDesc, masteryCd,
 } from '/shared/mastery.js';
+import { SUBCLASSES } from '/shared/subclasses.js';
 import { keyHtml, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 import { skillDiagram } from '/skillshapes.js';
 
@@ -83,6 +84,9 @@ export function initMastery(ctx) {
 
   const M = { data: null, promptSk: null, shrines: [], bar: '', snoozed: new Set() }; // snoozed: prompts dismissed with Later
   const skills = () => CLASSES[state.cls]?.skills || [];
+  // The signature skill (slot 5) of your subclass: its base definition, once you have one (never a borrowed skill).
+  const sigSk = () => { const sp = state.academy?.spec; return sp?.sig && SUBCLASSES[sp.sub]?.skill.id === sp.sig.id ? SUBCLASSES[sp.sub].skill : null; };
+  const mskills = () => [...skills().slice(1), ...(sigSk() ? [sigSk()] : [])]; // the skills that earn mastery
   const entry = id => M.data?.[id] || null;
   const lvlOf = id => masteryLevel(entry(id)?.pts || 0);
   const isOpen = () => !panel.classList.contains('hidden');
@@ -142,7 +146,7 @@ export function initMastery(ctx) {
     return true;
   }
   // Skills that reached Mastery 3 (and are unlocked) but have no branch yet.
-  const pending = () => skills().slice(1).filter(s => entry(s.id) && lvlOf(s.id) >= MASTERY.evolveAt && !entry(s.id).br && state.lvl >= s.lvl).map(s => s.id);
+  const pending = () => mskills().filter(s => entry(s.id) && lvlOf(s.id) >= MASTERY.evolveAt && !entry(s.id).br && state.lvl >= s.lvl).map(s => s.id);
   // The evolution moment shows only out of combat (4 s after the last hit) and with no window open.
   const calm = () => performance.now() - state.lastCombat > 4000 && !document.body.classList.contains('tree-open');
   function checkPrompt() { const p = pending().filter(id => !M.snoozed.has(id)); if (!M.promptSk && p.length && !isOpen() && calm()) showPrompt(p[0]); }
@@ -159,7 +163,13 @@ export function initMastery(ctx) {
     const l = lvlOf(s.id), ready = pending().includes(s.id);
     return `<span class="mpip ${ready ? 'ready' : activeBranch(entry(s.id)) ? 'evo' : ''}">${ready ? 'EVOLVE' : `M${l}`}</span>`;
   }
-  const barKey = () => skills().map((s, i) => `${name(i)}|${pip(i)}`).join(',');
+  function sigPip() { // the signature skill's pip (main.js sigButton)
+    const s = sigSk(), e = s && entry(s.id);
+    if (!e) return '';
+    const ready = pending().includes(s.id);
+    return `<span class="mpip ${ready ? 'ready' : activeBranch(e) ? 'evo' : ''}">${ready ? 'EVOLVE' : `M${lvlOf(s.id)}`}</span>`;
+  }
+  const barKey = () => skills().map((s, i) => `${name(i)}|${pip(i)}`).join(',') + sigPip();
   function barChanged() { const k = barKey(); if (k === M.bar) return false; M.bar = k; return true; }
 
   // ---------- Skills panel ----------
@@ -187,7 +197,7 @@ export function initMastery(ctx) {
     h += atShrine ? '<div class="note shrine">You are at a Skill Shrine: change any evolution for free.</div>'
       : '<div class="note">Skills gain mastery when they land: damage, posture, Breaks and Switches, healing, damage prevented, buffed allies. Whiffs give nothing. At Mastery 3 a skill evolves; change your pick at a Skill Shrine in town.</div>';
     if (!M.data) h += '<div class="note">…</div>';
-    else for (const s of skills().slice(1)) {
+    else for (const s of mskills()) {
       const e = entry(s.id) || { pts: 0, br: null }, locked = state.lvl < s.lvl;
       const [l, into, span] = masteryProgress(e.pts);
       const evoName = skillName(s, e);
@@ -208,7 +218,7 @@ export function initMastery(ctx) {
 
   // ---------- evolution prompt (Mastery 3 reached) ----------
   function showPrompt(skId) {
-    const s = skills().find(x => x.id === skId); if (!s) return;
+    const s = mskills().find(x => x.id === skId); if (!s) return;
     M.promptSk = skId;
     const col = `#${(CLASSES[state.cls]?.color || 0x8b5cf6).toString(16).padStart(6, '0')}`;
     prompt.innerHTML = `<div class="k0">MASTERY ${MASTERY.evolveAt}</div><h2>${esc(s.name)} can evolve</h2>
@@ -357,7 +367,7 @@ export function initMastery(ctx) {
       case 'fx': if (e.k !== 'evo') return false; evoFx(e); return true;
       case 'mlvl': {
         if (e.to !== me) return true;
-        const s = skills().find(x => x.id === e.sk); if (!s) return true;
+        const s = mskills().find(x => x.id === e.sk); if (!s) return true;
         const p = players.get(me);
         if (p) { fx.ring(p.model.group.position.x, p.model.group.position.z, 2.4, 0xa78bfa, 0.7); floatNum(p.model.group.position, 3.0, `${s.name} · Mastery ${e.lvl}`, 'mastery'); }
         if (e.evo) { banner('SKILL CAN EVOLVE', `${s.name} reached Mastery ${e.lvl} · choose its evolution`); sfx.play('evolve'); }
@@ -425,5 +435,5 @@ export function initMastery(ctx) {
   // Buff tags for the HUD (snapshot buff bits 32+).
   const buffTags = b => `${b & 32 ? '<span class="evo">Aegis</span>' : ''}${b & 64 ? '<span class="evo">Bulwark</span>' : ''}${b & 128 ? '<span class="evo">Iron Skin</span>' : ''}${b & 256 ? '<span class="evo">Renew</span>' : ''}${b & 512 ? '<span class="evo">War Cry</span>' : ''}${b & 1024 ? '<span class="evo">Zeal</span>' : ''}${b & 2048 ? '<span class="evo">Purified</span>' : ''}${b & 16384 ? '<span class="evo">Shield</span>' : ''}`; // 16384: a talent shield (not Aegis)
 
-  return { onMessage, event, toggle, isOpen, near, frame, lift, name, desc, cd, pip, evoId, barChanged, buffTags, render };
+  return { onMessage, event, toggle, isOpen, near, frame, lift, name, desc, cd, pip, sigPip, evoId, barChanged, buffTags, render };
 }

@@ -8,7 +8,7 @@ import WebSocket from 'ws';
 import { Game } from '../server/game.js';
 import { CLASSES, DODGE, GUARD, SWITCH, MAX_LEVEL, xpToNext, angleTo } from '../shared/data.js';
 import { SHRINES } from '../shared/mastery.js';
-import {
+import { nodeDef,
   TALENTS, TREES, KEYS, pointsAt, newTalents, allocError, spendBlock, refundBlock, talentTotals, nodesOf, spentOf,
 } from '../shared/talents.js';
 
@@ -71,7 +71,7 @@ g.time = 100;
     assert.ok(CLASSES[cls], `${cls} is a class`);
     assert.equal(t.branches.length, 3);
     for (const b of t.branches) {
-      assert.equal(b.nodes.filter(nd => nd.keystone).length, 1, `${b.id}: one keystone`);
+      assert.equal(b.nodes.filter(nd => nd.keystone && !nd.sub).length, 1, `${b.id}: one keystone`);
       assert.equal(b.nodes.find(nd => nd.keystone).tier, TALENTS.tiers.length - 1, `${b.id}: keystone at the bottom`);
       for (const nd of b.nodes) {
         assert.ok(nd.max >= 1 && nd.max <= 3 && nd.fx.length, nd.id);
@@ -174,7 +174,7 @@ g.time = 100;
 // ---------- stat effects ----------
 {
   const base = mk('swordsman'), t = mk('swordsman', { sw_edge: 3, sw_precision: 3 }, MAX_LEVEL, X + 40);
-  near(t.atk, base.atk * 1.09, 1e-9, 'atk'); near(t.crit, base.crit + 0.06, 1e-9, 'crit');
+  near(t.atk, base.atk * 1.09, 1e-9, 'atk'); near(t.crit, base.crit + nodeDef('sw_precision').fx[0].v * 3 / 100, 1e-9, 'crit');
   done();
   const gb = mk('guardian'), gp = mk('guardian', { gu_plate: 3 }, MAX_LEVEL, X + 40), gd = mk('guardian', { gu_brace: 3 }, MAX_LEVEL, X - 40);
   assert.equal(gp.maxHp, Math.round(gb.maxHp * 1.12), 'hp');

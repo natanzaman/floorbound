@@ -4,12 +4,16 @@
 // Usage: node test/path.js
 import assert from 'node:assert/strict';
 import { Game } from '../server/game.js';
+import { newPath, cleanPath } from '../shared/academy.js';
 import { MAX_LEVEL } from '../shared/data.js';
-import { TREES, BUILD_TAGS, planAlloc, buildShape, buildTag, buildName, suggestOrder, spendBlock, spentOf, nodeDef } from '../shared/talents.js';
-import { SUBCLASSES, subsOf } from '../shared/subclasses.js';
+import { talentTotals, TREES, BUILD_TAGS, planAlloc, buildShape, buildTag, buildName, suggestOrder, spendBlock, spentOf, nodeDef } from '../shared/talents.js';
+import { SUBCLASSES, subsOf, SIG_EVOS } from '../shared/subclasses.js';
+import { MASTERY, BRANCHES, masterySkills, AWAKEN } from '../shared/mastery.js';
+import { ruleText, cleanRule, FX_MAX } from '../shared/effects.js';
 import { shapeOf, VIEW, nodeBox } from '../public/treeshapes.js';
 
 let n = 0;
+const nodesOfAll = cls => TREES[cls].branches.flatMap(b => b.nodes.map(nd => nodeDef(nd.id)));
 const ok = name => console.log(`  ok ${++n} - ${name}`);
 const g = new Game();
 g.mobs.clear(); g.boss = null;
@@ -109,6 +113,136 @@ function mk(cls, lvl = 20) {
     assert.ok(Object.keys(a).some(id => nodeDef(id).sub === sub), `${sub}: takes its own nodes`);
   }
   ok('suggested path: the subclass branch first (its own nodes too), then the class order');
+}
+
+
+// ---------- signature mastery (Phase 2) ----------
+{
+  for (const sub of Object.keys(SUBCLASSES)) {
+    const { cls, skill } = SUBCLASSES[sub], f = SIG_EVOS[skill.id];
+    assert.ok(f?.A?.name && f?.B?.name && f.A.desc && f.B.desc, `${skill.id}: two forms`);
+    for (const k of ['A', 'B']) for (const key of Object.keys(f[k].n)) assert.ok(key in skill.n || (skill.id === 'conqroar' && ['selfDr', 'd'].includes(key)) || (skill.id === 'sirenwail' && key === 'stun'), `${skill.id}/${k}: ${key} is one of its numbers`);
+    assert.ok(masterySkills(cls).includes(skill.id), `${cls}: a mastery record for ${skill.id}`);
+    assert.equal(BRANCHES[skill.id], f);
+  }
+  const p = mk('swordsman', 20);
+  p.path.subs = { swordsman: 'duelist' }; g.specRefresh(p);
+  const field = () => { g.teleport(p, 0, 80); p.face = 0; const m = g.addMob('wolf', 0, 83); m.hp = m.maxHp = 1e5; return m; };
+  const m = field(), t0 = g.time;
+  g.useSkill(p, 4, 0);
+  for (let i = 0; i < 30; i++) g.update(0.05);
+  assert.ok(p.mastery.flashstep.pts > 0, `Flash Step earns mastery (${p.mastery.flashstep.pts})`);
+  assert.ok(Math.abs(p.cds[4] - t0 - SUBCLASSES.duelist.skill.cd * (1 - (p.haste || 0))) < 0.6, 'base cooldown at Mastery 1');
+  // Mastery 3: it evolves; the form's numbers and the cooldown change, the path message says so
+  p.mastery.flashstep.pts = MASTERY.need[3];
+  g.chooseBranch(p, 'flashstep', 'B');
+  assert.equal(p.mastery.flashstep.br, 'B');
+  const sm = g.specMsg(p).sig;
+  assert.equal(sm.name, 'Long Step'); assert.equal(sm.base, 'Flash Step');
+  assert.ok(Math.abs(g.sigCd(p) - SUBCLASSES.duelist.skill.cd * MASTERY.cd2) < 1e-6, 'Mastery 2+: -10% cooldown');
+  p.mastery.rallycut = { pts: MASTERY.need[3], br: null };
+  g.chooseBranch(p, 'deadeye', 'A'); // not this class's: nothing
+  assert.ok(!p.mastery.deadeye);
+  // Snap Shot: a form's cooldown
+  const r = mk('ranger', 20); r.path.subs = { ranger: 'sharpshooter' }; g.specRefresh(r);
+  r.mastery.deadeye = { pts: MASTERY.need[3], br: 'B' };
+  assert.ok(Math.abs(g.sigCd(r) - SUBCLASSES.sharpshooter.skill.cd * MASTERY.cd2 * SIG_EVOS.deadeye.B.cd) < 1e-6, 'Snap Shot comes back sooner');
+  g.mobs.delete(m.id); g.removePlayer(p); g.removePlayer(r);
+  ok('signature mastery: two forms each, earned by using slot 5, -10% at Mastery 2, a form at 3 (name, numbers, cooldown)');
+}
+
+{ // every form runs (and still earns mastery)
+  for (const sub of Object.keys(SUBCLASSES)) for (const br of ['A', 'B']) {
+    const { cls, skill } = SUBCLASSES[sub], p = mk(cls, 20);
+    p.path.subs = { [cls]: sub }; g.specRefresh(p);
+    p.mastery[skill.id] = { pts: MASTERY.need[3], br };
+    g.teleport(p, 0, 80); p.face = 0; p.hp = p.maxHp * 0.5;
+    const m = g.addMob('wolf', 0, 83); m.hp = m.maxHp = 1e5;
+    const pts = p.mastery[skill.id].pts;
+    g.useSkill(p, 4, 0);
+    for (let i = 0; i < 40; i++) g.update(0.05);
+    assert.ok(p.cds[4] > 0, `${skill.id}/${br}: used`);
+    assert.ok(p.mastery[skill.id].pts > pts || ['aegisline', 'encore'].includes(skill.id), `${skill.id}/${br}: earns mastery`);
+    g.mobs.delete(m.id); g.removePlayer(p);
+  }
+  ok('all 28 signature forms run');
+}
+
+{ // an Initiate plans the first talents of a class their weapon leads to; graduating as it spends the plan
+  const p = mk('swordsman', 8);
+  p.path = newPath('sword'); g.setTalents(p, {});
+  const t0 = TREES.guardian.branches[0].nodes.find(nd => nd.tier === 0), s0 = TREES.swordsman.branches[0].nodes.find(nd => nd.tier === 0);
+  g.talentAction(p, { op: 'plan', cls: 'guardian', ids: [t0.id, t0.id] });
+  assert.deepEqual(p.path.plan, { guardian: { [t0.id]: 2 } });
+  g.talentAction(p, { op: 'plan', cls: 'swordsman', ids: [s0.id] });
+  g.talentAction(p, { op: 'plan', cls: 'ranger', ids: [TREES.ranger.branches[0].nodes[0].id] });
+  assert.ok(!p.path.plan.ranger, 'not a class the sword leads to');
+  g.talentAction(p, { op: 'plan', cls: 'guardian', ids: Array(20).fill(t0.id) });
+  assert.deepEqual(p.path.plan.guardian, { [t0.id]: 2 }, 'an illegal plan changes nothing');
+  assert.deepEqual(p.talents, {}, 'the Initiate\'s own tree stays shut');
+  assert.deepEqual(g.talentsMsg(p).plan, p.path.plan, 'the talents message carries the plans');
+  assert.deepEqual(cleanPath(JSON.parse(JSON.stringify(p.path))).plan, p.path.plan, 'saved and loaded');
+  g.talentAction(p, { op: 'plan', cls: 'swordsman', clear: 1 });
+  assert.ok(!p.path.plan.swordsman, 'clear');
+  g.graduate(p, 'guardian', { quiet: true });
+  assert.equal(p.cls, 'guardian'); assert.deepEqual(p.talents, { [t0.id]: 2 }, 'graduation spends the plan');
+  assert.ok(!p.path.plan, 'and forgets every plan');
+  g.removePlayer(p);
+  ok('Initiate plans: per class the weapon leads to, all or nothing, saved, spent at graduation');
+}
+
+// ---------- Phase 3: the effect library, awakenings, Subclass II and the Crown, rule riders ----------
+{
+  const rules = [];
+  for (const [sk, f] of Object.entries(AWAKEN)) for (const k of ['A', 'B']) rules.push([`${sk}/${k}`, f[k]]);
+  for (const cls of Object.keys(TREES)) for (const nd of nodesOfAll(cls)) for (const e of nd.fx) if (e.rule) rules.push([nd.id, e.rule]);
+  for (const [id, r] of rules) {
+    assert.ok(cleanRule(r), `${id}: a known rule`); assert.ok(ruleText(r).length > 20, `${id}: has text`);
+    for (const [k, cap] of Object.entries(FX_MAX)) { const v = k === 'mult' ? r.mult : r.do === k ? r.v : undefined; if (v !== undefined) assert.ok(v <= cap, `${id}: ${k} ${v} <= ${cap}`); }
+  }
+  assert.equal(Object.keys(AWAKEN).length, Object.keys(BRANCHES).length, 'every skill with forms awakens');
+  for (const sub of Object.keys(SUBCLASSES)) {
+    const later = nodesOfAll(SUBCLASSES[sub].cls).filter(nd => nd.sub === sub && nd.lvl);
+    assert.deepEqual(later.map(nd => [nd.tier, nd.x, nd.lvl]).sort(), [[4, -1, 22], [4, 1, 22], [5, 0, MAX_LEVEL]], `${sub}: II left and right, the Crown`);
+  }
+  // level gates: Subclass II at 22, the Crown at 30; never a tier gate for others
+  const D = nodesOfAll('swordsman').filter(nd => nd.sub === 'duelist' && nd.lvl), a = {};
+  for (const id of suggestOrder('swordsman', 'duelist', 'tempo')) if (!spendBlock('swordsman', a, 21, id, 'duelist')) a[id] = (a[id] | 0) + 1;
+  assert.match(spendBlock('swordsman', a, 21, D[0].id, 'duelist') || '', /level 22/);
+  const crown = D.find(nd => nd.tier === 5);
+  assert.match(spendBlock('swordsman', { ...a, [D[0].id]: 1 }, 29, crown.id, 'duelist') || '', /level 30/);
+  ok('effect library: every awakening and rule node is a known rule with text, within caps; Subclass II at 22, the Crown at 30');
+}
+{ // the engine: an awakening fires on its skill's hits, a Crown rule on kills; a rule never sets off another
+  const p = mk('swordsman', MAX_LEVEL);
+  g.teleport(p, 0, 80); p.face = 0;
+  p.mastery.rush = { pts: MASTERY.need[5], br: 'A' }; // Phantom Rush awakened: its hits mark
+  const m = g.addMob('wolf', 0, 82); m.hp = m.maxHp = 1e5;
+  g.useSkill(p, 1, 0);
+  for (let i = 0; i < 20; i++) g.update(0.05);
+  assert.ok(m.fxMark && m.fxMark.until > g.time, 'Phantom Rush (Mastery 5) marks what it hits');
+  assert.ok(ev('fxr', e => e.id === p.id && e.k === 'mark').length, 'and says so');
+  const hp = m.hp; g.damageMob(m, p, 100, {}); assert.ok(hp - m.hp > 100 * 0.9 * 1.1 - 1, 'a marked enemy takes more');
+  g.mobs.delete(m.id);
+  p.path.subs = { swordsman: 'duelist' }; g.specRefresh(p);
+  const alloc = {}; for (const id of suggestOrder('swordsman', 'duelist', 'tempo')) if (!spendBlock('swordsman', alloc, MAX_LEVEL, id, 'duelist')) alloc[id] = (alloc[id] | 0) + 1;
+  for (const nd of nodesOfAll('swordsman').filter(nd => nd.sub === 'duelist' && nd.lvl).sort((x, y) => x.tier - y.tier)) if (!(alloc[nd.id] > 0)) { const k = Object.keys(alloc).find(id => !nodeDef(id).sub && nodeDef(id).tier < 2 && alloc[id] > 0 && !spendBlock('swordsman', { ...alloc, [id]: alloc[id] - 1 }, MAX_LEVEL, nd.id, 'duelist')); if (k && spendBlock('swordsman', alloc, MAX_LEVEL, nd.id, 'duelist')) alloc[k]--; if (!spendBlock('swordsman', alloc, MAX_LEVEL, nd.id, 'duelist')) alloc[nd.id] = 1; }
+  g.setTalents(p, alloc);
+  assert.ok(p.talents.sw_du_crown, `the Crown is learned (${JSON.stringify(p.talents)})`);
+  assert.ok(p.tal.rules.length >= 2, 'its rules are in the totals');
+  p.cds[1] = g.time + 10; p.cds[2] = g.time + 10;
+  const w = g.addMob('wolf', 0, 82); w.hp = 1;
+  g.damageMob(w, p, 50, {});
+  assert.ok(w.dead, 'killed');
+  assert.ok(p.cds[1] <= g.time + 7.01, `Crown: Untouchable takes 3 s off on a kill (${(p.cds[1] - g.time).toFixed(2)} left)`);
+  g.mobs.delete(w.id);
+  // no chains: a burst from a rule does not set off hit rules again
+  p.tal.rules.push({ on: 'hit', do: 'burst', mult: 0.1, r: 3, id: 'test' });
+  const z = g.addMob('wolf', 0, 82); z.hp = z.maxHp = 1e5; const e0 = g.events.length;
+  g.damageMob(z, p, 10, {});
+  assert.equal(g.events.slice(e0).filter(e => e.t === 'fxr' && e.k === 'burst').length, 1, 'one burst, no chain');
+  g.mobs.delete(z.id); g.removePlayer(p);
+  ok('the engine: an awakening marks on hit, the Crown cuts cooldowns on a kill, a rule never chains');
 }
 
 console.log(`path: all ${n} checks passed`);

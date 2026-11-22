@@ -1191,7 +1191,7 @@ function labelBar() {
 // Slot 5: the signature skill of your specialisation (public/academy.js sig(); nothing before one).
 function sigButton() {
   const g = academy.sig();
-  return g ? `<button class="sk s4 sig" data-slot="4" title="${esc(g.name)}: ${esc(g.desc)}"><span class="key">${isTouch ? '' : esc(keyLabel('skill4'))}</span>${esc(g.name)}<span class="cd"></span><span class="cdt"></span></button>` : '';
+  return g ? `<button class="sk s4 sig" data-slot="4" title="${esc(g.name)}: ${esc(g.desc)}"><span class="key">${isTouch ? '' : esc(keyLabel('skill4'))}</span>${mastery.sigPip()}${esc(g.name)}<span class="cd"></span><span class="cdt"></span></button>` : '';
 }
 function buildSkillBar(lvl = state.lvl) {
   const skills = CLASSES[state.cls].skills;

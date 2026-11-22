@@ -3,6 +3,7 @@
 // (public/academy.js, the creation screen) and the tests. The yard and its enemies: shared/academyyard.js.
 import { CLASSES, MAX_LEVEL } from './data.js';
 import { cleanSubs } from './subclasses.js'; // specialisation at level 15 (docs/briefs/subclasses.md)
+import { newTalents } from './talents.js';
 export { ACADEMY, YARD, PENS, nearAcademy, penAt, inYard } from './academyyard.js';
 
 // ---------- weapons ----------
@@ -177,9 +178,19 @@ export function cleanPath(raw) {
   p.armed = raw.armed ? 1 : 0; p.enrolled = raw.enrolled ? 1 : 0;
   if (raw.gear && typeof raw.gear === 'object' && !Array.isArray(raw.gear)) for (const [w, u] of Object.entries(raw.gear)) if (isWeapon(w) && Number.isInteger(u)) p.gear[w] = u;
   const subs = cleanSubs(raw.subs); if (Object.keys(subs).length) p.subs = subs; // (absent until a first specialisation)
+  if (p.stage === 'initiate') { const plan = cleanPlan(raw.plan, p.weapon); if (Object.keys(plan).length) p.plan = plan; } // (spent at graduation)
   return p;
 }
 
+// An Initiate's talent plans (docs/briefs/path.md): { cls: alloc } for the classes their weapon leads to. Graduating
+// spends the plan for that class (server/academy.js graduate); the level check comes then.
+export function cleanPlan(raw, weapon) {
+  const out = {};
+  if (raw && typeof raw === 'object' && !Array.isArray(raw) && isWeapon(weapon)) {
+    for (const cls of WEAPONS[weapon].leads) if (Object.hasOwn(raw, cls)) { const a = newTalents(raw[cls], cls, MAX_LEVEL); if (Object.keys(a).length) out[cls] = a; }
+  }
+  return out;
+}
 // Why `cls`'s trial is shut for this character (null: open). path null counts as graduated.
 export function trialBlock(path, cls, lvl) {
   if (!isTrial(cls) || !isClass(cls)) return 'No such trial.';

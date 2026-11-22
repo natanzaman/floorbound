@@ -9,12 +9,13 @@
 // Also: the unspent-points badge on the Path button, the one-time "talent point" tip, talent proc visuals, and the
 // client-side bits of talent effects (move speed, skill cooldown display).
 import { CLASSES, MAX_LEVEL, statsFor } from '/shared/data.js';
-import { MASTERY, BRANCHES, masteryLevel, masteryProgress, activeBranch, skillName, skillDesc, masteryCd } from '/shared/mastery.js';
+import { MASTERY, BRANCHES, AWAKEN, masteryLevel, masteryProgress, activeBranch, skillName, skillDesc, masteryCd } from '/shared/mastery.js';
 import {
   TALENTS, TREES, MILESTONES, pointsAt, levelForPoint, nodeDef, nodesOf, spentOf, branchSpent, spentAbove, spendBlock, refundBlock,
-  talentTotals, nodeLines, effectText, nodesForSkill, STAT_TEXT, BUILD_TAGS, TAG_TEXT, buildShape, buildTag, buildName, suggestOrder, planAlloc,
+  talentTotals, nodeLines, effectText, nodesForSkill, STAT_TEXT, gateOf, BUILD_TAGS, TAG_TEXT, buildShape, buildTag, buildName, suggestOrder, planAlloc,
 } from '/shared/talents.js';
 import { SUBCLASSES, SPEC, subName } from '/shared/subclasses.js';
+import { ruleText } from '/shared/effects.js';
 import { WEAPONS } from '/shared/academy.js';
 import { STYLES, CLASS_STYLES } from '/shared/styles.js';
 import { VIEW, shapeOf, shortName, NODE_R, KEY_R } from '/treeshapes.js';
@@ -268,8 +269,9 @@ export function initTalents(ctx) {
   $('bag').parentNode.append(panel);
 
   let sugOn = true; try { sugOn = localStorage.getItem('fb_tsug') !== '0'; } catch {}
-  const S = { r: {}, pts: 0, m: null, tab: 'path', sel: null, hover: null, flash: null, flashT: 0, confirmT: 0, near: false, key: '', plan: [], sug: sugOn, ab: 1 };
-  const cls = () => state.cls;
+  const S = { r: {}, pr: {}, pc: null, pm: false, pts: 0, m: null, tab: 'path', sel: null, hover: null, flash: null, flashT: 0, confirmT: 0, near: false, key: '', plan: [], sug: sugOn, ab: 1 };
+  let viewCls = null; // an Initiate's plan view: the class being planned (asPlan)
+  const cls = () => viewCls || state.cls;
   const spec = () => state.academy?.spec || null;
   // Your subclass (the Academy's Specialise, docs/briefs/subclasses.md): its nodes show in its branch; another's never do.
   const sub = () => spec()?.sub || null;
@@ -283,6 +285,17 @@ export function initTalents(ctx) {
   const ini = () => !!state.academy?.ini;
   const subBranch = () => SUBCLASSES[sub()]?.branch || null;
   const title = () => (ini() ? 'Initiate' : subName(sub()) || CLASSES[cls()]?.name || '');
+  // An Initiate plans the first talents of a class their weapon leads to (server/academy.js talentPlan). While planning,
+  // the Talents tab draws that class's tree with the saved plan as its ranks: asPlan swaps the view in for one call.
+  const leads = () => WEAPONS[state.academy?.path?.weapon]?.leads || [];
+  const planMode = () => S.locked && ini() && !state.academy?.loan && leads().length > 0;
+  const planCls = () => (leads().includes(S.pc) ? S.pc : leads()[0]);
+  function asPlan(fn) {
+    if (!planMode() || S.pm) return fn();
+    const r = S.r, lk = S.locked;
+    viewCls = planCls(); S.r = S.pr[viewCls] || {}; S.locked = false; S.pm = true;
+    try { return fn(); } finally { viewCls = null; S.r = r; S.locked = lk; S.pm = false; }
+  }
 
   // ---------- client-side effects ----------
   const speedMult = () => 1 + (totals().stat.speed || 0) / 100; // the server allows the extra speed
@@ -299,9 +312,10 @@ export function initTalents(ctx) {
     if (msg.type === 'mastery') { S.m = msg.m; if (isOpen() && S.tab !== 'talents') render(); return false; } // mastery.js handles it too
     if (msg.type !== 'talents') return false;
     S.r = msg.r || {}; S.pts = msg.pts | 0; S.locked = !!msg.locked; // locked: an Initiate (the tree opens at graduation, points bank up) or a class trial
+    S.pr = msg.plan || {}; // an Initiate's saved plans
     clearTimeout(S.waitT);
     if (S.sent) { S.plan = []; S.sent = false; } // the confirmed plan came back as the tree
-    else S.plan = keepValid(S.plan);
+    else S.plan = asPlan(() => keepValid(S.plan));
     badge();
     if (free() > 0 && !S.locked) firstTip();
     if (isOpen()) render();
@@ -346,6 +360,13 @@ export function initTalents(ctx) {
       else sfx.play('ui');
       const p = players.get(me);
       if (p && e.k) fx.beam(p.model.group.position.x, p.model.group.position.z, 0xe9b949, 1.4);
+      return true;
+    }
+    if (e.t === 'fxr') { // a rule fired (an awakening or a rule talent, server/effects.js): a small mark where it happened
+      const COL = { burn: 0xf97316, slow: 0x60a5fa, stun: 0xfde047, posture: 0xe5e7eb, mark: 0xf43f5e, burst: 0xf59e0b, pull: 0xa78bfa, shield: 0xfbbf24, heal: 0x4ade80, team: 0xfbbf24, cdcut: 0x22d3ee, dr: 0x94a3b8, rage: 0xdc2626 };
+      const col = COL[e.k] || 0xffffff, mine = e.id === me;
+      if (e.r) fx.ring(e.x, e.z, e.r, col, 0.45); else fx.sparks(e.x, 1.2, e.z, mine ? 8 : 4, col, 0.2, 4);
+      if (mine && e.k === 'cdcut') { const p = players.get(me); if (p) floatNum(p.model.group.position, 2.9, 'Cooldowns', 'talent'); }
       return true;
     }
     if (e.t === 'tproc') {
@@ -403,7 +424,7 @@ export function initTalents(ctx) {
         <nav class="tabs" role="tablist">${[['path', 'Path'], ['abilities', 'Abilities'], ['talents', 'Talents']].map(([k, t]) => `<button role="tab" aria-selected="${S.tab === k}" class="${S.tab === k ? 'on' : ''}" data-tab="${k}">${t}${dots[k] ? '<i></i>' : ''}</button>`).join('')}</nav>
         <span class="pts ${(n && !S.locked) || S.plan.length ? 'has' : ''}">${pill}</span>
         <button class="x" data-a="close" title="Close (Esc)">✕</button>
-      </div><div class="body"><div class="pane">${S.tab === 'path' ? pathTab() : S.tab === 'abilities' ? abilities() : talents()}</div><div class="tt" hidden></div></div>`;
+      </div><div class="body"><div class="pane">${S.tab === 'path' ? pathTab() : S.tab === 'abilities' ? abilities() : asPlan(talents)}</div><div class="tt" hidden></div></div>`;
   }
 
   // ===================================================== Path tab =====================================================
@@ -478,7 +499,7 @@ export function initTalents(ctx) {
   }
   function buildCard() {
     const a = eff(), tag = buildTag(cls(), a), shape = buildShape(cls(), a);
-    if (S.locked) return `<p class="note">Your build takes shape when your talent tree opens at graduation. Your points are banked until then.</p>`;
+    if (S.locked) return `<p class="note">Your build takes shape when your talent tree opens at graduation. Your points are banked until then${planMode() ? ': plan them on the Talents tab' : ''}.</p>`;
     return `<div class="build">${radar(shape)}<div><div class="bname">${esc(buildName(tag, title()))}</div>
       <p class="note" style="margin:6px 0 0">${tag ? esc(TAG_TEXT[tag].line) : 'Spend 3 talent points and your build gets a name.'}</p>
       ${S.plan.length ? '<p class="note" style="color:var(--ember);opacity:1">Includes your planned points.</p>' : ''}</div></div>`;
@@ -486,14 +507,17 @@ export function initTalents(ctx) {
   function skillRows() { // [slot, def, mastery entry or null]; slot 4: the signature skill
     const c = CLASSES[cls()], rows = c.skills.map((s, i) => [i, s, i ? (S.m?.[s.id] || { pts: 0, br: null }) : null]);
     const sg = spec()?.sig;
-    if (sg && !ini()) rows.push([4, { id: sg.id, name: sg.name, desc: sg.desc, cd: sg.cd, lvl: SPEC.lvl, sig: true }, S.m?.sig || null]);
+    if (sg && !ini()) { // a subclass's own signature skill earns mastery and evolves (shared/subclasses.js SIG_EVOS); a borrowed one doesn't
+      const own = SUBCLASSES[sub()]?.skill.id === sg.id ? SUBCLASSES[sub()].skill : null;
+      rows.push([4, own ? { ...own, sig: true } : { id: sg.id, name: sg.name, desc: sg.desc, cd: sg.cd, lvl: SPEC.lvl, sig: true }, own ? S.m?.[own.id] || { pts: 0, br: null } : null]);
+    }
     return rows;
   }
   const stageOf = (slot, s, e) => (!slot || !e ? 'Base' : masteryLevel(e.pts) >= MASTERY.max ? 'Awakened' : activeBranch(e) ? 'Evolved' : 'Base');
   function skillCards() {
     return skillRows().map(([slot, s, e]) => {
       const locked = state.lvl < s.lvl, l = e ? masteryLevel(e.pts) : 0, stg = stageOf(slot, s, e);
-      const nm = e && !s.sig ? skillName(s, e) : s.name;
+      const nm = e ? skillName(s, e) : s.name;
       return `<button class="skc ${locked ? 'locked' : ''}" data-go="ab${slot}"><span class="k">${slot === 0 ? (isTouch ? 'Atk' : '⚔') : slot === 4 ? 'G' : slot}</span><b>${esc(short(nm, 18))}</b>
         <small>${locked ? `Unlocks at level ${s.lvl}` : slot === 0 ? 'Basic attack' : e ? `Mastery ${l} <span class="stage ${stg}">${stg}</span>` : 'Signature skill'}</small>
         ${e ? `<div class="pips">${[1, 2, 3, 4, 5].map(k => `<i class="${l >= k ? (k === MASTERY.evolveAt ? 'pe' : 'on') : ''}"></i>`).join('')}</div>` : ''}</button>`;
@@ -507,7 +531,7 @@ export function initTalents(ctx) {
     const why = spendBlock(cls(), a, state.lvl, nd.id, sub());
     if (!why || /No talent points/.test(why)) return `${r ? 'part ' : ''}${why || S.locked ? 'open' : 'avail'}${p ? ' planned' : ''}`;
     if (r) return `part${p ? ' planned' : ''}`;
-    const gated = spentAbove(a, cls(), nd.tier) < TALENTS.tiers[nd.tier] || (nd.req?.length && !nd.req.some(q => a[q] > 0));
+    const gated = (nd.lvl && state.lvl < nd.lvl) || spentAbove(a, cls(), nd.tier) < gateOf(nd) || (nd.req?.length && !nd.req.some(q => a[q] > 0));
     return gated ? 'locked' : 'open';
   }
   // The next ranks the suggested path asks for, as { id: order (1..3) }.
@@ -578,14 +602,22 @@ export function initTalents(ctx) {
     for (const nd of nodesOf(cls())) if (S.r[nd.id] && nd.fx.some(e => e.key)) lines.push(`<li class="k"><b>${esc(nd.name)}</b>: ${esc(nd.desc)}</li>`);
     const tiers = TALENTS.tiers.map((need, k) => `<span class="${spentAbove(a, cls(), k) >= need ? 'on' : ''}" title="Tier ${k + 1}: ${need} points in the tiers above">${k === TALENTS.tiers.length - 1 ? '◆' : `T${k + 1}`}</span>`).join('');
     let top;
+    const picker = S.pm ? `<div class="pbox"><div class="plbl">Plan for a class</div><div class="row2">${leads().map(c => `<button class="btn ${c === cls() ? 'gold' : 'ghost'}" data-pc="${c}">${esc(CLASSES[c].name)}</button>`).join('')}</div>
+      <div class="note" style="margin-top:6px">Your tree opens when you graduate. Plan it now: the plan for the class you graduate as is spent then.</div></div>` : '';
     if (S.locked) top = `<div class="pbox"><b>${free()} point${free() === 1 ? '' : 's'} banked</b><div class="note">Your talent tree opens when you graduate at the Academy. Look around: this is what your class can grow into.</div></div>`;
     else if (S.plan.length) {
       const counts = {}; for (const id of S.plan) counts[id] = (counts[id] | 0) + 1;
       top = `<div class="pbox"><div class="plbl" style="color:var(--ember);opacity:1">Your plan</div><ol>${Object.entries(counts).map(([id, k]) => `<li>${esc(nodeDef(id)?.name)}${k > 1 ? ` ×${k}` : ''}</li>`).join('')}</ol>
-        <div class="row2"><button class="btn gold" data-a="confirm">Confirm ${S.plan.length}</button><button class="btn ghost" data-a="undo">Undo</button></div>
+        <div class="row2"><button class="btn gold" data-a="confirm">${S.pm ? 'Save to plan' : `Confirm ${S.plan.length}`}</button><button class="btn ghost" data-a="undo">Undo</button></div>
         <div class="note" style="margin-top:6px">${left()} point${left() === 1 ? '' : 's'} left. ${isTouch ? 'Tap' : 'Right-click'} a planned node to take a rank back.</div></div>`;
-    } else top = `<div><div class="big ${free() ? '' : 'zero'}">${free()}</div><div class="note">point${free() === 1 ? '' : 's'} to spend. ${spent} of ${S.pts} spent.${free() ? ` ${isTouch ? 'Tap' : 'Click'} nodes to plan, then confirm.` : state.lvl < MAX_LEVEL ? ` The next comes at level ${state.lvl + 1}.` : ''}</div></div>`;
+    } else if (S.pm) top = `<div><div class="big ${free() ? '' : 'zero'}">${free()}</div><div class="note">banked point${free() === 1 ? '' : 's'} left to plan.${spent ? ` ${spent} planned for the ${esc(CLASSES[cls()].name)}.` : ''}</div></div>`;
+    else top = `<div><div class="big ${free() ? '' : 'zero'}">${free()}</div><div class="note">point${free() === 1 ? '' : 's'} to spend. ${spent} of ${S.pts} spent.${free() ? ` ${isTouch ? 'Tap' : 'Click'} nodes to plan, then confirm.` : state.lvl < MAX_LEVEL ? ` The next comes at level ${state.lvl + 1}.` : ''}</div></div>`;
     const sel = S.sel || S.hover;
+    if (S.pm) return `<aside class="side">${picker}${top}
+      ${sel ? nodeCard(sel, a) : '<div class="note">Point at a node to read it. A short line first, then the numbers.</div>'}
+      <div><div class="plbl">Tiers open</div><div class="tiers">${tiers}</div></div>
+      <button class="btn ${confirm ? 'warn' : ''}" data-a="clearplan" ${spent ? '' : 'disabled'}>${confirm ? 'Click again to clear this plan' : 'Clear this plan'}</button>
+    </aside>`;
     return `<aside class="side">${top}
       ${sel ? nodeCard(sel, a) : '<div class="note">Point at a node to read it. A short line first, then the numbers.</div>'}
       <div><div class="plbl">Tiers open</div><div class="tiers">${tiers}</div></div>
@@ -599,7 +631,8 @@ export function initTalents(ctx) {
   // ----- tooltip (short; the side card has the details) -----
   const tip = () => panel.querySelector('.tt');
   function hideTip() { const t = tip(); if (t) t.hidden = true; if (S.hover) { S.hover = null; refreshSide(); } }
-  function showTip(id, ev) {
+  function showTip(id, ev) { return asPlan(() => showTip0(id, ev)); }
+  function showTip0(id, ev) {
     const nd = nodeDef(id), t = tip(); if (!nd || !t) return;
     const a = eff(), b = tree().branches.find(x => x.id === nd.branch), r = a[id] | 0, p = r - (S.r[id] | 0);
     const why = r >= nd.max ? null : spendBlock(cls(), a, state.lvl, id, sub());
@@ -612,7 +645,8 @@ export function initTalents(ctx) {
     t.hidden = false; S.hover = id;
     place(ev); refreshSide();
   }
-  function refreshSide() { // only the node card changes on hover
+  function refreshSide() { return asPlan(refreshSide0); }
+  function refreshSide0() { // only the node card changes on hover
     if (S.tab !== 'talents' || S.sel) return;
     const el = panel.querySelector('.side'); if (!el) return;
     const a = eff(), card = el.querySelector('.ncard, .side > .note');
@@ -635,9 +669,9 @@ export function initTalents(ctx) {
     const rows = skillRows(), col = hex(CLASSES[cls()].color);
     if (!rows.some(r => r[0] === S.ab)) S.ab = 1;
     const list = rows.map(([slot, s, e]) => {
-      const locked = state.lvl < s.lvl, stg = stageOf(slot, s, e), nm = e && !s.sig ? skillName(s, e) : s.name;
-      const ready = e && !e.br && masteryLevel(e.pts) >= MASTERY.evolveAt && !s.sig && !locked;
-      return `<button class="ai ${S.ab === slot ? 'on' : ''} ${locked ? 'locked' : ''}" data-ab="${slot}"><span class="k">${slot === 0 ? (isTouch ? 'Atk' : '⚔') : slot === 4 ? 'G' : slot}</span><span><b>${esc(nm)}</b><small>${locked ? `Level ${s.lvl}` : slot === 0 ? 'Basic attack' : slot === 4 ? 'Signature skill' : `Mastery ${masteryLevel(e.pts)} · ${stg}`}${ready ? ' · <span style="color:var(--ember)">can evolve</span>' : ''}</small></span></button>`;
+      const locked = state.lvl < s.lvl, stg = stageOf(slot, s, e), nm = e ? skillName(s, e) : s.name;
+      const ready = e && !e.br && masteryLevel(e.pts) >= MASTERY.evolveAt && !locked;
+      return `<button class="ai ${S.ab === slot ? 'on' : ''} ${locked ? 'locked' : ''}" data-ab="${slot}"><span class="k">${slot === 0 ? (isTouch ? 'Atk' : '⚔') : slot === 4 ? 'G' : slot}</span><span><b>${esc(nm)}</b><small>${locked ? `Level ${s.lvl}` : slot === 0 ? 'Basic attack' : !e ? 'Signature skill' : `${slot === 4 ? 'Signature · ' : ''}Mastery ${masteryLevel(e.pts)} · ${stg}`}${ready ? ' · <span style="color:var(--ember)">can evolve</span>' : ''}</small></span></button>`;
     }).join('');
     const row = rows.find(r => r[0] === S.ab);
     return `<div class="agrid"><div class="alist">${list}<p class="note" style="margin-top:6px">Every ability grows three ways: mastery from using it well, an evolution at Mastery ${MASTERY.evolveAt}, and talents.</p></div>
@@ -646,8 +680,8 @@ export function initTalents(ctx) {
   function detail([slot, s, e], col) {
     const T = totals(), haste = (state.inv?.stats?.haste || 0) / 100, locked = state.lvl < s.lvl;
     const key = slot === 0 ? 'basic' : slot === 4 ? 'sig' : s.id;
-    const nm = e && !s.sig ? skillName(s, e) : s.name, desc = e && !s.sig ? skillDesc(s, e) : s.desc;
-    const baseCd = e && !s.sig ? masteryCd(s, e) : s.cd, m = T.sk[key];
+    const nm = e ? skillName(s, e) : s.name, desc = e ? skillDesc(s, e) : s.desc;
+    const baseCd = e ? masteryCd(s, e) : s.cd, m = T.sk[key];
     const cdNow = baseCd * (m?.cd ? Math.max(0.4, 1 + m.cd / 100) : 1) * (slot ? 1 - haste : 1);
     const one = desc.split(/(?<=[.:])\s/)[0];
     let h = `<div class="ahead"><div><div class="plbl">${slot === 0 ? 'Basic attack' : slot === 4 ? `Signature skill · ${esc(subName(sub()) || 'Specialised')}` : `Skill ${slot}`}</div>
@@ -668,7 +702,8 @@ export function initTalents(ctx) {
     } else if (slot === 0) {
       const ids = CLASS_STYLES[cls()] || [];
       if (ids.length) h += `<div class="sub">Weapon styles</div><div class="note">Your basic attack follows the weapon you hold. Each style changes its rhythm.</div><div class="wst">${ids.map(id => `<div class="sc"><b>${esc(STYLES[id].name)}${STYLES[id].def ? ' <span class="stage">starter</span>' : ''}</b><small>${esc(STYLES[id].desc)}</small>${STYLES[id].passive ? `<small style="color:#fde68a">${esc(STYLES[id].passive)}</small>` : ''}</div>`).join('')}</div>`;
-    } else if (slot === 4) h += sigDetail(s, e);
+    }
+    if (slot === 4) h += sigDetail(s, e);
     const nodes = nodesForSkill(cls(), key).filter(shown);
     h += `<div class="sub">Talents that change it</div><div class="chips">${nodes.length ? nodes.map(nd => {
       const b = tree().branches.find(x => x.id === nd.branch), r = S.r[nd.id] | 0;
@@ -677,8 +712,11 @@ export function initTalents(ctx) {
     return h;
   }
   // Hooks for later phases (signature mastery, awakenings) live here so the tab draws the same either way.
-  const awakenText = () => `At Mastery ${MASTERY.max} your evolved form gains one more rule.`;
-  const sigDetail = () => `<p class="note" style="margin-top:10px">Your signature skill sits on ${keyName('skill4')}. It comes from your specialisation at the Academy.</p>`;
+  const awakenText = (s, e, br) => { // the active form's awakening (shared/mastery.js AWAKEN), else both
+    const A = AWAKEN[s.id]; if (!A) return `At Mastery ${MASTERY.max} your evolved form gains one more rule.`;
+    return br ? ruleText(A[br]) : `Each form gains one more rule at Mastery ${MASTERY.max}.`;
+  };
+  const sigDetail = (s, e) => `<p class="note" style="margin-top:10px">Your signature skill sits on ${keyName('skill4')}. It comes from your specialisation at the Academy${e ? ' and earns mastery like your other skills' : ''}.</p>`;
   function evoCard(s, e, k, l) {
     const b = BRANCHES[s.id][k], cur = l >= MASTERY.evolveAt ? e.br : null, on = cur === k;
     let st, can = false;
@@ -687,7 +725,7 @@ export function initTalents(ctx) {
     else if (!e.br) { st = 'Choose this evolution'; can = true; }
     else if (S.near) { st = 'Switch to this (free here)'; can = true; }
     else st = 'Switch at a Skill Shrine';
-    return `<button class="evo ${on ? 'on' : ''} ${can ? 'can' : ''} ${l < MASTERY.evolveAt ? 'dim' : ''}" ${can ? `data-sk="${s.id}" data-br="${k}"` : 'disabled'}><b>${k}: ${esc(b.name)}${b.coop ? ' <span style="font:600 10px system-ui;color:#67e8f9">co-op</span>' : ''}</b><small>${esc(b.desc)}</small><span class="st2">${st}</span></button>`;
+    return `<button class="evo ${on ? 'on' : ''} ${can ? 'can' : ''} ${l < MASTERY.evolveAt ? 'dim' : ''}" ${can ? `data-sk="${s.id}" data-br="${k}"` : 'disabled'}><b>${k}: ${esc(b.name)}${b.coop ? ' <span style="font:600 10px system-ui;color:#67e8f9">co-op</span>' : ''}</b><small>${esc(b.desc)}</small>${AWAKEN[s.id]?.[k] ? `<small style="color:#c4b5fd">M${MASTERY.max}: ${esc(ruleText(AWAKEN[s.id][k]))}</small>` : ''}<span class="st2">${st}</span></button>`;
   }
 
   // ---------- input ----------
@@ -702,6 +740,12 @@ export function initTalents(ctx) {
       return;
     }
     if (a === 'confirm') return confirmPlan();
+    if (a === 'clearplan') {
+      if (performance.now() - S.confirmT < 4000) { S.confirmT = 0; S.plan = []; send({ type: 'talent', op: 'plan', cls: planCls(), clear: 1 }); }
+      else { S.confirmT = performance.now(); render(); }
+      return;
+    }
+    const pc = t.closest('[data-pc]')?.dataset.pc; if (pc) { if (pc !== planCls()) { S.pc = pc; S.plan = []; S.sel = null; sfx.play('ui'); render(); } return; }
     if (a === 'undo') { S.plan = []; sfx.play('ui'); render(); return; }
     if (a === 'sug') { ev.preventDefault(); S.sug = !S.sug; try { localStorage.setItem('fb_tsug', S.sug ? '1' : '0'); } catch {} render(); return; }
     const nd = t.closest('.tn'); if (nd) { S.sel = nd.dataset.id; plan(nd.dataset.id); return; }
@@ -711,14 +755,16 @@ export function initTalents(ctx) {
     const gt = t.closest('[data-goto]'); if (gt) { S.tab = 'talents'; S.sel = gt.dataset.goto; render(); return; }
     const evo = t.closest('.evo.can'); if (evo) { send({ type: 'evolve', sk: evo.dataset.sk, br: evo.dataset.br }); sfx.play('ui'); }
   });
-  function plan(id) {
+  function plan(id) { return asPlan(() => plan0(id)); }
+  function plan0(id) {
     if (S.locked) { sfx.play('ui'); render(); return flash('Your talent tree opens when you graduate at the Academy. Your points are banked.'); }
     const res = planAlloc(cls(), S.r, state.lvl, [...S.plan, id], sub());
     if (res.error) { sfx.play('ui'); render(); return flash(res.error.replace(/^[^:]+: /, '')); } // say why (tier gate, missing line, no points, max rank)
     S.plan.push(id); S.flash = id; S.flashT = performance.now(); sfx.play('ui');
     render();
   }
-  function unplan(id) {
+  function unplan(id) { return asPlan(() => unplan0(id)); }
+  function unplan0(id) {
     const i = S.plan.lastIndexOf(id); if (i < 0) return false;
     S.plan.splice(i, 1); S.plan = keepValid(S.plan); sfx.play('ui'); render();
     return true;
@@ -726,7 +772,8 @@ export function initTalents(ctx) {
   function confirmPlan() {
     if (!S.plan.length) return;
     if (state.ws?.readyState !== 1) return flash('Not connected to the server.');
-    send({ type: 'talent', op: 'spendMany', ids: S.plan }); // (send returns nothing useful once connected)
+    if (planMode()) send({ type: 'talent', op: 'plan', cls: planCls(), ids: S.plan }); // an Initiate's plan: saved, spent at graduation
+    else send({ type: 'talent', op: 'spendMany', ids: S.plan }); // (send returns nothing useful once connected)
     S.sent = true;
     clearTimeout(S.waitT);
     S.waitT = setTimeout(() => { S.sent = false; flash('No answer from the server. If this keeps happening, reload the page.'); }, 2500);

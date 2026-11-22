@@ -11,7 +11,8 @@
 // (a hidden pick's borrowed tier), skillPow (a borrowed skill's power), rosterPath, pathMsg, meFor, academyOp, schedule.
 import { CLASSES, wrapAngle, paced } from '../shared/data.js';
 import { newTalents, talentTotals, TREES } from '../shared/talents.js';
-import { SPEC, SUBCLASSES, BOT_SUB, isSub, subsOf, subOf, specFee, specBlock, NOT_A_SUB } from '../shared/subclasses.js';
+import { SPEC, SUBCLASSES, BOT_SUB, isSub, subsOf, subOf, specFee, specBlock, NOT_A_SUB, SIG_EVOS, sigNums } from '../shared/subclasses.js';
+import { MASTERY, masteryLevel, activeBranch, masteryPow } from '../shared/mastery.js';
 import { WANDER as HIDDEN, canFind, borrowFrom, borrowable, borrowedTotals, wanderBlock, keepWander } from './wander.js'; // the unlisted pick (server only)
 import { isInitiate } from '../shared/academy.js';
 import { nearAcademy, nearLectern } from '../shared/academyyard.js';
@@ -21,8 +22,9 @@ const r2 = v => Math.round(v * 100) / 100;
 const SLOT = SPEC.slot;
 
 // ---------- the 14 signature skills ----------
-// this = the game, p = the user, c = { n: the skill's numbers, atk(): attack power now, alive() }. Return false when
-// nothing happened (no cooldown). Hits carry no mastery skill (signature skills have no mastery); talent effects on
+// this = the game, p = the user, c = { n: the skill's numbers (its form's, once evolved), atk(): attack power now (x1.1
+// at Mastery 4), pow (the same factor, for healing), alive() }. Return false when nothing happened (no cooldown).
+// Mastery: hits made while it runs are credited to it (p._tsk 'sig', mSk in server/mastery.js); talent effects on
 // 'sig' reach them through p._tsk (server/talents.js).
 const SIGS = {
   flashstep(p, c) { // Duelist: blink to the target (i-frames), cutting through what is in the way, then three quick cuts
@@ -47,7 +49,7 @@ const SIGS = {
     this.sigFx(p, 'arc', { r: N.r, c: 'gold', fin: 1 });
     this.hitArc(p, N.r, N.half, c.atk() * N.mult, { heavy: true, frac: N.frac, knock: 1 });
     this.sigFx(p, 'ring', { r: N.allyR, c: 'gold' });
-    for (const o of this.sigAllies(p)) if (!o.dead && dist(o, p) <= N.allyR) { this.teamBuff(o, N.dmg, N.d); this.events.push({ t: 'buff', id: o.id, k: 'bless', d: N.d }); }
+    for (const o of this.sigAllies(p)) if (!o.dead && dist(o, p) <= N.allyR) { this.teamBuff(o, N.dmg, N.d, { by: p.id, sk: c.id }); this.events.push({ t: 'buff', id: o.id, k: 'bless', d: N.d }); }
   },
   aegisline(p, c) { // Bulwark Knight: damage reduction for you and the line
     const N = c.n, t = this.time;
@@ -57,7 +59,7 @@ const SIGS = {
       if (o.dead || dist(o, p) > N.r) continue;
       const v = o === p ? N.self : N.ally;
       if (t < (o.dr?.until || 0) && o.dr.v >= v) continue; // a stronger one already holds
-      o.dr = { until: t + N.d, v, by: p.id };
+      o.dr = { until: t + N.d, v, by: p.id, sk: c.id }; // (sk: damage it prevents earns mastery)
       this.events.push({ t: 'buff', id: o.id, k: o === p ? 'wall' : 'dr', d: N.d });
     }
   },
@@ -66,9 +68,10 @@ const SIGS = {
     this.sigFx(p, 'ring', { r: N.r, c: 'gold' });
     for (const m of this.mobs.values()) if (this.targetable(m) && dist(m, p) <= N.r + m.def.radius) this.tauntMob(m, p, 'taunt');
     this.hitCircle(p, p.x, p.z, N.r, c.atk() * N.mult, { stun: N.stun, frac: N.frac, threat: 2, heavy: true });
+    if (N.selfDr && !(this.time < (p.dr?.until || 0) && p.dr.v >= N.selfDr)) { p.dr = { until: this.time + N.d, v: N.selfDr, by: p.id, sk: c.id }; this.events.push({ t: 'buff', id: p.id, k: 'wall', d: N.d }); } // Iron Roar
   },
   dawnburst(p, c) { // Lightbringer: a big party heal
-    const N = c.n, k = 1 + (p.tal?.stat?.heal || 0) / 100;
+    const N = c.n, k = (1 + (p.tal?.stat?.heal || 0) / 100) * c.pow;
     this.sigFx(p, 'ring', { r: N.r, c: 'light' });
     for (const o of this.sigAllies(p)) {
       if (o.dead || dist(o, p) > N.r || this.unhealable?.(o)) continue;
@@ -145,7 +148,7 @@ const SIGS = {
     this.sigFx(p, 'ring', { r: N.allyR, c: 'gold' });
     for (const o of this.sigAllies(p)) {
       if (o.dead || dist(o, p) > N.allyR || (t < (o.dr?.until || 0) && o.dr.v >= N.dr)) continue;
-      o.dr = { until: t + N.d, v: N.dr, by: p.id };
+      o.dr = { until: t + N.d, v: N.dr, by: p.id, sk: c.id };
       this.events.push({ t: 'buff', id: o.id, k: 'dr', d: N.d });
     }
   },
@@ -155,7 +158,7 @@ const SIGS = {
     for (const o of this.sigAllies(p)) {
       if (o.dead || dist(o, p) > N.r) continue;
       for (let i = 1; i < 4; i++) if (o.cds[i] > t) o.cds[i] = Math.max(t, o.cds[i] - N.cut); // (never the signature slot)
-      this.teamBuff(o, N.dmg, N.d);
+      this.teamBuff(o, N.dmg, N.d, { by: p.id, sk: c.id });
       this.events.push({ t: 'buff', id: o.id, k: 'bless', d: N.d });
     }
   },
@@ -164,7 +167,7 @@ const SIGS = {
     this.sigFx(p, 'ring', { r: N.r });
     for (const m of [...this.mobs.values()]) {
       if (!this.targetable(m) || dist(m, p) > N.r + m.def.radius) continue;
-      this.damageMob(m, p, c.atk() * N.mult, { interrupt: m.windupAt > 0, frac: N.frac });
+      this.damageMob(m, p, c.atk() * N.mult, { interrupt: m.windupAt > 0, frac: N.frac, stun: N.stun || 0 }); // (Lullaby holds)
       if (!m.dead) this.slowMob(m, N.slow, N.slowFor);
     }
   },
@@ -204,6 +207,12 @@ export const SubclassMethods = {
     const b = p.path.wb[p.cls], sk = CLASSES[b.c]?.skills.find(x => x.id === b.sk);
     return sk ? { id: sk.id, key: sk.id, name: sk.name, cd: sk.cd, desc: sk.desc, lvl: SPEC.lvl, borrow: b.c } : null;
   },
+  // The signature skill's cooldown after mastery (-10% at Mastery 2) and its form, before haste and talents.
+  sigCd(p, sk = this.sigDef(p)) {
+    if (!sk) return 0;
+    const e = sk.borrow ? null : p.mastery?.[sk.id], br = activeBranch(e);
+    return sk.cd * (e && masteryLevel(e.pts) >= 2 ? MASTERY.cd2 : 1) * (SIG_EVOS[sk.id]?.[br]?.cd || 1);
+  },
   // A skill slot's definition: 0-3 the class's, 4 the signature (or borrowed) skill.
   skillAt(p, slot) { return (slot | 0) === SLOT ? this.sigDef(p) : CLASSES[p?.cls]?.skills[slot | 0]; },
   sigFx(p, k, extra = {}) {
@@ -218,8 +227,9 @@ export const SubclassMethods = {
     if (sk.borrow) return this.useBorrowed(p, sk, face);
     const fn = SIGS[sk.id];
     if (!fn) return;
-    const mods = p.tal?.sk?.sig || {}, cd = sk.cd * (1 - (p.haste || 0)) * Math.max(0.4, 1 + (mods.cd || 0) / 100);
-    const c = { id: sk.id, n: sk.n, atk: () => p.atk * this.dmgMult(p), alive: () => !p.dead && !p.downed && !p.trap && this.players.has(p.id) };
+    const mods = p.tal?.sk?.sig || {}, cd = this.sigCd(p, sk) * (1 - (p.haste || 0)) * Math.max(0.4, 1 + (mods.cd || 0) / 100);
+    const e = p.mastery?.[sk.id], pow = masteryPow(e);
+    const c = { id: sk.id, n: sigNums(sk, activeBranch(e)), pow, atk: () => p.atk * this.dmgMult(p) * pow, alive: () => !p.dead && !p.downed && !p.trap && this.players.has(p.id) };
     const prev = this._sigId; this._sigId = sk.id;
     try { if (fn.call(this, p, c) === false) return; } finally { this._sigId = prev; }
     p.cds[SLOT] = this.time + cd;
@@ -275,7 +285,8 @@ export const SubclassMethods = {
   specMsg(p) {
     const P = p.path, sub = this.subOfP(p), sig = this.sigDef(p);
     const out = { lvl: SPEC.lvl, fee: specFee(p.lvl), sub: sub === HIDDEN.id ? '' : sub || '', opts: subsOf(p.cls) };
-    if (sig) out.sig = { id: sig.id, name: sig.name, desc: sig.borrow ? `${sig.desc} (Borrowed from the ${CLASSES[sig.borrow].name}: ${Math.round(HIDDEN.pow * 100)}% power.)` : sig.desc, cd: sig.cd, aim: sig.aim || 0, anim: sig.anim || sig.id };
+    const f = sig && !sig.borrow ? SIG_EVOS[sig.id]?.[activeBranch(p.mastery?.[sig.id])] : null; // (evolved: the form's name and text)
+    if (sig) out.sig = { id: sig.id, name: f ? f.name : sig.name, desc: sig.borrow ? `${sig.desc} (Borrowed from the ${CLASSES[sig.borrow].name}: ${Math.round(HIDDEN.pow * 100)}% power.)` : f ? f.desc : sig.desc, cd: Math.round(this.sigCd(p, sig) * 10) / 10, aim: sig.aim || 0, anim: sig.anim || sig.id, ...(f ? { base: sig.name, br: activeBranch(p.mastery[sig.id]) } : {}) };
     if (P?.found && !isInitiate(P)) { // (only once found: the client holds no text for it)
       const from = borrowFrom(P, p.cls).map(c => ({ cls: c, name: CLASSES[c].name, skills: borrowable(c).map(id => ({ id, name: CLASSES[c].skills.find(s => s.id === id).name })), branches: (TREES[c]?.branches || []).map(b => ({ id: b.id, name: b.name })) }));
       out.hid = { id: HIDDEN.id, name: HIDDEN.name, on: sub === HIDDEN.id ? P.wb[p.cls] : null, from,
@@ -370,6 +381,12 @@ export function installSubclasses(Game) {
       if (was < SPEC.lvl && p.lvl >= SPEC.lvl && !this.subOfP(p)) this.sysPriv(p, `Level ${SPEC.lvl}: you can specialise. Visit the Academy (Specialise) to pick a subclass and its signature skill.`);
     }
     return r;
+  });
+  // A signature skill's damage buff (Rallying Cut, Encore) earns it mastery for the extra damage allies deal.
+  wrap('bookBuffs', function (orig, p, dealt) {
+    orig.call(this, p, dealt);
+    const r = p.relay;
+    if (r?.sk && this.time < r.until) this.creditBy(r.by, r.sk, (dealt * r.v) / this.dmgMult(p), 'buff');
   });
   wrap('pathMsg', function (orig, p) { const m = orig.call(this, p); m.spec = this.specMsg(p); return m; });
   wrap('meFor', function (orig, p) {

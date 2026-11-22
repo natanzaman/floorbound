@@ -4,7 +4,7 @@
 //  - Lasting effects: Renew (heal over time), Bulwark (stand still), Aegis shields, Iron Skin reflect, Challenge,
 //    War Cry, Zeal, Purify (Miracle), Haven / Consecrate zones.
 import { CLASSES, angleTo, wrapAngle, resolveCollision, inTown, paced } from '../shared/data.js';
-import { MASTERY, BRANCHES, newMastery, masteryLevel, activeBranch, masteryCd, masteryPow, nearShrine } from '../shared/mastery.js';
+import { MASTERY, BRANCHES, newMastery, masteryLevel, activeBranch, masteryCd, masteryPow, nearShrine, isSigForm } from '../shared/mastery.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r2 = v => Math.round(v * 100) / 100;
@@ -45,6 +45,7 @@ export const MasteryMethods = {
     if (lvl <= before) return;
     const evo = lvl >= MASTERY.evolveAt && before < MASTERY.evolveAt && !e.br;
     p.masteryNow = true; // send the panel data right away
+    if (isSigForm(skId)) p.pathDirty = true; // the signature skill's cooldown and name live in the path message
     this.events.push({ t: 'mlvl', to: p.id, id: p.id, sk: skId, lvl, evo: evo ? 1 : 0 });
     const name = this.skillOf(p, skId)?.name || skId;
     this.sys(evo ? `${name} reached Mastery ${lvl}: it can EVOLVE! Press {key:skillTree} to choose.` : `${name} reached Mastery ${lvl}.`, p.id);
@@ -54,7 +55,13 @@ export const MasteryMethods = {
     const p = typeof who === 'object' ? who : this.players.get(who);
     if (p) this.masteryGain(p, skId, amount, kind);
   },
-  skillOf(p, skId) { return CLASSES[p.cls]?.skills.find(s => s.id === skId) || null; },
+  skillOf(p, skId) { return CLASSES[p.cls]?.skills.find(s => s.id === skId) || (this.sigDef?.(p)?.id === skId ? this.sigDef(p) : null); },
+  // The skill a hit or heal credits: the one named, else the signature skill while it runs (p._tsk 'sig', server/talents.js).
+  mSk(p, sk) {
+    if (sk || p?._tsk !== 'sig') return sk || null;
+    const s = this.sigDef?.(p);
+    return s && !s.borrow && p.mastery?.[s.id] ? s.id : null;
+  },
 
   // ---------- choosing a branch ----------
   // The first pick works anywhere once the skill reaches Mastery 3; changing it needs a Skill Shrine in town (free).
@@ -68,6 +75,7 @@ export const MasteryMethods = {
     e.br = br;
     p.masteryDirty = true; p.masteryNow = true; p.dirty = true;
     const b = BRANCHES[skId][br];
+    if (b.sig) p.pathDirty = true;
     this.events.push({ t: 'evolve', to: p.id, id: p.id, sk: skId, br, name: b.name, first: first ? 1 : 0, x: r2(p.x), z: r2(p.z) });
     this.sys(`${this.skillOf(p, skId)?.name || skId} evolved into ${b.name}!`, p.id);
     this.track(p, 'evolve', { skill: skId, branch: br, repick: !first });

@@ -16,6 +16,7 @@
 //   (skills a key rule changes, so the Abilities pane lists the node under them; sk effects are found on their own).
 // A class without an entry here simply has no tree yet (the window says so; nothing else changes).
 import { CLASSES, MAX_LEVEL } from './data.js';
+import { ruleText } from './effects.js';
 
 export const TALENTS = {
   firstLevel: 2,                 // the first point comes at level 2
@@ -454,6 +455,31 @@ export const KEYS = {
   symphony: { r: 12, shield: 0.08, d: 6, cdr: 2, sk: 'crescendo' },
 };
 
+// ---------- rule riders (docs/briefs/path.md, Phase 3) ----------
+// Every other plain stat node of a branch (2nd, 4th, ...) also carries a small, chancy rule (shared/effects.js) that
+// fits the stat, so fewer nodes are a bare number. Ranks raise the rule's chance (talentTotals).
+const RIDER = {
+  atk: { on: 'crit', do: 'burn', v: 0.06, d: 2, ch: 0.12, icd: 1 },
+  crit: { on: 'crit', do: 'mark', v: 0.05, d: 3, ch: 0.15, icd: 1 },
+  hp: { on: 'kill', do: 'heal', v: 0.02, r: 0, ch: 0.25 },
+  dr: { on: 'break', do: 'shield', v: 0.03, r: 0, d: 4, ch: 0.34 },
+  posture: { on: 'hit', do: 'posture', frac: [0.03, 0.01], ch: 0.05, icd: 1 },
+  heal: { on: 'heal', do: 'shield', v: 0.02, r: 0, d: 4, ch: 0.12, icd: 2, text: 'Your heals (the target)' },
+  haste: { on: 'kill', do: 'cdcut', v: 0.5, ch: 0.34 },
+  speed: { on: 'kill', do: 'dr', v: 0.1, d: 2, ch: 0.34 },
+  sw: { on: 'switch', do: 'team', v: 0.03, r: 12, d: 4, ch: 0.34 },
+  threat: { on: 'hit', do: 'slow', v: 0.15, d: 2, ch: 0.05, icd: 1 },
+};
+for (const tree of Object.values(TREES)) for (const b of tree.branches) {
+  let k = 0;
+  for (const n of b.nodes) {
+    if (n.keystone || n.sub || n.fx.length !== 1 || !n.fx[0].stat || !RIDER[n.fx[0].stat]) continue;
+    if (k++ % 2 === 0) continue;
+    const e = n.fx[0];
+    n.fx = [e, { rule: { ...RIDER[e.stat] } }];
+  }
+}
+
 // ---------- subclass nodes (docs/briefs/subclasses.md) ----------
 // Two per subclass (shared/subclasses.js), in tier 2 of the branch it is built on, in the side columns under that
 // branch's tier-1 nodes. Only that subclass can learn them (`sub`), and they never count toward a tier gate (so a change
@@ -472,13 +498,84 @@ const SUB_NODES = [
   ['berserker', 'carnage', 'reaver', { id: 'bz_rv_edge', name: 'Reaver\'s Edge', icon: '⚔', max: 3, fx: [{ stat: 'atk', v: 3 }] }, { id: 'bz_rv_sig', name: 'Rampage Mastery', icon: '❂', max: 2, fx: SIGN() }],
   ['berserker', 'bloodlust', 'bloodknight', { id: 'bz_bk_vigor', name: 'Blood Vigor', icon: '✚', max: 3, fx: [{ stat: 'hp', v: 4 }] }, { id: 'bz_bk_sig', name: 'Pact Mastery', icon: '♥', max: 2, fx: SIGN() }],
   ['lancer', 'dragoon', 'dragoon', { id: 'ln_dg_talon', name: 'Talon', icon: '▼', max: 3, fx: [{ stat: 'posture', v: 6 }] }, { id: 'ln_dg_sig', name: 'Dive Mastery', icon: '➘', max: 2, fx: SIGN() }],
-  ['lancer', 'phalanx', 'phalanx', { id: 'ln_ph_line', name: 'Hold the Line', icon: '▣', max: 3, fx: [{ stat: 'dr', v: 2 }] }, { id: 'ln_ph_sig', name: 'Wall Mastery', icon: '⛊', max: 2, fx: SIGN() }],
+  ['lancer', 'phalanx', 'phalanx', { id: 'ln_ph_line', name: 'Spear Line', icon: '▣', max: 3, fx: [{ stat: 'dr', v: 2 }] }, { id: 'ln_ph_sig', name: 'Wall Mastery', icon: '⛊', max: 2, fx: SIGN() }],
   ['bard', 'maestro', 'virtuoso', { id: 'bd_vi_flourish', name: 'Flourish', icon: '⧗', max: 3, fx: [{ stat: 'haste', v: 3 }] }, { id: 'bd_vi_sig', name: 'Encore Mastery', icon: '♫', max: 2, fx: SIGN(false) }],
   ['bard', 'discord', 'siren', { id: 'bd_si_shrill', name: 'Shrill Note', icon: '▼', max: 3, fx: [{ stat: 'posture', v: 6 }] }, { id: 'bd_si_sig', name: 'Wail Mastery', icon: '♪', max: 2, fx: SIGN() }],
 ];
 for (const [cls, bid, sub, a, b] of SUB_NODES) {
   const br = TREES[cls].branches.find(x => x.id === bid), side = x => br.nodes.find(n => n.tier === 1 && n.x === x).id;
   br.nodes.push({ ...a, tier: 2, x: -1, sub, req: [side(-1)] }, { ...b, tier: 2, x: 1, sub, req: [side(1)] });
+}
+
+// ---------- Subclass II (level 22) and the Crown (level 30) (docs/briefs/path.md, Phase 3) ----------
+// Three more nodes per subclass in its branch: two at tier 4 beside the branch's keystone (x -1 / 1, `lvl` 22) and the
+// Crown in a row of its own below (tier 5, `lvl` 30, a keystone). Like the first two they need the subclass and never
+// count toward a tier gate; they need the tier-4 gate themselves. `rule` effects: shared/effects.js (server/effects.js).
+const RU = (on, d, o = {}) => ({ rule: { on, do: d, ...o } });
+export const SUB2 = { lvl: 22, crownLvl: MAX_LEVEL };
+const SUB2_NODES = [
+  // [class, branch, subclass, II left, II right, Crown]
+  ['swordsman', 'tempo', 'duelist',
+    { id: 'sw_du_riposte', name: 'Cut and Turn', icon: '↺', max: 2, fx: [{ stat: 'counter', v: 8 }, RU('crit', 'cdcut', { v: 0.5, icd: 2, ch: 0.5 })] },
+    { id: 'sw_du_blur', name: 'Blur', icon: '≋', max: 1, fx: [{ sk: 'sig', cd: -10 }, RU('cast', 'dr', { v: 0.2, d: 2, sk: 'sig' })] },
+    { id: 'sw_du_crown', name: 'Crown: Untouchable', icon: '♛', max: 1, keystone: 1, desc: 'Every kill takes 3 s off your skills, and your critical hits mark their target (+10% damage taken, 4 s).', fx: [RU('kill', 'cdcut', { v: 3, icd: 1 }), RU('crit', 'mark', { v: 0.1, d: 4, icd: 1 })] }],
+  ['swordsman', 'link', 'vanguard',
+    { id: 'sw_va_banner', name: 'Banner Bearer', icon: '⚑', max: 2, fx: [{ stat: 'sw', v: 6 }, RU('switch', 'team', { v: 0.05, r: 12, d: 5 })] },
+    { id: 'sw_va_cleaver', name: 'Opening Cleave', icon: '⚔', max: 1, fx: [{ sk: 'sig', dmg: 12 }, RU('hit', 'posture', { frac: [0.08, 0.03], sk: 'sig', icd: 1 })] },
+    { id: 'sw_va_crown', name: 'Crown: The First Blade', icon: '♛', max: 1, keystone: 1, coop: 1, desc: 'Each Break you cause rallies the party: +10% damage for 5 s within 12 m, and a shield of 5% of max health.', fx: [RU('break', 'team', { v: 0.1, r: 12, d: 5 }), RU('break', 'shield', { v: 0.05, r: 12, d: 5 })] }],
+  ['guardian', 'bulwark', 'bulwark',
+    { id: 'gu_bk_bastion', name: 'Living Bastion', icon: '⛨', max: 2, fx: [{ stat: 'dr', v: 2 }, RU('break', 'shield', { v: 0.05, r: 0, d: 5 })] },
+    { id: 'gu_bk_vigil', name: 'Vigil', icon: '⛉', max: 1, fx: [{ sk: 'sig', cd: -10 }, RU('cast', 'heal', { v: 0.06, r: 10, sk: 'sig' })] },
+    { id: 'gu_bk_crown', name: 'Crown: The Unmoving', icon: '♛', max: 1, keystone: 1, coop: 1, desc: 'Using any skill shields you and allies within 8 m for 4% of max health (once every 4 s); kills shield you for 6%.', fx: [RU('cast', 'shield', { v: 0.04, r: 8, d: 5, icd: 4 }), RU('kill', 'shield', { v: 0.06, r: 0, d: 5, icd: 2 })] }],
+  ['guardian', 'warlord', 'warlord',
+    { id: 'gu_wl_dread', name: 'Dread', icon: '☗', max: 2, fx: [{ stat: 'posture', v: 5 }, RU('hit', 'slow', { v: 0.2, d: 2, ch: 0.15 })] },
+    { id: 'gu_wl_command', name: 'Command', icon: '⚑', max: 1, fx: [{ sk: 'sig', dmg: 12 }, RU('cast', 'team', { v: 0.08, r: 12, d: 6, sk: 'sig' })] },
+    { id: 'gu_wl_crown', name: 'Crown: Conqueror', icon: '♛', max: 1, keystone: 1, desc: 'Every Break you cause stuns the enemy 1 s longer and takes 2 s off your skills.', fx: [RU('break', 'stun', { d: 1 }), RU('break', 'cdcut', { v: 2 })] }],
+  ['cleric', 'mercy', 'lightbringer',
+    { id: 'cl_lb_halo', name: 'Halo', icon: '◯', max: 2, fx: [{ stat: 'heal', v: 4 }, RU('heal', 'shield', { v: 0.03, r: 0, d: 4, icd: 3, text: 'Your heals (the target)' })] },
+    { id: 'cl_lb_zenith', name: 'Zenith', icon: '☀', max: 1, fx: [{ sk: 'sig', cd: -12 }, RU('cast', 'cdcut', { v: 2, sk: 'sig' })] },
+    { id: 'cl_lb_crown', name: 'Crown: Sunrise', icon: '♛', max: 1, keystone: 1, coop: 1, desc: 'Your heals also give the party +6% damage for 5 s within 12 m (once every 3 s), and each kill heals you and allies within 12 m for 4%.', fx: [RU('heal', 'team', { v: 0.06, r: 12, d: 5, icd: 3 }), RU('kill', 'heal', { v: 0.04, r: 12, icd: 2 })] }],
+  ['cleric', 'judgement', 'inquisitor',
+    { id: 'cl_iq_brand', name: 'Brand', icon: '✶', max: 2, fx: [{ stat: 'crit', v: 2 }, RU('crit', 'burn', { v: 0.1, d: 3, icd: 1 })] },
+    { id: 'cl_iq_sentence', name: 'Sentence', icon: '⚚', max: 1, fx: [{ sk: 'sig', dmg: 12 }, RU('hit', 'mark', { v: 0.08, d: 4, sk: 'sig' })] },
+    { id: 'cl_iq_crown', name: 'Crown: Final Judgement', icon: '♛', max: 1, keystone: 1, desc: 'Your critical hits burst around the target for 50% attack (once a second), and kills take 2 s off your skills.', fx: [RU('crit', 'burst', { mult: 0.5, r: 3, icd: 1 }), RU('kill', 'cdcut', { v: 2, icd: 1 })] }],
+  ['ranger', 'marksman', 'sharpshooter',
+    { id: 'rg_ss_steady', name: 'Eagle Focus', icon: '◎', max: 2, fx: [{ stat: 'crit', v: 2 }, RU('crit', 'mark', { v: 0.06, d: 3, icd: 1 })] },
+    { id: 'rg_ss_breath', name: 'Held Breath', icon: '➶', max: 1, fx: [{ sk: 'sig', cd: -10 }, RU('crit', 'cdcut', { v: 1, sk: 'sig' })] },
+    { id: 'rg_ss_crown', name: 'Crown: One Arrow', icon: '♛', max: 1, keystone: 1, desc: 'Kills refund 3 s of your skills; your critical hits break 8% of the target\'s posture (3% bosses).', fx: [RU('kill', 'cdcut', { v: 3, icd: 1 }), RU('crit', 'posture', { frac: [0.08, 0.03], icd: 0.5 })] }],
+  ['ranger', 'trapper', 'trapmaster',
+    { id: 'rg_tm_caltrops', name: 'Caltrops', icon: '⌗', max: 2, fx: [{ stat: 'speed', v: 2 }, RU('hit', 'slow', { v: 0.2, d: 2, ch: 0.15 })] },
+    { id: 'rg_tm_springs', name: 'Spring Net', icon: '⇲', max: 1, fx: [{ sk: 'sig', cd: -10 }, RU('cast', 'pull', { r: 8, v: 1.5, sk: 'sig' })] },
+    { id: 'rg_tm_crown', name: 'Crown: The Killing Ground', icon: '♛', max: 1, keystone: 1, coop: 1, desc: 'Each Break you cause marks the enemy (+12% damage taken, 5 s) and slows enemies near it.', fx: [RU('break', 'mark', { v: 0.12, d: 5 }), RU('break', 'slow', { v: 0.4, d: 4 })] }],
+  ['berserker', 'carnage', 'reaver',
+    { id: 'bz_rv_frenzy', name: 'Bloodied Edge', icon: '⚔', max: 2, fx: [{ stat: 'atk', v: 2 }, RU('kill', 'rage', { v: 8 })] },
+    { id: 'bz_rv_storm', name: 'Axe Storm', icon: '❂', max: 1, fx: [{ sk: 'sig', dmg: 12 }, RU('kill', 'cdcut', { v: 2, sk: 'sig' })] },
+    { id: 'bz_rv_crown', name: 'Crown: The Red Harvest', icon: '♛', max: 1, keystone: 1, desc: 'Each kill bursts around the fallen for 60% attack (once a second) and gives 10 Rage.', fx: [RU('kill', 'burst', { mult: 0.6, r: 4, icd: 1 }), RU('kill', 'rage', { v: 10 })] }],
+  ['berserker', 'bloodlust', 'bloodknight',
+    { id: 'bz_bk_thirst', name: 'Thirst', icon: '♥', max: 2, fx: [{ stat: 'hp', v: 3 }, RU('crit', 'heal', { v: 0.02, r: 0, icd: 1 })] },
+    { id: 'bz_bk_oath', name: 'Blood Oath', icon: '✚', max: 1, fx: [{ sk: 'sig', cd: -10 }, RU('cast', 'dr', { v: 0.2, d: 3, sk: 'sig' })] },
+    { id: 'bz_bk_crown', name: 'Crown: Crimson Lord', icon: '♛', max: 1, keystone: 1, desc: 'Each kill heals you for 6% of max health; Breaks you cause shield you for 8%.', fx: [RU('kill', 'heal', { v: 0.06, r: 0 }), RU('break', 'shield', { v: 0.08, r: 0, d: 5 })] }],
+  ['lancer', 'dragoon', 'dragoon',
+    { id: 'ln_dg_updraft', name: 'Updraft', icon: '↟', max: 2, fx: [{ stat: 'posture', v: 5 }, RU('break', 'cdcut', { v: 1.5 })] },
+    { id: 'ln_dg_wings', name: 'Wings', icon: '➘', max: 1, fx: [{ sk: 'sig', cd: -10 }, RU('hit', 'stun', { d: 0.5, sk: 'sig', icd: 1 })] },
+    { id: 'ln_dg_crown', name: 'Crown: Skyfall', icon: '♛', max: 1, keystone: 1, desc: 'Every Break you cause bursts for 80% attack around the enemy; kills take 2 s off your skills.', fx: [RU('break', 'burst', { mult: 0.8, r: 4 }), RU('kill', 'cdcut', { v: 2, icd: 1 })] }],
+  ['lancer', 'phalanx', 'phalanx',
+    { id: 'ln_ph_shieldwall', name: 'Shieldwall', icon: '▣', max: 2, fx: [{ stat: 'dr', v: 2 }, RU('switch', 'shield', { v: 0.04, r: 8, d: 5 })] },
+    { id: 'ln_ph_brace', name: 'Brace', icon: '⛊', max: 1, fx: [{ sk: 'sig', cd: -10 }, RU('cast', 'shield', { v: 0.05, r: 8, d: 5, sk: 'sig' })] },
+    { id: 'ln_ph_crown', name: 'Crown: The Living Wall', icon: '♛', max: 1, keystone: 1, coop: 1, desc: 'Using any skill gives you and allies within 8 m 10% less damage taken for 3 s (once every 5 s); Breaks pull enemies in.', fx: [RU('cast', 'dr', { v: 0.1, d: 3, icd: 5 }), RU('break', 'pull', { r: 7, v: 1.5 })] }],
+  ['bard', 'maestro', 'virtuoso',
+    { id: 'bd_vi_tempo', name: 'Rubato', icon: '⧗', max: 2, fx: [{ stat: 'haste', v: 2 }, RU('switch', 'cdcut', { v: 1 })] },
+    { id: 'bd_vi_bravo', name: 'Bravo', icon: '♫', max: 1, fx: [{ sk: 'sig', cd: -12 }, RU('cast', 'heal', { v: 0.05, r: 14, sk: 'sig' })] },
+    { id: 'bd_vi_crown', name: 'Crown: Magnum Opus', icon: '♛', max: 1, keystone: 1, coop: 1, desc: 'Using any skill gives the party within 14 m +5% damage for 5 s (once every 4 s); kills take 1.5 s off your skills.', fx: [RU('cast', 'team', { v: 0.05, r: 14, d: 5, icd: 4 }), RU('kill', 'cdcut', { v: 1.5, icd: 1 })] }],
+  ['bard', 'discord', 'siren',
+    { id: 'bd_si_echo', name: 'Echo', icon: '▼', max: 2, fx: [{ stat: 'posture', v: 5 }, RU('hit', 'mark', { v: 0.05, d: 3, ch: 0.15 })] },
+    { id: 'bd_si_shriek', name: 'Shriek', icon: '♪', max: 1, fx: [{ sk: 'sig', dmg: 12 }, RU('hit', 'stun', { d: 0.6, sk: 'sig', icd: 1 })] },
+    { id: 'bd_si_crown', name: 'Crown: Song of Ruin', icon: '♛', max: 1, keystone: 1, desc: 'Each Break you cause marks the enemy (+12% damage taken, 5 s) and slows those around it by 40%.', fx: [RU('break', 'mark', { v: 0.12, d: 5 }), RU('break', 'slow', { v: 0.4, d: 4 })] }],
+];
+for (const [cls, bid, sub, a, b, c] of SUB2_NODES) {
+  const br = TREES[cls].branches.find(x => x.id === bid), t3 = br.nodes.filter(n => n.tier === 3 && !n.sub).map(n => n.id);
+  br.nodes.push({ ...a, tier: 4, x: -1, sub, lvl: SUB2.lvl, req: t3 }, { ...b, tier: 4, x: 1, sub, lvl: SUB2.lvl, req: t3 },
+    { ...c, tier: 5, x: 0, sub, lvl: SUB2.crownLvl, req: [a.id, b.id] });
 }
 
 // ---------- lookups ----------
@@ -496,6 +593,8 @@ export const branchSpent = (alloc, cls, bid) => (TREES[cls]?.branches.find(b => 
 export const spentAbove = (alloc, cls, tier) => nodesOf(cls).reduce((a, n) => a + (n.tier < tier && !n.sub ? alloc?.[n.id] | 0 : 0), 0);
 // Can this node be learned with this subclass (shared/subclasses.js)? Nodes without `sub` are open to everyone.
 export const subOk = (n, sub) => !n?.sub || n.sub === sub;
+// The points a node's tier needs above it (row 5, the Crown, has the last tier's gate).
+export const gateOf = n => TALENTS.tiers[Math.min(n.tier, TALENTS.tiers.length - 1)];
 // The skill key used by effects: 'basic' for slot 0, else the skill id.
 export const skKey = (cls, skId) => (CLASSES[cls]?.skills[0]?.id === skId ? 'basic' : skId);
 export const skillLabel = (cls, key) => (key === 'basic' ? CLASSES[cls]?.skills[0]?.name : key === 'sig' ? 'Signature skill' : CLASSES[cls]?.skills.find(s => s.id === key)?.name) || key;
@@ -508,8 +607,9 @@ export function spendBlock(cls, alloc, lvl, id, sub = null) {
   if (!subOk(n, sub)) return 'Opens with that specialisation (the Academy, level 15).';
   const r = alloc?.[id] | 0;
   if (r >= n.max) return 'Already at max rank.';
+  if (n.lvl && (lvl | 0) < n.lvl) return `Opens at level ${n.lvl}.`;
   if (spentOf(alloc) >= pointsAt(lvl)) return 'No talent points left (1 per level).';
-  if (spentAbove(alloc, cls, n.tier) < TALENTS.tiers[n.tier]) return `Needs ${TALENTS.tiers[n.tier]} points in the tiers above (${spentAbove(alloc, cls, n.tier)} so far).`;
+  if (spentAbove(alloc, cls, n.tier) < gateOf(n)) return `Needs ${gateOf(n)} points in the tiers above (${spentAbove(alloc, cls, n.tier)} so far).`;
   if (n.req?.length && !n.req.some(q => (alloc?.[q] | 0) > 0)) return `Needs a point in ${n.req.map(q => NODE.get(q)?.name).join(' or ')}.`;
   return null;
 }
@@ -522,7 +622,8 @@ export function allocError(cls, alloc, lvl, sub = null) {
     if (r && !subOk(n, sub)) return `${n.name} needs its specialisation.`;
     if (!Number.isInteger(r) || r < 0 || r > n.max) return `${n.name}: rank must be 0..${n.max}.`;
     if (!r) continue;
-    if (spentAbove(alloc, cls, n.tier) < TALENTS.tiers[n.tier]) return `${n.name} needs ${TALENTS.tiers[n.tier]} points in the tiers above it.`;
+    if (spentAbove(alloc, cls, n.tier) < gateOf(n)) return `${n.name} needs ${gateOf(n)} points in the tiers above it.`;
+    if (n.lvl && lvl !== undefined && (lvl | 0) < n.lvl) return `${n.name} opens at level ${n.lvl}.`;
     if (n.req?.length && !n.req.some(q => (alloc[q] | 0) > 0)) return `${n.name} needs a point in ${n.req.map(q => NODE.get(q)?.name).join(' or ')}.`;
   }
   if (lvl !== undefined && spentOf(alloc) > pointsAt(lvl)) return `${spentOf(alloc)} points spent but level ${lvl} only gives ${pointsAt(lvl)}.`;
@@ -555,7 +656,7 @@ export function newTalents(raw, cls, lvl, sub = null) {
 
 // Sum every effect of an allocation: { stat: {atk: 6, ...}, sk: { basic: {cd, dmg, fin, radius, dur}, rush: {...} }, aura: {...}, keys: {exec: 1} }.
 export function talentTotals(cls, alloc) {
-  const T = { stat: {}, sk: {}, aura: {}, keys: {} };
+  const T = { stat: {}, sk: {}, aura: {}, keys: {}, rules: [] };
   for (const n of nodesOf(cls)) {
     const r = alloc?.[n.id] | 0;
     if (!r) continue;
@@ -564,6 +665,7 @@ export function talentTotals(cls, alloc) {
       else if (e.sk) { const m = (T.sk[e.sk] ||= {}); for (const k of ['cd', 'dmg', 'fin', 'radius', 'dur']) if (e[k]) m[k] = (m[k] || 0) + e[k] * r; }
       else if (e.aura) T.aura[e.aura] = (T.aura[e.aura] || 0) + e.v * r;
       else if (e.key) T.keys[e.key] = r;
+      else if (e.rule) T.rules.push({ ...e.rule, id: `${n.id}:${n.fx.indexOf(e)}`, ...(e.rule.ch ? { ch: Math.min(1, e.rule.ch * r) } : {}) }); // (shared/effects.js; ranks raise the chance)
     }
   }
   if (T.stat.speed) T.stat.speed = Math.min(TALENTS.caps.speed, T.stat.speed);
@@ -589,7 +691,7 @@ export function effectText(cls, e, rank = 1) {
 export function nodeLines(cls, n, rank) {
   const lines = [];
   if (n.desc) lines.push(n.desc);
-  for (const e of n.fx) if (!e.key) lines.push(effectText(cls, e, rank));
+  for (const e of n.fx) if (!e.key && !(e.rule && n.desc)) lines.push(e.rule ? ruleText(e.rule.ch ? { ...e.rule, ch: Math.min(1, e.rule.ch * Math.max(1, rank)) } : e.rule) : effectText(cls, e, rank));
   return lines;
 }
 
@@ -630,10 +732,11 @@ export const BRANCH_TAG = {
   maestro: 'team', discord: 'control', harmony: 'team',
 };
 // The tags one node adds per rank (a node with several effects splits its weight).
+const RULE_TAG = { burn: 'power', burst: 'power', mark: 'power', rage: 'power', cdcut: 'tempo', slow: 'control', stun: 'control', posture: 'control', pull: 'control', shield: 'guard', dr: 'guard', heal: 'team', team: 'team' };
 export function nodeTags(n) {
   const out = {}, fx = n?.fx || [];
   for (const e of fx) {
-    const t = e.key || e.proc ? BRANCH_TAG[n.branch] : e.stat ? STAT_TAG[e.stat] : e.aura ? 'team' : e.sk ? SK_TAG[Object.keys(SK_TAG).find(k => e[k])] : null;
+    const t = e.key || e.proc ? BRANCH_TAG[n.branch] : e.rule ? RULE_TAG[e.rule.do] : e.stat ? STAT_TAG[e.stat] : e.aura ? 'team' : e.sk ? SK_TAG[Object.keys(SK_TAG).find(k => e[k])] : null;
     if (t) out[t] = (out[t] || 0) + 1 / fx.length;
   }
   if (n?.keystone) for (const t of Object.keys(out)) out[t] *= 2; // a keystone says a lot about a build
