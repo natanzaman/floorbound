@@ -188,6 +188,9 @@ export class Game {
 
   // ---------- messaging helpers ----------
   sys(text, to) { this.events.push({ t: 'sys', text, to }); }
+  // A private event: only this player's socket gets it (the snapshot's `pe`, server/index.js), never the shared world.
+  priv(p, e) { if (p) (p.pev ||= []).push({ ...e, to: p.id }); }
+  sysPriv(p, text) { this.priv(p, { t: 'sys', text }); }
   schedule(delay, fn) { this.scheduled.push({ at: this.time + delay, fn }); }
   teleport(p, x, z) {
     p.x = x; p.z = z; p.posSeq++;

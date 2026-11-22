@@ -6,7 +6,7 @@
 // Usage: node test/subclasses.js   (DATABASE_URL=postgresql://postgres:pg@localhost/fb_subclass node test/subclasses.js)
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
@@ -14,7 +14,9 @@ import WebSocket from 'ws';
 process.env.TEST_HOOKS = '1';
 process.env.NAMED_ENABLED ??= '0';
 const S = await import('../shared/subclasses.js');
-const { SPEC, SUBCLASSES, SUB_IDS, HIDDEN } = S;
+const { SPEC, SUBCLASSES, SUB_IDS } = S;
+const Wd = await import('../server/wander.js'); // the unlisted pick: server only
+const HIDDEN = Wd.WANDER;
 const { TREES, TALENTS, newTalents, allocError, spendBlock, nodeDef, pointsAt } = await import('../shared/talents.js');
 const { CLASSES } = await import('../shared/data.js');
 const { cleanPath } = await import('../shared/academy.js');
@@ -64,15 +66,18 @@ const ok = name => console.log(`  ok ${++n} - ${name}`);
   assert.equal(S.specBlock(has, 'swordsman', 20, 'vanguard', 600), null);
   ok('specBlock: graduates from level 15, own class only, free first pick, a fee to change (200 + 20 / level); bad ids refused');
 
-  assert.deepEqual(S.cleanSubs({ swordsman: 'duelist', guardian: 'duelist', cleric: 'toString', bogus: 'reaver', ranger: HIDDEN.id }), { swordsman: 'duelist', ranger: HIDDEN.id });
+  assert.deepEqual(S.cleanSubs({ swordsman: 'duelist', guardian: 'duelist', cleric: 'toString', bogus: 'reaver', ranger: HIDDEN.id }), { swordsman: 'duelist' }, 'the shared cleaner knows only the 14');
   assert.deepEqual(S.cleanSubs('x'), {}); assert.deepEqual(S.cleanSubs(['duelist']), {});
-  assert.deepEqual(S.cleanBorrow({ swordsman: { c: 'cleric', sk: S.borrowable('cleric')[0], br: TREES.cleric.branches[0].id }, guardian: { c: 'guardian', sk: 'taunt', br: 'x' }, lancer: { c: 'constructor' } }),
-    { swordsman: { c: 'cleric', sk: S.borrowable('cleric')[0], br: TREES.cleric.branches[0].id } });
-  const cp = cleanPath({ stage: 'class', weapon: 'sword', trials: { swordsman: 2 }, subs: { swordsman: 'duelist' }, found: 1, wb: { swordsman: { c: 'cleric', sk: S.borrowable('cleric')[1], br: TREES.cleric.branches[1].id } } });
-  assert.deepEqual(cp.subs, { swordsman: 'duelist' }); assert.equal(cp.found, 1); assert.equal(cp.wb.swordsman.c, 'cleric');
+  assert.deepEqual(Wd.cleanBorrow({ swordsman: { c: 'cleric', sk: Wd.borrowable('cleric')[0], br: TREES.cleric.branches[0].id }, guardian: { c: 'guardian', sk: 'taunt', br: 'x' }, lancer: { c: 'constructor' } }),
+    { swordsman: { c: 'cleric', sk: Wd.borrowable('cleric')[0], br: TREES.cleric.branches[0].id } });
+  const rawP = { stage: 'class', weapon: 'sword', trials: { swordsman: 2, cleric: 1 }, subs: { swordsman: 'duelist', guardian: HIDDEN.id, cleric: HIDDEN.id }, found: 1, wb: { guardian: { c: 'cleric', sk: Wd.borrowable('cleric')[1], br: TREES.cleric.branches[1].id } } };
+  const cs = cleanPath(rawP);
+  assert.deepEqual(cs.subs, { swordsman: 'duelist' }); assert.ok(!('found' in cs) && !('wb' in cs), 'the shared cleanPath keeps none of it');
+  const cp = Wd.keepWander(rawP, cleanPath(rawP));
+  assert.deepEqual(cp.subs, { swordsman: 'duelist', guardian: HIDDEN.id }, 'a pick without its borrow record is dropped'); assert.equal(cp.found, 1); assert.equal(cp.wb.guardian.c, 'cleric');
   const cp0 = cleanPath({ stage: 'class', weapon: 'sword', trials: {} });
   assert.ok(!cp0.found && !Object.keys(cp0.subs || {}).length, 'an old path: nothing new appears');
-  ok('cleanSubs / cleanBorrow drop anything foreign; cleanPath keeps subs, found and the borrow record');
+  ok('cleanSubs / cleanBorrow drop anything foreign; cleanPath keeps subs; server keepWander puts the unlisted fields back');
 
   // talents: a subclass's nodes need that subclass, its tier-1 node above, and the usual points; they open no tier
   const tempo = TREES.swordsman.branches.find(b => b.id === 'tempo');
@@ -95,31 +100,45 @@ const ok = name => console.log(`  ok ${++n} - ${name}`);
   assert.equal(nodeDef(left.id)?.sub, 'duelist');
   ok('talents: sub nodes need the subclass and their tier-1 node; dropped without it; they count toward no tier gate');
 
-  const tot = S.borrowedTotals({ c: 'guardian', sk: 'taunt', br: 'bulwark' });
+  const tot = Wd.borrowedTotals({ c: 'guardian', sk: 'taunt', br: 'bulwark' });
   const t0 = TREES.guardian.branches.find(b => b.id === 'bulwark').nodes.filter(x => x.tier === 0);
   for (const nd of t0) for (const e of nd.fx) if (e.stat) assert.ok(Math.abs(tot.stat[e.stat] - e.v * nd.max * HIDDEN.tierPow) < 0.05, `${nd.id}: ${tot.stat[e.stat]}`);
-  assert.deepEqual(S.borrowedTotals(null), { stat: {}, sk: {}, aura: {} });
-  for (const c of Object.keys(CLASSES)) assert.equal(S.borrowable(c).length, 2, `${c}: two borrowable skills`);
-  assert.ok(!S.canFind({ stage: 'class', trials: { swordsman: 1, guardian: 1 } }, 14));
-  assert.ok(!S.canFind({ stage: 'class', trials: { swordsman: 1, guardian: 0 } }, 20), 'two different passed trials');
-  assert.ok(!S.canFind({ stage: 'initiate', trials: { swordsman: 1, guardian: 1 } }, 20));
-  assert.ok(S.canFind({ stage: 'class', trials: { swordsman: 1, guardian: 3 } }, 15));
+  assert.deepEqual(Wd.borrowedTotals(null), { stat: {}, sk: {}, aura: {} });
+  for (const c of Object.keys(CLASSES)) assert.equal(Wd.borrowable(c).length, 2, `${c}: two borrowable skills`);
+  assert.ok(!Wd.canFind({ stage: 'class', trials: { swordsman: 1, guardian: 1 } }, 14));
+  assert.ok(!Wd.canFind({ stage: 'class', trials: { swordsman: 1, guardian: 0 } }, 20), 'two different passed trials');
+  assert.ok(!Wd.canFind({ stage: 'initiate', trials: { swordsman: 1, guardian: 1 } }, 20));
+  assert.ok(Wd.canFind({ stage: 'class', trials: { swordsman: 1, guardian: 3 } }, 15));
   ok('the hidden path\'s rules: found by a graduate of 15+ with two trials; it borrows a tier-0 branch at 80%');
 
   assert.ok(ACTION.skill4 && ACTION.skill4.group === 'Combat');
-  assert.equal(DEFAULTS.kbm.skill4[0], 'KeyX'); assert.equal(DEFAULTS.pad.skill4[0], 'LB+RT');
+  assert.equal(DEFAULTS.kbm.skill4[0], 'KeyG'); assert.equal(DEFAULTS.pad.skill4[0], 'LB+RT');
   for (const dev of ['kbm', 'pad']) assert.deepEqual(validate(DEFAULTS[dev], dev), [], `${dev} defaults are clean`);
-  ok('controls: skill4 (X, pad LB+RT), no conflicts in the defaults');
+  ok('controls: skill4 (G, pad LB+RT), no conflicts in the defaults');
 
-  // never advertised: the client, the guide, the README and the story never name the hidden path
-  const files = [...readdirSync(path.join(root, 'public')).filter(f => /\.(js|html|css)$/.test(f)).map(f => path.join('public', f)), 'README.md', 'docs/NEXT.md'];
-  for (const f of files) {
+  // never advertised or shipped: nothing the browser can load (public/ and every shared file it imports, followed
+  // import by import), nor the README, NEXT or the Named, names it or holds its rules
+  const shipped = new Set(), queue = readdirSync(path.join(root, 'public')).filter(f => /\.(js|mjs|html|css)$/.test(f)).map(f => path.join('public', f));
+  while (queue.length) {
+    const f = queue.shift();
+    if (shipped.has(f)) continue;
+    shipped.add(f);
+    if (!/\.m?js$/.test(f) && !/\.html$/.test(f)) continue;
     const txt = readFileSync(path.join(root, f), 'utf8');
-    assert.ok(!/wanderer/i.test(txt), `${f} names the hidden path`);
-    assert.ok(!/own road/i.test(txt), `${f}: its text`);
+    for (const [, spec] of txt.matchAll(/(?:from\s+|import\s*\(\s*|src=)['"]([^'"]+\.m?js)['"]/g)) {
+      const abs = spec.startsWith('/') ? spec.slice(1) : path.normalize(path.join(path.dirname(f), spec));
+      if (/^(shared|public)\//.test(abs) && !shipped.has(abs) && existsSync(path.join(root, abs))) queue.push(abs); // (vendored libraries via the import map are skipped)
+    }
+  }
+  const sharedShipped = [...shipped].filter(f => f.startsWith('shared/'));
+  assert.ok(sharedShipped.includes('shared/subclasses.js') && sharedShipped.includes('shared/academy.js'), `the walk finds the shared imports (${sharedShipped.length})`);
+  const WORDS = /wanderer|own road|hidden (path|pick|option)|unlisted (pick|path|specialisation)|canFind|borrowFrom|cleanBorrow|borrowedTotals|keepWander|wanderBlock|tierPow|path\.wb|path\.found/i;
+  for (const f of [...shipped, 'README.md', 'docs/NEXT.md']) {
+    const txt = readFileSync(path.join(root, f), 'utf8'), m = txt.match(WORDS);
+    assert.ok(!m, `${f} holds "${m?.[0]}"`);
   }
   for (const d of Object.values(NAMED)) assert.ok(!/wanderer/i.test(JSON.stringify(d)), `${d.id}: story text`);
-  ok('the hidden path is named nowhere players read (public/, README, NEXT, the Named)');
+  ok('the unlisted pick ships nowhere: public/, every shared file it imports, README, NEXT, the Named');
 }
 
 // ---------------- 2. in process ----------------
@@ -127,7 +146,8 @@ const { Game } = await import('../server/game.js');
 const g = new Game(); g.track = () => {};
 const sock = () => ({ readyState: 1, send() {} });
 const tick = s => { for (let i = 0; i < Math.round(s * 20); i++) g.update(0.05); };
-const sysTo = p => g.events.filter(e => e.t === 'sys' && (e.to === p.id)).map(e => e.text);
+const sysTo = p => (p.pev || []).filter(e => e.t === 'sys').map(e => e.text); // private lines (Game.priv), never in the shared events
+const shared = p => g.events.filter(e => e.to === p.id && (e.t === 'spec' || e.t === 'sys'));
 const atAcademy = p => g.teleport(p, ACADEMY.x + 3, ACADEMY.z);
 const act = (p, m) => g.handle(p, { type: 'academy', ...m });
 const join = (name, cls, lvl, weapon = null) => {
@@ -148,7 +168,9 @@ const field = (p) => { g.teleport(p, 0, 80); const m = g.addMob('wolf', 0, 82); 
   act(p, { op: 'specialise', sub: 'duelist' });
   assert.equal(p.path.subs.swordsman, 'duelist'); assert.equal(p.gold, 0, 'free');
   assert.equal(p.path.stage, 'class', 'a legacy character gets a graduated path');
-  assert.ok(g.events.some(e => e.t === 'spec' && e.id === p.id && e.sub === 'duelist'));
+  assert.ok(p.pev.some(e => e.t === 'spec' && e.sub === 'duelist'), 'the banner event: to its own socket');
+  assert.ok(!g.events.some(e => e.t === 'spec'), 'never in the shared world');
+  assert.ok(g.events.some(e => e.t === 'sys' && !e.to && /Duel specialised as a Duelist/.test(e.text)), 'the announcement is public');
   assert.equal(g.meFor(p).sub, 'duelist'); assert.equal(g.rosterPath(p).sub, 'duelist');
   const spec = g.pathMsg(p).spec; assert.equal(spec.sub, 'duelist'); assert.equal(spec.sig.name, 'Flash Step'); assert.ok(!('hid' in spec));
   assert.ok(p.cds[4] > g.time, 'a short cooldown after picking');
@@ -182,7 +204,19 @@ const field = (p) => { g.teleport(p, 0, 80); const m = g.addMob('wolf', 0, 82); 
   const up = join('Up', 'ranger', 14); up.path = { stage: 'class', weapon: 'bow', trials: { ranger: 1 }, drills: {}, keep: {}, cohort: [] };
   g.giveXp(up, 1e5); assert.ok(sysTo(up).some(t => /Level 15: you can specialise/.test(t)), 'a graduate hears it at 15');
   assert.ok(up.pathDirty, 'the path message goes again');
-  ok('gates: level 15, graduates only (Initiates refused, no notice), the level-15 notice for graduates');
+  { // not inside a trial or drill pen; buffs never reach the other side of a duel
+    const q = join('Pen', 'swordsman', 18); atAcademy(q); act(q, { op: 'specialise', sub: 'vanguard' }); tick(SPEC.cdOnPick + 0.2);
+    q.trial = { kind: 'drill', id: 'x' }; g.handle(q, { type: 'skill', slot: 4, face: 0 }); assert.ok(!(q.cds[4] > g.time), 'refused in a pen'); q.trial = null;
+    const a2 = join('Ally', 'cleric', 18), foe = join('Foe', 'ranger', 18), by = join('By', 'bard', 18);
+    for (const o of [a2, foe, by]) g.teleport(o, q.x + 1, q.z);
+    const D = { state: 'live', f: new Map([[q.id, { side: 0 }], [a2.id, { side: 0 }], [foe.id, { side: 1 }]]) }, od = g.duelOf;
+    g.duelOf = o => (D.f.has(o?.id) ? D : null);
+    const got = g.sigAllies(q).map(o => o.name);
+    g.duelOf = od;
+    assert.ok(got.includes('Ally') && !got.includes('Foe') && !got.includes('By'), `a duelist buffs its own side only (${got})`);
+    for (const o of [q, a2, foe, by]) g.removePlayer(o);
+  }
+  ok('gates: level 15, graduates only (Initiates refused, no notice), the level-15 notice for graduates; not in a pen; duel sides');
 
   // every signature skill fires and sets its cooldown
   for (const id of SUB_IDS) {
@@ -210,10 +244,11 @@ const field = (p) => { g.teleport(p, 0, 80); const m = g.addMob('wolf', 0, 82); 
   const atLectern = p => g.teleport(p, LECTERN.x, LECTERN.z);
   const w = join('Wan', 'swordsman', 16);
   w.path = { stage: 'class', weapon: 'sword', trials: { swordsman: 2 }, drills: {}, keep: {}, cohort: [] };
-  const borrow = { c: 'cleric', sk: S.borrowable('cleric')[0], br: TREES.cleric.branches[0].id };
+  const borrow = { c: 'cleric', sk: Wd.borrowable('cleric')[0], br: TREES.cleric.branches[0].id };
   atAcademy(w); w.gold = 1e5;
   act(w, { op: 'specialise', sub: HIDDEN.id, borrow }); assert.ok(!S.subOf(w.path, 'swordsman'), 'not found: refused');
-  assert.match(sysTo(w).at(-1), /No such path/);
+  assert.equal(sysTo(w).at(-1), S.NOT_A_SUB, 'the same answer as an unknown id');
+  act(w, { op: 'specialise', sub: 'nonsense' }); assert.equal(sysTo(w).at(-1), S.NOT_A_SUB);
   atLectern(w); tick(0.1); act(w, { op: 'lectern' });
   assert.ok(!w.path.found, 'one trial: the book is too faded'); assert.match(sysTo(w).at(-1), /faded/);
   w.path.trials.cleric = 1; tick(3.1); g.teleport(w, 0, 80); act(w, { op: 'lectern' }); assert.ok(!w.path.found, 'only at the lectern');
@@ -221,7 +256,7 @@ const field = (p) => { g.teleport(p, 0, 80); const m = g.addMob('wolf', 0, 82); 
   assert.ok(g.pathMsg(w).spec.hid, 'the option is sent once found');
   assert.ok(!JSON.stringify(g.pathMsg(join('Nob', 'swordsman', 16)).spec).includes(HIDDEN.id), 'and never before');
   atAcademy(w);
-  for (const bad of [{ c: 'swordsman', sk: 'rush', br: 'tempo' }, { c: 'ranger', sk: S.borrowable('ranger')[0], br: TREES.ranger.branches[0].id }, { c: 'cleric', sk: CLASSES.cleric.skills[3].id, br: borrow.br }, { c: 'cleric', sk: CLASSES.cleric.skills[0].id, br: borrow.br }, { c: 'cleric', sk: borrow.sk, br: 'nope' }, { c: 'constructor', sk: 'x', br: 'y' }, null]) {
+  for (const bad of [{ c: 'swordsman', sk: 'rush', br: 'tempo' }, { c: 'ranger', sk: Wd.borrowable('ranger')[0], br: TREES.ranger.branches[0].id }, { c: 'cleric', sk: CLASSES.cleric.skills[3].id, br: borrow.br }, { c: 'cleric', sk: CLASSES.cleric.skills[0].id, br: borrow.br }, { c: 'cleric', sk: borrow.sk, br: 'nope' }, { c: 'constructor', sk: 'x', br: 'y' }, null]) {
     act(w, { op: 'specialise', sub: HIDDEN.id, borrow: bad }); assert.ok(!S.subOf(w.path, 'swordsman'), `refused: ${JSON.stringify(bad)}`);
   }
   const lo = join('Lo', 'swordsman', 14); lo.path = { ...w.path, trials: { ...w.path.trials } }; atAcademy(lo);
@@ -237,11 +272,15 @@ const field = (p) => { g.teleport(p, 0, 80); const m = g.addMob('wolf', 0, 82); 
   // the borrowed skill: the other class's code, 80% power, the real class back after
   const m = field(w); tick(SPEC.cdOnPick + 0.2); w.hp = w.maxHp * 0.5;
   let pow = null; const orig = g.skillPow; g.skillPow = function (pp, ...a) { const v = orig.call(this, pp, ...a); if (pp === w && w._borrowing) pow = { v, cls: w.cls }; return v; };
-  g.handle(w, { type: 'skill', slot: 4, face: 0 }); g.skillPow = orig; tick(1);
+  w.cds[1] = g.time + 7.5; w.cds[2] = g.time + 3.25; w.cds[3] = 0; const before = w.cds.slice(0, 4);
+  g.handle(w, { type: 'skill', slot: 4, face: 0 }); g.skillPow = orig;
+  assert.deepEqual(w.cds.slice(0, 4), before, 'every other cooldown exactly as it was');
+  tick(1);
   assert.equal(w.cls, 'swordsman'); assert.ok(!w._borrowing); assert.ok(w.cds[4] > g.time, 'slot 5 cools down');
-  assert.equal(w.cds[1], 0, 'the swordsman\'s own slot 2 untouched');
   if (pow) assert.equal(pow.cls, 'cleric', 'ran as the other class');
   g.mobs.delete(m.id);
+  assert.equal(shared(w).length, 0, 'none of its lines or events went into the shared world (all private)');
+  assert.ok(w.pev.some(e => e.t === 'spec' && e.found) && w.pev.some(e => e.t === 'spec' && e.hn), 'they went to its own socket');
   // a non-graduate, or no found flag via the admin path record, is refused even with a forged record
   const f = join('Forge', 'swordsman', 16); f.path = { stage: 'class', weapon: 'sword', trials: { swordsman: 1, cleric: 1 }, drills: {}, keep: {}, cohort: [], subs: { swordsman: HIDDEN.id }, wb: { swordsman: borrow } };
   assert.equal(g.subOfP(f), null, 'a pick without the found flag does nothing'); assert.equal(g.sigDef(f), null);
@@ -296,7 +335,9 @@ function client(joinMsg) {
   c.ws.on('message', raw => {
     const m = JSON.parse(raw.toString()); c.last[m.type] = m;
     if (m.type === 'welcome') c.id = m.id;
-    if (m.type === 'snap') for (const e of m.w?.events || []) if (e.t === 'sys' && (!e.to || e.to === c.id)) c.sys.push(e.text);
+    if (m.type === 'snap') for (const e of [...(m.w?.events || []), ...(m.pe || [])]) { // (pe: private events, this socket only)
+      if (e.t === 'sys' && (!e.to || e.to === c.id)) c.sys.push(e.text);
+    }
     if (m.type === 'roster') c.roster = m.players;
   });
   c.send = m => c.ws.send(JSON.stringify(m));

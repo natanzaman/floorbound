@@ -111,79 +111,25 @@ export const BOT_SUB = { swordsman: 'duelist', guardian: 'bulwark', cleric: 'lig
 
 // ---------- the record (characters.path.subs) ----------
 // path.subs = { cls: subId }: the subclass of each class you have specialised (a class change keeps them per class).
-// Hidden extras (code only): path.found (1 once found), path.wb = { cls: { c, sk, br } }.
-export const HIDDEN = { id: 'wanderer', lvl: 15, trials: 2, pow: 0.8, tierPow: 0.8 };
-// The skills a hidden pick may take from another class: its two level-1 skills (never the basic attack or the level-3 one).
-export const borrowable = cls => (CLASSES[cls]?.skills || []).filter((s, i) => i >= 1 && i <= 2).map(s => s.id);
 export const subOf = (path, cls) => (path?.subs && own(path.subs, cls) ? path.subs[cls] : null);
 
 export function cleanSubs(raw) {
   const out = {};
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    for (const [cls, id] of Object.entries(raw)) {
-      if (!own(CLASSES, cls)) continue;
-      if (isSub(id) && SUBCLASSES[id].cls === cls) out[cls] = id;
-      else if (id === HIDDEN.id) out[cls] = id;
-    }
-  }
-  return out;
-}
-// One borrow record per class: { c: other class, sk: one of its borrowable skills, br: a branch id of its tree }.
-export function cleanBorrow(raw) {
-  const out = {};
-  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    for (const [cls, b] of Object.entries(raw)) {
-      if (!own(CLASSES, cls) || !b || typeof b !== 'object') continue;
-      const c = String(b.c || ''), sk = String(b.sk || ''), br = String(b.br || '');
-      if (!own(CLASSES, c) || c === cls || !borrowable(c).includes(sk) || !TREES[c]?.branches.some(x => x.id === br)) continue;
-      out[cls] = { c, sk, br };
-    }
+    for (const [cls, id] of Object.entries(raw)) if (own(CLASSES, cls) && isSub(id) && SUBCLASSES[id].cls === cls) out[cls] = id;
   }
   return out;
 }
 
-// Classes whose trial this path has passed (medal > 0).
-export const passedTrials = path => Object.entries(path?.trials || {}).filter(([, m]) => (m | 0) > 0).map(([c]) => c);
 const graduate = path => !!path && path.stage !== 'initiate';
-// Does the hidden lectern answer this character? (A graduate, level 15+, two different class trials passed.)
-export const canFind = (path, lvl) => graduate(path) && (lvl | 0) >= HIDDEN.lvl && passedTrials(path).length >= HIDDEN.trials;
-// The classes a hidden pick may borrow from: any other class whose trial was passed.
-export const borrowFrom = (path, cls) => passedTrials(path).filter(c => c !== cls && own(CLASSES, c));
-
-// Why this character can't take `sub` now (null: it can). opts.borrow: { c, sk, br } for the hidden pick.
-export function specBlock(path, cls, lvl, sub, gold, opts = {}) {
+export const NOT_A_SUB = 'That is not a specialisation of your class.';
+// Why this character can't take `sub` now (null: it can).
+export function specBlock(path, cls, lvl, sub, gold) {
   if (!graduate(path)) return 'Graduate from the Academy first.';
   if ((lvl | 0) < SPEC.lvl) return `Specialisation opens at level ${SPEC.lvl}.`;
+  if (!isSub(sub) || SUBCLASSES[sub].cls !== cls) return NOT_A_SUB;
   const cur = subOf(path, cls);
-  if (sub === HIDDEN.id) {
-    if (!path.found) return 'No such path.';
-    const b = opts.borrow;
-    if (!b || !borrowFrom(path, cls).includes(b.c) || !borrowable(b.c).includes(b.sk) || !TREES[b.c]?.branches.some(x => x.id === b.br)) return 'Choose a skill and a branch from a class whose trial you passed.';
-    const old = path.wb?.[cls];
-    if (cur === sub && old && old.c === b.c && old.sk === b.sk && old.br === b.br) return 'You already walk that path.';
-  } else {
-    if (!isSub(sub) || SUBCLASSES[sub].cls !== cls) return 'That is not a specialisation of your class.';
-    if (cur === sub) return `You are already a ${SUBCLASSES[sub].name}.`;
-  }
+  if (cur === sub) return `You are already a ${SUBCLASSES[sub].name}.`;
   if (cur && (gold | 0) < specFee(lvl)) return `Changing specialisation costs ${specFee(lvl)} gold.`;
   return null;
-}
-
-// The talent effects a hidden pick borrows: the first tier of the chosen branch at full rank, at HIDDEN.tierPow.
-// Same shape as talentTotals (shared/talents.js); merged into p.tal by server/subclasses.js.
-export function borrowedTotals(b) {
-  const T = { stat: {}, sk: {}, aura: {} };
-  const br = b && TREES[b.c]?.branches.find(x => x.id === b.br);
-  if (!br) return T;
-  const k = HIDDEN.tierPow;
-  for (const n of br.nodes) {
-    if (n.tier !== 0 || n.sub) continue;
-    for (const e of n.fx) {
-      const v = (x) => Math.round(x * n.max * k * 100) / 100;
-      if (e.stat) T.stat[e.stat] = (T.stat[e.stat] || 0) + v(e.v);
-      else if (e.aura) T.aura[e.aura] = (T.aura[e.aura] || 0) + v(e.v);
-      else if (e.sk) { const m = (T.sk[e.sk] ||= {}); for (const q of ['cd', 'dmg', 'fin', 'radius', 'dur']) if (e[q]) m[q] = (m[q] || 0) + v(e[q]); }
-    }
-  }
-  return T;
 }

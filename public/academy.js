@@ -262,7 +262,7 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
       if (!cur) act = ui.confirm === `s:${id}` ? `<button class="warn" data-a="spec" data-id="${id}">Confirm${S.sub ? ` (${S.fee}g)` : ''}</button>` : `<button class="go" data-a="askspec" data-id="${id}" ${S.sub && gold < S.fee ? 'disabled' : ''}>${S.sub ? `Change · ${S.fee}g` : 'Specialise'}</button>`;
       h += `<div class="row spec ${cur ? 'on' : ''}"><span class="nm"><b>${esc(D.name)}</b> · ${esc(branchName(D.cls, D.branch))} branch${cur ? ' <small style="display:inline">(yours)</small>' : ''}<small>${esc(D.blurb)}</small><span class="sig">${esc(sk.name)} (${sk.cd} s): ${esc(sk.desc)}</span></span>${act}</div>`;
     }
-    const H = S.hid; // (only sent once found: its words come from the server)
+    const H = S.hid; // (an extra row the server sends to some characters: every word of it comes from the server)
     if (H && H.from?.length) {
       const hb = ui.hb, F = H.from[hb.c % H.from.length], sk = F.skills[hb.s % F.skills.length], br = F.branches[hb.b % F.branches.length];
       const cur = H.on && H.on.c === F.cls && H.on.sk === sk.id && H.on.br === br.id;

@@ -2,7 +2,7 @@
 // class ranks, the hall heads and cohorts. Data and pure rules, shared by the server (server/academy.js), the client
 // (public/academy.js, the creation screen) and the tests. The yard and its enemies: shared/academyyard.js.
 import { CLASSES, MAX_LEVEL } from './data.js';
-import { cleanSubs, cleanBorrow } from './subclasses.js'; // specialisation at level 15 (docs/briefs/subclasses.md)
+import { cleanSubs } from './subclasses.js'; // specialisation at level 15 (docs/briefs/subclasses.md)
 export { ACADEMY, YARD, PENS, nearAcademy, penAt, inYard } from './academyyard.js';
 
 // ---------- weapons ----------
@@ -177,8 +177,6 @@ export function cleanPath(raw) {
   p.armed = raw.armed ? 1 : 0; p.enrolled = raw.enrolled ? 1 : 0;
   if (raw.gear && typeof raw.gear === 'object' && !Array.isArray(raw.gear)) for (const [w, u] of Object.entries(raw.gear)) if (isWeapon(w) && Number.isInteger(u)) p.gear[w] = u;
   const subs = cleanSubs(raw.subs); if (Object.keys(subs).length) p.subs = subs; // (absent until a first specialisation)
-  if (raw.found) p.found = 1;
-  const wb = cleanBorrow(raw.wb); if (Object.keys(wb).length) p.wb = wb;
   return p;
 }
 

@@ -510,6 +510,7 @@ function onMessage(msg, arrival = performance.now()) {
   if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); smith.render(); life.render(); wellWake.inv(); return; }
   if (msg.type === 'life') { life.onMsg(msg); return; } // life classes (public/life.js)
   if (msg.type === 'hall') { state.hallData = msg; renderHall(); bell.hall(msg); return; }
+  if (msg.type === 'snap' && msg.pe) msg.w.events = msg.w.events.concat(msg.pe); // private events: only for me (server Game.priv)
   if (msg.type === 'snap') {
     const busy = msg.w.events.some(e => e.t === 'clear' || e.t === 'lvl');
     for (const e of msg.w.events) { // titles and the Hall of Clearers (kept out of handleEvent)
@@ -1184,7 +1185,7 @@ function labelBar() {
 // Slot 5: the signature skill of your specialisation (public/academy.js sig(); nothing before one).
 function sigButton() {
   const g = academy.sig();
-  return g ? `<button class="sk s4 sig" data-slot="4" title="${esc(g.name)}: ${esc(g.desc)}"><span class="key">${isTouch ? '' : 'X'}</span>${esc(g.name)}<span class="cd"></span><span class="cdt"></span></button>` : '';
+  return g ? `<button class="sk s4 sig" data-slot="4" title="${esc(g.name)}: ${esc(g.desc)}"><span class="key">${isTouch ? '' : esc(keyLabel('skill4'))}</span>${esc(g.name)}<span class="cd"></span><span class="cdt"></span></button>` : '';
 }
 function buildSkillBar(lvl = state.lvl) {
   const skills = CLASSES[state.cls].skills;

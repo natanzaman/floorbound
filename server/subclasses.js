@@ -11,9 +11,8 @@
 // (a hidden pick's borrowed tier), skillPow (a borrowed skill's power), rosterPath, pathMsg, meFor, academyOp, schedule.
 import { CLASSES, wrapAngle, paced } from '../shared/data.js';
 import { newTalents, talentTotals, TREES } from '../shared/talents.js';
-import {
-  SPEC, SUBCLASSES, HIDDEN, BOT_SUB, isSub, subsOf, subOf, specFee, specBlock, canFind, borrowFrom, borrowable, borrowedTotals,
-} from '../shared/subclasses.js';
+import { SPEC, SUBCLASSES, BOT_SUB, isSub, subsOf, subOf, specFee, specBlock, NOT_A_SUB } from '../shared/subclasses.js';
+import { WANDER as HIDDEN, canFind, borrowFrom, borrowable, borrowedTotals, wanderBlock, keepWander } from './wander.js'; // the unlisted pick (server only)
 import { isInitiate } from '../shared/academy.js';
 import { nearAcademy, nearLectern } from '../shared/academyyard.js';
 
@@ -48,13 +47,13 @@ const SIGS = {
     this.sigFx(p, 'arc', { r: N.r, c: 'gold', fin: 1 });
     this.hitArc(p, N.r, N.half, c.atk() * N.mult, { heavy: true, frac: N.frac, knock: 1 });
     this.sigFx(p, 'ring', { r: N.allyR, c: 'gold' });
-    for (const o of this.players.values()) if (!o.dead && dist(o, p) <= N.allyR) { this.teamBuff(o, N.dmg, N.d); this.events.push({ t: 'buff', id: o.id, k: 'bless', d: N.d }); }
+    for (const o of this.sigAllies(p)) if (!o.dead && dist(o, p) <= N.allyR) { this.teamBuff(o, N.dmg, N.d); this.events.push({ t: 'buff', id: o.id, k: 'bless', d: N.d }); }
   },
   aegisline(p, c) { // Bulwark Knight: damage reduction for you and the line
     const N = c.n, t = this.time;
     this.sigFx(p, 'ring', { r: N.r, c: 'gold' });
     this.sigFx(p, 'shield');
-    for (const o of this.players.values()) {
+    for (const o of this.sigAllies(p)) {
       if (o.dead || dist(o, p) > N.r) continue;
       const v = o === p ? N.self : N.ally;
       if (t < (o.dr?.until || 0) && o.dr.v >= v) continue; // a stronger one already holds
@@ -71,7 +70,7 @@ const SIGS = {
   dawnburst(p, c) { // Lightbringer: a big party heal
     const N = c.n, k = 1 + (p.tal?.stat?.heal || 0) / 100;
     this.sigFx(p, 'ring', { r: N.r, c: 'light' });
-    for (const o of this.players.values()) {
+    for (const o of this.sigAllies(p)) {
       if (o.dead || dist(o, p) > N.r || this.unhealable?.(o)) continue;
       this.healPlayer(o, (o.maxHp * N.frac + N.flat + p.lvl * N.perLvl) * k, p, null);
       this.events.push({ t: 'fx', k: 'heal', by: p.id, id: o.id, x: r2(o.x), z: r2(o.z) });
@@ -144,7 +143,7 @@ const SIGS = {
     this.sigFx(p, 'arc', { r: N.r, c: 'gold', fin: 1 });
     this.hitArc(p, N.r, N.half, c.atk() * N.mult, { knock: N.knock, stun: N.stun, heavy: true });
     this.sigFx(p, 'ring', { r: N.allyR, c: 'gold' });
-    for (const o of this.players.values()) {
+    for (const o of this.sigAllies(p)) {
       if (o.dead || dist(o, p) > N.allyR || (t < (o.dr?.until || 0) && o.dr.v >= N.dr)) continue;
       o.dr = { until: t + N.d, v: N.dr, by: p.id };
       this.events.push({ t: 'buff', id: o.id, k: 'dr', d: N.d });
@@ -153,7 +152,7 @@ const SIGS = {
   encore(p, c) { // Virtuoso: cooldowns back and a damage buff for the party
     const N = c.n, t = this.time;
     this.sigFx(p, 'ring', { r: N.r, c: 'light' });
-    for (const o of this.players.values()) {
+    for (const o of this.sigAllies(p)) {
       if (o.dead || dist(o, p) > N.r) continue;
       for (let i = 1; i < 4; i++) if (o.cds[i] > t) o.cds[i] = Math.max(t, o.cds[i] - N.cut); // (never the signature slot)
       this.teamBuff(o, N.dmg, N.d);
@@ -177,8 +176,18 @@ function onLine(x0, z0, x1, z1, m, width) {
   return Math.hypot(m.x - (x0 + lx * tt), m.z - (z0 + lz * tt)) <= width + m.def.radius;
 }
 
-const HID_NAME = 'Your Own Road'; // (the hidden pick's name on screen: sent only to a character who found it)
 export const SubclassMethods = {
+  // Who a signature skill's buffs and heals reach: players near enough, never the other side of a duel (server/duels.js).
+  sigAllies(p) {
+    const d = this.duelOf?.(p), fp = d && d.state !== 'done' ? d.f.get(p.id) : null;
+    return [...this.players.values()].filter(o => {
+      if (o === p) return true;
+      const od = this.duelOf?.(o);
+      if (!fp && !(od && od.state !== 'done')) return true;
+      const fo = fp && od === d ? d.f.get(o.id) : null;
+      return !!fo && fo.side === fp.side;
+    });
+  },
   // ---------- the record ----------
   // The subclass in force (null: none, a trial's loan, an Initiate). The hidden pick counts as HIDDEN.id.
   subOfP(p) {
@@ -204,13 +213,13 @@ export const SubclassMethods = {
   // ---------- using slot 5 (from game.js useSkill) ----------
   useSignature(p, face) {
     const sk = this.sigDef(p);
-    if (!sk || p.dead || this.time < (p.cds[SLOT] || 0)) return;
+    if (!sk || p.dead || p.trial || this.time < (p.cds[SLOT] || 0)) return; // (not in a trial or drill pen: the yard's own kit)
     if (typeof face === 'number' && isFinite(face)) p.face = wrapAngle(face);
     if (sk.borrow) return this.useBorrowed(p, sk, face);
     const fn = SIGS[sk.id];
     if (!fn) return;
     const mods = p.tal?.sk?.sig || {}, cd = sk.cd * (1 - (p.haste || 0)) * Math.max(0.4, 1 + (mods.cd || 0) / 100);
-    const c = { id: sk.id, n: sk.n, atk: () => p.atk * this.dmgMult(p), alive: () => !p.dead && this.players.has(p.id) };
+    const c = { id: sk.id, n: sk.n, atk: () => p.atk * this.dmgMult(p), alive: () => !p.dead && !p.downed && !p.trap && this.players.has(p.id) };
     const prev = this._sigId; this._sigId = sk.id;
     try { if (fn.call(this, p, c) === false) return; } finally { this._sigId = prev; }
     p.cds[SLOT] = this.time + cd;
@@ -220,11 +229,11 @@ export const SubclassMethods = {
   useBorrowed(p, sk, face) {
     const other = sk.borrow, i = CLASSES[other].skills.findIndex(x => x.id === sk.id);
     if (i < 1) return;
-    const real = p.cls, saved = p.cds[i], prevB = p._borrowing;
+    const real = p.cls, saved = p.cds.slice(), prevB = p._borrowing; // (every slot: the other class's code may touch any cooldown)
     p.cls = other; p.cds[i] = 0; p._borrowing = true;
     let until = 0;
     try { this.useSkill(p, i, face); until = p.cds[i]; }
-    finally { p.cls = real; p.cds[i] = saved; p._borrowing = prevB; }
+    finally { p.cls = real; for (let k = 0; k < saved.length; k++) p.cds[k] = saved[k]; p._borrowing = prevB; }
     if (until > this.time) p.cds[SLOT] = until;
   },
 
@@ -238,9 +247,9 @@ export const SubclassMethods = {
     this.specRefresh(p);
     this.markPath(p);
     const name = sub === HIDDEN.id ? null : SUBCLASSES[sub].name;
-    this.events.push({ t: 'spec', id: p.id, to: p.id, sub: name ? sub : '', n: name || '', ...(name ? {} : { hn: HID_NAME, hs: 'A borrowed skill is in slot 5' }) });
+    this.priv(p, { t: 'spec', id: p.id, sub: name ? sub : '', n: name || '', ...(name ? {} : { hn: HIDDEN.name, hs: 'A borrowed skill is in slot 5' }) });
     if (name) this.sys(`${p.name} specialised as a ${name}!`);
-    else this.sys('You choose your own road.', p.id);
+    else this.sysPriv(p, 'You choose your own road.');
     this.track?.(p, 'specialise', { cls: p.cls, sub, fee, lvl: p.lvl });
   },
   // Talents and stats after a change of subclass (or an admin edit): the other subclass's nodes come back as points.
@@ -269,7 +278,7 @@ export const SubclassMethods = {
     if (sig) out.sig = { id: sig.id, name: sig.name, desc: sig.borrow ? `${sig.desc} (Borrowed from the ${CLASSES[sig.borrow].name}: ${Math.round(HIDDEN.pow * 100)}% power.)` : sig.desc, cd: sig.cd, aim: sig.aim || 0, anim: sig.anim || sig.id };
     if (P?.found && !isInitiate(P)) { // (only once found: the client holds no text for it)
       const from = borrowFrom(P, p.cls).map(c => ({ cls: c, name: CLASSES[c].name, skills: borrowable(c).map(id => ({ id, name: CLASSES[c].skills.find(s => s.id === id).name })), branches: (TREES[c]?.branches || []).map(b => ({ id: b.id, name: b.name })) }));
-      out.hid = { id: HIDDEN.id, name: HID_NAME, on: sub === HIDDEN.id ? P.wb[p.cls] : null, from,
+      out.hid = { id: HIDDEN.id, name: HIDDEN.name, on: sub === HIDDEN.id ? P.wb[p.cls] : null, from,
         text: `Keep your class and take one skill (slot 5) and the first tier of one talent branch from another class whose trial you passed, at ${Math.round(HIDDEN.pow * 100)}% power. No signature skill.` };
     }
     return out;
@@ -281,13 +290,13 @@ export const SubclassMethods = {
     const t = this.time;
     if (t < (p.lecternAt || 0)) return;
     p.lecternAt = t + 3;
-    const say = text => this.sys(text, p.id);
+    const say = text => this.sysPriv(p, text);
     if (!canFind(p.path, p.lvl)) return say('A dusty lectern. The book on it is too faded to read.');
     if (p.path.found) return say('The margins are full of your own notes now.');
     p.path.found = 1;
     this.markPath(p);
     say('Under the dust, a page in many hands: "One tree is a habit, not a law. Walk where you have already walked." A new choice waits in your Specialise section.');
-    this.events.push({ t: 'spec', id: p.id, to: p.id, found: 1 });
+    this.priv(p, { t: 'spec', id: p.id, found: 1 });
     this.track?.(p, 'lectern', { cls: p.cls, lvl: p.lvl });
   },
 
@@ -297,8 +306,9 @@ export const SubclassMethods = {
     if (p.dead || p.trial || p.duel) return;
     const sub = String(msg.sub || '');
     const borrow = sub === HIDDEN.id && msg.borrow && typeof msg.borrow === 'object' ? { c: String(msg.borrow.c || ''), sk: String(msg.borrow.sk || ''), br: String(msg.borrow.br || '') } : null;
-    const why = specBlock(p.path || { stage: 'class', trials: {} }, p.cls, p.lvl, sub, p.gold, { borrow }); // (no path: graduated before the Academy)
-    if (why) return this.sys(why, p.id);
+    const path = p.path || { stage: 'class', trials: {} }; // (no path: graduated before the Academy)
+    const why = sub === HIDDEN.id ? wanderBlock(path, p.cls, p.lvl, p.gold, borrow, NOT_A_SUB) : specBlock(path, p.cls, p.lvl, sub, p.gold); // (not found: the same answer as any unknown id)
+    if (why) return this.sysPriv(p, why);
     this.specialise(p, sub, borrow);
   },
 };
@@ -312,6 +322,7 @@ export function installSubclasses(Game) {
   wrap('initTalents', function (orig, p, raw) { p._talRaw = raw; return orig.call(this, p, raw); });
   wrap('initPath', function (orig, p, ...a) {
     const r = orig.call(this, p, ...a);
+    keepWander(a[0], p.path); // (shared cleanPath drops the unlisted pick's fields: server/wander.js)
     const raw = p._talRaw; delete p._talRaw;
     if (this.joinSub && !p.charId) this.botSpecialise(p, this.joinSub); // an anonymous join with a subclass (index.js: bot runners, tests)
     const sub = this.subOfP(p);
@@ -356,7 +367,7 @@ export function installSubclasses(Game) {
     const was = p.lvl, r = orig.call(this, p, ...a);
     if (p.lvl !== was && !p.bot && !isInitiate(p.path)) {
       p.pathDirty = true;
-      if (was < SPEC.lvl && p.lvl >= SPEC.lvl && !this.subOfP(p)) this.sys(`Level ${SPEC.lvl}: you can specialise. Visit the Academy (Specialise) to pick a subclass and its signature skill.`, p.id);
+      if (was < SPEC.lvl && p.lvl >= SPEC.lvl && !this.subOfP(p)) this.sysPriv(p, `Level ${SPEC.lvl}: you can specialise. Visit the Academy (Specialise) to pick a subclass and its signature skill.`);
     }
     return r;
   });
@@ -371,7 +382,7 @@ export function installSubclasses(Game) {
     if (op === 'lectern') return this.academySpecOp(p, msg);
     if (op === 'specialise') {
       if (!p || p.dead) return;
-      if (!nearAcademy(p.x, p.z, 1.5)) return this.sys('Do that at the Academy, in the Town of Beginnings.', p.id);
+      if (!nearAcademy(p.x, p.z, 1.5)) return this.sysPriv(p, 'Do that at the Academy, in the Town of Beginnings.');
       return this.academySpecOp(p, msg);
     }
     return orig.call(this, p, msg);

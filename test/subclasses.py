@@ -1,6 +1,6 @@
 # Subclasses in a real browser (docs/briefs/subclasses.md): a bow Initiate at level 16 graduates as a Ranger, the
 # Academy panel shows the Specialise section with the Ranger's two subclasses, a confirmed pick puts the signature
-# skill on the HUD's fifth button, and X fires it (slot 5 cools down). Screenshots go to docs/briefs/subclass-shots/.
+# skill on the HUD's fifth button, and G fires it (slot 5 cools down). Screenshots go to docs/briefs/subclass-shots/.
 # Usage: python3 test/subclasses.py   (starts its own server; PORT=xxxx, default 3581; CHROMIUM=<path> optional)
 import os, subprocess, time
 from playwright.sync_api import sync_playwright
@@ -71,11 +71,11 @@ try:
         S("() => __fb.send({ type: 'test', tp: [0, 60] })")
         p.wait_for_timeout(6000) # the 5 s cooldown after picking
         p.mouse.click(640, 400)
-        p.keyboard.press('KeyX')
+        p.keyboard.press('KeyG')
         p.wait_for_function("() => __fb.state.ready?.[4] > performance.now() + 5000", timeout=10000)
         p.wait_for_timeout(800)
         p.screenshot(path=os.path.join(SHOTS, 'slot5.png'))
-        ok('X fires the signature skill: slot 5 cools down on the HUD')
+        ok('G fires the signature skill: slot 5 cools down on the HUD')
         assert not errors, errors
         ok('no page errors')
         b.close()

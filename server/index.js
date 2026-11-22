@@ -250,13 +250,14 @@ function tick(dt) {
   tickNo++;
   for (const p of game.players.values()) {
     if (p.ws.readyState !== 1) continue;
+    const pe = p.pev; p.pev = null; // private events (Game.priv): this player's socket only
     if (p.ws.local) {
       shared ||= localHub.freeze ? deepFreeze(JSON.parse(world)) : JSON.parse(world);
       if (halfRate && (tickNo + p.id) % 2 && thinksSlow(p, humans)) { (p.evLater ||= []).push(shared.events); continue; } // 10 Hz: this tick's events wait for the next
       const later = p.evLater; p.evLater = null;
       const w = later ? { ...shared, events: [].concat(...later, shared.events) } : shared;
-      p.ws.deliver({ type: 'snap', st, me: game.meFor(p), w, ...(later ? { dt: (later.length + 1) / TICK_RATE } : {}) });
-    } else sendCounted(p.ws, `{"type":"snap","st":${st},"me":${JSON.stringify(game.meFor(p))},"w":${p.bot ? world : game.viewFor(p)}}`); // a human: only what is near them (Game.viewFor, bandwidth); a bot on a socket: the same world as in process
+      p.ws.deliver({ type: 'snap', st, me: game.meFor(p), w, ...(later ? { dt: (later.length + 1) / TICK_RATE } : {}), ...(pe ? { pe } : {}) });
+    } else sendCounted(p.ws, `{"type":"snap","st":${st},"me":${JSON.stringify(game.meFor(p))},"w":${p.bot ? world : game.viewFor(p)}${pe ? `,"pe":${JSON.stringify(pe)}` : ''}}`); // a human: only what is near them (Game.viewFor, bandwidth); a bot on a socket: the same world as in process
     if (p.invDirty) { p.invDirty = false; p.ws.send(JSON.stringify(game.invFor(p))); }
     if (p.talentsDirty) { p.talentsDirty = false; p.ws.send(JSON.stringify(game.talentsMsg(p))); } // talent tree: points, ranks
     if (p.lifeDirty && !p.bot) { p.lifeDirty = false; p.ws.send(JSON.stringify(game.lifeMsg(p))); } // life classes (server/life.js)

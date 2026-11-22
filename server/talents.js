@@ -286,7 +286,7 @@ export function installTalents(Game) {
     if (p.dodgeCd === before || !p.tal) return; // no roll
     const t = this.time;
     if (p.tal.stat.dodge) p.dodgeCd = t + DODGE.cd * (1 - Math.min(50, p.tal.stat.dodge) / 100);
-    if (p.tal.keys.flow) for (let i = 1; i < p.cds.length; i++) if (p.cds[i] > t) p.cds[i] = Math.max(t, p.cds[i] - KEYS.flow.roll);
+    if (p.tal.keys.flow) for (let i = 1; i < 4; i++) if (p.cds[i] > t) p.cds[i] = Math.max(t, p.cds[i] - KEYS.flow.roll);
   });
 
   wrap('evadeHit', function (orig, p, src, mob) {

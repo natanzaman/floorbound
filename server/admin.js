@@ -20,7 +20,9 @@ import { STAT_KEYS, TITLE_BY_ID, newStats } from '../shared/titles.js';
 import { floorOf } from '../shared/floor2.js';
 import { MASTERY, BRANCHES, newMastery, masteryLevel } from '../shared/mastery.js';
 import { newTalents, allocError, TREES, spendBlock, nodesOf, pointsAt, nodeDef } from '../shared/talents.js';
-import { WEAPONS, cleanPath, isInitiate } from '../shared/academy.js';
+import { WEAPONS, cleanPath as cleanShared, isInitiate } from '../shared/academy.js';
+import { keepWander } from './wander.js';
+const cleanPath = raw => keepWander(raw, cleanShared(raw)); // (the unlisted pick's fields survive an edit: server/wander.js)
 import { subOf } from '../shared/subclasses.js'; // a subclass keeps its two talent nodes (docs/briefs/subclasses.md)
 import { BEHAVIOURS } from './botmanager.js';
 import { isNamedName } from '../shared/named.js';

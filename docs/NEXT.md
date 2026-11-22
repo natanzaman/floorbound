@@ -80,14 +80,14 @@ Plans: `docs/briefs/bots-access.md`, `docs/briefs/waypoint.md`, `docs/briefs/tar
 ## Subclasses (2026-11-22, branch `feat/subclass`, brief `docs/briefs/subclasses.md`)
 - Academy phase 3: graduates specialise at **level 15** in one of two subclasses per class (14 in all, Academy panel →
   Specialise). Each adds two talent nodes to one branch and a **signature skill in slot 5** (new rebindable control
-  `skill4`: X, pad LB+RT; a gold HUD button). First pick free, a change costs 200 + 20/level. Premade bots pick by role
+  `skill4`: G, pad LB+RT; a gold HUD button). First pick free, a change costs 200 + 20/level. Premade bots pick by role
   and use slot 5 (`shared/bots/subclass.js`); the Named have their own. Admin editor: Subclass select.
-- The owner's hidden path is built as he asked: described only in the brief and the tests, never in the UI, guide,
-  README or here by name.
+- The owner's other Phase 3 request is in too: see the brief's last part (deliberately not described here).
 - Balance (`scripts/tuneboss.js`, 6 bots at level 18+, skill 5, 3 runs each, before → after): Sovereign 153 → 147 s,
   Colossus 145 → 149 s (both within 5%, all kills); no skill needed tuning. Bots in the field use their signature skills.
-- **Owner calls waiting:** every number is a first guess (the 14 cooldowns and strengths, the fee, 80% for the hidden
-  path). Signature skills have no mastery or evolutions, chains don't refund them and the Team Burst doesn't reset them.
+- **Owner calls waiting:** every number is a first guess (the 14 cooldowns and strengths, the fee, the brief's 80%).
+  Signature skills have no mastery or evolutions, and nothing else shortens their cooldown (chains, the Team Burst,
+  Zeal, Encore, the Dual Blades switch cut and the Flow keystone all skip slot 5): only their own talents do.
 
 ## Owner calls from the 2026-11-20 batch: decided 2026-11-21 (`feat/tweaks`, brief `docs/briefs/tweaks-2026-11-21.md`)
 - **Several of the Named per party: yes.** Any of the five can join one party, up to the normal 6 (open invites count);

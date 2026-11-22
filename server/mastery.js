@@ -298,7 +298,7 @@ export const MasteryMethods = {
         fx({ r: 15 });
         for (const o of this.allyList(p, 15)) {
           o.dmg = { until: t + 8, v: 0.15 * pow, by: p.id, sk: S, zeal: true };
-          for (let i = 1; i < o.cds.length; i++) if (o.cds[i] > t) o.cds[i] = t + (o.cds[i] - t) * 0.75;
+          for (let i = 1; i < 4; i++) if (o.cds[i] > t) o.cds[i] = t + (o.cds[i] - t) * 0.75;
           this.events.push({ t: 'buff', id: o.id, k: 'zeal', d: 8 });
         }
         break;

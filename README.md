@@ -35,7 +35,7 @@ The default keys; change any of them in Game Menu → Controls (they follow your
 | Move | WASD: the character keeps facing where the camera looks, so S walks backwards and A/D strafe (also while locked on) | Left stick |
 | Basic attack | Left click or J (hold) | Big round button (hold) |
 | Skills | 1, 2, 3 | Small buttons |
-| Signature skill (slot 5, after specialising at level 15) | X | Gold button |
+| Signature skill (slot 5, after specialising at level 15) | G | Gold button |
 | Dodge roll | Shift | Dodge button |
 | Jump | Space (hop over the boss's slams and Quake Rings; you keep your momentum and can steer in the air, a little less sharply than on the ground) | Jump button |
 | Guard / parry (Guardian) | Hold R to guard; tap R just before a hit to parry | — |
@@ -490,7 +490,7 @@ Code: `shared/academy.js` (rules and tables), `shared/academyyard.js` (the build
 
 ### Subclasses (level 15)
 
-At **level 15** a graduate can **specialise** in one of two subclasses of its class, in the Academy's **Specialise** section. Each subclass is built on one talent branch: it adds two nodes to that branch (tier 2, left and right, each after the tier-1 node above it; they don't count toward opening deeper tiers) and grants a **signature skill** in a new **slot 5** (X; pad LB+RT; a gold button on touch). The first pick is free; changing later costs gold (200 + 20 per level), and the old subclass's two nodes are refunded. Changing class keeps one subclass per class.
+At **level 15** a graduate can **specialise** in one of two subclasses of its class, in the Academy's **Specialise** section. Each subclass is built on one talent branch: it adds two nodes to that branch (tier 2, left and right, each after the tier-1 node above it; they don't count toward opening deeper tiers) and grants a **signature skill** in a new **slot 5** (G; pad LB+RT; a gold button on touch). The first pick is free; changing later costs gold (200 + 20 per level), and the old subclass's two nodes are refunded. Changing class keeps one subclass per class.
 
 | Class | Subclass (branch) | Signature skill |
 | --- | --- | --- |

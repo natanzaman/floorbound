@@ -22,11 +22,16 @@
 - **The signature skill** sits in a new **slot 5** (`p.cds[4]`). `useSkill(p, 4)` goes to `useSignature`
   (server/subclasses.js `SIG_FNS`): cooldown × haste × the `'sig'` talent cooldown mod. The 14 skills reuse existing
   fx kinds (`ring`, `arc`, `line`, `burst`, dash) with their own colours, so they read on screen without new art.
-- **Controls:** new action `skill4` ("Signature skill"), default X on keyboard, LB+RT on the pad, rebindable on the
+- **Controls:** new action `skill4` ("Signature skill"), default G on keyboard (X is the weapon swap), LB+RT on the pad, rebindable on the
   Controls screen. HUD: a gold fifth button with a tooltip (name, cooldown, description); on touch it sits in the
   skill grid's second row. Every 4-slot array (`cds`, the client's `ready` / `lastPress`) is now 5 long.
-- **Not covered on purpose:** signature skills earn no mastery (no evolutions), skill chains do not refund them and the
-  Team Burst does not reset them. Cheap to add later if wanted.
+- **Not covered on purpose:** signature skills earn no mastery (no evolutions), and nothing outside their own talents
+  shortens slot 5: skill chains, the Team Burst, Zeal, Encore, the Dual Blades switch cut and the Flow keystone all
+  loop over slots 1-3 only. Cheap to add later if wanted.
+- **Where it works:** not inside a trial or drill pen (the yard's own kit). Buffs and heals reach players near you,
+  never the other side of a duel (`sigAllies`). Aimed targeting works through `pickFront` (`skySpot`).
+- **Private lines:** the spec banners and every refusal or notice to one player go to that player's socket only
+  (`Game.priv` / `sysPriv`: the snapshot's `pe` field), never into the shared world.
 - **Show:** nameplates and the Players list show the subclass name instead of the class (`rosterPath` / plate tag);
   the Skill Tree shows the two subclass nodes in their branch (only your own subclass's), tooltip "specialisation".
 - **Admin:** a Subclass select and "Set subclass" in the character editor (blank clears it); a path edit drops another
@@ -57,20 +62,25 @@
   close (or a boss), party buffs and heals when allies are near (heals at low party health). Sub nodes are spent first.
 - The Named: Halvard Bulwark Knight, Maribel Lightbringer, Tovin Sharpshooter, Sennet Phalanx, Cairn Dragoon
   (`sub` in `shared/named.js`).
-- Director film shows and their actors are untouched (no join `sub`, no outfit call).
+- Server-run bots (`botmanager.addBotPlayer`) specialise on joining at 15+; the Named do it in their outfit. Director
+  film actors are untouched (their join carries `actor`).
 
 ### The hidden path (never advertised)
-- Id `wanderer` (`HIDDEN` in `shared/subclasses.js`). It is found at an unlisted **lectern** 4.5 m behind the Academy
+- **Server only:** its id, rules, name and texts live in `server/wander.js` (`WANDER`, `canFind`, `borrowFrom`,
+  `cleanBorrow`, `keepWander`, `wanderBlock`, `borrowedTotals`). No file the browser loads (public/ and every shared file
+  it imports) names it; `test/subclasses.js` walks the imports and checks. Shared `cleanPath` drops its fields;
+  the server puts them back with `keepWander` (on load and on admin edits).
+- Id `wanderer`. It is found at an unlisted **lectern** 4.5 m behind the Academy
   hall (`LECTERN` in `shared/academyyard.js`; the interact bar says "Read"). Reading it does nothing unless the
   character is a graduate of level 15+ who has passed the trials of **2+ different classes** (`canFind`); then
   `path.found = 1` and a third option appears in the Specialise section.
 - The option's text is sent by the server only once found (`specMsg` `hid`), so the client bundle holds none of it.
 - The pick: keep your class, take **one skill** (slot 1 or 2 of another class whose trial you passed) into slot 5 and
   the **first tier of one talent branch** of that class (every tier-0 node at max rank), both at **80% power**
-  (`HIDDEN.pow`, `tierPow`). No signature skill, no sub nodes. Stored as `path.wb = { cls: { c, sk, br } }`.
-- Server enforcement (`specBlock`): not found, an Initiate, under level 15, a class not passed, the own class, a skill
+  (`WANDER.pow`, `tierPow`). No signature skill, no sub nodes. Stored as `path.wb = { cls: { c, sk, br } }`.
+- Server enforcement (`wanderBlock`): not found gets the same answer as any unknown id; an Initiate, under level 15, a class not passed, the own class, a skill
   outside slots 1-2, an unknown branch or too little gold are all refused. A borrowed skill runs through the other
-  class's own code (`useBorrowed` swaps `p.cls` for the call and restores it), at 80% via `skillPow`.
+  class's own code (`useBorrowed` swaps `p.cls` for the call and restores it and every cooldown), at 80% via `skillPow`.
 - It never shows on plates, the Players list or `me.sub` (the class shows).
 
 ## Balance

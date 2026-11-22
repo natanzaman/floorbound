@@ -87,6 +87,7 @@ export class BotManager {
     if (msg.f3) p.stats.floor3 = 1; // Floor 3 too
     g.recompute(p); p.hp = p.maxHp;
     if (msg.named) this.namedJoin?.(p, String(msg.named)); // one of the Named: flagged and outfitted at once (server/named.js)
+    else if (!msg.actor) g.botSpecialise?.(p); // its role's subclass from level 15 (server/subclasses.js); film actors keep their script's kit
     g.rosterDirty = true;
     return p;
   }
