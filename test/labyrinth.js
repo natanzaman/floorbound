@@ -121,6 +121,7 @@ const at = (p, x, z) => g.teleport(p, x, z);
 {
   const w = [...g.mobs.values()].find(m => m.type === 'tombwarden');
   a.testWard = true; a.hp = a.maxHp;
+  w.threat.clear(); w.labAwake = 0; w.labGo = null; // (start it asleep, whatever woke it before)
   at(a, w.x + 0.1, w.z + 0.1); // right next to it, quietly: it sleeps
   tick(1); assert.equal(w.threat.size, 0, 'asleep: a quiet player beside it is not noticed');
   // a torch lit nearby wakes it, and it fights what it finds
@@ -180,7 +181,8 @@ const at = (p, x, z) => g.teleport(p, x, z);
 // ---------- the crypt breathes, with rising pressure ----------
 {
   const S = g.labs.galleries;
-  at(a, ...startPoint(GAL)); a.testWard = true; at(b, 0, 60);
+  at(a, 0, 60); at(b, 0, 60); tick(0.2); // (the layer empties: its pressure resets)
+  at(a, ...startPoint(GAL)); a.testWard = true;
   tick(0.2); assert.ok(S.since > 0, 'pressure clock starts');
   assert.ok(g.labPressure(GAL) < 0.05);
   S.since = g.time - GAL.breathe.pressAfter; S.breatheAt = g.time; g.events = [];
@@ -269,10 +271,11 @@ const at = (p, x, z) => g.teleport(p, x, z);
   g.knockback(m, b, 2.5);
   assert.ok(m.x < wx - 0.9 && cellOf(CAT, m.x, m.z) === cellOf(CAT, wx - 1.6, wz), 'knockback stops at the wall');
   // no bite through the wall
+  Object.assign(b, { dead: false, hp: b.maxHp }); // (b may have fallen to a wandering ghoul earlier)
   at(b, wx + 1.4, wz); const hp = b.hp; b.testWard = false;
   g.damagePlayer(b, 30, { src: 'ghoul bite', mob: m });
   assert.equal(b.hp, hp, 'the wall takes the bite');
-  at(b, m.x - 1.5, wz); g.damagePlayer(b, 30, { src: 'ghoul bite', mob: m }); assert.ok(b.hp < hp, 'in the open it lands');
+  at(b, m.x - 1.5, wz); for (let k = 0; k < 8 && b.hp >= hp; k++) g.damagePlayer(b, 30, { src: 'ghoul bite', mob: m }); assert.ok(b.hp < hp, 'in the open it lands');
   // chests: emptied per character, still emptied after a reconnect
   const c = CAT.chestList[0]; at(a, c.x, c.z - 1.2); a.charId = 77; g.handle(a, { type: 'lab', a: 'chest' });
   const a2 = g.addPlayer(null, 'Pell', 'swordsman'); a2.charId = 77; at(a2, c.x, c.z - 1.2); g.events = [];

@@ -129,8 +129,8 @@ A portcullis blocks the corridor to the Warden's chamber. Everyone standing at t
 
 A stair in the field, just short of the Chamber Gate, leads down into a three-layer dungeon maze. Its mini-boss holds the **Horn Key**, and the Chamber Gate only counts you ready once someone at the gate has it: one keyholder opens it for the whole party, a character needs it once, and anyone who has already beaten the Warden counts. Plan: `docs/briefs/labyrinths.md`.
 
-- **The Catacombs:** spike plates (wait for them to sink, or jump or roll), Crypt Ghouls, chests (most in dead ends, a few on the way), wall torches you can light to mark your path.
-- **The Drowning Galleries:** flooded cells slow you and are loud. **Tomb Wardens** sleep until they hear noise (wading, lighting torches, fighting); throw a **bone rattle** (interact with nothing in reach) to send them elsewhere. Every so often the crypt breathes: torches gutter and the dead climb out, sooner the longer you stay. Two bone levers raise the portcullis to the way down; pull both together, or alone within the time it takes to run between them.
+- **The Catacombs:** spike plates (wait for them to sink, or jump or roll), Crypt Ghouls, chests (most in dead ends, a few on the way), wall torches you can light to mark your path (a lit torch glows on its wall and floor).
+- **The Drowning Galleries:** flooded cells slow you and are loud. **Tomb Wardens** sleep until they hear noise (wading, lighting torches, fighting); throw a **bone rattle** (interact with nothing in reach) to send them elsewhere. Every so often the crypt breathes: torches gutter and the dead climb out, sooner the longer you stay. Two bone levers raise the portcullis to the way down; pull both within 12 s of each other, or alone within the time it takes to run between them (15 s at least).
 - **The Ossuary:** the **Gravekeeper** rings the Grave Bell (jump or roll the low ring) and calls the dead at half health. Its stair up leaves you before the Chamber Gate.
 
 Dying in the Undercrypt brings you back at the last threshold you crossed. Each layer rolls walls, traps, mobs and loot from separate seeds (`shared/labyrinth.js`).

@@ -10,6 +10,14 @@ import * as CAUSEWAY from '/labcauseway.js'; // Floor 3's look (the Windrift Cau
 const STYLES = { thicket: THICKET, causeway: CAUSEWAY }; // (Floor 1's crypt is drawn here)
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0.05, flatShading: true, ...opts });
+const UP = new THREE.Vector3(0, 1, 0);
+let GLOW_TEX = null; // a soft round falloff, drawn once
+const glowTex = () => {
+  if (GLOW_TEX) return GLOW_TEX;
+  const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+  const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,0.9)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return (GLOW_TEX = new THREE.CanvasTexture(c));
+};
 const glow = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
 function rng(seed) { return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }; }
 
@@ -85,10 +93,15 @@ function buildLayer(scene, L, occluders) {
   // torches you can light: a bracket always, a flame once lit
   const tN = L.torchList.length;
   const bracket = new THREE.InstancedMesh(new THREE.BoxGeometry(0.16, 0.6, 0.16), mat(K.bracket), Math.max(1, tN));
-  const flame = new THREE.InstancedMesh(new THREE.ConeGeometry(0.18, 0.55, 6), glow(K.flame), Math.max(1, tN));
+  const flame = new THREE.InstancedMesh(new THREE.ConeGeometry(0.24, 0.75, 6), glow(K.flame), Math.max(1, tN));
   const halo = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 8, 6), glow(K.halo, 0.22), Math.max(1, tN));
   L.torchList.forEach((tc, i) => { m4.compose(p.set(tc.x, 2.5, tc.z), q.identity(), s.set(1, 1, 1)); bracket.setMatrixAt(i, m4); });
-  bracket.count = tN; root.add(bracket, flame, halo);
+  // a lit torch's light, faked (no real lights: they cost every pixel): a warm splash on its wall and on the floor below
+  const splashMat = new THREE.MeshBasicMaterial({ map: glowTex(), color: K.halo, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending });
+  const wallGlow = new THREE.InstancedMesh(new THREE.PlaneGeometry(4.2, 4.2), splashMat, Math.max(1, tN));
+  const floorGlow = new THREE.InstancedMesh(new THREE.PlaneGeometry(6, 6).rotateX(-Math.PI / 2), splashMat, Math.max(1, tN));
+  bracket.count = tN; root.add(bracket, flame, halo, wallGlow, floorGlow);
+  for (const im of [flame, halo, wallGlow, floorGlow]) { im.count = 0; im.frustumCulled = false; } // (a culling sphere built while nothing is lit would hide every lit flame)
 
   // water: dark, still, faintly lit (the Galleries)
   const waterMat = new THREE.MeshStandardMaterial({ color: 0x0f1c22, emissive: 0x06232a, emissiveIntensity: 0.6, roughness: 0.1, metalness: 0.5, transparent: true, opacity: 0.88 });
@@ -167,7 +180,7 @@ function buildLayer(scene, L, occluders) {
     const bell = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 2.4, 3, 16, 1, true), mat(0x8a6a2a, { metalness: 0.6, roughness: 0.4, side: THREE.DoubleSide })); bell.position.set(hx, 9, hz); root.add(bell);
     const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 10, 6), mat(0x52525b)); chain.position.set(hx, 15.5, hz); root.add(chain);
   }
-  return { L, root, flame, halo, plates, spikes, per, stairs, chests, levers, port, terrain };
+  return { L, root, flame, halo, wallGlow, floorGlow, plates, spikes, per, stairs, chests, levers, port, terrain };
 }
 
 // The crypt stair in the field: a dark opening with steps going down, under a stone arch.
@@ -446,9 +459,12 @@ export function initLabClient(ctx) {
         const tc = Lv.torchList[id]; if (!tc) return;
         const fl = (0.85 + 0.25 * Math.sin(time * 11 + id * 1.7)) * low;
         m4.compose(p.set(tc.x, 2.95, tc.z), q.identity(), s.set(fl, fl * (1 + 0.2 * Math.sin(time * 9 + id)), fl)); V.flame.setMatrixAt(i, m4);
-        m4.compose(p.set(tc.x, 2.95, tc.z), q.identity(), s.set(fl * 1.4, fl * 1.4, fl * 1.4)); V.halo.setMatrixAt(i, m4);
+        m4.compose(p.set(tc.x, 2.95, tc.z), q.identity(), s.set(fl * 1.6, fl * 1.6, fl * 1.6)); V.halo.setMatrixAt(i, m4);
+        const w = 0.8 + 0.2 * fl; // the splashes breathe with the flame
+        m4.compose(p.set(tc.x + tc.nx * 0.12, 2.7, tc.z + tc.nz * 0.12), q.setFromAxisAngle(UP, Math.atan2(tc.nx, tc.nz)), s.set(w, w, 1)); V.wallGlow.setMatrixAt(i, m4);
+        m4.compose(p.set(tc.x + tc.nx * 1.6, 0.07, tc.z + tc.nz * 1.6), q.identity(), s.set(w, 1, w)); V.floorGlow.setMatrixAt(i, m4);
       });
-      V.flame.count = V.halo.count = lit.length; V.flame.instanceMatrix.needsUpdate = V.halo.instanceMatrix.needsUpdate = true;
+      for (const im of [V.flame, V.halo, V.wallGlow, V.floorGlow]) { im.count = lit.length; im.instanceMatrix.needsUpdate = true; }
       // spike plates (server time from the snapshot)
       let n = 0;
       for (const pl of V.plates) {

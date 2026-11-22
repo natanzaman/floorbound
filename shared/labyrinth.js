@@ -462,8 +462,6 @@ export function trapState(L, tr, t) {
 }
 export const onTrap = (tr, x, z) => Math.abs(x - tr.x) < tr.half && Math.abs(z - tr.z) < tr.half;
 
-// The levers' window: how long the first pull waits for the second. With one person it's the real walk between them
-// at running speed (+ `solo` s); with two or more it's short (they're meant to pull together).
 // The labyrinth's names for its bits (the lure, the levers, the torches), per floor.
 export const LAB_WORDS = {
   1: { lure: 'bone rattle', lever: 'Bone lever', torch: 'Torch', chest: 'Chest', deep: 'Gilded chest', gate: 'portcullis', event: 'THE CRYPT BREATHES' },
@@ -472,7 +470,9 @@ export const LAB_WORDS = {
 };
 export const labWords = L => LAB_WORDS[L?.floor || 1];
 
-export const leverWindow = (L, people, speed = 10) => people <= 1 ? L.leverWalk / speed * 1.25 + L.levers.solo : 6;
+// The levers' window: how long the first pull waits for the second. With one person it's the real walk between them
+// at running speed (+ `solo` s); with two or more it's 12 s (they're meant to pull together). Never under 12 s (owner, 2026-11-22).
+export const leverWindow = (L, people, speed = 10) => people <= 1 ? Math.max(15, L.leverWalk / speed * 1.25 + L.levers.solo) : 12;
 
 // The stairs of a labyrinth, by kind: 'in' (field -> first layer's start), 'down' (a layer's end -> the next one's
 // start), 'up' (a layer's start -> back: the previous layer's end, or the field), 'out' (the Heart's end -> the boss gate).

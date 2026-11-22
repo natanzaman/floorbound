@@ -29,7 +29,7 @@ with the mini-boss and the key. Layers live in their own patches of Floor 1's co
 - **Noise:** wading, lighting torches and fighting wake Tomb Wardens in range and send them to the sound.
   A **bone rattle** (from chests; you start with one) thrown with interact when nothing else is in reach draws them away.
 - **Levers:** both pulled within the window raises the portcullis for 45 s; alone, the window is the walk between them
-  at run speed ×1.25 plus 6 s.
+  at run speed ×1.25 plus 6 s, never under 15 s; with two or more it is 12 s (owner, 2026-11-22).
 - **Checkpoint:** dying in the labyrinth brings you back at the last threshold you crossed.
 - **Key lock:** `labGateOk` at the Chamber Gate; waived with `SPAWN_AT` or `LAB_GATE=0` (tests), and for bot-only groups.
 
