@@ -99,4 +99,6 @@ async function setup() {
   await q(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS access_level SMALLINT NOT NULL DEFAULT 1`);
   // Each Named's allow list (who may control them; empty = anyone allowed by the rule), kept across restarts.
   await q(`ALTER TABLE named_chars ADD COLUMN IF NOT EXISTS allow JSONB`);
+  // Life classes (server/life.js, shared/life.js newLife): { skills: { id: xp }, learned, plot (the garden tiles), food, spots }
+  await q(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS life JSONB`);
 }

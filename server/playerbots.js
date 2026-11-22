@@ -39,6 +39,8 @@ import { inArena2 } from '../shared/floor2.js';
 import { inArena3 } from '../shared/floor3.js';
 import { canManageBot, accessOf, minAccess, cleanAllow, allowLabel, ALLOW_CREATOR } from '../shared/accesslevels.js';
 import * as db from './db.js';
+import { GARDEN } from '../shared/life.js';
+import { floorOf } from '../shared/floor2.js';
 import { isAdmin } from './admin.js';
 import { resolveAllow } from './accounts.js';
 
@@ -213,6 +215,11 @@ export class PlayerBots {
     e.behaviour = M.behaviour; e.follow = follow; e.partied = true;
     const p = this.mgr.livePlayer(e);
     if (p && M.behaviour === 'follow') p.stats.floor2 = 1; // followers use the waypoints
+    if (M.tend && typeof e.b.command === 'function' && p) { // walk to the garden and stay there (server/life.js lifeTend)
+      if (floorOf(p.x) !== 1) { if (by) this.game.sys(`${p.name} is on another floor: send it to Floor 1 first.`, by.id); return; }
+      try { e.b.command({ k: 'tend', x: GARDEN.x + 4, z: GARDEN.z + 3, by: 0, byName: by?.name || '', group: [p.id] }); } catch (err) { console.error('pbot order', err); }
+      return;
+    }
     if (typeof e.b.command === 'function' && p && by) {
       const k = { follow: 'follow', stay: 'stay', field: 'farm', warden: 'boss' }[mode];
       try { e.b.command({ k, by: by.id, byName: by.name, followId: by.id, adm, group: [p.id] }); } catch (err) { console.error('pbot order', err); }
@@ -461,6 +468,7 @@ export class PlayerBots {
       }
       if (e.creator) { e.creator.pid = owner.id; e.creator.name = owner.name; } // (an anonymous creator who reconnected)
       if (!b) continue;
+      b.pbOwner = owner.id; // (life classes: its creator's garden, server/life.js lifeTend)
       if (rec.partied) {
         if (this.syncParty(b, owner, rec) === 'left') { // it left the party it served (a /b leave order): it roams on its own
           this.freeBot(e, b);

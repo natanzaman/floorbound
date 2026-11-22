@@ -15,7 +15,7 @@ const fresh = (cls = 'swordsman') => {
   const p = g.addPlayer(ws, `T${g.nextId}`, cls);
   p.x = SMITH.x; p.z = SMITH.z + 2.5;
   p.gold = 100000;
-  p.inv.mats = { tusk: 99, pelt: 99, resin: 99, fang: 99, core: 99, horn: 99, dust: 99, ess: 99, prism: 99 };
+  p.inv.mats = { tusk: 99, pelt: 99, resin: 99, fang: 99, core: 99, horn: 99, dust: 99, ess: 99, prism: 99, copper: 99, iron: 99, silver: 99, stormite: 99 }; // (ore: life-skill recipes, shared/life.js)
   g.events.length = 0;
   return p;
 };

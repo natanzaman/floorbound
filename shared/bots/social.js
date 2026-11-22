@@ -15,6 +15,7 @@ export const BOT_COMMANDS = {
   setme: { label: 'Set me up', icon: '✦' },
   status: { label: 'Status', icon: '?' },
   leave: { label: 'Leave party', icon: '⨯', wheel: false },
+  tend: { label: 'Tend my garden', icon: '❀', wheel: false }, // life classes: hold at the town garden (shared/life.js)
 };
 export const BOT_COMMAND_IDS = Object.keys(BOT_COMMANDS);
 
@@ -34,6 +35,7 @@ export const BOT_ALIASES = {
   setme: ['setme', 'setup', 'set', 'combo', 'combos'],
   status: ['status', 'report', 'sitrep'],
   leave: ['leave', 'dismiss'],
+  tend: ['tend', 'garden'],
 };
 const ALIAS = new Map(Object.entries(BOT_ALIASES).flatMap(([cmd, words]) => words.map(w => [w, cmd])));
 const ALL_WORDS = new Set(['all', 'bots', 'everyone', 'team', 'party']);

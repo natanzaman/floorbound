@@ -44,6 +44,7 @@ const TIPS = {
   howl: 'The Alpha howled: nearby wolves are frenzied. Back off or burst them down.',
   waypoint: () => `Waypoint: each town's glowing centrepiece (the well in the Town of Beginnings, awake once you've beaten the Warden; the fire at each camp) takes you to any floor you've unlocked. ${touch() ? 'Tap Warp' : `Press ${K('interact')}`} beside it.`,
   mats: 'Materials! Take them to the Smith in town to refine or craft gear.',
+  life: () => `A gathering spot! Life skills are a second track beside your class: Herbalist, Miner, Fisher, Farmer, Cook, Alchemist (and Smith). Learn them free at the Life Hall in the Town of Beginnings, then ${touch() ? 'tap the action button' : `press ${K('interact')}`} at herb patches, ore veins and pools (fishing: wait for the bite, then strike). Each spot refills for you a few minutes later. Plant seeds in your own garden plot in town, cook meals at the fire (one fight buff at a time) and brew potions at the bench. Game Menu → Life skills shows your levels.`,
   affix: 'Bonus stats! Uncommon and better gear rolls 1-3 affixes (the blue lines): crit, haste, skill damage, combo damage, faster revives... Hover an item in the bag to compare. The Smith can reroll one affix.',
   setpiece: 'A SET PIECE! Each boss drops its own 2-3 piece set (better odds if you land the Last Attack). Wear 2 or 3 pieces for set bonuses: your bag shows the progress.',
   loadout: 'Loadouts: save up to 3 builds (gear, weapon style, talents) in your bag and swap them in town or at a camp, out of combat.',

@@ -55,6 +55,10 @@ export const SHOP = [
   { kind: 'cons', id: 'potion' }, { kind: 'cons', id: 'tonic' }, { kind: 'cons', id: 'draught' },
   { kind: 'gear', slot: 'weapon', price: 140 }, { kind: 'gear', slot: 'armor', price: 140 },
   { kind: 'gear', slot: 'weapon', price: 170, alt: 1 }, // an Uncommon weapon in your class's alternate style (shared/styles.js altStyle)
+  // seeds for the garden (life classes, shared/life.js): plain materials, names from MATS (shared/crafting.js)
+  { kind: 'mat', id: 'wheatseed', price: 3, desc: 'Plant it in your garden plot (Farmer).' },
+  { kind: 'mat', id: 'carrotseed', price: 6, desc: 'Plant it in your garden plot (Farmer 2).' },
+  { kind: 'mat', id: 'sunseed', price: 15, desc: 'Plant it in your garden plot (Farmer 4).' },
 ];
 export const MERCHANT = { x: 9, z: 3, r: 4 };
 

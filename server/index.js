@@ -123,7 +123,7 @@ function onConnection(ws) {
         other.ws.close();
         c = await accounts.loadCharacter(acct.id, msg.character);
       }
-      const p = game.addPlayer(ws, c.name, c.cls, { charId: c.id, accountId: acct.id, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats, mastery: c.mastery, talents: c.talents });
+      const p = game.addPlayer(ws, c.name, c.cls, { charId: c.id, accountId: acct.id, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats, mastery: c.mastery, talents: c.talents, life: c.life }); // life: life classes (server/life.js)
       admin.isAdmin(acct).then(v => { p.admin = v; }).catch(() => {}); // admins can order any bot (botcmd with a name)
       p.access = clampAccess(acct.access_level); // access level 1-5 (shared/accesslevels.js; admins count as 5)
       return p;
@@ -162,6 +162,7 @@ function onConnection(ws) {
         ws.send(JSON.stringify(game.invFor(player))); player.invDirty = false;
         ws.send(JSON.stringify(game.masteryMsg(player))); player.masteryDirty = false; player.mSentT = game.time;
         ws.send(JSON.stringify(game.talentsMsg(player))); player.talentsDirty = false; // talent tree (server/talents.js)
+        ws.send(JSON.stringify(game.lifeMsg(player))); player.lifeDirty = false; // life classes (server/life.js)
         ws.send(JSON.stringify(hall.message())); // the engraved stones
         ws.send(JSON.stringify({ type: 'cine', state: game.cineState() })); // players only use its light (public/cine.js)
         broadcastRoster();
@@ -247,6 +248,7 @@ function tick(dt) {
     } else sendCounted(p.ws, `{"type":"snap","st":${st},"me":${JSON.stringify(game.meFor(p))},"w":${p.bot ? world : game.viewFor(p)}}`); // a human: only what is near them (Game.viewFor, bandwidth); a bot on a socket: the same world as in process
     if (p.invDirty) { p.invDirty = false; p.ws.send(JSON.stringify(game.invFor(p))); }
     if (p.talentsDirty) { p.talentsDirty = false; p.ws.send(JSON.stringify(game.talentsMsg(p))); } // talent tree: points, ranks
+    if (p.lifeDirty && !p.bot) { p.lifeDirty = false; p.ws.send(JSON.stringify(game.lifeMsg(p))); } // life classes (server/life.js)
     if (p.masteryDirty && (p.masteryNow || game.time - (p.mSentT || 0) >= 1)) { // skill mastery: at most once a second, at once on a level-up/evolve
       p.masteryDirty = p.masteryNow = false; p.mSentT = game.time;
       p.ws.send(JSON.stringify(game.masteryMsg(p)));

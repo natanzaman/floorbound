@@ -2,7 +2,7 @@
 // page for admins. It does NOT pause anything (multiplayer): main.js only blocks your movement and attacks while it's
 // open. Leaving (change character / log out) is main.js's leave(kind); it asks first when you're downed, partied or
 // in a boss fight.
-export function initGameMenu({ state, isTouch, guide, controls, steps, openSettings, openControls, lockCursor, leave, accounts, checkAdmin, sfx }) {
+export function initGameMenu({ state, isTouch, guide, controls, steps, openSettings, openControls, openLife, lockCursor, leave, accounts, checkAdmin, sfx }) {
   const back = document.createElement('div'); back.id = 'gamemenu'; back.className = 'hidden'; back.dataset.nav = 'gamemenu'; // (data-nav: the controller can drive it, public/focusnav.js)
   back.innerHTML = '<div class="gm-box panel" role="dialog" aria-label="Game Menu"></div>';
   document.body.appendChild(back);
@@ -22,6 +22,7 @@ export function initGameMenu({ state, isTouch, guide, controls, steps, openSetti
       <button class="gm-b primary" data-a="resume">Resume</button>
       <button class="gm-b" data-a="settings">Settings</button>
       ${openControls ? '<button class="gm-b" data-a="bindings">Controls</button>' : ''}
+      ${openLife && !spec ? '<button class="gm-b" data-a="life">Life skills</button>' : ''}
       ${spec ? '' : '<button class="gm-b" data-a="controls">Controls &amp; guide</button>'}
       <button class="gm-b" data-a="char">${spec ? 'Leave spectator view' : acc ? 'Change character' : 'Change name or class'}</button>
       ${acc ? '<button class="gm-b" data-a="logout">Log out</button>' : ''}
@@ -46,6 +47,7 @@ export function initGameMenu({ state, isTouch, guide, controls, steps, openSetti
     if (a === 'resume') close(true);
     else if (a === 'settings') { close(); openSettings(); }
     else if (a === 'bindings') { close(); openControls(); }
+    else if (a === 'life') { close(); openLife(); } // life classes (public/life.js)
     else if (a === 'controls') { view = 'controls'; render(); }
     else if (a === 'back') { view = 'main'; render(); }
     else if (a === 'guide') { guide.off = false; if (guide.key) guide.save(); guide.render(); close(true); }
