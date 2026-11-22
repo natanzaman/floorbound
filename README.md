@@ -242,6 +242,16 @@ The stone itself is engraved: its face carries the names of the latest Floor 1 c
   - **Reforge** an item's stats within its rarity range, or give a charm a different affix, for Essence and gold (Epics also take a Prism). Crafted and Last Attack items are fixed.
 - Everything is validated on the server and saved with the character. Tuning lives in `shared/crafting.js` (drops, costs, recipes); the server side is `server/smith.js`, the forge and panel `public/smith.js`. Tests: `node test/craft.js`.
 
+## Life classes
+
+A second track beside your combat class (plan: `docs/briefs/life-classes.md`). Life skills level 1–10 by doing them: **Herbalist, Miner, Fisher, Farmer** (gathering) and **Cook, Alchemist** (making), plus **Smith**, which levels from everything you do at the Smith. Learn them free at the **Life Hall** (the green-roofed booth east of the plaza). Game Menu → Life skills opens the Life panel anywhere (levels, garden, recipes, meals).
+- **Gathering spots** in the fields of Floors 1–3 (herb patches, ore veins, fishing pools; a few rare glowing ones in the labyrinths). Press F at one: herbs and ore take a few seconds standing still (moving or a hit stops it); fishing waits for the bite (“A BITE!”), then press F within about a second. A spot you emptied refills for you after a few minutes; nobody else can use up yours. Higher levels open better spots and add to every yield.
+- **Your garden**: six tiles of your own in the town garden (west of the plaza; everyone sees their own crops). Seeds from the merchant (Wheat, Carrot, Sunberry) or herb patches (Moonroot from Floor 3 and the labyrinths). Crops grow in real time, also while you're away, and are ripe in 20 min to 6 h. Your own bots near the garden (`/b tend`, or the bot behaviour “Tend my garden”) make it grow 25% faster.
+- **Cooking fire** (east of the plaza): meals are fight buffs, one at a time (a new one replaces it), 15–20 min of play: Field Bread (health back every second, even in fights), Fisher's Stew (+12% posture damage), Carrot Pie (+8% max health), Spiced Eel (+6% damage), Tower Feast (a bit of everything). Eat from the bag or the Meals tab.
+- **Alchemy bench** (southeast): brews the usual Health Potions, Battle Tonics and Ironbark Draughts from herbs and ore.
+- Ore also feeds the Smith: Ore-Forged Mail and a Stormite weapon in the Craft tab. Life materials stack to 99 in the Materials pouch.
+- Data: `shared/life.js` (skills, XP curve, spots, crops, recipes, meals); rules: `server/life.js`; client: `public/life.js`. Saved in `characters.life`. Tests: `node test/life.js` (with `DATABASE_URL`: a real server, restarts and all), `python3 test/life.py` (browser).
+
 ## New players and the party finder
 
 New characters get a short step-by-step guide card (move, hit, dodge, kill, bag, party, Switch, raid gate, boss) plus one-time tips the first time they see each attack type. **Find party** puts you in the party finder: solo players are matched together, or into any party that has turned on recruiting.
@@ -465,6 +475,7 @@ shared/arenas.js, server/arenas.js, public/arenas.js  multi-area boss fights: ar
 shared/bots/floor3.js  bots: Tempest Beam jumps, Breaks into an Overload
 shared/bots/arenas.js  bots in a boss's lower area: the landing, round sludge and fire, cover from the beam
 server/game.js   authoritative simulation: combat, AI, boss, XP, parties
+shared/life.js, server/life.js, public/life.js  life classes: life skills, gathering spots, the garden, cooking, alchemy, meals, the Life panel
 server/combat.js posture/Break, perfect dodge, guard/parry, Horn Sweep, Quake Rings (mixed into Game)
 shared/threat.js, server/threat.js, public/threat.js  team threat: targetOf (the one target picker), taunt locks, clean-damage multiplier, who bosses target (snapshot `th`), threat meter (`me.th`), healer threat, Guardian Cover, flank / Pincer; bots in shared/bots/threat.js; test/threat.js, test/threatrules.js
 server/bossteam.js boss team mechanics: shared meteor (stack), spread markers, tether (mixed into Game; public/bossteam.js, shared/bots/bossteam.js)

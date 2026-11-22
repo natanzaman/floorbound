@@ -104,7 +104,7 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
 
   function matsStrip() {
     const have = mats();
-    return `<div class="mats">${MAT_IDS.filter(k => !MATS[k].life || have[k]).map(k => // (life-skill materials only when you have some) `<span class="${have[k] ? '' : 'zero'}" title="${esc(MATS[k].name)}: from ${esc(MATS[k].from)}" style="--c:${MATS[k].color}"><i></i>${esc(MATS[k].name)} <b>${have[k] || 0}</b></span>`).join('')}</div>`;
+    return `<div class="mats">${MAT_IDS.filter(k => !MATS[k].life || have[k]).map(k => `<span class="${have[k] ? '' : 'zero'}" title="${esc(MATS[k].name)}: from ${esc(MATS[k].from)}" style="--c:${MATS[k].color}"><i></i>${esc(MATS[k].name)} <b>${have[k] || 0}</b></span>`).join('')}</div>`;
   }
 
   function tabRefine() {

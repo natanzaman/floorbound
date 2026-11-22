@@ -24,6 +24,16 @@ Plans: `docs/briefs/bots-access.md`, `docs/briefs/waypoint.md`, `docs/briefs/tar
 - **Owner calls waiting:** the default rule (Half Health was a guess), `DUEL.pvp` 0.25, the 2 / 3 min clock, whether
   knockback and stuns should move players in duels (not in v1), a duel ladder.
 
+## Life classes (2026-11-22, branch `feat/life`, plan `docs/briefs/life-classes.md`)
+- Life skills 1-10 beside the combat class: Herbalist, Miner, Fisher, Farmer, Cook, Alchemist, plus Smith (levels from
+  Smith actions). Learn free at the Life Hall in town. Gathering spots on Floors 1-3 (+6 rare ones in the labyrinths),
+  spots refill per player (nobody can take yours), fishing has a strike-on-the-bite window. A 6-tile garden plot per
+  character (real-time crops, across restarts; your bots near it or on `/b tend` speed it up 25%). Cooking fire (meals:
+  one fight buff at a time), alchemy bench (the existing potions / tonics / draughts), ore recipes at the Smith.
+  `characters.life` JSONB. Tests: `test/life.js` (DB part restarts a real server), `test/life.py`.
+- **Owner calls waiting:** growth times (20 min to 6 h), meal strength (+6% damage, +12% posture, 0.4%/s regen), whether
+  the Life Hall moves under the Academy, Smith-level perks (none yet), bots / the Named gathering (not built).
+
 ## Owner calls from the 2026-11-20 batch: decided 2026-11-21 (`feat/tweaks`, brief `docs/briefs/tweaks-2026-11-21.md`)
 - **Several of the Named per party: yes.** Any of the five can join one party, up to the normal 6 (open invites count);
   each is still one of a kind. Despawn / respawn rejoins a party that has other Named in it (room permitting).

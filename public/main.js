@@ -2329,4 +2329,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { interactKind, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent, vfx, post };
+window.__fb = { interactKind, life, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent, vfx, post };
