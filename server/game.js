@@ -46,6 +46,8 @@ import { installLoot } from './loot.js';
 import { installLooks } from './looks.js'; // character looks: setLook, w.looks (I2)
 import { installDuels } from './duels.js'; // solo and team duels: challenges, stand-ins, rules, w.du (docs/briefs/duels.md)
 import { installTargeting } from './targeting.js'; // targeting modes + cleave (player settings, Controls → Combat)
+import { installLife } from './life.js'; // life classes: gathering, the garden, cooking, alchemy, meals (docs/briefs/life-classes.md)
+import { GARDEN } from '../shared/life.js';
 import { rollGear } from '../shared/loot.js'; // affixes, boss sets, loadouts, drop tables (H2)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
@@ -420,8 +422,10 @@ export class Game {
     const price = s.kind === 'cons' ? CONSUMABLES[s.id].price : s.price;
     if (p.gold < price) return this.sys('Not enough gold.', p.id);
     if (s.kind === 'gear' && p.inv.bag.length >= BAG_SIZE) return this.sys('Your bag is full.', p.id);
+    if (s.kind === 'mat' && !this.lifeRoom(p, s.id, 1)) return this.sys('You can\'t carry more of those.', p.id); // seeds (server/life.js)
     p.gold -= price;
     if (s.kind === 'cons') p.inv.cons[s.id] = (p.inv.cons[s.id] || 0) + 1;
+    else if (s.kind === 'mat') this.giveMats(p, { [s.id]: 1 });
     else p.inv.bag.push(rollGear(s.slot, 1, p.cls, Math.random, undefined, s.alt ? altStyle(p.cls) : undefined)); // alt: weapon styles
     this.events.push({ t: 'coin', id: p.id });
     this.invChanged(p);
@@ -545,7 +549,7 @@ export class Game {
       no = bots.filter(o => block(o)).map(o => o.id);
       if (no.length && no.length === bots.length) { this.sys(block(bots[0]), p.id); return false; }
     }
-    this.events.push({ t: 'botcmd', by: p.id, byName: p.name, party: p.party || 0, cmd, ...(name ? { name } : {}), tgt: p.target || 0, ...(p.admin ? { adm: 1 } : {}), ...(free ? { free: 1 } : {}), ...(no?.length ? { no } : {}) });
+    this.events.push({ t: 'botcmd', by: p.id, byName: p.name, party: p.party || 0, cmd, ...(name ? { name } : {}), tgt: p.target || 0, ...(p.admin ? { adm: 1 } : {}), ...(free ? { free: 1 } : {}), ...(no?.length ? { no } : {}), ...(cmd === 'tend' ? { x: GARDEN.x + 4, z: GARDEN.z + 3 } : {}) }); // tend: the town garden (life classes)
     return name || true;
   }
   // Bots that roam free of any human's party (a party of bots only counts as free), the Named excepted: they keep to their own plans.
@@ -1517,6 +1521,7 @@ installTeamplay(Game); // skill combos between players, the Team Burst gauge, te
 installChains(Game); // skill chains (server/chains.js); after the team play, so a combo's own damage (_tbIn) is never a step
 installMvp(Game); // the post-fight MVP card from the team stats, downs and deaths; in the fight's tracking row (server/mvp.js); after the team play
 installLoot(Game); // loot and builds: drops from shared/loot.js, gear in p.tal, set rules, loadouts (server/loot.js); after the talents and team play
+installLife(Game); // life classes (server/life.js); after the talents (wraps postureMul), the Smith (wraps forged) and dmgMult
 installLooks(Game); // character looks: setLook(entity, id), listed in snapshots as w.looks (server/looks.js)
 installNamed(Game); // the Named: humans-first rules, friendship, invites by tier (server/named.js); a no-op without a NamedManager
 installRescue(Game); // rescue traps (server/rescue.js); after the Named: its trap-object and crystal wrappers sit outside everyone's

@@ -13,6 +13,7 @@ import { initLooks } from '/looks.js';
 import { TwistClient } from '/twists.js';
 import { Sound } from '/audio.js';
 import { createSmith } from '/smith.js';
+import { createLife } from '/life.js'; // life classes: gathering spots, garden, cooking, alchemy, the Life panel
 import { initGround } from '/ground.js';
 import { MATS, MAT_IDS } from '/shared/crafting.js';
 import { initCombat } from '/combat.js';
@@ -374,7 +375,7 @@ async function leaveGame(kind) {
 }
 const gmenu = initGameMenu({
   state, isTouch, guide, sfx, controls: () => esc(controlsText()), steps: () => GUIDE_STEPS.map(s => ({ title: esc(s.title), text: esc(s.text()) })),
-  openSettings: () => settingsUi.open(), openControls: () => controlsUi.open(),
+  openSettings: () => settingsUi.open(), openControls: () => controlsUi.open(), openLife: () => life.toggle(true),
   lockCursor: () => lockCursor(), leave: k => leaveGame(k), accounts: () => !!(acct.cfg.accounts && acct.token),
   checkAdmin: () => api('/api/admin/me').then(r => r.admin),
 });
@@ -382,6 +383,7 @@ const wheel = initBotWheel({ send, state, players, log, keyLabel, toggleMode: ()
 const bubbles = initBubbles({ state, players, project, camera, layer: $('labels'), enabled: () => settings.bubbles !== false && !cine.film }); // speech bubbles over heads (public/bubbles.js); the film view uses subtitles
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
+const life = createLife({ scene, floor1, send, state, project, log, sfx, guide, $ }); // life classes (public/life.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
 const combat = initCombat({ state, players, mobs, fx, sfx, guide, send, floatNum, slowMotion, shake: a => shake(a), shakeNear: (...a) => shakeNear(...a), bossShot: (...a) => bossShot(...a), lockedMob: () => lockedMob(), nearestMob: r => nearestMob(r), guardFace: () => guardFace(), callout: (a, b, c) => callout(a, b, c) });
 // threat you can see (target marker, boss-bar name, meter), Guardian Cover (C), flank / Pincer tags (public/threat.js)
@@ -478,7 +480,8 @@ function onMessage(msg, arrival = performance.now()) {
   if (mastery.onMessage(msg)) return; // skill mastery
   if (pbots.onMessage(msg)) return; // player-owned bots (Players panel → Bots tab)
   if (friends.onMessage(msg)) return; // the Named (Players panel → Friends tab)
-  if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); smith.render(); wellWake.inv(); return; }
+  if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); smith.render(); life.render(); wellWake.inv(); return; }
+  if (msg.type === 'life') { life.onMsg(msg); return; } // life classes (public/life.js)
   if (msg.type === 'hall') { state.hallData = msg; renderHall(); bell.hall(msg); return; }
   if (msg.type === 'snap') {
     const busy = msg.w.events.some(e => e.t === 'clear' || e.t === 'lvl');
@@ -822,6 +825,7 @@ function handleEvent(e) {
     case 'clear2': if (inArena2(state.x, state.z)) guide.did('boss'); break; // banner/sound in floor2client.js
     case 'clear3': if (inArena3(state.x, state.z)) guide.did('boss'); break; // banner/sound in floor3client.js
     case 'forge': smith.onForge(e); break;
+    case 'lifebite': case 'lifelvl': life.onEvent(e); break; // life classes (public/life.js)
     case 'loot': {
       if (e.to !== me) break;
       const p = players.get(me);
@@ -970,7 +974,7 @@ input.onLabels(() => labelBar()); // (device, pad kind, picture or bindings chan
 const LEGACY_KEYS = { e: 'revive', q: 'turnLeft', j: 'attack', r: 'guard', v: 'botWheel' };
 const keys = { has: k => (LEGACY_KEYS[k] ? input.held(LEGACY_KEYS[k]) : input.key(k.length === 1 ? `Key${k.toUpperCase()}` : k)), clear: () => input.reset() };
 const panels = createPanels(); // Esc closes the first group; all of them free the cursor while open
-for (const id of ['players', 'bag', 'hall', 'warp', 'smith', 'settings', 'skillsp', 'duel-pick']) panels.register(id, { esc: true });
+for (const id of ['players', 'bag', 'hall', 'warp', 'smith', 'life', 'settings', 'skillsp', 'duel-pick']) panels.register(id, { esc: true });
 for (const id of ['talentsp', 'botwheel', 'botmenu', 'gamemenu']) panels.register(id); // (they close themselves on Esc)
 const stick = { active: false, id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
 let attackHeld = false;
@@ -1391,11 +1395,13 @@ function useSkill(slot) {
 const nearMerchant = () => !state.dead && Math.hypot(state.x - MERCHANT.x, state.z - MERCHANT.z) < MERCHANT.r + 1;
 function interactKind() {
   if (state.dead || !state.joined || state.spectator) return null;
+  if (life.interactKind() === 'life-hook') return 'life-hook'; // fishing: the key strikes (public/life.js)
   if (nearMerchant()) return 'shop';
   if (nearHall()) return 'hall';
   if (smith.near()) return 'smith';
   if (mastery.near()) return 'shrine'; // Skill Shrine (public/mastery.js)
   if (ground.near()) return 'pickup';
+  { const lk = life.interactKind(); if (lk) return lk; } // gathering spots, the Life Hall, garden, fire, bench
   if (!state.gateOpen && (inGateZone(state.x, state.z) || inGateZone2(state.x, state.z) || inGateZone3(state.x, state.z))) return 'gate';
   return lab.interactKind() || f3.interactKind() || f2.interactKind(); // the labyrinths' stairs, the waypoints and the Stairways
 
@@ -1407,6 +1413,7 @@ function interact() {
   else if (k === 'smith') { smith.toggle(); sfx.play('ui'); }
   else if (k === 'shrine') talents.toggle();
   else if (k === 'pickup') { send({ type: 'pickup', id: ground.near() }); }
+  else if (life.interact(k)) { /* public/life.js */ }
   else if (k === 'gate') { send({ type: 'ready' }); sfx.play('ui'); state.meReady = state.meReady ? 0 : 1; updateGateBox(true); }
   else if (!lab.interact(k) && !f3.interact(k)) f2.interact(k);
 }
@@ -1498,8 +1505,8 @@ function renderBag() {
   let h = `<div class="top"><span>Bag <span class="gold">${inv.gold} gold</span></span><button class="x" data-a="close">✕</button></div>`;
   if (shopping) {
     h += `<div class="shop"><h4>Merchant</h4>${SHOP.map((s, i) => {
-      const name = s.kind === 'cons' ? CONSUMABLES[s.id].name : styles.shopName(s, state.cls) || (s.slot === 'weapon' ? 'Uncommon weapon (your class)' : 'Uncommon armour');
-      const desc = s.kind === 'cons' ? CONSUMABLES[s.id].desc : s.slot === 'weapon' ? '+7–9% damage' : '+8–12% max health';
+      const name = s.kind === 'cons' ? CONSUMABLES[s.id].name : s.kind === 'mat' ? `${MATS[s.id]?.name || s.id} <small>(you have ${inv.mats?.[s.id] || 0})</small>` : styles.shopName(s, state.cls) || (s.slot === 'weapon' ? 'Uncommon weapon (your class)' : 'Uncommon armour');
+      const desc = s.kind === 'cons' ? CONSUMABLES[s.id].desc : s.kind === 'mat' ? s.desc : s.slot === 'weapon' ? '+7–9% damage' : '+8–12% max health';
       const price = s.kind === 'cons' ? CONSUMABLES[s.id].price : s.price;
       return `<div class="it"><span class="nm"><b>${name}</b><small>${desc}</small></span><button data-a="buy" data-i="${i}" ${inv.gold < price ? 'disabled style="opacity:.4"' : ''}>${price}g</button></div>`;
     }).join('')}</div>`;
@@ -1519,7 +1526,7 @@ function renderBag() {
   }).join('') : '<div class="it empty"><span class="nm"><small>Nothing yet. Enemies drop gear; the Warden always does.</small></span></div>';
   { // materials, each with Drop / Delete
     const have = inv.mats || {}, ids = MAT_IDS.filter(k => have[k] > 0);
-    h += `<h4>Materials</h4>` + (ids.length ? ids.map(k => `<div class="it"><span class="slot" style="color:${MATS[k].color}">mat</span><span class="nm"><b>${esc(MATS[k].name)} ×${have[k]}</b><small>from ${esc(MATS[k].from)}</small></span>${stackBtns('mat', k)}</div>`).join('') + '<small class="mats-hint">Take them to the Smith in town (F) to refine or craft gear. Shift+click Drop/Delete to do the whole stack.</small>'
+    h += `<h4>Materials</h4>` + (ids.length ? ids.map(k => `<div class="it"><span class="slot" style="color:${MATS[k].color}">mat</span><span class="nm"><b>${esc(MATS[k].name)} ×${have[k]}</b><small>${life.isFood(k) ? esc(life.foodText(k)) : `from ${esc(MATS[k].from)}`}</small></span>${life.isFood(k) ? `<button data-a="eat" data-id="${k}">Eat</button>` : ''}${stackBtns('mat', k)}</div>`).join('') + '<small class="mats-hint">Monster parts go to the Smith in town (F); herbs, ore, fish and crops to the Life skills (Game Menu → Life skills). Shift+click Drop/Delete to do the whole stack.</small>'
       : '<div class="it empty"><span class="nm"><small>None yet. Monsters drop materials for the Smith in town.</small></span></div>');
   }
   h += renderTitles(inv.life);
@@ -1558,6 +1565,7 @@ $('bag').addEventListener('click', e => {
   }
   if (a === 'unequip') send({ type: 'unequip', slot: b.dataset.s });
   if (a === 'use') useItem(b.dataset.id);
+  if (a === 'eat') send({ type: 'life', a: 'eat', id: b.dataset.id }); // a meal (server/life.js)
   if (a === 'title') send({ type: 'title', id: b.dataset.t || null });
   sfx.play('ui');
 });
@@ -1757,7 +1765,7 @@ function updateHud(now) {
     }
     if (btn.dataset.slot === 'guard') { btn.classList.toggle('on', combat.guarding); continue; }
     if (btn.dataset.slot === 'cover') { threat.coverCd(btn); continue; }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : state.meReady ? 'Unready' : 'Ready'); continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : a?.startsWith('life-') ? life.actLabel(a) : state.meReady ? 'Unready' : 'Ready'); continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : { cd: mastery.cd(slot) }; // mastery/branch cooldowns
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
@@ -2247,6 +2255,7 @@ function frame(now) {
   arenas.frame(vdt);
   if (merchantNpc?.anim) merchantNpc.anim.update(vdt);
   smith.frame(vdt);
+  life.frame(vdt);
   ground.frame(vdt, isTouch);
   mastery.frame(vdt, now); // Skill Shrines, evolved-skill auras
   classesA.frame(vdt, now); // arrows, marks, Rage bars
@@ -2320,4 +2329,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { interactKind, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent, vfx, post };
+window.__fb = { interactKind, life, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent, vfx, post };

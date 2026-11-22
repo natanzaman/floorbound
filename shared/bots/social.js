@@ -15,6 +15,7 @@ export const BOT_COMMANDS = {
   setme: { label: 'Set me up', icon: '✦' },
   status: { label: 'Status', icon: '?' },
   leave: { label: 'Leave party', icon: '⨯', wheel: false },
+  tend: { label: 'Tend my garden', icon: '❀', wheel: false }, // life classes: hold at the town garden (shared/life.js)
 };
 export const BOT_COMMAND_IDS = Object.keys(BOT_COMMANDS);
 
@@ -34,6 +35,7 @@ export const BOT_ALIASES = {
   setme: ['setme', 'setup', 'set', 'combo', 'combos'],
   status: ['status', 'report', 'sitrep'],
   leave: ['leave', 'dismiss'],
+  tend: ['tend', 'garden'],
 };
 const ALIAS = new Map(Object.entries(BOT_ALIASES).flatMap(([cmd, words]) => words.map(w => [w, cmd])));
 const ALL_WORDS = new Set(['all', 'bots', 'everyone', 'team', 'party']);
@@ -86,6 +88,7 @@ export const LINES = {
   attack: ['On it: {mob}!', 'Attacking {mob}.', 'Focusing {mob}.'],
   setme: ['Setting you up, {who}!', "I'll open it for you, {who}.", 'Watch for my setups, {who}!'],
   noTarget: ['Lock a target first (Tab), {who}.', "I can't see your target, {who}."],
+  notFloor1: ["I'm not on Floor 1, {who}: the garden's in the Town of Beginnings.", "Can't tend the garden from here, {who}. Bring me to Floor 1."], // (/b tend off Floor 1)
   farm: ['Off to farm.', 'Farming time.'],
   boss: ['To the Warden!', "Let's do the boss.", 'Heading for the boss.'],
   ready: ['Ready!', 'Ready up!', 'Ready.'],

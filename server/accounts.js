@@ -11,6 +11,7 @@ import * as db from './db.js';
 const q = (...a) => db.q(...a);
 import { CLASSES, MAX_LEVEL } from '../shared/data.js';
 import { isNamedName } from '../shared/named.js';
+import { lifeRecord } from './life.js';
 import { cleanControls, CONTROLS_MAX_BYTES } from '../shared/controls.js';
 import { cleanAllow, ALLOW_CREATOR, ALLOW_MAX } from '../shared/accesslevels.js';
 
@@ -68,14 +69,14 @@ export async function listCharacters(accountId) {
 }
 
 export async function loadCharacter(accountId, charId) {
-  const rows = await q('SELECT id, name, cls, lvl, xp, gold, inv, stats, mastery, talents FROM characters WHERE id = $1 AND account_id = $2', [charId | 0, accountId]);
+  const rows = await q('SELECT id, name, cls, lvl, xp, gold, inv, stats, mastery, talents, life FROM characters WHERE id = $1 AND account_id = $2', [charId | 0, accountId]);
   return rows[0] || null;
 }
 
 // p: an in-game player with charId, lvl, xp, gold, inv, stats (lifetime stats + titles), mastery (skill mastery + evolutions), talents (talent tree)
 export async function saveCharacter(p) {
-  await q('UPDATE characters SET lvl = $2, xp = $3, gold = $4, inv = $5, stats = $6, mastery = $7, talents = $8, updated_at = now() WHERE id = $1',
-    [p.charId, Math.min(MAX_LEVEL, p.lvl), p.xp, Math.max(0, p.gold | 0), JSON.stringify(p.inv), JSON.stringify(p.stats || null), JSON.stringify(p.mastery || null), JSON.stringify(p.talents || null)]);
+  await q('UPDATE characters SET lvl = $2, xp = $3, gold = $4, inv = $5, stats = $6, mastery = $7, talents = $8, life = $9, updated_at = now() WHERE id = $1',
+    [p.charId, Math.min(MAX_LEVEL, p.lvl), p.xp, Math.max(0, p.gold | 0), JSON.stringify(p.inv), JSON.stringify(p.stats || null), JSON.stringify(p.mastery || null), JSON.stringify(p.talents || null), JSON.stringify(lifeRecord(p))]); // life: server/life.js
 }
 
 // Controls that follow the account (roadmap K2): the whole fb_controls object, cleaned (unknown ids dropped), with a

@@ -31,6 +31,7 @@ export const GroundMethods = {
     if (Math.hypot(p.x - g.x, p.z - g.z) > GROUND.reach + 1) return;
     if (g.by === p.id && this.time < g.byUntil) return;
     if (g.stack) { // potions or materials: no bag slot needed
+      if (g.stack.kind !== 'cons' && this.lifeRoom && !this.lifeRoom(p, g.stack.id, g.stack.n)) return this.sys(`You can't carry that many ${g.name}: a life material stack stops at 99.`, p.id); // (server/life.js)
       const pool = g.stack.kind === 'cons' ? p.inv.cons : (p.inv.mats ||= {});
       pool[g.stack.id] = (pool[g.stack.id] || 0) + g.stack.n;
     } else {

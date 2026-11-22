@@ -14,6 +14,8 @@ export const MODES = {
   field: { name: 'Farm nearby', doing: 'Farming the field', behaviour: 'field' },
   warden: { name: 'Go to the Warden', doing: 'Heading for the Warden', behaviour: 'warden' },
   stay: { name: 'Stay here', doing: 'Holding position', behaviour: 'follow', follow: false },
+  // life classes (shared/life.js TEND): walk to the Town of Beginnings garden and stay there; crops grow faster
+  tend: { name: 'Tend my garden', doing: 'Tending the garden', behaviour: 'follow', follow: false, tend: true },
 };
 export const MODE_IDS = Object.keys(MODES);
 
