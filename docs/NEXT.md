@@ -24,6 +24,19 @@ Plans: `docs/briefs/bots-access.md`, `docs/briefs/waypoint.md`, `docs/briefs/tar
 - **Owner calls waiting:** the default rule (Half Health was a guess), `DUEL.pvp` 0.25, the 2 / 3 min clock, whether
   knockback and stuns should move players in duels (not in v1), a duel ladder.
 
+## The Academy (2026-11-22, branch `feat/academy`, brief `docs/briefs/academy.md`)
+- New characters start as **Initiates** with a weapon (sword, spear, bow, staff, wand): the base class at x0.85, plain
+  skill names, no level-3 skill, talents locked (points bank). The Academy (west of the square) runs class trials from
+  level 5 in a walled yard (full kit on loan), graduation, paid class changes (mastery and talents kept per class),
+  six drills with one-time rewards, ranks (Novice to Master) on nameplates, the Players list and the Hall, the Named as
+  hall heads, and two bot classmates per Initiate who graduate with you. Old characters (path null) are unchanged.
+- **Owner calls waiting:** every tuning number is a first guess (trial medal marks, training enemy health, x0.85 power,
+  the change fee 100 + 20/level, drill rewards, rank thresholds). Initiates can't Break (the Break skill is the level-3
+  skill) until they graduate: fine for levels 1-5, but say if Initiates should keep it.
+- Known small things: a classmate's join line names its base class ("Tamsy the Swordsman entered the tower") because
+  bots join before the Academy makes them Initiates; classmates follow you into the yard's pen (trial enemies ignore
+  them and can't be hurt by them, so a trial stays solo).
+
 ## Owner calls from the 2026-11-20 batch: decided 2026-11-21 (`feat/tweaks`, brief `docs/briefs/tweaks-2026-11-21.md`)
 - **Several of the Named per party: yes.** Any of the five can join one party, up to the normal 6 (open invites count);
   each is still one of a kind. Despawn / respawn rejoins a party that has other Named in it (room permitting).

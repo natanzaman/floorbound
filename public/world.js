@@ -9,6 +9,7 @@ import { MOBS } from '/shared/data.js';
 import { makeF2Mob, decorateSovereign } from '/floor2world.js';
 import { makeF3Mob, decorateColossus, F3_POSES, F3_WINDUPS } from '/floor3world.js';
 import { attachClassA } from '/classes-a.js';
+import { makeAcademyMob } from '/academy.js';
 import { makeLabMob } from '/labyrinth.js'; // labyrinth enemies
 import { makePropModel } from '/rescue.js'; // rescue trap objects (J1)
 import { fxCount, segs } from '/quality.js'; // effect density and circle detail (graphics quality)
@@ -723,6 +724,7 @@ function makeDuelMark() {
 
 export function makeMobModel(type) {
   if (MOBS[type]?.lab) return makeLabMob(type); // labyrinth enemies (labyrinth.js)
+  if (MOBS[type]?.academy) return makeAcademyMob(type); // the Academy's training enemies (academy.js)
   if (MOBS[type]?.prop) return makePropModel(type); // trap objects: vines, the pillar's orb, the storm crystal (public/rescue.js)
   if (MOBS[type]?.duel) return makeDuelMark(); // a duel opponent's stand-in: a red ring at their feet, a red marker over their head
   if (MOBS[type]?.f2) return type === 'sovereign' && ASSETS ? makeSovereignRig() : makeF2Mob(type); // Floor 2 (floor2world.js)

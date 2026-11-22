@@ -99,4 +99,7 @@ async function setup() {
   await q(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS access_level SMALLINT NOT NULL DEFAULT 1`);
   // Each Named's allow list (who may control them; empty = anyone allowed by the rule), kept across restarts.
   await q(`ALTER TABLE named_chars ADD COLUMN IF NOT EXISTS allow JSONB`);
+  // The Academy (docs/briefs/academy.md): an Initiate's weapon or a graduate's record, medals, mastery and talents kept per
+  // class, classmates (shared/academy.js cleanPath). NULL: a character from before the Academy, graduated in its class.
+  await q(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS path JSONB`);
 }

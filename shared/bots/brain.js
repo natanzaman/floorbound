@@ -91,11 +91,13 @@ function onMessage(b, msg) {
   if (msg.type === 'roster') { b.roster = msg.players; b.names = new Map(msg.players.map(r => [r.id, r])); }
   if (msg.type === 'mastery') evolve(b, msg.m);
   if (msg.type === 'talents') spendTalent(b, msg);
+  if (msg.type === 'path' && msg.cls && msg.cls !== b.cls) { b.cls = msg.cls; b.role = roleOf(msg.cls); } // graduated or changed class at the Academy (server/academy.js)
   if (msg.type === 'snap') onSnap(b, msg);
 }
 
 // Talents: spend the next unspent point along the class's `bot` path (one rank per round trip; the server answers with a new 'talents').
 function spendTalent(b, msg) {
+  if (msg.locked) return; // an Initiate (or a class trial): the tree opens at graduation
   const r = msg.r || {}, path = TREES[b.cls]?.bot || [], want = {};
   for (const id of path) {
     want[id] = (want[id] || 0) + 1;

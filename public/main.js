@@ -13,6 +13,8 @@ import { initLooks } from '/looks.js';
 import { TwistClient } from '/twists.js';
 import { Sound } from '/audio.js';
 import { createSmith } from '/smith.js';
+import { createAcademy, weaponCards } from '/academy.js'; // the Academy: Initiates, trials, drills, ranks (docs/briefs/academy.md)
+import { WEAPONS, pathLabel } from '/shared/academy.js';
 import { initGround } from '/ground.js';
 import { MATS, MAT_IDS } from '/shared/crafting.js';
 import { initCombat } from '/combat.js';
@@ -150,15 +152,21 @@ const arenas = initArenas({ scene, fx, sfx, state, mobs, players, camera, views:
   banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), shake: a => shake(a) });
 
 // ---------------- login ----------------
-let chosen = localStorage.getItem('fb_cls') || 'swordsman';
+// New characters pick a weapon and start as Initiates (docs/briefs/academy.md). Without accounts (local play and the
+// browser tests) the class cards stay below the weapons: a join with a class starts graduated in it.
+let anonMode = true; // (no accounts on this server: set by initLogin)
+let chosen = localStorage.getItem('fb_cls') || 'swordsman', chosenW = localStorage.getItem('fb_weapon') || 'sword', pickW = localStorage.getItem('fb_pick') !== 'cls';
+if (!WEAPONS[chosenW]) chosenW = 'sword';
 $('name').value = localStorage.getItem('fb_name') || '';
 function renderClasses() {
-  $('classes').innerHTML = CLASS_IDS.map(id => {
+  const anon = anonMode;
+  $('classes').innerHTML = `<div class="wpns-pick">${weaponCards(pickW ? chosenW : '')}</div>` + (anon ? `<div class="dev-cls"><h5>Local play: or start graduated as a class</h5>${CLASS_IDS.map(id => {
     const c = CLASSES[id];
     const hex = '#' + c.color.toString(16).padStart(6, '0');
-    return `<button class="cls ${id === chosen ? 'sel' : ''}" data-id="${id}"><span class="role"><span class="dot" style="background:${hex}"></span>${c.role}</span><b>${c.name}</b><p>${c.blurb}</p></button>`;
-  }).join('');
-  for (const b of document.querySelectorAll('.cls')) b.onclick = () => { chosen = b.dataset.id; renderClasses(); };
+    return `<button class="cls ${!pickW && id === chosen ? 'sel' : ''}" data-id="${id}"><span class="role"><span class="dot" style="background:${hex}"></span>${c.role}</span><b>${c.name}</b><p>${c.blurb}</p></button>`;
+  }).join('')}</div>` : '');
+  for (const b of document.querySelectorAll('#classes .cls[data-id]')) b.onclick = () => { chosen = b.dataset.id; pickW = false; renderClasses(); };
+  for (const b of document.querySelectorAll('#classes .wpn')) b.onclick = () => { chosenW = b.dataset.w; pickW = true; renderClasses(); };
 }
 renderClasses();
 $('enter').disabled = true;
@@ -236,12 +244,13 @@ async function initLogin() {
   if (h.get('signin')) loginMsg(h.get('signin') === 'cancelled' ? 'Discord sign-in was cancelled.' : 'Discord sign-in failed. Try again?');
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
   try { acct.cfg = await fetch('/api/config').then(r => r.json()); } catch {}
+  anonMode = !acct.cfg.accounts; renderClasses();
   let rejoin = null;
   try { rejoin = JSON.parse(sessionStorage.getItem('fb_rejoin') || 'null'); sessionStorage.removeItem('fb_rejoin'); } catch {}
   if (rejoin && Date.now() - rejoin.t > 10 * 60e3) rejoin = null;
   if (!acct.cfg.accounts) {
-    $('enter').textContent = 'Enter the Tower'; showPanel('create'); // anonymous mode
-    if (rejoin?.msg?.cls) { state.cls = rejoin.msg.cls; join(rejoin.msg); }
+    $('enter').textContent = 'Enter the Tower'; renderClasses(); showPanel('create'); // anonymous mode
+    if (rejoin?.msg?.cls || rejoin?.msg?.weapon) { state.cls = rejoin.msg.cls || WEAPONS[rejoin.msg.weapon]?.base; join(rejoin.msg); }
     return;
   }
   if (!acct.token) return showAuth();
@@ -266,8 +275,8 @@ function renderChars() {
     ? `${account.avatar ? `<img src="${account.avatar}" alt="">` : ''}<span class="who">Signed in as <b>${esc(account.discord)}</b></span><button id="signout">Sign out</button>`
     : `<span class="who">Guest account: saved in this browser</span>${acct.cfg.discord ? '<button id="link-discord" class="link">Link Discord</button>' : ''}<button id="signout">Sign out</button>`;
   $('char-list').innerHTML = characters.map(c => {
-    const k = CLASSES[c.cls], hex = '#' + k.color.toString(16).padStart(6, '0');
-    return `<div class="char"><span class="dot" style="background:${hex}"></span><div class="info"><b>${esc(c.name)}</b><small>Lv ${c.lvl} ${k.name} · ${k.role}</small></div><button class="play" data-id="${c.id}" data-nav="play-${c.id}">Play</button><button class="del" data-id="${c.id}" data-nav="del-${c.id}" title="Delete">✕</button></div>`;
+    const k = CLASSES[c.cls], hex = '#' + k.color.toString(16).padStart(6, '0'), ini = c.path?.stage === 'initiate';
+    return `<div class="char"><span class="dot" style="background:${hex}"></span><div class="info"><b>${esc(c.name)}</b><small>Lv ${c.lvl} ${esc(pathLabel(c.path, c.cls))}${ini ? '' : ` · ${k.role}`}</small></div><button class="play" data-id="${c.id}" data-nav="play-${c.id}">Play</button><button class="del" data-id="${c.id}" data-nav="del-${c.id}" title="Delete">✕</button></div>`;
   }).join('');
   $('new-char').classList.toggle('hidden', characters.length >= (acct.cfg.maxCharacters || 8));
   for (const b of $('char-list').querySelectorAll('.play')) b.onclick = () => {
@@ -284,7 +293,7 @@ function renderChars() {
   const ld = $('link-discord'); if (ld) ld.onclick = () => { location.href = `/auth/discord?link=${encodeURIComponent(acct.token)}`; };
 }
 function showCreate() {
-  $('name').value = ''; $('enter').textContent = 'Create character';
+  $('name').value = ''; $('enter').textContent = 'Create character'; pickW = true; renderClasses();
   $('create-back').classList.toggle('hidden', !acct.me?.characters.length);
   showPanel('create'); $('name').focus();
 }
@@ -297,12 +306,12 @@ $('create-back').onclick = () => { loginMsg(''); showPanel('chars'); };
 async function onEnter() {
   if (!acct.cfg.accounts) { // anonymous mode (local dev): pick a name and go
     const name = $('name').value.trim() || `Hero${Math.floor(Math.random() * 900 + 100)}`;
-    localStorage.setItem('fb_name', name); localStorage.setItem('fb_cls', chosen);
-    state.cls = chosen;
-    return join({ type: 'join', name, cls: chosen });
+    localStorage.setItem('fb_name', name); localStorage.setItem('fb_cls', chosen); localStorage.setItem('fb_weapon', chosenW); localStorage.setItem('fb_pick', pickW ? 'weapon' : 'cls');
+    state.cls = pickW ? WEAPONS[chosenW].base : chosen;
+    return join(pickW ? { type: 'join', name, weapon: chosenW } : { type: 'join', name, cls: chosen }); // a weapon: an Initiate
   }
   try {
-    const { character } = await api('/api/characters', { method: 'POST', body: JSON.stringify({ name: $('name').value, cls: chosen }) });
+    const { character } = await api('/api/characters', { method: 'POST', body: JSON.stringify({ name: $('name').value, weapon: chosenW }) }); // a new Initiate
     loginMsg('');
     await loadMe();
     state.cls = character.cls;
@@ -382,6 +391,7 @@ const wheel = initBotWheel({ send, state, players, log, keyLabel, toggleMode: ()
 const bubbles = initBubbles({ state, players, project, camera, layer: $('labels'), enabled: () => settings.bubbles !== false && !cine.film }); // speech bubbles over heads (public/bubbles.js); the film view uses subtitles
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
 const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
+const academy = createAcademy({ scene: floor1, occluders, state, send, project, sfx, banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), log: (a, b) => log(a, b), $, tip: id => guide.tip(id) }); // the Academy and its yard (public/academy.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
 const combat = initCombat({ state, players, mobs, fx, sfx, guide, send, floatNum, slowMotion, shake: a => shake(a), shakeNear: (...a) => shakeNear(...a), bossShot: (...a) => bossShot(...a), lockedMob: () => lockedMob(), nearestMob: r => nearestMob(r), guardFace: () => guardFace(), callout: (a, b, c) => callout(a, b, c) });
 // threat you can see (target marker, boss-bar name, meter), Guardian Cover (C), flank / Pincer tags (public/threat.js)
@@ -474,6 +484,11 @@ function onMessage(msg, arrival = performance.now()) {
   }
   if (cine.onMessage(msg)) return; // the film picture as it is now (sent on join)
   if (msg.type === 'talents') state.talentAlloc = msg.r || {}; // (loadouts compare it)
+  if (msg.type === 'path' && msg.cls && msg.cls !== state.cls && !state.spectator) { // graduated, changed class, or a class trial's loaned kit
+    state.cls = msg.cls;
+    const meE = players.get(state.myId); if (meE) { removeEntity(meE); players.delete(state.myId); } // (the next snapshot draws the new class)
+  }
+  if (academy.onMessage(msg)) { buildSkillBar(); mastery.render(); talents.render(); return; } // the Academy path (public/academy.js)
   if (talents.onMessage(msg)) return; // talent tree (also keeps a copy of the mastery data)
   if (mastery.onMessage(msg)) return; // skill mastery
   if (pbots.onMessage(msg)) return; // player-owned bots (Players panel → Bots tab)
@@ -502,6 +517,7 @@ function onSnapshot({ st, me, w }, arrival) {
     return;
   }
   teamplay.snap(w); // Team Burst gauges and sync windows
+  academy.snapMe(me); // a running trial or drill: the HUD, the Ward Post (public/academy.js)
   if (me) {
     state.xp = me.xp; state.next = me.next;
     if (me.lvl !== state.lvl) { state.lvl = me.lvl; buildSkillBar(me.lvl); mastery.render(); }
@@ -530,6 +546,7 @@ function onSnapshot({ st, me, w }, arrival) {
     const [id, x, z, face, hp, maxHp, lvl, ci, party, dead, buffs] = a;
     seen.add(id);
     let e = players.get(id);
+    if (e && CLASS_IDS[ci] && e.cls !== CLASS_IDS[ci]) { removeEntity(e); players.delete(id); e = null; } // a class change (the Academy): the new look
     if (!e) e = addPlayerEntity(id, CLASS_IDS[ci], x, z);
     Object.assign(e, { tx: x, tz: z, tface: face, hp, maxHp, lvl, party, dead: !!dead, buffs });
     if (id !== state.myId) e.track.push(sTime, x, z, face, rt);
@@ -586,6 +603,7 @@ function handleEvent(e) {
   if (classesA.event(e)) return; // Ranger / Berserker
   if (styles.event(e)) return; // weapon styles: styled basic attacks
   if (revive.event(e)) return; // downed / revive
+  if (academy.event(e)) return; // the Academy: trials, drills, graduation
   switch (e.t) {
     case 'tp':
       if (e.id === me) { // the server moved you: the game position jumps, the drawn one slides there (or snaps if far)
@@ -970,7 +988,7 @@ input.onLabels(() => labelBar()); // (device, pad kind, picture or bindings chan
 const LEGACY_KEYS = { e: 'revive', q: 'turnLeft', j: 'attack', r: 'guard', v: 'botWheel' };
 const keys = { has: k => (LEGACY_KEYS[k] ? input.held(LEGACY_KEYS[k]) : input.key(k.length === 1 ? `Key${k.toUpperCase()}` : k)), clear: () => input.reset() };
 const panels = createPanels(); // Esc closes the first group; all of them free the cursor while open
-for (const id of ['players', 'bag', 'hall', 'warp', 'smith', 'settings', 'skillsp', 'duel-pick']) panels.register(id, { esc: true });
+for (const id of ['players', 'bag', 'hall', 'warp', 'smith', 'academy', 'settings', 'skillsp', 'duel-pick']) panels.register(id, { esc: true });
 for (const id of ['talentsp', 'botwheel', 'botmenu', 'gamemenu']) panels.register(id); // (they close themselves on Esc)
 const stick = { active: false, id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
 let attackHeld = false;
@@ -1146,9 +1164,9 @@ function buildSkillBar(lvl = state.lvl) {
   const order = isTouch ? [1, 0, 2, 3] : [0, 1, 2, 3];
   $('skills').innerHTML = order.map(i => {
     const s = skills[i];
-    const locked = lvl < s.lvl, nm = mastery.name(i); // evolved name once a branch is active (public/mastery.js)
-    return `<button class="sk s${i} ${i === 0 ? 'basic' : ''} ${locked ? 'locked' : ''} ${mastery.evoId(i) ? 'evolved' : ''}" data-slot="${i}" title="${esc(nm)}: ${esc(mastery.desc(i))}${i === 0 ? esc(styles.barNote()) : ''}${locked ? ` (unlocks at Lv ${s.lvl})` : ''}">
-      <span class="key">${i === 0 ? (isTouch ? '' : 'CLICK') : i}</span>${mastery.pip(i)}${esc(nm)}${locked ? `<br><small>Lv ${s.lvl}</small>` : ''}<span class="cd"></span><span class="cdt"></span></button>`;
+    const acad = academy.locked(i), locked = lvl < s.lvl || acad, nm = (!mastery.evoId(i) && academy.name(i)) || mastery.name(i); // evolved name once a branch is active (public/mastery.js); an Initiate's plain names and locked level-3 skill (public/academy.js)
+    return `<button class="sk s${i} ${i === 0 ? 'basic' : ''} ${locked ? 'locked' : ''} ${mastery.evoId(i) ? 'evolved' : ''}" data-slot="${i}" title="${esc(nm)}: ${esc(mastery.desc(i))}${i === 0 ? esc(styles.barNote()) : ''}${acad ? ' (opens when you graduate at the Academy)' : locked ? ` (unlocks at Lv ${s.lvl})` : ''}">
+      <span class="key">${i === 0 ? (isTouch ? '' : 'CLICK') : i}</span>${mastery.pip(i)}${esc(nm)}${acad ? '<br><small>Academy</small>' : locked ? `<br><small>Lv ${s.lvl}</small>` : ''}<span class="cd"></span><span class="cdt"></span></button>`;
   }).join('') + `<button class="sk sd" data-slot="dodge" title="Dodge roll: dash and avoid damage"><span class="key">${isTouch ? '' : 'SHIFT'}</span>Dodge<span class="cd"></span><span class="cdt"></span></button>`
     + `<button class="sk sj" data-slot="jump" title="Jump: hop over the boss's ground slams"><span class="key">${isTouch ? '' : 'SPACE'}</span>Jump<span class="cd"></span><span class="cdt"></span></button>`
     + combat.guardButton(state.cls, isTouch)
@@ -1374,7 +1392,7 @@ function useSkill(slot) {
   if (state.dead || revive.isDown() || rescue.encased() || !state.joined || arenas.frozen()) return;
   const sk = CLASSES[state.cls].skills[slot];
   const now = performance.now();
-  if (!sk || state.lvl < sk.lvl || now < state.ready[slot] || combat.guarding) return;
+  if (!sk || state.lvl < sk.lvl || academy.locked(slot) || now < state.ready[slot] || combat.guarding) return;
   const mode = tMode(), range = engageRange(slot, sk);
   if (mode === 'aimed') state.face = state.yaw; // no auto-targeting: where you look
   else if (range) {
@@ -1394,6 +1412,7 @@ function interactKind() {
   if (nearMerchant()) return 'shop';
   if (nearHall()) return 'hall';
   if (smith.near()) return 'smith';
+  if (academy.near()) return 'academy'; // the Academy (public/academy.js)
   if (mastery.near()) return 'shrine'; // Skill Shrine (public/mastery.js)
   if (ground.near()) return 'pickup';
   if (!state.gateOpen && (inGateZone(state.x, state.z) || inGateZone2(state.x, state.z) || inGateZone3(state.x, state.z))) return 'gate';
@@ -1405,6 +1424,7 @@ function interact() {
   if (k === 'shop') { state.shopOpen = true; $('bag').classList.remove('hidden'); renderBag(); sfx.play('ui'); }
   else if (k === 'hall') { toggleHall(); sfx.play('ui'); }
   else if (k === 'smith') { smith.toggle(); sfx.play('ui'); }
+  else if (k === 'academy') academy.toggle();
   else if (k === 'shrine') talents.toggle();
   else if (k === 'pickup') { send({ type: 'pickup', id: ground.near() }); }
   else if (k === 'gate') { send({ type: 'ready' }); sfx.play('ui'); state.meReady = state.meReady ? 0 : 1; updateGateBox(true); }
@@ -1430,7 +1450,7 @@ function ago(iso) {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
   return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)}m ago` : s < 86400 ? `${Math.floor(s / 3600)}h ago` : fmtDate(iso);
 }
-const hallParty = r => r.players.map(p => `<span title="Lv${p.lvl} ${CLASSES[p.cls]?.name || ''}">${esc(p.name)}</span>`).join(', ') || '—';
+const hallParty = r => r.players.map(p => `<span title="Lv${p.lvl} ${p.rk ? `${esc(p.rk)} ` : ''}${CLASSES[p.cls]?.name || ''}">${esc(p.name)}${p.rk ? ` <small class="rk">${esc(p.rk)}</small>` : ''}</span>`).join(', ') || '—'; // rk: the class rank carved beside the name (the Academy)
 const hallMeta = r => `${esc(r.lastAttack || '?')} took the Last Attack · ${r.deaths} death${r.deaths === 1 ? '' : 's'}`;
 function renderHall() {
   const el = $('hall');
@@ -1652,7 +1672,7 @@ function renderPlayers() {
     const lfgTag = (p ? (p.buffs || 0) & 4 : o?.[3]) ? '<span class="tag">LFG</span>' : '';
     const pf = p ? floorOf(p.tx ?? p.x) : o?.[2] || 1, floorTag = pf > 1 ? `<span class="tag f2">F${pf}</span>` : '';
     const up = p ? !p.dead : o ? !o[4] : false;
-    rows.push(`<div class="p"><span>${looks.swatch(id)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? o?.[1] ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}${up ? `<button data-duel="${id}" title="Challenge to a duel">Duel</button>` : ''}</div>`);
+    rows.push(`<div class="p"><span>${looks.swatch(id)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? o?.[1] ?? 1} ${esc(academy.rosterLabel(r))}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}${up ? `<button data-duel="${id}" title="Challenge to a duel">Duel</button>` : ''}</div>`);
   }
   const meE = players.get(state.myId), seeking = !!((meE?.buffs || 0) & 4);
   const lfgBtn = `<button class="lfg ${seeking ? 'on' : ''}">${state.party ? (seeking ? 'Recruiting via party finder ✓' : 'Recruit with party finder') : seeking ? 'Searching for a party… (cancel)' : 'Find party'}</button>`;
@@ -1704,7 +1724,7 @@ function updateHud(now) {
   const name = state.roster.get(state.myId)?.name || '';
   const meHtml = `${esc(name)}${titleTag(state.roster.get(state.myId)?.title)}`;
   if ($('me-name').innerHTML !== meHtml) $('me-name').innerHTML = meHtml;
-  setText($('me-lvl'), `Lv ${state.lvl} ${CLASSES[state.cls].name}`);
+  setText($('me-lvl'), `Lv ${state.lvl} ${academy.label()}`); // (an Initiate: "Initiate · Sword")
   const pct = (state.hp / state.maxHp) * 100;
   setBar($('me-hp'), pct, $('me-hp').parentElement);
   setText($('me-hp-text'), `${state.hp} / ${state.maxHp}`);
@@ -1757,7 +1777,7 @@ function updateHud(now) {
     }
     if (btn.dataset.slot === 'guard') { btn.classList.toggle('on', combat.guarding); continue; }
     if (btn.dataset.slot === 'cover') { threat.coverCd(btn); continue; }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : state.meReady ? 'Unready' : 'Ready'); continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'academy' ? 'Enter' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : state.meReady ? 'Unready' : 'Ready'); continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : { cd: mastery.cd(slot) }; // mastery/branch cooldowns
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
@@ -2056,7 +2076,7 @@ function animateEntity(e, dt) {
     setShown(e.label, true);
     const tr = `translate(${p[0].toFixed(1)}px, ${p[1].toFixed(1)}px) translate(-50%, -100%)`;
     if (tr !== e.label.tr) { e.label.tr = tr; e.label.el.style.transform = tr; }
-    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${looks.plate(e, e.def.name)}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}${openings.tag(e)}` : `<span class="lv">Lv${e.lvl}</span>${looks.plate(e, `${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}`)}`;
+    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${looks.plate(e, e.def.name)}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}${openings.tag(e)}` : `<span class="lv">Lv${e.lvl}</span>${looks.plate(e, `${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}${academy.plateTag(state.roster.get(e.id))}`)}`;
     if (txt !== e.label.text) { e.label.text = txt; e.label.nm.innerHTML = txt; }
     const pct = Math.round((e.hp / e.maxHp) * 100);
     if (pct !== e.label.pct) { e.label.pct = pct; e.label.fill.style.width = `${pct}%`; }
@@ -2247,6 +2267,7 @@ function frame(now) {
   arenas.frame(vdt);
   if (merchantNpc?.anim) merchantNpc.anim.update(vdt);
   smith.frame(vdt);
+  academy.frame(); // the Academy's label, the trial HUD, the Ward Post
   ground.frame(vdt, isTouch);
   mastery.frame(vdt, now); // Skill Shrines, evolved-skill auras
   classesA.frame(vdt, now); // arrows, marks, Rage bars
@@ -2320,4 +2341,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { interactKind, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent, vfx, post };
+window.__fb = { interactKind, academy, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent, vfx, post };
