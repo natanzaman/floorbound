@@ -398,6 +398,7 @@ export function installAcademy(Game) {
     return orig.call(this, tg, amount, by, sk);
   });
   wrap('damageMob', function (orig, m, p, base, opts) {
+    if (!m) return orig.call(this, m, p, base, opts);
     if (m.trial && p?.id !== m.trial) return; // a trial is solo: classmates (and anyone else) can't hurt its enemies
     const T = m.trial && p?.trial;
     if (!T) return orig.call(this, m, p, base, opts);
