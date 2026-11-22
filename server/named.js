@@ -524,7 +524,7 @@ export class NamedManager {
       const rb = st.enabled ? 'Already in the world.' : this.ctlBlock(h, st, 'botRespawn') || (this.parked ? 'A show is being filmed.' : '');
       return {
         id: def.id, name: def.name, cls: def.cls, role: def.role, group: def.group, gname: GROUPS[def.group].name, color: lookColor(def),
-        lvl: p?.lvl ?? st.lvl, dead: !!p?.dead, state, where, myParty: mine, lead: host?.name || '',
+        pid: p?.id || 0, lvl: p?.lvl ?? st.lvl, dead: !!p?.dead, state, where, myParty: mine, lead: host?.name || '',
         ctl: { invite: c(ib), kick: c(kb), despawn: c(db), respawn: c(rb) },
       };
     });

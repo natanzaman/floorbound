@@ -44,6 +44,7 @@ import { setKeySource, keyText, keyHtml, tapping } from '/keyname.js'; // prompt
 import { initBossTeam } from '/bossteam.js'; // boss team mechanics: STACK, SPREAD, tether (G4)
 import { initOpenings } from '/openings.js'; // boss openings: weak point, OPENING tag (J3)
 import { initRescue } from '/rescue.js'; // rescue traps: vines, Drowning Pillar, storm crystal (J1)
+import { initDuels } from '/duels.js'; // solo and team duels: the challenge picker, the duel bar, rings, results
 import { initTeamplay } from '/teamplay.js'; // combo counters, the Team Burst bar and sync window (G2)
 import { initMvp } from '/mvp.js'; // the post-fight MVP card (G5)
 import { Q, PRESETS, setLevel, startLevel, startAntialias } from '/quality.js'; // graphics quality: Low / Medium / High / Auto
@@ -403,6 +404,7 @@ const revive = initRevive({ state, players, send: o => send(o), project: (x, y, 
 // boss team mechanics: the gold STACK circle, SPREAD rings, tether beams, first-time prompts (public/bossteam.js)
 // rescue traps: telegraphs, the pillar's beam, your trapped banner, "Hold E to cut free", markers (public/rescue.js)
 const openings = initOpenings({ state, mobs, guide, callout: (a, b, c) => callout(a, b, c) });
+const duels = initDuels({ state, players, scene, send: o => send(o), sfx, callout: (a, b, c) => callout(a, b, c), banner: (a, b) => banner(a, b), tip: id => guide.tip(id) }); // public/duels.js
 const rescue = initRescue({ state, players, mobs, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), callout: (a, b, c) => callout(a, b, c), isTouch, revive, keyLabel });
 const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a) });
 // skill combos between players and the Team Burst: chain counters, setup hints, the party bar, T to sync (public/teamplay.js)
@@ -506,6 +508,7 @@ function onSnapshot({ st, me, w }, arrival) {
   state.phase = w.phase || 0;
   twists.snap(w);
   threat.snap(w, me); // boss / elite targets, my threat meter, Cover cooldown
+  duels.snap(w.du); // duels: rings, the duel bar, which stand-ins are my opponents (before the events)
 
   // events first (they may reference mobs that are about to vanish)
   for (const e of w.events) handleEvent(e);
@@ -533,6 +536,7 @@ function onSnapshot({ st, me, w }, arrival) {
   const seenM = new Set();
   for (const a of w.mobs) {
     const [id, ti, x, z, face, hp, maxHp, flags, posture] = a;
+    if (MOBS[MOB_IDS[ti]]?.duel && !duels.showMob(id)) continue; // a duel stand-in: only my live opponents' (public/duels.js)
     seenM.add(id);
     let e = mobs.get(id);
     if (!e) e = addMobEntity(id, MOB_IDS[ti], x, z, face);
@@ -556,6 +560,7 @@ function handleEvent(e) {
   if (bell.event(e)) return; // the Tower Bell
   if (bossTeam.event(e)) return; // boss team mechanics (stack / spread / tether)
   if (rescue.event(e)) return; // rescue traps
+  if (duels.event(e)) return; // duels: challenges, countdown, results
   if (teamplay.event(e)) return; // combos, Team Burst
   if (mvp.event(e)) return; // the post-fight MVP card
   if (combat.event(e)) return; // perfect dodge, parry, guard, Horn Sweep
@@ -905,7 +910,7 @@ function addMobEntity(id, type, x, z, face) {
   model.group.position.set(x, 0, z);
   model.group.rotation.y = face;
   scene.add(model.group);
-  const e = { id, kind: 'mob', type, def: MOBS[type], model, mats: model.mats, label: MOBS[type]?.boss ? null : makeLabel('mob'), x, z, face, tx: x, tz: z, tface: face, walk: 0, wind: 0, flash: 0, track: new Track(), animAcc: 0 };
+  const e = { id, kind: 'mob', type, def: MOBS[type], model, mats: model.mats, label: MOBS[type]?.boss || MOBS[type]?.duel ? null : makeLabel('mob'), x, z, face, tx: x, tz: z, tface: face, walk: 0, wind: 0, flash: 0, track: new Track(), animAcc: 0 };
   mobs.set(id, e);
   twists.decorate(e); // Thorn Totems
   if (type === 'warden') boss = e;
@@ -950,7 +955,7 @@ input.onLabels(() => labelBar()); // (device, pad kind, picture or bindings chan
 const LEGACY_KEYS = { e: 'revive', q: 'turnLeft', j: 'attack', r: 'guard', v: 'botWheel' };
 const keys = { has: k => (LEGACY_KEYS[k] ? input.held(LEGACY_KEYS[k]) : input.key(k.length === 1 ? `Key${k.toUpperCase()}` : k)), clear: () => input.reset() };
 const panels = createPanels(); // Esc closes the first group; all of them free the cursor while open
-for (const id of ['players', 'bag', 'hall', 'warp', 'smith', 'settings', 'skillsp']) panels.register(id, { esc: true });
+for (const id of ['players', 'bag', 'hall', 'warp', 'smith', 'settings', 'skillsp', 'duel-pick']) panels.register(id, { esc: true });
 for (const id of ['talentsp', 'botwheel', 'botmenu', 'gamemenu']) panels.register(id); // (they close themselves on Esc)
 const stick = { active: false, id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
 let attackHeld = false;
@@ -1253,7 +1258,8 @@ function announceTarget() {
   const m = state.lock && mobs.get(state.lock), p = state.focus && players.get(state.focus);
   const el = $('selmsg');
   el.className = m ? 'foe' : p ? 'ally' : '';
-  el.innerHTML = m ? `Target: <b>${esc(m.def.name)}</b> <small>Lv ${m.def.level ?? ''}</small>` : p ? `Following: <b>${esc(p.name)}</b> <small>Lv ${p.lvl ?? ''}</small>` : 'Target cleared';
+  const du = m?.def.duel && players.get(duels.ownerOf(m.id)); // a duel opponent's stand-in: their name
+  el.innerHTML = du ? `Target: <b>${esc(du.name)}</b> <small>Lv ${du.lvl ?? ''}</small>` : m ? `Target: <b>${esc(m.def.name)}</b> <small>Lv ${m.def.level ?? ''}</small>` : p ? `Following: <b>${esc(p.name)}</b> <small>Lv ${p.lvl ?? ''}</small>` : 'Target cleared';
   el.classList.add('show');
   clearTimeout(selMsgT); selMsgT = setTimeout(() => el.classList.remove('show'), 1800);
 }
@@ -1293,6 +1299,7 @@ function dodge() {
 let tfKey = '';
 function updateTargetFrame(t, isMob) {
   const el = $('target');
+  if (isMob && t?.def?.duel) { const o = players.get(duels.ownerOf(t.id)); if (o) { t = o; isMob = false; } } // a duel opponent: show them, not their stand-in
   if (!t) { if (tfKey) { el.classList.add('hidden'); tfKey = ''; } return; }
   const name = isMob ? t.def.name : t.name;
   const sub = isMob ? `Lv ${t.def.level}${t.def.elite ? ' · Elite' : t.def.boss ? ' · Boss' : ''}${t.staggered ? ' · BROKEN' : ''}` : `Lv ${t.lvl} · ${CLASSES[t.cls].name}`;
@@ -1604,7 +1611,7 @@ $('sound-btn').textContent = sfx.on ? 'Sound on' : 'Sound off';
 $('sound-btn').onclick = () => { sfx.unlock(); $('sound-btn').textContent = sfx.toggle() ? 'Sound on' : 'Sound off'; };
 $('lock-btn').onpointerdown = e => { e.preventDefault(); cycleLock(); };
 canvas.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
-$('chat-btn').onclick = () => { const t = prompt('Say something (/p party, /s nearby, /b bot orders: /b help, /sit /kneel /bow /stand)'); if (t) sendChat(t); };
+$('chat-btn').onclick = () => { const t = prompt('Say something (/p party, /s nearby, /b bot orders: /b help, /duel name, /sit /kneel /bow /stand)'); if (t) sendChat(t); };
 // Chat channels: "/p text" party, "/s text" say (nearby); anything else goes to everyone ("/b ..." bot orders: the server
 // reads them, shared/bots/social.js parseBotChat; they never show as chat).
 function sendChat(raw) {
@@ -1629,7 +1636,7 @@ function renderPlayers() {
     const inParty = state.party && p?.party === state.party;
     const lfgTag = (p?.buffs || 0) & 4 ? '<span class="tag">LFG</span>' : '';
     const pf = p ? floorOf(p.tx ?? p.x) : 1, floorTag = pf > 1 ? `<span class="tag f2">F${pf}</span>` : '';
-    rows.push(`<div class="p"><span>${looks.swatch(id)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}</div>`);
+    rows.push(`<div class="p"><span>${looks.swatch(id)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}${p && !p.dead ? `<button data-duel="${id}" title="Challenge to a duel">Duel</button>` : ''}</div>`);
   }
   const meE = players.get(state.myId), seeking = !!((meE?.buffs || 0) & 4);
   const lfgBtn = `<button class="lfg ${seeking ? 'on' : ''}">${state.party ? (seeking ? 'Recruiting via party finder ✓' : 'Recruit with party finder') : seeking ? 'Searching for a party… (cancel)' : 'Find party'}</button>`;
@@ -1647,6 +1654,7 @@ function renderPlayers() {
   pbots.bindList($('players'));
   $('players').querySelector('.lfg').onclick = () => { send({ type: 'lfg' }); sfx.play('ui'); setTimeout(renderPlayers, 150); };
   for (const b of $('players').querySelectorAll('[data-inv]')) b.onclick = () => { send({ type: 'invite', id: +b.dataset.inv }); b.textContent = 'Sent'; b.disabled = true; };
+  for (const b of $('players').querySelectorAll('[data-duel]')) b.onclick = () => { $('players').classList.add('hidden'); duels.challenge(+b.dataset.duel); }; // (the Bots section's Duel buttons too: public/playerbots.js)
   const lv = $('players').querySelector('.leave'); if (lv) lv.onclick = () => send({ type: 'leave' });
 }
 const lobby = { at: 0, offline: [], offOpen: true, html: '' }; // Players panel: offline list + which sections are open
@@ -2036,7 +2044,7 @@ function animateEntity(e, dt) {
     const pct = Math.round((e.hp / e.maxHp) * 100);
     if (pct !== e.label.pct) { e.label.pct = pct; e.label.fill.style.width = `${pct}%`; }
     if (e.kind === 'mob') combat.label(e); // posture bar
-    if (e.kind === 'player') { const c = state.party && e.party === state.party ? 'party' : 'ally'; if (c !== e.label.side) { e.label.side = c; e.label.el.classList.toggle('party', c === 'party'); e.label.el.classList.toggle('ally', c === 'ally'); } }
+    if (e.kind === 'player') { const c = duels.isFoe(e.id) ? 'foe' : state.party && e.party === state.party ? 'party' : 'ally'; if (c !== e.label.side) { e.label.side = c; e.label.el.classList.toggle('party', c === 'party'); e.label.el.classList.toggle('ally', c === 'ally'); e.label.el.classList.toggle('foe', c === 'foe'); } }
     else if (e.def.elite && !e.label.el.classList.contains('elite')) e.label.el.classList.add('elite');
     const isSel = (e.kind === 'mob' ? state.lock : state.focus) === e.id;
     e.label.el.classList.toggle('sel', !!isSel);
@@ -2289,4 +2297,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { interactKind, wellWake, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };
+window.__fb = { interactKind, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent };

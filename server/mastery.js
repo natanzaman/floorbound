@@ -329,7 +329,7 @@ export const MasteryMethods = {
     if (zn.kind === 'consecrate') {
       if (!owner) return;
       for (const m of [...this.mobs.values()]) {
-        if (this.targetable(m) && Math.hypot(m.x - zn.x, m.z - zn.z) <= zn.r + m.def.radius) this.damageMob(m, owner, zn.dmg, { sk: zn.sk, frac: zn.frac, threat: 0.6 });
+        if (this.targetable(m, owner) && Math.hypot(m.x - zn.x, m.z - zn.z) <= zn.r + m.def.radius) this.damageMob(m, owner, zn.dmg, { sk: zn.sk, frac: zn.frac, threat: 0.6 });
       }
       return;
     }

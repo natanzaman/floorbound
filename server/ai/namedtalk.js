@@ -207,7 +207,7 @@ export function checkPhrase(text, req, moment, names = []) {
   if ((moment === 'offer' || moment === 'raid') && own.size && ![...own].some(id => hasName(t, MOBS[id]?.name.replace(/^The /, '')) || hasName(t, mobName(id, 2)))) return 'target';
   if (moment === 'offer' && req.k === 'bring' && !hasName(t, MATS[req.mat]?.name || req.mat)) return 'target';
   if (nums.some(x => x !== (req.n ?? -1) && !(x === 1 && req.n == null))) return 'number';
-  for (const [id, m] of Object.entries(MOBS)) if (!own.has(id) && (hasName(t, m.name.replace(/^The /, '')) || hasName(t, mobName(id, 2)))) return 'monster';
+  for (const [id, m] of Object.entries(MOBS)) if (!own.has(id) && !m.duel && (hasName(t, m.name.replace(/^The /, '')) || hasName(t, mobName(id, 2)))) return 'monster';
   if (req.mat) for (const [id, m] of Object.entries(MATS)) if (id !== req.mat && hasName(t, m.name)) return 'material';
   return '';
 }

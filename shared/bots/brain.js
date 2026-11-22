@@ -38,6 +38,7 @@ import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
 import { comboTurn, burstTurn } from './teamplay.js'; // combo payoffs + Team Burst (G2)
 import { readOpenings, openingTurn, gustDodge } from './openings.js'; // boss openings, Gale Push (J3)
 import { easeOff } from './threat.js'; // DPS ease off near 90% threat (J4)
+import { readDuels, foeMobs } from '../duels.js'; // duels: only my opponents' stand-ins are targets (server/duels.js)
 
 const BOSS_LVL = { 1: 5, 2: 15, 3: 25 }; // a leader levels on its floor's field until this, then goes for the boss
 const floorFor = beh => (beh === 'floor3' ? 3 : beh === 'floor2' ? 2 : 0); // a behaviour's own floor (0: none)
@@ -122,6 +123,7 @@ function onSnap(b, msg) {
   b.cds = msg.me.cds.map((c, k) => (b.t - (b.pressed?.[k] || -9) < 0.3 ? Math.max(c, 0.2) : c));
   if (b.t - (b.dodgePressed || -9) > 0.3) b.dodgeCd = msg.me.dodge || 0;
   b.mobs = msg.w.mobs.map(m => ({ id: m[0], type: MOB_IDS[m[1]], x: m[2], z: m[3], hp: m[5], maxHp: m[6], engaged: !!(m[7] & 2), enraged: !!(m[7] & 4), winding: !!(m[7] & 16), staggered: !!(m[7] & 32), marked: !!(m[7] & 256), def: MOBS[MOB_IDS[m[1]]] })).filter(m => m.def);
+  readDuel(b, msg.w.du); // duels: drop every stand-in but my live opponents' (b.duel: my duel while I'm still in it)
   const th = new Map(msg.w.th || []); for (const m of b.mobs) m.tgt = th.get(m.id) || 0; // who a boss / elite is after (server/threat.js)
   const f2 = msg.w.f2, f3 = msg.w.f3, fl = floorOf(b.x), gate = fl === 3 ? f3?.gate : fl === 2 ? f2?.gate : msg.w.gate;
   b.gateOpen = !!gate?.[0];
@@ -399,7 +401,8 @@ function thinkFree(b) {
   b.anchor = M.anchor ? { id: M.anchor.id, name: M.anchor.name, bot: !!M.anchor.bot } : null;
   upkeep(b, P, M);
   burstTurn(b, P); // join / start a Team Burst
-  if (stepRoll(b) || perilous(b) || waveDodge(b) || beamDodge(b) || gustDodge(b) || travel(b, M)) return;
+  if (duelWait(b)) return; // a duel's countdown: into the ring, face them
+  if (stepRoll(b) || perilous(b) || waveDodge(b) || beamDodge(b) || gustDodge(b) || (!b.duel && travel(b, M))) return;
   if (reviveTurn(b, P)) return; // a partymate is down and it's our job to pick them up
   if (rescueTurn(b, P)) return; // a partymate is caught in vines and it's our job to cut them free
   act(b, P, M);
@@ -460,10 +463,10 @@ function ctxBase(b) {
 }
 
 function act(b, P, M) {
-  let tgt = (!b.trap && rescueTarget(b, P)) || chooseTarget(b, P, M); // a trap object to break first (J1)
+  let tgt = b.duel ? duelFoe(b) : (!b.trap && rescueTarget(b, P)) || chooseTarget(b, P, M); // a duel: only my opponents; a trap object to break first (J1)
   const anchor = M.anchor && !M.anchor.dead ? M.anchor : null;
   // cohesion: too far from the anchor, drop the fight and regroup (but never walk out of a boss fight)
-  if (anchor && M.mode !== 'stay' && d2(anchor.x, anchor.z, b.x, b.z) > LEASH && !(tgt?.def.boss && inBossRoom(b.x, b.z)) && M.mode !== 'attack') tgt = null;
+  if (anchor && !b.duel && M.mode !== 'stay' && d2(anchor.x, anchor.z, b.x, b.z) > LEASH && !(tgt?.def.boss && inBossRoom(b.x, b.z)) && M.mode !== 'attack') tgt = null;
   if ((tgt?.id ?? null) !== b.tgtId) {
     if (tgt?.def.boss && M.mode === 'lead' && b.party) say(b, 'pull', { mob: tgt.def.name.replace(/^The /, '') }, { cd: 120 });
     b.tgtId = tgt?.id ?? null; b.engAt = null;
@@ -526,6 +529,30 @@ function makeCtx(b, P, M, tgt, dodge) {
   ctx.peel = b.role === 'tank' && b.mobs.some(m => m.engaged && !m.def.boss && d2(m.x, m.z, b.x, b.z) < 8 + m.def.radius
     && alive.some(p => p.id !== b.id && p.role !== 'tank' && d2(p.x, p.z, m.x, m.z) < m.def.radius + 2.5));
   return ctx;
+}
+
+// ---------------- duels ----------------
+// The snapshot's duels (shared/duels.js): b.duel = my duel while I'm in it and it's on; b.foes = my live opponents'
+// stand-in mob ids. Every other stand-in leaves b.mobs (a duel between others is none of my business).
+function readDuel(b, rows) {
+  const duels = rows ? readDuels(rows) : [];
+  b.foes = foeMobs(duels, b.id);
+  b.duel = duels.find(d => d.state < 2 && d.fighters.some(f => f.id === b.id && !f.out)) || null;
+  if (rows) b.mobs = b.mobs.filter(m => !m.def.duel || b.foes.has(m.id));
+  else if (b.mobs.some(m => m.def.duel)) b.mobs = b.mobs.filter(m => !m.def.duel);
+}
+function duelFoe(b) { return nearest(b.mobs, m => (b.foes.has(m.id) ? d2(m.x, m.z, b.x, b.z) : null)); }
+// Countdown (or the moment before the stand-ins show): stay well inside the ring, face the nearest opponent.
+function duelWait(b) {
+  const d = b.duel;
+  if (d?.state === 1 && duelFoe(b) && d2(b.x, b.z, d.x, d.z) > d.r - 3) { moveToward(b, d.x, d.z, 1); b.goal = 'Duelling: back into the ring'; return true; }
+  if (!d || (d.state === 1 && duelFoe(b))) return false;
+  if (d2(b.x, b.z, d.x, d.z) > d.r * 0.6) moveToward(b, d.x, d.z, 1);
+  const me = d.fighters.find(f => f.id === b.id), foe = b.players.filter(p => d.fighters.some(f => f.id === p.id && f.side !== me?.side && !f.out))
+    .sort((u, v) => d2(u.x, u.z, b.x, b.z) - d2(v.x, v.z, b.x, b.z))[0];
+  if (foe) b.face = Math.atan2(foe.x - b.x, foe.z - b.z);
+  b.goal = d.state === 0 ? 'Duel: waiting for FIGHT' : 'Duelling';
+  return true;
 }
 
 // ---------------- targets ----------------
@@ -656,6 +683,7 @@ function fieldSpot(b) { // wander between random spots in the field (boar meadow
 }
 
 function goalText(b, P, M, tgt) {
+  if (b.duel) return `Duelling ${tgt ? b.names.get(b.duel.fighters.find(f => f.mob === tgt.id)?.id)?.name || 'an opponent' : ''}`.trim();
   const fight = tgt ? `Fighting ${tgt.def.name}` : '';
   if (M.mode === 'stay') return `${fight || 'Holding position'}${b.cmd?.byName ? ` (${b.cmd.byName}'s order)` : ''}`;
   if (M.mode === 'attack') return `Attacking ${tgt?.def.name || 'target'} (${b.cmd.byName}'s order)`;

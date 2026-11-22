@@ -390,7 +390,7 @@ export class PlayerBots {
       const inv = !b ? 'Still joining.' : inMine ? 'Already in your party.' : this.mgr.controlBlock(who, e, 'botInvite') || (b.dead ? 'Down right now.' : '');
       const kick = !inMine ? 'Not in your party.' : this.mgr.controlBlock(who, e, 'botKick');
       return {
-        bid: e.bid, name: b?.name || e.b.name, cls: e.b.cls, lvl: b?.lvl ?? e.lvl, dead: !!b?.dead, mine, creator: rec ? (this.ownerOf(rec)?.name || rec.ownerName) : '',
+        bid: e.bid, pid: b?.id || 0, name: b?.name || e.b.name, cls: e.b.cls, lvl: b?.lvl ?? e.lvl, dead: !!b?.dead, mine, creator: rec ? (this.ownerOf(rec)?.name || rec.ownerName) : '',
         myParty: inMine, where: this.where(b), ctl: { invite: this.ctl(inv), kick: this.ctl(kick) },
         ...(rec && this.canManage(p, e, admin) ? { allow: !e.allow?.length ? 'anyone' : e.allow.every(a => a.id === ALLOW_CREATOR) ? 'just the creator' : allowLabel(e.allow.filter(a => a.id !== ALLOW_CREATOR)), allowList: (e.allow || []).filter(a => a.id !== ALLOW_CREATOR).map(a => a.name), canAllow: true } : {}),
       };

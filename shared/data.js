@@ -2,6 +2,7 @@
 import { F2, F2_MOB_IDS, F2_MOBS, F2_BITE, inCamp2, walkable2, areaName2, floor2Obstacles } from './floor2.js';
 import { F3, F3_MOB_IDS, F3_MOBS, F3_BITE, F3_RARES, inCamp3, walkable3, areaName3, floor3Obstacles } from './floor3.js';
 import { RESCUE_MOB_IDS, RESCUE_MOBS } from './rescue.js';
+import { DUEL_MOB_IDS, DUEL_MOBS } from './duels.js';
 import { TIMED, movesOf } from './bosstiming.js'; // boss timing tables (J3)
 import { AREA_COLLIDERS } from './arenas.js'; // multi-area boss fights (J2): the active area's walls and pillars
 import { LABS, LAB_MOB_IDS, LAB_MOBS, LAB_BITE, labAt, walkLab } from './labyrinth.js'; // the labyrinths before each boss
@@ -203,6 +204,9 @@ Object.assign(MOBS, RESCUE_MOBS);
 // Labyrinth enemies (shared/labyrinth.js), appended after the trap objects.
 MOB_IDS.push(...LAB_MOB_IDS);
 Object.assign(MOBS, LAB_MOBS);
+// Duel stand-ins (shared/duels.js): one on each duelist, so attacks reach opponents; appended after the trap objects.
+MOB_IDS.push(...DUEL_MOB_IDS);
+Object.assign(MOBS, DUEL_MOBS);
 
 export const xpToNext = lvl => 50 * lvl;
 

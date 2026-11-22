@@ -228,6 +228,10 @@ The stone itself is engraved: its face carries the names of the latest Floor 1 c
 
 New characters get a short step-by-step guide card (move, hit, dodge, kill, bag, party, Switch, raid gate, boss) plus one-time tips the first time they see each attack type. **Find party** puts you in the party finder: solo players are matched together, or into any party that has turned on recruiting.
 
+## Duels
+
+Challenge anyone nearby to a duel: **Players → Duel** (players, bots and the Named; bots accept by themselves), or chat `/duel <name> [first|half|last] [team]`. Pick the rule: **First Strike** (the first clean hit wins), **Half Health** (out at half, the default) or **Last Stand** (out at 1 health). **Party vs party** puts everyone in your party against everyone in theirs. A 3 s countdown, then fight inside the ring (2 min solo, 3 min team; leave the ring for 2 s and you forfeit; `/yield` gives up). Nobody dies, only your own side can heal you, and everyone gets their health back afterwards. Duels work in town too. Player damage against players is a quarter of its damage against monsters. Rules and numbers: `shared/duels.js`; server `server/duels.js` (each fighter carries a stand-in mob so every attack reaches an opponent); client `public/duels.js`; plan `docs/briefs/duels.md`. Tests: `node test/duels.js`, `node test/duelbots.js` (bot duels on a real server), `node test/duels.mjs` (browser).
+
 ## Play tracking
 
 With a database, the server records play events (session start/end, first kill, deaths and their cause, party joins, guide steps, boss attempts, rare drops) in `play_events`. See the aggregates at **/stats.html** (raw JSON at `/api/stats?days=7`): boss kills, wipes, median kill time and sessions that reached the boss for each floor side by side, and what kills players on each floor.
