@@ -122,6 +122,11 @@ const sysTo = (g, p) => g.events.filter(e => e.t === 'sys' && e.to === p.id).map
   const total0 = G.gold + a.gold + b.gold;
   const ra = act(g, a, 'withdraw', { gold: 200 }), rb = act(g, b, 'withdraw', { gold: 200 });
   ok(ra.ok !== rb.ok && G.gold === 50 && G.gold + a.gold + b.gold === total0, 'two withdrawals of 200 from 250: one goes through, nothing made or lost');
+  // too many bank moves in a row
+  const spam = add(g, 'Spam'); act(g, a, 'invite', { pid: spam.id }); act(g, spam, 'accept');
+  let refused = 0; for (let i = 0; i < GUILD.bankOps + 5; i++) if (/Easy there/.test(act(g, spam, 'deposit', { gold: 1 }).error || '')) refused++;
+  ok(refused === 5, `at most ${GUILD.bankOps} bank moves per 10 s per player`);
+  run(g, 10.5); ok(act(g, spam, 'deposit', { gold: 1 }).ok, '…then it opens again');
   // the vault
   const it = makeItem('weapon', 2, 'swordsman'), it2 = makeItem('armor', 1, 'swordsman');
   m.inv.bag.push(it, it2);
@@ -173,7 +178,7 @@ const sysTo = (g, p) => g.events.filter(e => e.t === 'sys' && e.to === p.id).map
   // finishing a quest: guild XP and gold
   G.quests.list[0].got = QUEST_BY_ID.boars.n - 1; const xp0 = G.xp, gold0 = G.gold;
   g.killMob(boar, a);
-  ok(G.quests.list[0].done && G.xp === xp0 + QUEST_BY_ID.boars.xp && G.gold === gold0 + QUEST_BY_ID.boars.gold && sysTo(g, a).some(t => /Guild quest done/.test(t)), 'a finished quest pays guild XP and gold into the bank');
+  ok(G.quests.list[0].done && G.xp === xp0 + QUEST_BY_ID.boars.xp && G.gold === gold0 + QUEST_BY_ID.boars.gold && a.ws.out.some(m => m.type === 'gchat' && m.sys && /Guild quest done/.test(m.text)) && !g.events.some(e => /Guild quest done/.test(e.text || '')), 'a finished quest pays guild XP and gold into the bank (the notice goes to members only)');
   // a Switch with a guildmate in your party (the bot), not without
   g.bumpStat(a, 'switches');
   ok(G.quests.list[2].got === 0, 'a Switch with no guildmate in your party doesn\'t count');

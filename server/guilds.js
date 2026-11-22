@@ -121,7 +121,15 @@ export const GuildMethods = {
   guildNeedsChar() { return !!this.guildStore; }, // with a database a human needs a saved character
   guildLevelOf(g) { return guildLevel(g.xp); },
   guildVaultCap(g) { return perksAt(guildLevel(g.xp)).vault; },
-  guildTell(g, text, except = 0) { for (const o of this.guildOnline(g)) if (!o.bot && o.id !== except) this.sys(text, o.id); },
+  guildTell(g, text, except = 0) { // a line for the guild's online players only (sent to them, not in the shared snapshot)
+    const msg = JSON.stringify({ type: 'gchat', sys: 1, tag: g.tag, text });
+    for (const o of this.guildOnline(g)) if (!o.bot && o.id !== except && o.ws?.readyState === 1) o.ws.send(msg);
+  },
+  guildBankBusy(p) { // at most GUILD.bankOps bank moves per 10 s per player (each one is a database transaction)
+    const t = this.time;
+    if (!p.gBank || t - p.gBank.at > 10) p.gBank = { at: t, n: 0 };
+    return ++p.gBank.n > GUILD.bankOps;
+  },
   guildHuman(m) { return !!m.charId || (m.key.startsWith('s:') && !this.players.get(+m.key.slice(2))?.bot); },
   guildHeir(g) { // the next leader: a saved player (or any human without a database), highest rank, then the oldest
     const ok = m => this.guildHuman(m) && m.rank !== RANK.leader;
@@ -480,10 +488,9 @@ export const GuildMethods = {
         case 'demote': text = this.guildRank(p, msg.key, false); break;
         case 'transfer': text = this.guildTransfer(p, msg.key); break;
         case 'disband': text = this.guildDisband(p); break;
-        case 'deposit': text = this.guildDeposit(p, msg.gold); break;
-        case 'withdraw': text = this.guildWithdraw(p, msg.gold); break;
-        case 'store': text = this.guildStoreItem(p, msg.u); break;
-        case 'take': text = this.guildTakeItem(p, msg.v); break;
+        case 'deposit': case 'withdraw': case 'store': case 'take':
+          if (this.guildBankBusy(p)) fail('Easy there: wait a few seconds between so many bank moves.');
+          text = this.guildBank(p, op, msg); break;
         default: return;
       }
     } catch (e) {
@@ -492,6 +499,15 @@ export const GuildMethods = {
     }
     if (!p.bot && p.ws?.readyState === 1) p.ws.send(JSON.stringify({ type: 'guild', op, ok, ...(ok ? { msg: text } : { error: text }), view: this.guildView(p) }));
     return ok;
+  },
+  guildBank(p, op, msg) {
+    switch (op) {
+      case 'deposit': return this.guildDeposit(p, msg.gold);
+      case 'withdraw': return this.guildWithdraw(p, msg.gold);
+      case 'store': return this.guildStoreItem(p, msg.u);
+      case 'take': return this.guildTakeItem(p, msg.v);
+    }
+    return '';
   },
 };
 

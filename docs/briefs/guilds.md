@@ -18,13 +18,15 @@ Sized for a handful of friends plus the game's many bots and the Named. One guil
 - **Members are kept by key:** `c:<charId>` (players, persisted), `n:<namedId>` (the Named, persisted), `s:<playerId>`
   (bots and anonymous players: session-only; they drop out when they leave the world). Max `GUILD.maxMembers` (50).
 - **Chat:** `/g text` (or `/guild text`): `{ type: 'gchat' }` sent only to the guild's online players (not in the
-  shared snapshot). The tag shows as `[TAG]` on nameplates, in the Players list, the HUD name and the Hall of Clearers.
+  shared snapshot); guild notices (joins, quests, levels, withdrawals) go the same way (`{ type: 'gchat', sys: 1 }`).
+  The tag shows as `[TAG]` on nameplates, in the Players list, the HUD name and the Hall of Clearers.
 - **Bank:** gold (anyone deposits, Officer+ withdraws) and a vault of bag items (`GUILD.vault` = 20 slots, +perks, max
   40; keepsakes stay with you). Everything happens in the single-threaded game loop, so a move is all-or-nothing in
   memory: the item leaves the bag and enters the vault (or the other way) in one step, by vault slot id (`v`), so two
   players taking the same item at once: the first gets it, the second is told it's gone. Persisted in one Postgres
   transaction (guild row + that character's gold and bag), queued behind the character's own saves
-  (`accounts.charLock`) so an older save can never land after it.
+  (`accounts.charLock`, which loads also wait on) so an older save can never land after it. At most `GUILD.bankOps`
+  (40) bank moves per player per 10 s.
 - **Weekly quests:** 3 a week (Monday 00:00 UTC), drawn from `GUILD_QUESTS` with a seed of (guild id, week). Kinds: kill
   (by mob type, floor, or rares), lab (defeat a labyrinth keeper), boss (a floor boss falls with a member in the fight),
   switch (land a Switch with a guildmate in your party). Members' actions count; a bot's or one of the Named's count
@@ -40,7 +42,7 @@ Sized for a handful of friends plus the game's many bots and the Named. One guil
   `accept {gid}`, `decline {gid}`, `leave`, `kick {key}`, `promote {key}`, `demote {key}`, `transfer {key}`, `disband`,
   `deposit {gold}`, `withdraw {gold}`, `store {u}`, `take {v}`. Chat `{ type: 'chat', ch: 'g', text }`.
 - Server → client: `{ type: 'guild', op, ok, msg | error, view }` (view: the guild as you see it, or invites and the fee
-  when you have none), `{ type: 'gchat', from, id, text }`; event `ginvite { to, gid, name, tag, from }`; roster rows
+  when you have none), `{ type: 'gchat', from, id, tag, text }` (or `{ sys: 1, tag, text }`: a notice); event `ginvite { to, gid, name, tag, from }`; roster rows
   carry `g` (the tag); Hall rows' players carry `g`.
 
 ## DB (`server/db.js`, safe to run twice)
@@ -58,7 +60,13 @@ makeGuildStore), `public/guilds.js` (Guild tab, invite card, registrar label, `/
 card), hooks in `server/index.js` (store, hall tags), `server/admin.js` (routes), `server/accounts.js` (charLock),
 `server/db.js` (tables, `tx`), `shared/accesslevels.js` (`guildInvite`), `public/main.js` (tab, chat, plates, Hall).
 
+## Testing aids
+`TEST_HOOKS=1`: `{ type: 'test', gold: n }` (spending money), `{ type: 'test', guildEv: { kind, mob, floor, n } }`
+(counts toward this week's quests).
+
 ## Tests
 `node test/guilds.js`: pure rules, in process (create, ranks, invites incl. bots / the Named, chat, bank and vault
 races, quests and the bot rate, levels and perks, Hall tags) and, with `DATABASE_URL`, a real server: create over the
 wire, deposits / withdrawals racing, the vault, quest progress, everything still there after a restart.
+`python3 test/guilds.py` (browser, no database): the Registrar, the tab, found, the invite card, `/g`, tags, bank,
+vault, leave.

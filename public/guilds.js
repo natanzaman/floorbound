@@ -152,6 +152,7 @@ export function initGuilds({ $, send, state, log, sfx, project, keyHtml, tapping
     open() { openTab('guild'); poll(true); },
     onEvent(e) { if (e.t === 'ginvite' && e.to === state.myId) { card(e); sfx?.play('ui'); } },
     onMessage(msg) {
+      if (msg.type === 'gchat' && msg.sys) { log(`[Guild] ${msg.text}`, 'guild'); if (visible()) poll(true); return true; } // a guild notice (joins, quests, levels)
       if (msg.type === 'gchat') { log(`[Guild] ${msg.from}: ${msg.text}`, msg.id === state.myId ? 'me guild' : 'guild'); return true; }
       if (msg.type !== 'guild') return false;
       if (msg.view) ui.view = msg.view;

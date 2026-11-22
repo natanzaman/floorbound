@@ -10,6 +10,7 @@ export const GUILD = {
   inviteFor: 60,     // s an invite waits
   botAnswer: [1, 2], // s before a bot or one of the Named answers an invite (they accept)
   goldMax: 10_000_000,
+  bankOps: 40,       // bank moves (deposit, withdraw, store, take) per player per 10 s
 };
 
 // Registrar: the door of the south-east house of the plaza in the Town of Beginnings (no new art; a label like the Smith's).
