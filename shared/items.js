@@ -142,6 +142,19 @@ Object.assign(DROPS, { // the Undercrypt (shared/labyrinth.js): its enemies, its
   cryptchestdeep: { gold: [30, 55], item: 1, potion: 1, table: 'elite' },
 });
 
+Object.assign(DROPS, { // the Weeping Thicket and the Windrift Causeways (shared/labyrinth.js)
+  mirelurker: { gold: [8, 13], item: 0.12, potion: 0.14, table: 'mire' },
+  mosshag: { gold: [18, 28], item: 0.3, potion: 0.3, table: 'mire' },
+  motherofmire: { gold: [90, 130], item: 1, potion: 1, table: 'mireElite' },
+  thicketchest: { gold: [30, 50], item: 1, potion: 0.5, table: 'mire' },
+  thicketchestdeep: { gold: [50, 80], item: 1, potion: 1, table: 'mireElite' },
+  stormharpy: { gold: [12, 20], item: 0.14, potion: 0.15, table: 'spire' },
+  kiterider: { gold: [26, 38], item: 0.3, potion: 0.3, table: 'spire' },
+  galematriarch: { gold: [140, 190], item: 1, potion: 1, table: 'spireRare' },
+  skychest: { gold: [45, 70], item: 1, potion: 0.5, table: 'spire' },
+  skychestdeep: { gold: [70, 110], item: 1, potion: 1, table: 'spireRare' },
+});
+
 Object.assign(DROPS, { // Floor 2
   shieldback: { gold: [8, 14], item: 0.13, potion: 0.14, table: 'mire' },
   wisp: { gold: [7, 12], item: 0.11, potion: 0.12, table: 'mire' },

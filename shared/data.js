@@ -70,9 +70,9 @@ export function walkable(x, z, gateClosed = false) {
 }
 
 export function areaName(x, z) {
+  const lab = labAt(x, z); if (lab) return lab.name; // a labyrinth's layer (shared/labyrinth.js)
   if (x > F3.split) return areaName3(x, z);
   if (x > F2.split) return areaName2(x, z);
-  const lab = labAt(x, z); if (lab) return lab.name; // a labyrinth's layer (shared/labyrinth.js)
   if (inTown(x, z)) return 'Town of Beginnings';
   if (inArena(x, z)) return "Warden's Chamber";
   if (z > 148) return 'Chamber Gate';
@@ -107,10 +107,13 @@ export const OBSTACLES = (() => {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
     out.push({ kind: 'pillar', x: WORLD.arena.x + Math.cos(a) * 21, z: WORLD.arena.z + Math.sin(a) * 21, r: 1.6 });
   }
-  const E = LABS[1].entry; // the Undercrypt's stair: the woods give it room
-  for (let i = out.length - 1; i >= 0; i--) if ((out[i].kind === 'tree' || out[i].kind === 'rock') && Math.hypot(out[i].x - E.x, out[i].z - E.z) < E.clear) out.splice(i, 1);
   out.push(...floor2Obstacles()); // Floor 2 (see shared/floor2.js)
   out.push(...floor3Obstacles()); // Floor 3 (see shared/floor3.js)
+  const KEEP = new Set(['pillar', 'campfire', 'brazier', 'fountain']); // (landmarks stay; scattered scenery makes room)
+  for (const lab of Object.values(LABS)) { // each labyrinth's stair in its field: the scenery gives it room
+    const E = lab.entry;
+    for (let i = out.length - 1; i >= 0; i--) if (!KEEP.has(out[i].kind) && Math.hypot(out[i].x - E.x, out[i].z - E.z) < E.clear + out[i].r) out.splice(i, 1);
+  }
   return out;
 })();
 
