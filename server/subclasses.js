@@ -177,6 +177,7 @@ function onLine(x0, z0, x1, z1, m, width) {
   return Math.hypot(m.x - (x0 + lx * tt), m.z - (z0 + lz * tt)) <= width + m.def.radius;
 }
 
+const HID_NAME = 'Your Own Road'; // (the hidden pick's name on screen: sent only to a character who found it)
 export const SubclassMethods = {
   // ---------- the record ----------
   // The subclass in force (null: none, a trial's loan, an Initiate). The hidden pick counts as HIDDEN.id.
@@ -237,7 +238,7 @@ export const SubclassMethods = {
     this.specRefresh(p);
     this.markPath(p);
     const name = sub === HIDDEN.id ? null : SUBCLASSES[sub].name;
-    this.events.push({ t: 'spec', id: p.id, to: p.id, sub: name ? sub : '', n: name || '' });
+    this.events.push({ t: 'spec', id: p.id, to: p.id, sub: name ? sub : '', n: name || '', ...(name ? {} : { hn: HID_NAME, hs: 'A borrowed skill is in slot 5' }) });
     if (name) this.sys(`${p.name} specialised as a ${name}!`);
     else this.sys('You choose your own road.', p.id);
     this.track?.(p, 'specialise', { cls: p.cls, sub, fee, lvl: p.lvl });
@@ -268,7 +269,7 @@ export const SubclassMethods = {
     if (sig) out.sig = { id: sig.id, name: sig.name, desc: sig.borrow ? `${sig.desc} (Borrowed from the ${CLASSES[sig.borrow].name}: ${Math.round(HIDDEN.pow * 100)}% power.)` : sig.desc, cd: sig.cd, aim: sig.aim || 0, anim: sig.anim || sig.id };
     if (P?.found && !isInitiate(P)) { // (only once found: the client holds no text for it)
       const from = borrowFrom(P, p.cls).map(c => ({ cls: c, name: CLASSES[c].name, skills: borrowable(c).map(id => ({ id, name: CLASSES[c].skills.find(s => s.id === id).name })), branches: (TREES[c]?.branches || []).map(b => ({ id: b.id, name: b.name })) }));
-      out.hid = { id: HIDDEN.id, name: 'Your Own Road', on: sub === HIDDEN.id ? P.wb[p.cls] : null, from,
+      out.hid = { id: HIDDEN.id, name: HID_NAME, on: sub === HIDDEN.id ? P.wb[p.cls] : null, from,
         text: `Keep your class and take one skill (slot 5) and the first tier of one talent branch from another class whose trial you passed, at ${Math.round(HIDDEN.pow * 100)}% power. No signature skill.` };
     }
     return out;
@@ -349,6 +350,15 @@ export function installSubclasses(Game) {
     const out = orig.call(this, p), s = this.subOfP(p);
     if (s && s !== HIDDEN.id && p.lvl >= SPEC.lvl) out.sub = s; // (the hidden pick shows the class)
     return out;
+  });
+  // Levelling changes the fee and, at SPEC.lvl, opens the section: send the path again (and say so once).
+  wrap('giveXp', function (orig, p, ...a) {
+    const was = p.lvl, r = orig.call(this, p, ...a);
+    if (p.lvl !== was && !p.bot && !isInitiate(p.path)) {
+      p.pathDirty = true;
+      if (was < SPEC.lvl && p.lvl >= SPEC.lvl && !this.subOfP(p)) this.sys(`Level ${SPEC.lvl}: you can specialise. Visit the Academy (Specialise) to pick a subclass and its signature skill.`, p.id);
+    }
+    return r;
   });
   wrap('pathMsg', function (orig, p) { const m = orig.call(this, p); m.spec = this.specMsg(p); return m; });
   wrap('meFor', function (orig, p) {

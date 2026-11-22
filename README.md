@@ -35,6 +35,7 @@ The default keys; change any of them in Game Menu → Controls (they follow your
 | Move | WASD: the character keeps facing where the camera looks, so S walks backwards and A/D strafe (also while locked on) | Left stick |
 | Basic attack | Left click or J (hold) | Big round button (hold) |
 | Skills | 1, 2, 3 | Small buttons |
+| Signature skill (slot 5, after specialising at level 15) | X | Gold button |
 | Dodge roll | Shift | Dodge button |
 | Jump | Space (hop over the boss's slams and Quake Rings; you keep your momentum and can steer in the air, a little less sharply than on the ground) | Jump button |
 | Guard / parry (Guardian) | Hold R to guard; tap R just before a hit to parry | — |
@@ -54,7 +55,7 @@ The default keys; change any of them in Game Menu → Controls (they follow your
 | Game Menu (Resume, Settings, Controls, Controls & guide, Change character, Log out; Admin page for admins) | Esc (it first closes whatever is open; in mouse look the Esc that frees the cursor opens it). The game keeps running: only your moving and attacking stop while it's open | ☰ button |
 | Performance overlay | F3, or Settings → Performance overlay | — |
 
-**Controller:** plug in a standard gamepad and the game asks once whether to switch to it (A: yes, B: not now). Left stick moves, right stick turns the camera; RT attack (hold), RB dodge, LT guard (hold), A jump, X / Y / B skills 1–3, R3 lock on / next target, D-pad ↑ ← → potion / tonic / draught, D-pad ↓ interact (hold next to a downed ally: revive), View bag, Start Game Menu. Hold LB for the second layer: LB+A cover, LB+X Team Burst, LB+Y bot wheel (point with the right stick, release Y to give the order (with Toggle the bot wheel on, press LB+Y again to give it); leaving the window while holding it cancels), LB+B select what you aim at, LB+R3 clear target, LB+D-pad ↑ Skill Tree, LB+D-pad → Players. Triggers press past halfway and let go under a third; sticks have a deadzone. PlayStation and Nintendo pads show their own button names (or pick Xbox / PlayStation names in Controls), and every on-screen hint (the skill bar, "press … to trade", revive prompts) names the button of the device you're playing with. A wired third-party Xbox pad on a Mac (SCUF, PowerA: the light keeps blinking) has no macOS driver: in Chrome or Edge, Game Menu → Controls → Connect it, pick the pad once, and the game drives it over WebUSB (Windows needs nothing). Under Controller the keyboard keeps Esc, Enter (chat) and F3, the mouse is for menus, and the touch stick hides; unplugging the pad goes back to keyboard & mouse. Menus work with the pad too (Game Menu, Settings, Bag, Skill Tree, character select, the MVP card): the d-pad or left stick moves a yellow focus ring, A presses, B goes back (Settings opened from the Game Menu returns to it), Left / Right change sliders, and each window remembers where the ring was; Smith, Hall and Players stay mouse-only for now.
+**Controller:** plug in a standard gamepad and the game asks once whether to switch to it (A: yes, B: not now). Left stick moves, right stick turns the camera; RT attack (hold), RB dodge, LT guard (hold), A jump, X / Y / B skills 1–3, LB+RT signature skill (slot 5), R3 lock on / next target, D-pad ↑ ← → potion / tonic / draught, D-pad ↓ interact (hold next to a downed ally: revive), View bag, Start Game Menu. Hold LB for the second layer: LB+A cover, LB+X Team Burst, LB+Y bot wheel (point with the right stick, release Y to give the order (with Toggle the bot wheel on, press LB+Y again to give it); leaving the window while holding it cancels), LB+B select what you aim at, LB+R3 clear target, LB+D-pad ↑ Skill Tree, LB+D-pad → Players. Triggers press past halfway and let go under a third; sticks have a deadzone. PlayStation and Nintendo pads show their own button names (or pick Xbox / PlayStation names in Controls), and every on-screen hint (the skill bar, "press … to trade", revive prompts) names the button of the device you're playing with. A wired third-party Xbox pad on a Mac (SCUF, PowerA: the light keeps blinking) has no macOS driver: in Chrome or Edge, Game Menu → Controls → Connect it, pick the pad once, and the game drives it over WebUSB (Windows needs nothing). Under Controller the keyboard keeps Esc, Enter (chat) and F3, the mouse is for menus, and the touch stick hides; unplugging the pad goes back to keyboard & mouse. Menus work with the pad too (Game Menu, Settings, Bag, Skill Tree, character select, the MVP card): the d-pad or left stick moves a yellow focus ring, A presses, B goes back (Settings opened from the Game Menu returns to it), Left / Right change sliders, and each window remembers where the ring was; Smith, Hall and Players stay mouse-only for now.
 
 **Targeting (Game Menu → Controls → Combat, follows your account):** how an attack picks its target. **Nearest**: always the nearest enemy. **Locked or nearest** (default, as before): your locked target if it's within the skill's reach + 4 m (at least 14 m), else for bows and bolts the enemy nearest your crosshair, else the nearest. **Cone**: the nearest enemy in a 120° cone where you look; a locked target inside the cone comes first; swings and thrusts never hit anything beside or behind you (the server checks the camera's look sent with each attack). **Aimed**: no auto-targeting: attacks go where the camera looks (the crosshair in mouse look, the right stick on a pad); arrows, Smite, Bard notes and bolt weapons fly straight with no homing and hit whatever is in the line (also an enemy that walks into it), with a hitbox 0.35 m wider than the visual; melee hits inside the attack's field of view where you face, and marks, pounces and leaps take the first enemy on the aim line. **Cleave** (on by default): one swing hits every enemy inside its field of view, up to **Max targets per hit** (1–8, default 8) and the attack's own limit (basic swings 4, finishers 6, thrusts 3); off: one enemy per hit (your locked target if it's inside, else the nearest; in Aimed, the one nearest your aim line). Area attacks (Bard chords, Hamstring, the Berserker's Cleave skill, ring-shaped basic attacks) keep only their own limit; spins, slams, ground circles, dashes and projectiles aren't affected. Each attack's field of view and limit are data (`ATTACKS` in `shared/targeting.js`); weapon styles scale it with `mods.fov` (see *Weapon styles*: slow heavy arcs swing wider, quick ones narrower). Bots keep the old behaviour.
 
@@ -472,6 +473,29 @@ New characters start as **Initiates**: you pick a name and a **weapon** (sword, 
 
 Code: `shared/academy.js` (rules and tables), `shared/academyyard.js` (the building, the yard, training enemies), `server/academy.js`, `public/academy.js`. Brief: `docs/briefs/academy.md`. Tests: `node test/academy.js` (with `DATABASE_URL` it also runs a server: create, trial, graduate, restart) and `python3 test/academy.py` (browser).
 
+### Subclasses (level 15)
+
+At **level 15** a graduate can **specialise** in one of two subclasses of its class, in the Academy's **Specialise** section. Each subclass is built on one talent branch: it adds two nodes to that branch (tier 2, left and right, each after the tier-1 node above it; they don't count toward opening deeper tiers) and grants a **signature skill** in a new **slot 5** (X; pad LB+RT; a gold button on touch). The first pick is free; changing later costs gold (200 + 20 per level), and the old subclass's two nodes are refunded. Changing class keeps one subclass per class.
+
+| Class | Subclass (branch) | Signature skill |
+| --- | --- | --- |
+| Swordsman | Duelist (Tempo) | Flash Step: blink to the target, untouchable, then three quick cuts (18 s) |
+| Swordsman | Vanguard (Link) | Rallying Cut: a wide heavy cut (big posture damage) that gives you and allies within 12 m +12% damage (24 s) |
+| Guardian | Bulwark Knight (Bulwark) | Aegis of the Line: you take 40% less damage for 5 s, allies within 10 m 25% less (32 s) |
+| Guardian | Warlord (Warlord) | Conqueror's Roar: taunts and staggers every enemy within 9 m (24 s) |
+| Cleric | Lightbringer (Mercy) | Dawnburst: heals you and every ally within 15 m for 22% of their health (30 s) |
+| Cleric | Inquisitor (Judgement) | Judgement Ray: a 14 m ray, heavy damage and posture, interrupts (16 s) |
+| Ranger | Sharpshooter (Marksman) | Deadeye Shot: a half-second draw, then a 24 m piercing arrow (18 s) |
+| Ranger | Trapmaster (Trapper) | Snare Field: holds and slows everything in a 4.5 m circle up to 10 m ahead (24 s) |
+| Berserker | Reaver (Carnage) | Rampage: three spinning sweeps, the last one knocks back (20 s) |
+| Berserker | Blood Knight (Bloodlust) | Crimson Pact: a heavy cleave that heals you for 40% of its damage (18 s) |
+| Lancer | Dragoon (Dragoon) | Wyvern Dive: leap onto the target (up to 11 m) and crash down, staggering (22 s) |
+| Lancer | Phalanx (Phalanx) | Spear Wall: knocks back and stuns enemies in front; you and allies within 8 m take 20% less damage (26 s) |
+| Bard | Virtuoso (Maestro) | Encore: you and allies within 14 m get 4 s back on skills and +10% damage (40 s) |
+| Bard | Siren (Discord) | Siren's Wail: a 7 m wail that slows enemies and interrupts (22 s) |
+
+Signature skills earn no mastery and are not refunded by skill chains. Premade bots specialise at 15 by role (Duelist, Bulwark Knight, Lightbringer, Sharpshooter, Reaver, Dragoon, Virtuoso) and the Named have their own (Halvard: Bulwark Knight, Maribel: Lightbringer, Tovin: Sharpshooter, Sennet: Phalanx, Cairn: Dragoon). The subclass shows on nameplates and in the Players list. Admins set or clear it in the admin editor (Subclass). Code: `shared/subclasses.js` (the table and rules), `server/subclasses.js` (the signature skills), the nodes in `shared/talents.js`. Brief: `docs/briefs/subclasses.md`. Test: `node test/subclasses.js` (add `DATABASE_URL` for a server run with a restart).
+
 ## Classes
 
 | Class | Role | Skills |
@@ -494,6 +518,7 @@ shared/floor2.js Floor 2: map, waypoints (every floor's), enemies, Sovereign tun
 server/floor2.js Floor 2 AI (Shieldback, Wisp, Lurker, Matron, Sovereign), Sunken Gate, waypoint travel/Stairway
 public/floor2world.js, public/floor2client.js  Floor 2 scene, models, effects, waypoint glows and UI
 shared/academy.js, shared/academyyard.js, server/academy.js, public/academy.js  the Academy: Initiates, class trials, drills, ranks, classmates
+shared/subclasses.js, server/subclasses.js, shared/bots/subclass.js  subclasses at level 15, signature skills (slot 5), bot use
 public/wellwake.js     the well waking (Floor 1's waypoint sleeps until your Floor 2 opens; the short shot of it lighting up)
 shared/floor3.js Floor 3: map, enemies, Colossus tuning and twists (appended into data.js)
 server/floor3.js Floor 3 AI (Ram, Harpy, Acolyte, Sentinel, rares, the Colossus: Overload, Tempest Beam), Storm Gate, Stairway, travel
@@ -533,6 +558,7 @@ public/focusnav.js  controller menu navigation: spatial focus over the top windo
 shared/gamepad.js  pad reading (deadzones, trigger hysteresis, button edges, the LB layer, glyph families; DOM-free); test/gamepad.js, test/padsmoke.mjs (a fake pad in a real browser)
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
 test/academy.js  the Academy: rules, trials and drills in process, graduation and class change; with DATABASE_URL a server run (port 3941); test/academy.py: the creation screen, panel and a trial in a browser
+test/subclasses.js  subclasses: rules, signature skills, slot 5, fee, talents, bots and the Named; with DATABASE_URL a server run with a restart
 test/wellwake.js the well's dormant rule (no warp before Floor 2 opens, warp after), the film's wake cue, Episode 1's sheet; test/wellwake.py: the shot in a browser (Python Playwright)
 test/bubbles.js  speech bubble logic: duration, one per speaker, who sees which line; film subtitle hold (public/bubbles.js)
 test/filmsubs.mjs  film dialogue in a browser: subtitles in the letterbox bar, voice-over files played (needs Playwright for Node)

@@ -298,6 +298,7 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
   function onMessage(msg) {
     if (msg.type !== 'path') return false;
     state.academy = msg;
+    if (!ini() && msg.spec && !msg.spec.sub && (state.lvl | 0) >= msg.spec.lvl) tip('spec'); // a graduate who can specialise
     ui.html = '';
     render();
     return true;
@@ -313,7 +314,7 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
     }
     if (e.t === 'spec' && e.id === state.myId) {
       if (e.found) { banner('A NEW CHOICE', 'Open the Academy\'s Specialise section'); sfx?.play('levelup'); }
-      else { banner(e.n ? e.n.toUpperCase() : 'YOUR OWN ROAD', e.n ? 'Your signature skill is in slot 5; two new talents wait in your tree' : 'A borrowed skill is in slot 5'); sfx?.play('levelup'); }
+      else { banner(String(e.n || e.hn || '').toUpperCase(), e.n ? 'Your signature skill is in slot 5; two new talents wait in your tree' : e.hs || ''); sfx?.play('levelup'); } // (hn / hs: the server's words for a pick it never lists)
       return true;
     }
     if (e.t === 'grad' && e.id === state.myId) {
