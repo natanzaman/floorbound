@@ -29,6 +29,7 @@ import { initClassesB } from '/classes-b.js';
 import { initClassesA } from '/classes-a.js';
 import { initStyles } from '/styles.js';
 import { initPlayerBots } from '/playerbots.js';
+import { initGuilds } from '/guilds.js'; // guilds: the Guild tab, invite card, /g chat, the Registrar (docs/briefs/guilds.md)
 import { initNamed, talkTo } from '/named.js'; // the Friends tab: the Named and your friendship with them
 import { snapPoses, poseFrame } from '/poses.js'; // kneel / sit / bow (F5)
 import { initTalents } from '/talents.js';
@@ -420,6 +421,8 @@ const looks = initLooks({ players, mobs }); // character looks: the Named's own 
 const pbots = initPlayerBots({ $, send, state, players, log: (a, b) => log(a, b), sfx, rerender: () => { lobby.html = ''; renderPlayers(); }, refresh: () => renderPlayers() });
 const friends = initNamed({ $, send, state, log: (a, b) => log(a, b), sfx, banner: (a, b) => banner(a, b) }); // public/named.js
 // (the Friends tab is added on welcome, only when the server runs the Named: msg.named)
+const guilds = initGuilds({ $, send, state, log: (a, b) => log(a, b), sfx, project: (...a) => project(...a), keyHtml, tapping, tip: id => guide.tip(id), openTab: id => { $('players').classList.remove('hidden'); pbots.select(id); lobby.html = ''; renderPlayers(); } }); // public/guilds.js
+pbots.addTab(guilds); // the Guild tab
 // talent trees + the Skill Tree window (K): progression track, talents, abilities (public/talents.js)
 const talents = initTalents({ state, players, fx, sfx, send, floatNum, mastery, guide, isTouch, $ });
 const loot = initLoot({ state, send, $, styleTitle: it => styles.title(it), fx, sfx, guide, players, floatNum: (...a) => floatNum(...a) });
@@ -503,6 +506,7 @@ function onMessage(msg, arrival = performance.now()) {
   if (mastery.onMessage(msg)) return; // skill mastery
   if (pbots.onMessage(msg)) return; // player-owned bots (Players panel → Bots tab)
   if (friends.onMessage(msg)) return; // the Named (Players panel → Friends tab)
+  if (guilds.onMessage(msg)) return; // guilds: the Guild tab's replies and guild chat (public/guilds.js)
   if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); smith.render(); life.render(); wellWake.inv(); return; }
   if (msg.type === 'life') { life.onMsg(msg); return; } // life classes (public/life.js)
   if (msg.type === 'hall') { state.hallData = msg; renderHall(); bell.hall(msg); return; }
@@ -889,6 +893,7 @@ function handleEvent(e) {
       if (e.s === 'open') { sfx.play('gate', { x: 0, z: 161 }, 1.5); if (Math.abs(state.x) < 30 && state.z > 120) banner('THE RAID GATE OPENS', 'The Horned Warden awaits'); }
       break;
     case 'invite': if (e.to === me) showInvite(e.from, e.name); break;
+    case 'ginvite': guilds.onEvent(e); break; // a guild invite card (public/guilds.js)
     case 'mind': if (bubbles.mind(e) && !state.spectator && !e.ch) guide.tip('botmind'); break; // an AI companion is thinking about a line said to it (H3)
     case 'chat': // ch 'p': party chat (only your party sees it), 's': say (heard within 40 m)
       if (bubbles.chat(e) && e.id !== me && !state.spectator) guide.tip('bubbles'); // a bubble over the speaker's head (same rules as the log)
@@ -1431,6 +1436,7 @@ function interactKind() {
   if (nearHall()) return 'hall';
   if (smith.near()) return 'smith';
   if (academy.near()) return 'academy'; // the Academy (public/academy.js)
+  if (guilds.near()) return 'guild'; // the Guild Registrar (public/guilds.js)
   if (mastery.near()) return 'shrine'; // Skill Shrine (public/mastery.js)
   if (ground.near()) return 'pickup';
   { const lk = life.interactKind(); if (lk) return lk; } // gathering spots, the Life Hall, garden, fire, bench
@@ -1444,6 +1450,7 @@ function interact() {
   else if (k === 'hall') { toggleHall(); sfx.play('ui'); }
   else if (k === 'smith') { smith.toggle(); sfx.play('ui'); }
   else if (k === 'academy') academy.toggle();
+  else if (k === 'guild') { guilds.open(); sfx.play('ui'); }
   else if (k === 'shrine') talents.toggle();
   else if (k === 'pickup') { send({ type: 'pickup', id: ground.near() }); }
   else if (life.interact(k)) { /* public/life.js */ }
@@ -1452,6 +1459,7 @@ function interact() {
 }
 
 // ---------------- titles & Hall of Clearers ----------------
+const guildTag = r => (r?.g ? `<small class="gtag">[${esc(r.g)}]</small> ` : ''); // a guild member's tag (roster rows carry g: server/guilds.js)
 const titleTag = id => { const t = TITLE_BY_ID[id]; return t ? `<small class="ttl" style="color:${t.color}">${t.name}</small>` : ''; };
 let titleAt = 0;
 function titleBanner(name, delay = 0) { // queue so several titles (e.g. after a Warden kill) each get their moment
@@ -1470,7 +1478,7 @@ function ago(iso) {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
   return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)}m ago` : s < 86400 ? `${Math.floor(s / 3600)}h ago` : fmtDate(iso);
 }
-const hallParty = r => r.players.map(p => `<span title="Lv${p.lvl} ${p.rk ? `${esc(p.rk)} ` : ''}${CLASSES[p.cls]?.name || ''}">${esc(p.name)}${p.rk ? ` <small class="rk">${esc(p.rk)}</small>` : ''}</span>`).join(', ') || '—'; // rk: the class rank carved beside the name (the Academy)
+const hallParty = r => r.players.map(p => `<span title="Lv${p.lvl} ${p.rk ? `${esc(p.rk)} ` : ''}${CLASSES[p.cls]?.name || ''}">${p.g ? `<small class="gtag">[${esc(p.g)}]</small> ` : ''}${esc(p.name)}${p.rk ? ` <small class="rk">${esc(p.rk)}</small>` : ''}</span>`).join(', ') || '—'; // rk: the class rank carved beside the name (the Academy); g: the guild tag
 const hallMeta = r => `${esc(r.lastAttack || '?')} took the Last Attack · ${r.deaths} death${r.deaths === 1 ? '' : 's'}`;
 function renderHall() {
   const el = $('hall');
@@ -1670,18 +1678,19 @@ $('sound-btn').textContent = sfx.on ? 'Sound on' : 'Sound off';
 $('sound-btn').onclick = () => { sfx.unlock(); $('sound-btn').textContent = sfx.toggle() ? 'Sound on' : 'Sound off'; };
 $('lock-btn').onpointerdown = e => { e.preventDefault(); cycleLock(); };
 canvas.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
-$('chat-btn').onclick = () => { const t = prompt('Say something (/p party, /s nearby, /b bot orders: /b help, /duel name, /sit /kneel /bow /stand)'); if (t) sendChat(t); };
-// Chat channels: "/p text" party, "/s text" say (nearby); anything else goes to everyone ("/b ..." bot orders: the server
+$('chat-btn').onclick = () => { const t = prompt('Say something (/p party, /s nearby, /g guild, /b bot orders: /b help, /duel name, /sit /kneel /bow /stand)'); if (t) sendChat(t); };
+// Chat channels: "/p text" party, "/s text" say (nearby), "/g text" guild (server/guilds.js); anything else goes to everyone ("/b ..." bot orders: the server
 // reads them, shared/bots/social.js parseBotChat; they never show as chat).
 function sendChat(raw) {
   let t = String(raw || '').trim(), ch;
-  const m = t.match(/^\/(p|party|s|say)\s+([\s\S]*)$/i);
+  const m = t.match(/^\/(p|party|s|say|g|guild)\s+([\s\S]*)$/i);
   if (m) { ch = m[1][0].toLowerCase(); t = m[2].trim(); }
   if (t) send({ type: 'chat', text: t, ...(ch ? { ch } : {}) });
 }
 $('players-btn').onclick = () => { $('players').classList.toggle('hidden'); lobby.html = ''; renderPlayers(); };
 function renderPlayers() {
   if ($('players').classList.contains('hidden')) return;
+  $('players').toggleAttribute('data-nav', pbots.tab === 'guild'); // the Guild tab is pad-driven (the Registrar opens it; public/focusnav.js)
   const nNamed = [...state.roster.values()].filter(r => r.named).length; // the Named have the Friends tab (public/named.js)
   const nBots = [...state.roster.values()].filter(r => r.bot && !r.named).length, nReal = state.roster.size - nBots - nNamed;
   if (pbots.tab !== 'players') return pbots.render($('players'), nReal, nBots); // Bots / Friends tab (public/playerbots.js)
@@ -1696,7 +1705,7 @@ function renderPlayers() {
     const lfgTag = (p ? (p.buffs || 0) & 4 : o?.[3]) ? '<span class="tag">LFG</span>' : '';
     const pf = p ? floorOf(p.tx ?? p.x) : o?.[2] || 1, floorTag = pf > 1 ? `<span class="tag f2">F${pf}</span>` : '';
     const up = p ? !p.dead : o ? !o[4] : false;
-    rows.push(`<div class="p"><span>${looks.swatch(id)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? o?.[1] ?? 1} ${esc(academy.rosterLabel(r))}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}${up ? `<button data-duel="${id}" title="Challenge to a duel">Duel</button>` : ''}</div>`);
+    rows.push(`<div class="p"><span>${looks.swatch(id)}${guildTag(r)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? o?.[1] ?? 1} ${esc(academy.rosterLabel(r))}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}${up ? `<button data-duel="${id}" title="Challenge to a duel">Duel</button>` : ''}</div>`);
   }
   const meE = players.get(state.myId), seeking = !!((meE?.buffs || 0) & 4);
   const lfgBtn = `<button class="lfg ${seeking ? 'on' : ''}">${state.party ? (seeking ? 'Recruiting via party finder ✓' : 'Recruit with party finder') : seeking ? 'Searching for a party… (cancel)' : 'Find party'}</button>`;
@@ -1746,7 +1755,7 @@ let hudT = 0;
 function updateHud(now) {
   if (now - hudT < 100) return; hudT = now;
   const name = state.roster.get(state.myId)?.name || '';
-  const meHtml = `${esc(name)}${titleTag(state.roster.get(state.myId)?.title)}`;
+  const meHtml = `${guildTag(state.roster.get(state.myId))}${esc(name)}${titleTag(state.roster.get(state.myId)?.title)}`;
   if ($('me-name').innerHTML !== meHtml) $('me-name').innerHTML = meHtml;
   setText($('me-lvl'), `Lv ${state.lvl} ${academy.label()}`); // (an Initiate: "Initiate · Sword")
   const pct = (state.hp / state.maxHp) * 100;
@@ -1802,7 +1811,7 @@ function updateHud(now) {
     }
     if (btn.dataset.slot === 'guard') { btn.classList.toggle('on', combat.guarding); continue; }
     if (btn.dataset.slot === 'cover') { threat.coverCd(btn); continue; }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'academy' ? (academy.inTrial() ? 'Leave' : 'Enter') : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : a?.startsWith('life-') ? life.actLabel(a) : state.meReady ? 'Unready' : 'Ready'); continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'guild' ? 'Guild' : a === 'academy' ? (academy.inTrial() ? 'Leave' : 'Enter') : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : a?.startsWith('life-') ? life.actLabel(a) : state.meReady ? 'Unready' : 'Ready'); continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : { cd: mastery.cd(slot) }; // mastery/branch cooldowns
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
@@ -2101,7 +2110,7 @@ function animateEntity(e, dt) {
     setShown(e.label, true);
     const tr = `translate(${p[0].toFixed(1)}px, ${p[1].toFixed(1)}px) translate(-50%, -100%)`;
     if (tr !== e.label.tr) { e.label.tr = tr; e.label.el.style.transform = tr; }
-    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${looks.plate(e, e.def.name)}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}${openings.tag(e)}` : `<span class="lv">Lv${e.lvl}</span>${looks.plate(e, `${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}${academy.plateTag(state.roster.get(e.id))}`)}`;
+    const txt = e.kind === 'mob' ? `<span class="lv">Lv${e.def.level}</span>${looks.plate(e, e.def.name)}${e.staggered ? ' <b class="brk">BROKEN</b>' : ''}${openings.tag(e)}` : `<span class="lv">Lv${e.lvl}</span>${looks.plate(e, `${guildTag(state.roster.get(e.id))}${esc(e.name)}${state.spectator ? ` · ${CLASSES[e.cls].role}` : ''}${titleTag(state.roster.get(e.id)?.title)}${academy.plateTag(state.roster.get(e.id))}`)}`;
     if (txt !== e.label.text) { e.label.text = txt; e.label.nm.innerHTML = txt; }
     const pct = Math.round((e.hp / e.maxHp) * 100);
     if (pct !== e.label.pct) { e.label.pct = pct; e.label.fill.style.width = `${pct}%`; }
@@ -2294,6 +2303,7 @@ function frame(now) {
   smith.frame(vdt);
   life.frame(vdt);
   academy.frame(); // the Academy's label, the trial HUD, the Ward Post
+  guilds.frame(); // the Guild Registrar's label
   ground.frame(vdt, isTouch);
   mastery.frame(vdt, now); // Skill Shrines, evolved-skill auras
   classesA.frame(vdt, now); // arrows, marks, Rage bars

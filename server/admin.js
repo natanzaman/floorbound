@@ -8,6 +8,7 @@
 // Talents (characters.talents, { nodeId: rank }, shared/talents.js) too: validated against the tree and the level.
 // Access levels (accounts.access_level, 1-5, shared/accesslevels.js): POST /api/admin/accounts/:id/access { level }; the
 // players list shows each account's level. Bots carry their creator and an allow list (PATCH /api/admin/bots/:bid { allow }).
+// Guilds: GET /api/admin/guilds (with members), DELETE /api/admin/guilds/:id (disband).
 import * as db from './db.js';
 import * as accounts from './accounts.js';
 import { CLASSES, MAX_LEVEL, xpToNext, areaName } from '../shared/data.js';
@@ -67,7 +68,10 @@ const partyNames = p => { const pa = p.party && game.parties.get(p.party); retur
 const accountLabel = r => r.discord_name || (r.discord_id ? `discord ${r.discord_id}` : `guest #${r.account_id}`);
 
 // ---------- character model ----------
-async function loadFull(id) {
+// Reads and offline writes of a character run in its save lock (accounts.charLock), in line with the game's saves and
+// guild bank moves.
+function loadFull(id) { return accounts.charLock(id, () => loadFullNow(id)); }
+async function loadFullNow(id) {
   const [r] = await q(`SELECT c.id, c.name, c.cls, c.lvl, c.xp, c.gold, c.inv, c.stats, c.mastery, c.talents, c.path, c.created_at, c.updated_at,
     a.id AS account_id, a.discord_id, a.discord_name, a.is_admin
     FROM characters c JOIN accounts a ON a.id = c.account_id WHERE c.id = $1`, [id]);
@@ -347,7 +351,13 @@ function applyOp(c, op) {
 }
 
 async function editCharacter(id, body) {
-  const r = await loadFull(id);
+  const live = await accounts.charLock(id, () => editLocked(id, body));
+  if (live) { live.dirty = false; await accounts.saveCharacter(live); } // (it takes the lock itself)
+  return view(await loadFull(id));
+}
+// → the live player to save once the lock is free, or null (an offline character, written here).
+async function editLocked(id, body) {
+  const r = await loadFullNow(id);
   if (!r) throw new Bad('No such character.', 404);
   let p = liveChar(id);
   // In a class trial the live player wears a loaned kit (class, mastery, talents: server/academy.js p.loan), so an edit
@@ -381,13 +391,11 @@ async function editCharacter(id, body) {
     game.invChanged(p);
     game.rosterDirty = true; // name / title
     game.sys('An admin updated your character.', p.id);
-    p.dirty = false;
-    await accounts.saveCharacter(p);
-  } else {
-    await q('UPDATE characters SET cls = $2, lvl = $3, xp = $4, gold = $5, inv = $6, stats = $7, mastery = $8, talents = $9, path = $10 WHERE id = $1',
-      [id, c.cls, c.lvl, c.xp, c.gold, JSON.stringify(c.inv), JSON.stringify(c.stats), JSON.stringify(c.mastery), JSON.stringify(c.talents), c.path ? JSON.stringify(c.path) : null]);
+    return p;
   }
-  return view(await loadFull(id));
+  await q('UPDATE characters SET cls = $2, lvl = $3, xp = $4, gold = $5, inv = $6, stats = $7, mastery = $8, talents = $9, path = $10 WHERE id = $1',
+    [id, c.cls, c.lvl, c.xp, c.gold, JSON.stringify(c.inv), JSON.stringify(c.stats), JSON.stringify(c.mastery), JSON.stringify(c.talents), c.path ? JSON.stringify(c.path) : null]);
+  return null;
 }
 
 async function deleteCharacter(id) {
@@ -399,7 +407,8 @@ async function deleteCharacter(id) {
     game.rosterDirty = true;
     p.ws.close();
   }
-  const rows = await q('DELETE FROM characters WHERE id = $1 RETURNING id', [id]);
+  const rows = await accounts.charLock(id, () => q('DELETE FROM characters WHERE id = $1 RETURNING id', [id]));
+  if (rows.length) game.guildCharGone?.(id); // its guild hands on the lead, or ends with no player left
   return rows.length > 0;
 }
 
@@ -491,6 +500,12 @@ export async function handle(req, res, url) {
         if (body?.confirm !== r.name) return json(res, 400, { error: 'Type the character name to confirm.' }), true;
         return json(res, 200, { ok: await deleteCharacter(id) }), true;
       }
+    }
+
+    // Guilds (server/guilds.js): every guild with its members; disband one (its bank and vault go with it)
+    if (path === '/api/admin/guilds' && m === 'GET') return json(res, 200, { guilds: game.guildsAdmin() }), true;
+    if ((mm = path.match(/^\/api\/admin\/guilds\/(\d+)$/)) && m === 'DELETE') {
+      return game.guildDisbandAdmin(+mm[1]) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'No such guild.' }), true;
     }
 
     if (path === '/api/admin/bots' && m === 'GET') {

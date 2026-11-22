@@ -45,6 +45,7 @@ import { installMvp } from './mvp.js'; // post-fight MVP card (G5)
 import { installLoot } from './loot.js';
 import { installLooks } from './looks.js'; // character looks: setLook, w.looks (I2)
 import { installDuels } from './duels.js'; // solo and team duels: challenges, stand-ins, rules, w.du (docs/briefs/duels.md)
+import { installGuilds } from './guilds.js'; // guilds: ranks, invites, bank + vault, weekly quests, /g chat, tags (docs/briefs/guilds.md)
 import { installTargeting } from './targeting.js'; // targeting modes + cleave (player settings, Controls → Combat)
 import { installLife } from './life.js'; // life classes: gathering, the garden, cooking, alchemy, meals (docs/briefs/life-classes.md)
 import { GARDEN } from '../shared/life.js';
@@ -90,6 +91,7 @@ export class Game {
     this.initFloor2(); // Floor 2 — The Glimmering Mire (server/floor2.js)
     this.initFloor3(); // Floor 3 — The Gale Spires (server/floor3.js)
     this.initLabs(); // the labyrinths before each boss (server/labyrinth.js)
+    this.guildInit(); // guilds (server/guilds.js): in memory until index.js hands over a store
   }
 
   id() { return this.nextId++; }
@@ -219,6 +221,7 @@ export class Game {
       case 'test': // testing aid (TEST_HOOKS=1 only): { hurt: fraction } sets your health, { xp } gives XP, for the bot tests
         if (process.env.TEST_HOOKS && msg.hurt > 0 && msg.hurt <= 1 && !p.dead) p.hp = Math.max(1, Math.round(p.maxHp * msg.hurt));
         if (process.env.TEST_HOOKS && msg.xp > 0) this.giveXp(p, Math.min(1e6, msg.xp | 0)); // { xp }: level up (bot level sync tests)
+        if (process.env.TEST_HOOKS && msg.gold > 0) { p.gold += Math.min(1e6, msg.gold | 0); this.invChanged(p); } // { gold }: spending money (guild tests)
         if (process.env.TEST_HOOKS && msg.ward != null) p.testWard = !!msg.ward; // { ward: 1 }: nothing hurts you (input tests: a slow headless run never gets bitten down mid-check)
         return;
       case 'invite': return this.invite(p, msg.id);
@@ -1539,6 +1542,7 @@ installClutch(Game); // Last Stand and the finisher's slow motion (server/clutch
 installNamed(Game); // the Named: humans-first rules, friendship, invites by tier (server/named.js); a no-op without a NamedManager
 installRescue(Game); // rescue traps (server/rescue.js); after the Named: its trap-object and crystal wrappers sit outside everyone's
 installDuels(Game); // duels (server/duels.js): outside the damage, heal and skill wrappers above, so a stand-in's hits skip them
+installGuilds(Game); // guilds (server/guilds.js): outside the kill, XP and stat wrappers above (quest credit, the XP perk)
 installAcademy(Game); // the Academy: Initiates, trials, drills, ranks, cohorts (server/academy.js); outside the skill, damage and heal wrappers
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last
 if (process.env.TUNE_STATS) installTuneStats(Game); // testing aid (scripts/tuneboss.js): log boss moves used and hits taken; outermost
