@@ -48,6 +48,7 @@ import { installDuels } from './duels.js'; // solo and team duels: challenges, s
 import { installTargeting } from './targeting.js'; // targeting modes + cleave (player settings, Controls → Combat)
 import { installLife } from './life.js'; // life classes: gathering, the garden, cooking, alchemy, meals (docs/briefs/life-classes.md)
 import { GARDEN } from '../shared/life.js';
+import { installAcademy } from './academy.js'; // Initiates, class trials, drills, ranks, cohorts (docs/briefs/academy.md)
 import { rollGear } from '../shared/loot.js'; // affixes, boss sets, loadouts, drop tables (H2)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
@@ -144,11 +145,12 @@ export class Game {
     p.stats.maxLvl = Math.max(p.stats.maxLvl, p.lvl);
     this.initMastery(p, saved?.mastery); // skill mastery + evolutions (server/mastery.js)
     this.initTalents(p, saved?.talents); // talent tree (server/talents.js)
+    this.initPath?.(p, saved?.path); // the Academy path: Initiate or graduated (server/academy.js)
     this.checkTitles(p);
     this.recompute(p);
     p.hp = p.maxHp;
     this.players.set(p.id, p);
-    this.sys(`${p.name} the ${CLASSES[cls].name} entered the tower.`);
+    this.sys(`${p.name} the ${this.classTitle?.(p) || CLASSES[cls].name} entered the tower.`);
     this.track(p, 'session_start', { cls, lvl: p.lvl, anon: !saved, fresh: !!saved && p.lvl === 1 && p.xp === 0 });
     this.announceRareTo(p); // a late joiner still gets the banner/beam for a rare that's already out
     return p;
@@ -173,6 +175,7 @@ export class Game {
     p.swPow = g.sw / 100;
     p.gearDr = Math.min(0.3, g.dr / 100);
     this.talentStats?.(p); // talent tree bonuses (server/talents.js)
+    this.pathStats?.(p); // an Initiate's reduced power (server/academy.js)
     if (p.hp !== undefined) p.hp = Math.max(1, Math.min(p.maxHp, Math.round(p.maxHp * frac)));
   }
 
@@ -447,6 +450,7 @@ export class Game {
     const i = p.inv.bag.findIndex(it => it.u === u);
     if (i < 0) return;
     if (p.inv.bag[i].ks) return this.sys("The merchant won't take a keepsake.", p.id);
+    if (p.inv.bag[i].ac) return this.sys("The merchant won't buy an Academy weapon.", p.id);
     const [it] = p.inv.bag.splice(i, 1);
     p.gold += sellPrice(it);
     this.events.push({ t: 'coin', id: p.id });
@@ -609,6 +613,7 @@ export class Game {
     if (p.dead || p.guarding) return; // a guarding Guardian can't attack
     const sk = CLASSES[p.cls].skills[slot];
     if (!sk || p.lvl < sk.lvl || this.time < p.cds[slot]) return;
+    if (this.kitLocked?.(p, slot)) return; // an Initiate's level-3 skill opens at graduation (server/academy.js)
     if (typeof face === 'number' && isFinite(face)) p.face = wrapAngle(face);
     if (this.classSkillA?.(p, slot, sk)) return; // Ranger / Berserker skills (server/classes-a.js)
     // Skill mastery (server/mastery.js): S = the skill credited with mastery (not the basic attack), pow = Mastery 4's +10%,
@@ -879,7 +884,7 @@ export class Game {
       this.events.push({ t: 'lvl', id: p.id, lvl: p.lvl });
       this.track(p, 'level', { lvl: p.lvl, secs: Math.round(this.time - p.joinedAt) });
       const unlocked = CLASSES[p.cls].skills.find(s => s.lvl === p.lvl);
-      if (unlocked) this.sys(`New skill unlocked: ${unlocked.name}!`, p.id);
+      if (unlocked && !this.kitLocked?.(p, CLASSES[p.cls].skills.indexOf(unlocked))) this.sys(`New skill unlocked: ${unlocked.name}!`, p.id);
     }
     if (p.lvl >= MAX_LEVEL) p.xp = 0;
     p.dirty = true;
@@ -1118,7 +1123,7 @@ export class Game {
     if (d > def.range + 0.4) {
       this.moveMob(m, target.x, target.z, def.speed * (enraged ? 1.25 : 1) * (frenzy ? 1.3 : 1), dt, def.range);
     } else if (t >= m.atkT && (!def.boss || this.swingReady(m))) {
-      const wind = def.boss ? (m.tm || this.twistW || WARDEN).cleave.wind : def.ranged ? THORN.wind : 0.45;
+      const wind = def.boss ? (m.tm || this.twistW || WARDEN).cleave.wind : def.ranged ? THORN.wind : def.wind || 0.45; // (training enemies: their own wind-up, shared/academyyard.js)
       m.windupAt = t + wind;
       if (def.boss) this.swingStart(m, wind); // no point-blank chaining (server/openings.js)
       const cd = def.boss ? (m.tm || this.twistW || WARDEN).cleave.cd * (enraged ? (m.tm || this.twistW || WARDEN).cleave.rage : 1) : def.atkCd; // the boss: its table's cd (cooldownMul)
@@ -1487,7 +1492,7 @@ export class Game {
   }
 
   roster() {
-    return [...this.players.values()].map(p => ({ id: p.id, name: p.name, cls: p.cls, title: p.stats?.activeTitle || null, ...(p.bot ? { bot: 1 } : {}) }));
+    return [...this.players.values()].map(p => ({ id: p.id, name: p.name, cls: p.cls, title: p.stats?.activeTitle || null, ...(p.bot ? { bot: 1 } : {}), ...this.rosterPath?.(p) }));
   }
 }
 
@@ -1526,6 +1531,7 @@ installLooks(Game); // character looks: setLook(entity, id), listed in snapshots
 installNamed(Game); // the Named: humans-first rules, friendship, invites by tier (server/named.js); a no-op without a NamedManager
 installRescue(Game); // rescue traps (server/rescue.js); after the Named: its trap-object and crystal wrappers sit outside everyone's
 installDuels(Game); // duels (server/duels.js): outside the damage, heal and skill wrappers above, so a stand-in's hits skip them
+installAcademy(Game); // the Academy: Initiates, trials, drills, ranks, cohorts (server/academy.js); outside the skill, damage and heal wrappers
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last
 if (process.env.TUNE_STATS) installTuneStats(Game); // testing aid (scripts/tuneboss.js): log boss moves used and hits taken; outermost
 

@@ -22,6 +22,7 @@ Files:
 - **Death is real.** Health at zero and you're gone, here and outside. The game respawns characters, but the story never shows a respawn: on film, a fallen character just never comes back.
 - **The Hall of Clearers.** The only place in the tower where names are written. Every party that beats a floor boss is carved there, the fallen included, if they fought.
 - **The well.** The old well in the Town of Beginnings' square is just stone and water until Floor 1 falls. When a party kills the Warden, *a bright light emits from the well*: it is a portal now, a way up to every floor that party has opened. (In the game: Floor 1's waypoint wakes for each character with their first Warden kill.)
+- **The Academy.** A stone hall west of the square, where survivors who came through the first weeks teach the newcomers who never chose a class: pick up a weapon, prove yourself in the yard, and graduate into a class.
 - **The day count.** Players count days since the gates closed. On Day 41 the Floor 1 stone is still blank. Three raids tried. Few came back.
 
 **Places used this season**: all already in the game.

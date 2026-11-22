@@ -182,5 +182,5 @@ export function gearStats(eq) {
   return s;
 }
 
-export const sellPrice = it => RARITY[it.r]?.sell ?? 1;
+export const sellPrice = it => (it.ac ? 0 : RARITY[it.r]?.sell ?? 1); // (Academy weapons, it.ac: worth nothing)
 export const newInventory = () => ({ bag: [], eq: { weapon: null, armor: null, charm: null }, cons: { potion: 3, tonic: 0, draught: 0 } });

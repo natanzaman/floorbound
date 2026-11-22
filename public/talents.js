@@ -219,10 +219,10 @@ export function initTalents(ctx) {
   function onMessage(msg) {
     if (msg.type === 'mastery') { S.m = msg.m; if (isOpen() && S.tab === 'abilities') render(); return false; } // mastery.js handles it too
     if (msg.type !== 'talents') return false;
-    S.r = msg.r || {}; S.pts = msg.pts | 0;
+    S.r = msg.r || {}; S.pts = msg.pts | 0; S.locked = !!msg.locked; // locked: an Initiate (the tree opens at graduation, points bank up) or a class trial
     clearTimeout(S.waitT);
     badge();
-    if (free() > 0) firstTip();
+    if (free() > 0 && !S.locked) firstTip();
     if (isOpen()) render();
     return true;
   }
@@ -238,7 +238,7 @@ export function initTalents(ctx) {
   function badge() {
     const b = $('skills-btn'); if (!b) return;
     let pip = b.querySelector('.tpip');
-    const n = free();
+    const n = S.locked ? 0 : free(); // (banked points of an Initiate: no badge)
     if (!n) { pip?.remove(); return; }
     if (!pip) { pip = document.createElement('span'); pip.className = 'tpip'; b.appendChild(pip); }
     pip.textContent = n; pip.title = `${n} talent point${n > 1 ? 's' : ''} to spend`;
@@ -304,7 +304,7 @@ export function initTalents(ctx) {
         <div class="emb" aria-hidden="true">${esc(c.name[0])}</div>
         <div class="who"><h3>Skill Tree</h3><small>Level ${state.lvl} ${esc(c.name)}, ${esc(c.role.toLowerCase())}</small><div class="xpb" title="${state.lvl >= MAX_LEVEL ? 'Max level' : `${state.xp} / ${state.next} XP`}"><i style="width:${xpPct}%"></i></div></div>
         <nav class="tabs" role="tablist">${[['progression', 'Progression'], ['talents', 'Talents'], ['abilities', 'Abilities']].map(([k, t]) => `<button role="tab" aria-selected="${S.tab === k}" class="${S.tab === k ? 'on' : ''}" data-tab="${k}">${t}</button>`).join('')}</nav>
-        <span class="pts ${n ? 'has' : ''}">${n ? `${n} talent point${n > 1 ? 's' : ''} to spend` : `${spentOf(S.r)} / ${S.pts} points spent`}</span>
+        <span class="pts ${n && !S.locked ? 'has' : ''}">${S.locked ? `${n} point${n === 1 ? '' : 's'} banked: the tree opens when you graduate at the Academy` : n ? `${n} talent point${n > 1 ? 's' : ''} to spend` : `${spentOf(S.r)} / ${S.pts} points spent`}</span>
         <button class="x" data-a="close" title="Close (Esc)">✕</button>
       </div><div class="body"><div class="pane">${S.tab === 'progression' ? progression() : S.tab === 'abilities' ? abilities() : talents()}</div><div class="tt" hidden></div></div>`;
   }
@@ -522,6 +522,7 @@ export function initTalents(ctx) {
     const evo = t.closest('.evo.can'); if (evo) { send({ type: 'evolve', sk: evo.dataset.sk, br: evo.dataset.br }); sfx.play('ui'); }
   });
   function spend(id) {
+    if (S.locked) { sfx.play('ui'); return flash('Your talent tree opens when you graduate at the Academy. Your points are banked.'); }
     const why = spendBlock(cls(), S.r, state.lvl, id);
     if (why) { sfx.play('ui'); return flash(why); } // say why (tier gate, missing line, no points, max rank)
     if (!send({ type: 'talent', op: 'spend', id })) return flash('Not connected to the server.');

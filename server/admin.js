@@ -19,6 +19,7 @@ import { STAT_KEYS, TITLE_BY_ID, newStats } from '../shared/titles.js';
 import { floorOf } from '../shared/floor2.js';
 import { MASTERY, BRANCHES, newMastery, masteryLevel } from '../shared/mastery.js';
 import { newTalents, allocError, TREES, spendBlock, nodesOf, pointsAt } from '../shared/talents.js';
+import { WEAPONS, cleanPath, isInitiate } from '../shared/academy.js';
 import { BEHAVIOURS } from './botmanager.js';
 import { isNamedName } from '../shared/named.js';
 import { ACCESS_MIN, ACCESS_MAX, ACCESS_ADMIN, clampAccess } from '../shared/accesslevels.js';
@@ -67,7 +68,7 @@ const accountLabel = r => r.discord_name || (r.discord_id ? `discord ${r.discord
 
 // ---------- character model ----------
 async function loadFull(id) {
-  const [r] = await q(`SELECT c.id, c.name, c.cls, c.lvl, c.xp, c.gold, c.inv, c.stats, c.mastery, c.talents, c.created_at, c.updated_at,
+  const [r] = await q(`SELECT c.id, c.name, c.cls, c.lvl, c.xp, c.gold, c.inv, c.stats, c.mastery, c.talents, c.path, c.created_at, c.updated_at,
     a.id AS account_id, a.discord_id, a.discord_name, a.is_admin
     FROM characters c JOIN accounts a ON a.id = c.account_id WHERE c.id = $1`, [id]);
   return r || null;
@@ -81,6 +82,7 @@ function view(r) {
   return {
     id: r.id, name: p ? p.name : r.name, cls: p ? p.cls : r.cls, lvl: src.lvl, xp: src.xp, next: xpToNext(src.lvl), gold: src.gold,
     inv, stats: { ...(src.stats || {}), ...newStats(src.stats) }, mastery: newMastery(src.mastery, p ? p.cls : r.cls), talents: newTalents(src.talents, p ? p.cls : r.cls, src.lvl), online: !!p,
+    path: p ? p.path || null : r.path || null, title: p ? game.classTitle?.(p) || null : null, loan: !!p?.loan,
     area: p ? areaName(p.x, p.z) : null, floor: p ? floorOf(p.x) : null, party: p ? partyNames(p) : [],
     account: { id: r.account_id, label: accountLabel(r), discord: r.discord_name || null, admin: !!r.is_admin },
     created_at: r.created_at, updated_at: r.updated_at,
@@ -144,6 +146,20 @@ function cleanStats(st) {
   return { ...clone(st), ...newStats(st) };
 }
 
+// Change the working copy's class (offline only): fresh mastery and talents, a weapon of the old class to the bag.
+function setCls(c, cls, online) {
+  if (!CLASSES[cls]) throw new Bad('Unknown class.');
+  if (online) throw new Bad('Change the class while the character is offline.');
+  c.cls = cls;
+  c.mastery = newMastery(c.mastery, c.cls); // the new class's skills (start fresh)
+  c.talents = {}; // a different tree
+  const w = c.inv.eq.weapon; // a weapon for the old class goes back to the bag
+  if (w?.cls && w.cls !== c.cls) {
+    if (c.inv.bag.length >= BAG_SIZE) throw new Bad('Bag full: make room for the old weapon first.');
+    c.inv.bag.push(w); c.inv.eq.weapon = null;
+  }
+}
+
 // Apply an edit body to a working copy c = { name, cls, lvl, xp, gold, inv, stats }.
 function applyEdit(c, body, online) {
   if (body.rawInv !== undefined) c.inv = cleanInv(body.rawInv);
@@ -165,18 +181,16 @@ function applyEdit(c, body, online) {
     if (process.env.NAMED_ENABLED !== '0' && isNamedName(name)) throw new Bad('That name belongs to one of the Named.', 409);
     c.name = name;
   }
-  if (body.cls !== undefined && body.cls !== c.cls) {
-    if (!CLASSES[body.cls]) throw new Bad('Unknown class.');
-    if (online) throw new Bad('Change the class while the character is offline.');
-    c.cls = body.cls;
-    c.mastery = newMastery(c.mastery, c.cls); // the new class's skills (start fresh)
-    c.talents = {}; // a different tree
-    const w = c.inv.eq.weapon; // a weapon for the old class goes back to the bag
-    if (w?.cls && w.cls !== c.cls) {
-      if (c.inv.bag.length >= BAG_SIZE) throw new Bad('Bag full: make room for the old weapon first.');
-      c.inv.bag.push(w); c.inv.eq.weapon = null;
-    }
+  if (body.cls !== undefined && body.cls !== c.cls) setCls(c, body.cls, online);
+  // The Academy path (characters.path, shared/academy.js): null = graduated before the Academy existed. An Initiate's
+  // class is its weapon's base class (Initiate · Spear = Lancer), so an Initiate path moves the class there.
+  if (body.rawPath !== undefined) {
+    if (body.rawPath !== null && (typeof body.rawPath !== 'object' || Array.isArray(body.rawPath))) throw new Bad('path must be an object or null.');
+    if (body.rawPath && body.rawPath.weapon !== undefined && !WEAPONS[body.rawPath.weapon]) throw new Bad(`Unknown weapon ${body.rawPath.weapon}.`);
+    c.path = cleanPath(body.rawPath);
+    c.pathEdited = true;
   }
+  if (isInitiate(c.path) && c.cls !== WEAPONS[c.path.weapon].base) setCls(c, WEAPONS[c.path.weapon].base, online);
   if (body.lvl !== undefined) c.lvl = int(body.lvl, 1, MAX_LEVEL, 'Level');
   if (body.xp !== undefined) c.xp = int(body.xp, 0, 1e9, 'XP');
   if (c.lvl >= MAX_LEVEL) c.xp = 0; else c.xp = Math.min(c.xp, xpToNext(c.lvl) - 1);
@@ -326,11 +340,16 @@ async function editCharacter(id, body) {
   const r = await loadFull(id);
   if (!r) throw new Bad('No such character.', 404);
   let p = liveChar(id);
+  // In a class trial the live player wears a loaned kit (class, mastery, talents: server/academy.js p.loan), so an edit
+  // built from it would overwrite the real ones when the loan is given back. Wait for the trial to end.
+  const inTrial = () => { if (p?.loan) throw new Bad('That character is in a class trial: try again when it ends (under a minute).', 409); };
+  inTrial();
   const src = p || r;
   const c = {
     name: p ? p.name : r.name, cls: p ? p.cls : r.cls, lvl: src.lvl, xp: src.xp, gold: src.gold,
     inv: clone(src.inv && Array.isArray(src.inv.bag) ? src.inv : newInventory()), stats: { ...clone(src.stats || {}), ...newStats(src.stats) },
     mastery: newMastery(clone(src.mastery), p ? p.cls : r.cls), talents: newTalents(clone(src.talents), p ? p.cls : r.cls, src.lvl),
+    path: clone((p ? p.path : r.path) || null),
   };
   c.inv.mats ||= {};
   applyEdit(c, body, !!p);
@@ -339,10 +358,12 @@ async function editCharacter(id, body) {
     catch (e) { if (e.code === '23505') throw new Bad('That name is taken.', 409); throw e; }
   }
   p = liveChar(id); // (it may have come online meanwhile)
+  inTrial();
   if (p) {
     // Online: change the live player first (so the periodic save can't write old values back), then save.
     const lvlChanged = p.lvl !== c.lvl;
     Object.assign(p, { name: c.name, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats, mastery: c.mastery });
+    if (c.pathEdited) { p.path = c.path; game.markPath(p); }
     game.setTalents(p, c.talents); // re-sends the Skill Tree data
     p.masteryDirty = p.masteryNow = true; // re-send the Skills panel data
     game.recompute(p);
@@ -353,8 +374,8 @@ async function editCharacter(id, body) {
     p.dirty = false;
     await accounts.saveCharacter(p);
   } else {
-    await q('UPDATE characters SET cls = $2, lvl = $3, xp = $4, gold = $5, inv = $6, stats = $7, mastery = $8, talents = $9 WHERE id = $1',
-      [id, c.cls, c.lvl, c.xp, c.gold, JSON.stringify(c.inv), JSON.stringify(c.stats), JSON.stringify(c.mastery), JSON.stringify(c.talents)]);
+    await q('UPDATE characters SET cls = $2, lvl = $3, xp = $4, gold = $5, inv = $6, stats = $7, mastery = $8, talents = $9, path = $10 WHERE id = $1',
+      [id, c.cls, c.lvl, c.xp, c.gold, JSON.stringify(c.inv), JSON.stringify(c.stats), JSON.stringify(c.mastery), JSON.stringify(c.talents), c.path ? JSON.stringify(c.path) : null]);
   }
   return view(await loadFull(id));
 }

@@ -37,9 +37,10 @@ export const SmithMethods = {
   smithFind(p, u, equipped = true) {
     u = u | 0;
     const i = p.inv.bag.findIndex(it => it.u === u);
-    if (i >= 0) return { it: p.inv.bag[i], i, eq: null };
-    if (equipped) for (const [slot, it] of Object.entries(p.inv.eq)) if (it && it.u === u) return { it, i: -1, eq: slot };
-    return null;
+    let f = i >= 0 ? { it: p.inv.bag[i], i, eq: null } : null;
+    if (!f && equipped) for (const [slot, it] of Object.entries(p.inv.eq)) if (it && it.u === u) f = { it, i: -1, eq: slot };
+    if (f?.it.ac) { this.sys('The Smith won\'t work an Academy weapon: it belongs to the Academy.', p.id); return null; } // (server/academy.js armWith)
+    return f;
   },
 
   smithCheck(p, cost) {

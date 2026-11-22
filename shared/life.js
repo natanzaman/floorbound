@@ -172,7 +172,7 @@ export function rollSpot(type, lvl, rnd = Math.random) {
 export const LIFE_HALL = { x: 11, z: -6, r: 2.2, use: 3.6, name: 'Life Hall' };
 export const COOK_FIRE = { x: 14, z: 14, r: 1.0, use: 3.2, name: 'Cooking fire' };
 export const ALCH_BENCH = { x: 21, z: -2, r: 1.2, use: 3.2, name: 'Alchemy bench' };
-export const GARDEN = { x: -21, z: -2, r: 4.2, use: 5.2, name: 'Garden' };
+export const GARDEN = { x: -12, z: 15, r: 4.2, use: 5.2, name: 'Garden' };
 export const STATIONS = { hall: LIFE_HALL, cook: COOK_FIRE, brew: ALCH_BENCH, garden: GARDEN };
 export const nearStation = (k, x, z, pad = 0) => { const s = STATIONS[k]; return !!s && Math.hypot(x - s.x, z - s.z) < s.use + pad; };
 export const stationAt = (x, z, pad = 0) => Object.keys(STATIONS).find(k => nearStation(k, x, z, pad)) || null;

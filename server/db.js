@@ -101,4 +101,7 @@ async function setup() {
   await q(`ALTER TABLE named_chars ADD COLUMN IF NOT EXISTS allow JSONB`);
   // Life classes (server/life.js, shared/life.js newLife): { skills: { id: xp }, learned, plot (the garden tiles), food, spots }
   await q(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS life JSONB`);
+  // The Academy (docs/briefs/academy.md): an Initiate's weapon or a graduate's record, medals, mastery and talents kept per
+  // class, classmates (shared/academy.js cleanPath). NULL: a character from before the Academy, graduated in its class.
+  await q(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS path JSONB`);
 }

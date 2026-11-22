@@ -84,7 +84,7 @@ export function applyRefine(it) {
 export const SALVAGE = [{ dust: 2 }, { dust: 1, ess: 1 }, { ess: 2 }, { ess: 2, prism: 1 }];
 // What salvaging returns: the rarity yield plus half the main/second materials spent refining it.
 export function salvageYield(it) {
-  if (!SALVAGE[it.r] || it.ks) return null; // Last Attack items and keepsakes can't be salvaged
+  if (!SALVAGE[it.r] || it.ks || it.ac) return null; // Last Attack items, keepsakes and Academy weapons can't be salvaged
   const out = { ...SALVAGE[it.r] };
   const [main, second] = SLOT_MATS[it.slot] || SLOT_MATS.charm;
   let m = 0, s = 0;

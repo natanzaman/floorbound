@@ -43,6 +43,7 @@ import { GARDEN } from '../shared/life.js';
 import { floorOf } from '../shared/floor2.js';
 import { isAdmin } from './admin.js';
 import { resolveAllow } from './accounts.js';
+import { WEAPONS, COHORT, COHORT_MAX, COHORT_NAMES, cohortClasses, isInitiate } from '../shared/academy.js';
 
 class PbError extends Error {}
 const fail = msg => { throw new PbError(msg); };
@@ -56,6 +57,7 @@ export class PlayerBots {
     //          party), inParty (the party it was last seen in), pid, wantParty, lastParty, seenIn, goneAt, goneT }
     this.owned = new Map();
     mgr.ownedRec = bid => this.owned.get(bid) || null; // BotManager / admin edits know a bot was player-added
+    game.academyBots = this; // the Academy's cohorts: addCohort / graduateCohort (server/academy.js)
     // Player-added bots get no XP of their own: they level with their owner (syncLevel).
     const giveXp = game.giveXp.bind(game);
     game.giveXp = (p, amount) => (p?.bot && p.pbOwned ? undefined : giveXp(p, amount));
@@ -437,6 +439,44 @@ export class PlayerBots {
     rec.loadout = { rarity: L.rarityName, mastery: L.mastery, evolved: L.evolved };
   }
 
+  // ---------- cohorts: the Academy's bot classmates (docs/briefs/academy.md) ----------
+  // Two per character at most (path.cohort keeps their names), the player's own bots (creator = the player), Initiates
+  // with the weapons COHORT gives the player's weapon; graduated players get them graduated (cohortClasses).
+  cohortOf(p) { return this.mine(p).filter(rec => rec.cohort && this.entry(rec.bid)); }
+  addCohort(path, p) {
+    const weapons = COHORT[path.weapon] || COHORT.sword, have = this.cohortOf(p), out = [];
+    const grad = !isInitiate(path) ? cohortClasses(p.cls, weapons) : null;
+    for (let i = 0; i < COHORT_MAX; i++) {
+      if (have.some(rec => rec.cohort.slot === i)) continue;
+      const w = weapons[i], cls = grad ? grad[i] : WEAPONS[w].base;
+      const name = path.cohort[i] || COHORT_NAMES[(p.id * 7 + i * 5 + Math.floor(Math.random() * COHORT_NAMES.length)) % COHORT_NAMES.length];
+      let r = null;
+      try { r = this.add(p, { cls, name, skill: 3, party: true }); }
+      catch { try { r = this.add(p, { cls, name, skill: 3, party: false }); } catch (e) { this.game.sys(`A classmate couldn't come: ${e.message}`, p.id); continue; } }
+      const rec = this.owned.get(r.bid);
+      if (!rec) continue;
+      rec.cohort = { slot: i, weapon: w, cls: grad ? cls : null };
+      path.cohort[i] = rec.name; out.push(rec.name);
+    }
+    return out;
+  }
+  // The player graduated: their classmates graduate with them, into classes that fill the roles the player's lacks.
+  graduateCohort(p) {
+    const recs = this.cohortOf(p).sort((a, b) => a.cohort.slot - b.cohort.slot);
+    if (!recs.length) return;
+    const classes = cohortClasses(p.cls, recs.map(r => r.cohort.weapon)), names = [];
+    recs.forEach((rec, i) => {
+      rec.cohort.cls = classes[i];
+      const e = this.entry(rec.bid), b = e && this.mgr.livePlayer(e);
+      if (!b) return;
+      this.game.graduate(b, classes[i], { quiet: true });
+      this.outfit(b, rec); // the new class's premade gear, mastery and talents
+      b.inv.bag = b.inv.bag.filter(it => it.slot !== 'weapon'); // (the weapons graduating swapped out: bots carry none)
+      names.push(`${b.name} (${CLASSES[classes[i]].name})`);
+    });
+    if (names.length) this.game.sys(`Your classmates graduate with you: ${names.join(', ')}.`, p.id);
+  }
+
   // ---------- twice a second: loadouts, parties, owners leaving ----------
   upkeep() {
     const g = this.game, now = Date.now();
@@ -455,6 +495,7 @@ export class PlayerBots {
       if (b && (rec.pid !== b.id || rec.loadoutLvl !== b.lvl)) { // a new bot (added, or respawned as another class), or a new level
         if (rec.pid !== b.id) { rec.wantParty = true; rec.lastParty = 0; rec.seenIn = 0; g.rosterDirty = true; } // (roster: its owner tag)
         this.outfit(b, rec);
+        if (rec.cohort) g.cohortSetup?.(b, rec.cohort); // an Academy classmate: an Initiate with its weapon, or its class (server/academy.js)
         rec.loadoutLvl = b.lvl;
       }
       if (!owner) {
