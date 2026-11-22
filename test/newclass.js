@@ -80,7 +80,7 @@ const dealt = (m, p) => ev('hit', e => e.id === m.id && (!p || e.by === p.id)).r
 const hitsOn = (m, p) => ev('hit', e => e.id === m.id && (!p || e.by === p.id));
 const fresh = p => { p.combo = 0; p.lastBasic = -9; };
 // Every node of a branch at max rank (tiers 0-3 add up to 14+, so the keystone is legal too).
-const full = (cls, bid) => Object.fromEntries(TREES[cls].branches.find(b => b.id === bid).nodes.map(nd => [nd.id, nd.max]));
+const full = (cls, bid) => Object.fromEntries(TREES[cls].branches.find(b => b.id === bid).nodes.filter(nd => !nd.sub).map(nd => [nd.id, nd.max]));
 g.time = 100;
 
 // ====================================================================================================
@@ -92,7 +92,8 @@ g.time = 100;
     assert.ok(t, `${cls} has a tree`);
     assert.equal(t.branches.length, 3);
     for (const b of t.branches) {
-      assert.ok(b.nodes.length >= 7 && b.nodes.length <= 8, `${b.id}: 7-8 nodes`);
+      const own = b.nodes.filter(nd => !nd.sub); // (a subclass adds two more: shared/subclasses.js)
+      assert.ok(own.length >= 7 && own.length <= 8, `${b.id}: 7-8 nodes`);
       for (let k = 0; k < 5; k++) assert.ok(b.nodes.some(nd => nd.tier === k), `${b.id}: tier ${k}`);
       assert.ok(b.nodes.some(nd => nd.max > 1), `${b.id}: ranked nodes`);
       const ks = b.nodes.find(nd => nd.keystone);
