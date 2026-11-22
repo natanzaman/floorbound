@@ -128,8 +128,8 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender, re
     if (full) html += `<div class="pb-hp"><div style="width:${pc}%"></div></div>`;
     if (full && b.kit) {
       const gear = b.kit.gear.map(g => `<span style="color:${RARITY[g.r]?.color || '#ddd'}" title="${esc(g.name)}">${esc(g.name)}</span>`).join(' · ');
-      const evo = b.kit.mastery.filter(m => m.br).map(m => BRANCHES[m.sk]?.[m.br]?.name).filter(Boolean);
-      const ml = b.kit.mastery.length ? Math.min(...b.kit.mastery.map(m => m.lvl)) : 1;
+      const evo = b.kit.mastery.filter(m => m.br && !BRANCHES[m.sk]?.A?.sig).map(m => BRANCHES[m.sk]?.[m.br]?.name).filter(Boolean);
+      const km = b.kit.mastery.filter(m => !BRANCHES[m.sk]?.A?.sig), ml = km.length ? Math.min(...km.map(m => m.lvl)) : 1; // (class skills: a signature skill only counts once specialised)
       html += `<div class="pb-kit">${gear}<br><span>Mastery ${ml}${evo.length ? ` · ${esc(evo.join(', '))}` : ''}</span></div>`;
     }
     if (b.can) {

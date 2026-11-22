@@ -10,7 +10,7 @@
 // do (what it does; numbers x attack power where there is damage):
 //   burn   { v: x atk per second, d }      on the target            slow { v: 0-1, d }    stun { d } (bosses 30%)
 //   posture{ frac: [normal, boss] }        mark { v: +taken, d }    burst{ mult, r } around the target
-//   pull   { r, v: metres }  enemies near the target toward it      shield { v: x max hp, r (0: you), d }
+//   pull   { r, v: metres }  enemies near the target toward it      shield { v: x max hp, r (0: you), d, to: 't' (the one healed) }
 //   heal   { v: x max hp, r (0: you) }      team { v: +damage, r, d } (you and allies)
 //   cdcut  { v: s off skills 1-3 }         dr   { v: less damage, d } (you)          rage { v } (Berserker)
 export const FX_KINDS = ['burn', 'slow', 'stun', 'posture', 'mark', 'burst', 'pull', 'shield', 'heal', 'team', 'cdcut', 'dr', 'rage'];
@@ -28,7 +28,7 @@ const DO_TEXT = {
   mark: e => `mark the target: it takes ${pct(e.v)} more damage for ${e.d} s`,
   burst: e => `burst around the target for ${pct(e.mult)} attack (${e.r} m)`,
   pull: e => `pull enemies within ${e.r} m toward the target`,
-  shield: e => `shield ${near(e.r)} for ${pct(e.v)} of max health (${e.d} s)`,
+  shield: e => `shield ${e.to === 't' ? 'the one healed' : near(e.r)} for ${pct(e.v)} of max health (${e.d} s)`,
   heal: e => `heal ${near(e.r)} for ${pct(e.v)} of max health`,
   team: e => `give you and allies within ${e.r} m +${pct(e.v)} damage for ${e.d} s`,
   cdcut: e => `take ${e.v} s off your skill cooldowns`,

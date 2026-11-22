@@ -417,7 +417,8 @@ export function initTalents(ctx) {
     const ac = state.academy, wpn = WEAPONS[ac?.path?.weapon]?.name;
     const role = ini() ? `Initiate · ${esc(wpn || 'Sword')}` : sub() ? `<b>${esc(subName(sub()))}</b> · ${esc(c.name)}` : spec()?.sig ? `<b>Specialised</b> · ${esc(c.name)}` : `<b>${esc(c.name)}</b>`;
     const dots = { talents: n && !S.locked, abilities: evolvable() > 0 };
-    const pill = S.locked ? `${n} point${n === 1 ? '' : 's'} banked` : S.plan.length ? `${S.plan.length} planned · ${left()} left` : n ? `${n} talent point${n > 1 ? 's' : ''} to spend` : `${spentOf(S.r)} / ${S.pts} points spent`;
+    const pv = S.tab === 'talents' && planMode() ? asPlan(() => ({ n: free(), k: S.plan.length, left: left() })) : null; // an Initiate planning: the plan's count
+    const pill = pv ? (pv.k ? `${pv.k} planned · ${pv.left} left` : `${pv.n} point${pv.n === 1 ? '' : 's'} banked`) : S.locked ? `${n} point${n === 1 ? '' : 's'} banked` : S.plan.length ? `${S.plan.length} planned · ${left()} left` : n ? `${n} talent point${n > 1 ? 's' : ''} to spend` : `${spentOf(S.r)} / ${S.pts} points spent`;
     panel.innerHTML = `<div class="hd">
         <div class="emb" aria-hidden="true" title="${esc(shape.name)}"><svg viewBox="0 0 24 24"><path d="${shape.sigil}"/></svg></div>
         <div class="who"><h3>${esc(me || 'Your Path')}</h3><small>${role} · Level ${state.lvl}</small><div class="xpb" title="${state.lvl >= MAX_LEVEL ? 'Max level' : `${state.xp} / ${state.next} XP`}"><i style="width:${xpPct}%"></i></div></div>
@@ -443,8 +444,8 @@ export function initTalents(ctx) {
       { lvl: 1, name: 'Initiate', done: true, text: graduated ? 'Your first weapon and its basic skills.' : `Your ${wpn.toLowerCase()}: basic attacks and two skills.` },
       { lvl: 5, name: graduated ? c.name : 'Class', done: graduated, text: graduated ? `Graduated: the full ${c.name} kit and its talent tree.` : 'Pass a class trial at the Academy: a full kit and a talent tree.' },
       { lvl: SPEC.lvl, name: sn || 'Subclass', done: !!sp?.sig, text: sp?.sig ? `${sp.sig.name}, your signature skill, and two talents in your tree.` : 'Specialise at the Academy: a signature skill and two talents.' },
-      { lvl: 22, name: sn ? `${sn} II` : 'Subclass II', done: !!sp?.sig && L >= 22, text: 'Two more talents for your subclass.' },
-      { lvl: MAX_LEVEL, name: 'Crown', done: !!sp?.sig && L >= MAX_LEVEL, text: 'Your subclass\'s crowning talent.' },
+      { lvl: 22, name: sn ? `${sn} II` : 'Subclass II', done: !!sub() && L >= 22, text: 'Two more talents for your subclass.' },
+      { lvl: MAX_LEVEL, name: 'Crown', done: !!sub() && L >= MAX_LEVEL, text: 'Your subclass\'s crowning talent.' },
     ];
   }
   function pathTab() {
@@ -755,18 +756,17 @@ export function initTalents(ctx) {
     const gt = t.closest('[data-goto]'); if (gt) { S.tab = 'talents'; S.sel = gt.dataset.goto; render(); return; }
     const evo = t.closest('.evo.can'); if (evo) { send({ type: 'evolve', sk: evo.dataset.sk, br: evo.dataset.br }); sfx.play('ui'); }
   });
-  function plan(id) { return asPlan(() => plan0(id)); }
+  function plan(id) { asPlan(() => plan0(id)); render(); } // (render outside the plan view: the header is the player's)
   function plan0(id) {
-    if (S.locked) { sfx.play('ui'); render(); return flash('Your talent tree opens when you graduate at the Academy. Your points are banked.'); }
+    if (S.locked) { sfx.play('ui'); return flash('Your talent tree opens when you graduate at the Academy. Your points are banked.'); }
     const res = planAlloc(cls(), S.r, state.lvl, [...S.plan, id], sub());
-    if (res.error) { sfx.play('ui'); render(); return flash(res.error.replace(/^[^:]+: /, '')); } // say why (tier gate, missing line, no points, max rank)
+    if (res.error) { sfx.play('ui'); return flash(res.error.replace(/^[^:]+: /, '')); } // say why (tier gate, missing line, no points, max rank)
     S.plan.push(id); S.flash = id; S.flashT = performance.now(); sfx.play('ui');
-    render();
   }
-  function unplan(id) { return asPlan(() => unplan0(id)); }
+  function unplan(id) { const r = asPlan(() => unplan0(id)); if (r) render(); return r; }
   function unplan0(id) {
     const i = S.plan.lastIndexOf(id); if (i < 0) return false;
-    S.plan.splice(i, 1); S.plan = keepValid(S.plan); sfx.play('ui'); render();
+    S.plan.splice(i, 1); S.plan = keepValid(S.plan); sfx.play('ui');
     return true;
   }
   function confirmPlan() {

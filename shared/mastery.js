@@ -155,7 +155,7 @@ export const AWAKEN = {
   wall: { A: W('cast', 'shield', { v: 0.08, r: 8, d: 6 }), B: W('cast', 'heal', { v: 0.1, r: 0 }) },
   gslam: { A: W('hit', 'posture', { frac: [0.1, 0.03] }), B: W('hit', 'slow', { v: 0.35, d: 3 }) },
   // Cleric
-  heal: { A: W('heal', 'shield', { v: 0.06, r: 0, d: 6, icd: 2, text: 'Each target it heals' }), B: W('cast', 'cdcut', { v: 2 }) },
+  heal: { A: W('heal', 'shield', { v: 0.06, r: 0, to: 't', d: 6, icd: 2 }), B: W('cast', 'cdcut', { v: 2 }) },
   bless: { A: W('cast', 'cdcut', { v: 1.5 }), B: W('cast', 'heal', { v: 0.06, r: 12 }) },
   sanct: { A: W('cast', 'dr', { v: 0.15, d: 6 }), B: W('hit', 'mark', { v: 0.1, d: 3, icd: 1 }) },
   // Lancer

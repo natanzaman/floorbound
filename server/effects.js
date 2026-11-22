@@ -23,7 +23,7 @@ export const EffectMethods = {
   },
   // Fire p's rules for an event. ctx: { m (the enemy), t (the player healed) }.
   fxOn(p, on, sk, ctx = {}) {
-    if (!p || p.dead || this._fxDepth || !this.players.has(p.id)) return;
+    if (!p || p.dead || this._fxDepth || !this.players.has(p.id) || this.duelOf?.(p)) return; // (no rules in a duel)
     const list = this.fxRules(p, on, sk);
     if (!list.length) return;
     const now = this.time, icd = (p.fxIcd ||= {});
@@ -42,12 +42,17 @@ export const EffectMethods = {
     switch (r.do) {
       case 'burn': {
         if (!live) return;
-        const per = atk * r.v, ticks = Math.max(1, Math.round(r.d));
-        for (let i = 1; i <= ticks; i++) this.schedule(i, () => {
-          if (m.dead || !this.targetable(m) || !this.players.has(p.id)) return;
-          this._fxDepth = (this._fxDepth || 0) + 1;
-          try { this.damageMob(m, p, per, { threat: 0.5 }); } finally { this._fxDepth--; }
-        });
+        // A lingering effect, not use time (effectLater: no longer cooldown), and not the skill's own hits: the ticks
+        // carry no skill (no skill talents, mastery or chain steps), so the skill markers are cleared while queuing them.
+        const per = atk * r.v, ticks = Math.max(1, Math.round(r.d)), tp = this._tp, tsk = p._tsk, sig = this._sigId;
+        this._tp = null; p._tsk = null; this._sigId = null;
+        try {
+          for (let i = 1; i <= ticks; i++) (this.effectLater || this.schedule).call(this, i, () => {
+            if (m.dead || !this.targetable(m) || !this.players.has(p.id)) return;
+            this._fxDepth = (this._fxDepth || 0) + 1;
+            try { this.damageMob(m, p, per, { threat: 0.5 }); } finally { this._fxDepth--; }
+          });
+        } finally { this._tp = tp; p._tsk = tsk; this._sigId = sig; }
         return ev({ d: r.d });
       }
       case 'slow': if (live) { this.slowMob?.(m, r.v, r.d); ev(); } return;
@@ -65,10 +70,10 @@ export const EffectMethods = {
         for (const o of this.mobs.values()) if (o !== m && this.targetable(o) && dist(o, m) <= r.r + o.def.radius) this.dragToward(o, m, r.v, 1.2);
         return ev({ r: r.r });
       }
-      case 'shield': for (const o of allies(r.r)) this.talentShield(o, o.maxHp * r.v, r.d); return ev({ r: r.r || 0 });
+      case 'shield': for (const o of r.to === 't' && t ? [t] : allies(r.r)) if (!o.dead) this.talentShield(o, o.maxHp * r.v, r.d); return ev({ r: r.r || 0 }); // (to 't': the one healed)
       case 'heal': for (const o of allies(r.r)) if (!this.unhealable?.(o)) this.healPlayer(o, o.maxHp * r.v, p, null); return ev({ r: r.r || 0 });
       case 'team': for (const o of allies(r.r)) this.teamBuff(o, r.v, r.d); return ev({ r: r.r });
-      case 'cdcut': for (let i = 1; i < p.cds.length; i++) if (p.cds[i] > now) p.cds[i] = Math.max(now, p.cds[i] - r.v); return ev();
+      case 'cdcut': for (let i = 1; i < 4; i++) if (p.cds[i] > now) p.cds[i] = Math.max(now, p.cds[i] - r.v); return ev();
       case 'dr': if (!(now < (p.dr?.until || 0) && p.dr.v >= r.v)) { p.dr = { until: now + r.d, v: r.v, by: p.id }; this.events.push({ t: 'buff', id: p.id, k: 'dr', d: r.d }); } return ev();
       case 'rage': if (p.cls === 'berserker') { p.rage = Math.min(100, (p.rage || 0) + r.v); ev(); } return;
     }
@@ -89,7 +94,7 @@ export function installEffects(Game) {
     return r;
   });
   wrap('damageMob', function (orig, m, p, base, opts = {}) {
-    if (!p || !m) return orig.call(this, m, p, base, opts);
+    if (!p || !m || m.def?.duel) return orig.call(this, m, p, base, opts); // (a duel stand-in: duelHit decides, no rules)
     if (m.fxMark && this.time < m.fxMark.until) base *= 1 + m.fxMark.v; // a Mark (shared/effects.js)
     const ev0 = this.events.length, wasDead = m.dead, sk = this.mSk ? this.mSk(p, opts.sk || null) : opts.sk || null;
     const r = orig.call(this, m, p, base, opts);

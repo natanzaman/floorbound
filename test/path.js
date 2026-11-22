@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { Game } from '../server/game.js';
 import { newPath, cleanPath } from '../shared/academy.js';
-import { MAX_LEVEL } from '../shared/data.js';
+import { MAX_LEVEL, CLASSES } from '../shared/data.js';
 import { talentTotals, TREES, BUILD_TAGS, planAlloc, buildShape, buildTag, buildName, suggestOrder, spendBlock, spentOf, nodeDef } from '../shared/talents.js';
 import { SUBCLASSES, subsOf, SIG_EVOS } from '../shared/subclasses.js';
 import { MASTERY, BRANCHES, masterySkills, AWAKEN } from '../shared/mastery.js';
@@ -243,6 +243,27 @@ function mk(cls, lvl = 20) {
   assert.equal(g.events.slice(e0).filter(e => e.t === 'fxr' && e.k === 'burst').length, 1, 'one burst, no chain');
   g.mobs.delete(z.id); g.removePlayer(p);
   ok('the engine: an awakening marks on hit, the Crown cuts cooldowns on a kill, a rule never chains');
+}
+
+{ // review fixes: a burn never lengthens the skill's cooldown; cooldown cuts leave slot 5 alone; 'the one healed' gets the shield
+  const p = mk('swordsman', MAX_LEVEL); g.teleport(p, 0, 80); p.face = 0;
+  const m = g.addMob('wolf', 0, 81.5); m.hp = m.maxHp = 1e5;
+  p.tal.rules.push({ on: 'hit', do: 'burn', v: 0.1, d: 3, id: 't1' });
+  const t0 = g.time; g.useSkill(p, 2, 0);
+  const want = g.skillCd(p, CLASSES.swordsman.skills[2], 2);
+  assert.ok(p.cds[2] - t0 <= want + 0.3, `cooldown unchanged by the burn (${(p.cds[2] - t0).toFixed(2)} vs ${want.toFixed(2)})`);
+  p.tal.rules = [{ on: 'kill', do: 'cdcut', v: 3, id: 't2' }];
+  p.cds[4] = g.time + 20; p.cds[1] = g.time + 10;
+  const w = g.addMob('wolf', 0, 82); w.hp = 1; g.damageMob(w, p, 50, {});
+  assert.ok(p.cds[1] < g.time + 7.1 && Math.abs(p.cds[4] - g.time - 20) < 1e-6, 'skills 1-3 only');
+  const c = mk('cleric', MAX_LEVEL), o = mk('swordsman', MAX_LEVEL);
+  g.teleport(c, 0, 80); g.teleport(o, 2, 80); o.hp = 10; o.shield = null; c.shield = null;
+  c.tal.rules = [{ on: 'heal', do: 'shield', v: 0.05, r: 0, to: 't', d: 4, id: 't3' }];
+  g.healPlayer(o, 50, c, null);
+  assert.ok(o.shield?.hp > 0 && !c.shield, 'the one healed is shielded, not the healer');
+  for (const x of [m, w]) g.mobs.delete(x.id);
+  for (const x of [p, c, o]) g.removePlayer(x);
+  ok('burns keep the cooldown, cuts leave slot 5, heal shields go to the one healed');
 }
 
 console.log(`path: all ${n} checks passed`);

@@ -53,7 +53,7 @@ export const TalentMethods = {
       const ids = Array.isArray(msg.ids) ? msg.ids.slice(0, 40).map(String) : [];
       if (!ids.length) return;
       const res = planAlloc(p.cls, p.talents, p.lvl, ids, this.subOfP?.(p));
-      if (res.error) return this.sys(res.error, p.id);
+      if (res.error) { p.talentsDirty = true; return this.sys(res.error, p.id); } // (the tree goes back: the window stops waiting)
       p.talents = res.alloc;
       const ks = [...new Set(ids)].map(nodeDef).filter(nd => nd?.keystone);
       for (const id of new Set(ids)) this.events.push({ t: 'talent', to: p.id, id: p.id, n: id, r: p.talents[id], op: 'spend', k: nodeDef(id)?.keystone ? 1 : 0, x: r2(p.x), z: r2(p.z) });

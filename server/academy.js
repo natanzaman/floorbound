@@ -124,7 +124,7 @@ export const AcademyMethods = {
       const ids = Array.isArray(msg.ids) ? msg.ids.slice(0, 40).map(String) : [];
       if (!ids.length) return;
       const res = planAlloc(cls, plans[cls] || {}, p.lvl, ids);
-      if (res.error) return this.sys(res.error, p.id);
+      if (res.error) { p.talentsDirty = true; return this.sys(res.error, p.id); } // (the window stops waiting)
       plans[cls] = res.alloc;
     }
     if (!Object.keys(plans).length) delete path.plan;
