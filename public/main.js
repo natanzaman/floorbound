@@ -48,6 +48,7 @@ import { initDuels } from '/duels.js'; // solo and team duels: the challenge pic
 import { initTeamplay } from '/teamplay.js'; // combo counters, the Team Burst bar and sync window (G2)
 import { initMvp } from '/mvp.js'; // the post-fight MVP card (G5)
 import { Q, PRESETS, setLevel, startLevel, startAntialias } from '/quality.js'; // graphics quality: Low / Medium / High / Auto
+import { FXL, LOOKS, setLook } from '/fxlook.js'; // effects styles (bloom, grade, trails, sparks, skill effects)
 import { createPost } from '/post.js'; // bloom + tone mapping (Medium / High)
 import { initVfx } from '/vfx.js'; // weapon trails, 3D skill effects, impact flashes, camera kick, chain counter (the visuals pass)
 import { SnapClock, Track, Correction } from '/shared/netsmooth.js'; // interpolation buffer, late snapshots, your own corrections
@@ -77,6 +78,8 @@ applyAccess(settings); // text/UI scale + high contrast (CSS variables, style.cs
 const saveSettings = () => storeSettings(settings);
 if (QS.get('quality')) settings.quality = QS.get('quality'); // (tests: ?quality=low)
 const lastAuto = (() => { try { return localStorage.getItem('fb_autoq'); } catch { return null; } })(); // where Auto settled last time
+if (QS.get('look')) settings.look = QS.get('look'); // (?look=ember: an effects style, public/fxlook.js)
+setLook(settings.look);
 setLevel(startLevel(settings.quality, { touch: isTouch, lastAuto }));
 const MSAA = startAntialias(settings.quality, { touch: isTouch, lastAuto }); // chosen before the renderer exists (it can't change after)
 
@@ -2320,4 +2323,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { interactKind, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent, vfx, post };
+window.__fb = { interactKind, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent, vfx, post, FXL, LOOKS, setLook };

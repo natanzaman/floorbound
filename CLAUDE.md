@@ -15,7 +15,7 @@ Start every session by reading `docs/NEXT.md` (what to do next, local setup), th
   - `main.js` wires everything together: HUD, input, prediction, snapshot handling.
   - `world.js`, `floor2world.js` and `floor3world.js` build the scenery.
   - Input: `shared/controls.js` (actions, bindings, rules) → `public/input.js` (keys, mouse, pad; `__fb.input`), `shared/gamepad.js`, `public/focusnav.js` (pad menus), `public/controlsui.js` (Controls screen), `public/controlsync.js` (account copy), `public/keyname.js` (prompts name the active device's key), `public/xboxusb.js` (WebUSB wired pads on Mac).
-  - Feature modules mirror the server ones. Visuals pass (`docs/briefs/combos-visuals.md`): `public/vfx.js` (trails, 3D skill effects, camera kick, chain counter), `public/post.js` (bloom + tone mapping, Medium/High), `public/sparks.js`.
+  - Feature modules mirror the server ones. Visuals pass (`docs/briefs/combos-visuals.md`): `public/vfx.js` (trails, 3D skill effects, camera kick, chain counter), `public/post.js` (bloom + tone mapping, Medium/High), `public/sparks.js`. Effects styles ("looks", `docs/briefs/looks.md`): `public/fxlook.js`, one table of numbers per look (bloom, colour grade, trails, sparks, skill effects, glow or paint), picked with `?look=<id>` or Settings → Graphics; `scripts/lookshots.mjs` shoots every look in the same scenes.
 - **Shared** (`shared/`): data and tuning, item, talent, style, mastery and twist tables, and the bot code.
   - `shared/bots/`: brain, motor, registry, social, classes, style.
   - `shared/botskill.js`: capability levels 1–5.
@@ -42,6 +42,6 @@ Start every session by reading `docs/NEXT.md` (what to do next, local setup), th
   - Bot boss runs: `ROLES=guardian,ranger,... BOT_SKILL=5 RUNS=2 PORT=36xx node test/wardenskill.js`. Also accepts `START_STYLE`, `STATS=1`, `LOG_TALENTS=1`.
   - Browser checks: Python Playwright with swiftshader. Start a server with `PORT=xxxx START_LEVEL=10 SPAWN_AT=0,150 node server/index.js`. Headless rendering is slow, so judge by game state, not by frame timing.
   - Use unique ports and kill test servers by PID (use `nohup node … &` with `$!`, not a `cd && …` subshell).
-  - New feature tests: `accesslevels`, `freebots`, `targeting` (+ `targeting.py`), `wellwake` (+ `wellwake.py`).
+  - New feature tests: `accesslevels`, `freebots`, `targeting` (+ `targeting.py`), `wellwake` (+ `wellwake.py`), `fxlook`.
 - **Style:** small, focused diffs that respect existing patterns. Data-driven over per-case hardcoding. Keep the in-game guide (`public/guide.js`) and README in step with mechanics.
 - **Talking to the owner:** concise and outcome-first, in plain words. He reads on his phone.

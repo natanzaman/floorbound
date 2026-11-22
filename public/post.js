@@ -19,6 +19,7 @@
 //    bright pass takes those pixels whatever their colour, plus anything close to white. The sky, the sunlit ground
 //    and the red danger telegraphs stay crisp and readable.
 import * as THREE from 'three';
+import { FXL } from '/fxlook.js';
 
 /** Blending for a glowing effect: colour is added (premultiplied in the shader), alpha is multiplied down by the
  *  shader's alpha, which marks the pixel for the bloom. (On the canvas itself, Low, the alpha write does nothing.) */
@@ -26,6 +27,23 @@ export const GLOW_BLEND = {
   blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
   blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor, transparent: true, depthWrite: false,
 };
+
+/** Every material that draws with GLOW_BLEND registers here, so a look (public/fxlook.js `solid`) can switch them all
+ *  between pure glow (light is added: bright on dark ground, washed out on bright ground) and paint (the effect covers
+ *  what is behind it by its own strength, so its colour reads on any ground). Blend factors are GL state, not shader
+ *  code: nothing recompiles. In paint mode the shader's alpha is scaled by `solid` (uniform uSolid), and the bloom
+ *  mask is scaled back up by the same amount so the effect glows as much as before. */
+export const glowMats = [];
+export function glowMaterial(mat) { mat.uniforms.uSolid = GLOW_SOLID; glowMats.push(mat); return mat; }
+export const GLOW_SOLID = { value: 1 };
+let glowRev = -1;
+export function applyGlowLook() {
+  if (glowRev === FXL.rev) return;
+  glowRev = FXL.rev;
+  const solid = FXL.fx.solid;
+  GLOW_SOLID.value = solid > 0 ? solid : 1;
+  for (const m of glowMats) m.blendDst = solid > 0 ? THREE.OneMinusSrcAlphaFactor : THREE.OneFactor;
+}
 
 export const BLOOM = { threshold: 0.78, knee: 0.2, bright: 0.55, mask: 1.0, strength: 0.85, shoulder: 0.8, vignette: 0.16, levels: 4 };
 
@@ -59,7 +77,7 @@ void main() {
   gl_FragColor = vec4(sqrt(c * 0.0625 * 0.75 + own * own * 0.6), 1.0);
 }`;
 const FINAL = `
-uniform sampler2D tMap; uniform sampler2D tBloom; uniform vec4 uP; varying vec2 vUv;
+uniform sampler2D tMap; uniform sampler2D tBloom; uniform vec4 uP; uniform vec4 uGain; uniform vec4 uLift; varying vec2 vUv;
 // The tone map: light below the shoulder passes untouched (the game keeps its colours), light above it rolls off
 // towards white instead of clipping, so a glow over a bright floor keeps its shape.
 vec3 shoulder(vec3 x) { float a = uP.y, w = 1.0 - a; vec3 t = max(x - a, 0.0) / w; return min(x, vec3(a)) + w * (1.0 - 1.0 / (1.0 + t + t * t)); }
@@ -67,6 +85,10 @@ float hash(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.0
 void main() {
   vec3 s = texture2D(tMap, vUv).rgb, b = texture2D(tBloom, vUv).rgb;
   vec3 lin = s * s + b * b * uP.x; // (gamma 2 in, sqrt out: exact for an untouched pixel, and no pow per pixel)
+  // the look's colour grade (public/fxlook.js): saturation, contrast about mid grey, a tint on the light, a lift in the darks
+  float lum = dot(lin, vec3(0.2126, 0.7152, 0.0722));
+  lin = max((mix(vec3(lum), lin, uGain.a) - 0.18) * uLift.a + 0.18, 0.0) * uGain.rgb;
+  lin += uLift.rgb * (1.0 - min(lin, 1.0));
   lin = min(shoulder(lin), 1.0);
   vec2 q = vUv - 0.5; lin *= 1.0 - uP.z * smoothstep(0.25, 0.95, dot(q, q) * 2.0);
   gl_FragColor = vec4(sqrt(lin) + (hash(gl_FragCoord.xy) - 0.5) / 255.0, 1.0);
@@ -83,7 +105,7 @@ export function createPost(renderer, { samples = 0 } = {}) {
   const mBright = mat(BRIGHT, { tMap: { value: null }, uTexel: { value: new THREE.Vector2() }, uP: { value: new THREE.Vector4(B.threshold, B.knee, B.bright, B.mask) } });
   const mDown = mat(DOWN, { tMap: { value: null }, uTexel: { value: new THREE.Vector2() } });
   const mUp = mat(UP, { tMap: { value: null }, tAdd: { value: null }, uTexel: { value: new THREE.Vector2() } });
-  const mFinal = mat(FINAL, { tMap: { value: null }, tBloom: { value: null }, uP: { value: new THREE.Vector4(B.strength, B.shoulder, B.vignette, 0) } });
+  const mFinal = mat(FINAL, { tMap: { value: null }, tBloom: { value: null }, uP: { value: new THREE.Vector4(B.strength, B.shoulder, B.vignette, 0) }, uGain: { value: new THREE.Vector4(1, 1, 1, 1) }, uLift: { value: new THREE.Vector4(0, 0, 0, 1) } });
   const small = () => new THREE.WebGLRenderTarget(2, 2, { depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
   const down = [], up = [];
   for (let i = 0; i < N; i++) { down.push(small()); if (i < N - 1) up.push(small()); }
@@ -124,15 +146,20 @@ export function createPost(renderer, { samples = 0 } = {}) {
     render(scene, camera) {
       if (!W) api.setSize();
       sceneRT ||= makeScene();
+      const K = FXL.bloom, G = FXL.grade, n = Math.max(2, Math.min(N, K.levels | 0)); // the look: numbers only (no shader changes)
+      mBright.uniforms.uP.value.set(K.threshold, K.knee, K.bright, K.mask / (FXL.fx.solid > 0 ? FXL.fx.solid : 1));
+      mFinal.uniforms.uP.value.set(K.strength, K.shoulder, K.vignette, 0);
+      mFinal.uniforms.uGain.value.set(G.gain[0], G.gain[1], G.gain[2], G.sat);
+      mFinal.uniforms.uLift.value.set(G.lift[0], G.lift[1], G.lift[2], G.contrast);
       const info = renderer.info, reset = info.autoReset; // count the whole frame (the F3 overlay's draw calls), not just the last pass
       info.autoReset = false; info.reset();
       renderer.setRenderTarget(sceneRT);
       renderer.render(scene, camera);
       const auto = renderer.autoClear; renderer.autoClear = false; // (every pass covers its whole target)
       mBright.uniforms.tMap.value = sceneRT.texture; mBright.uniforms.uTexel.value.set(1 / W, 1 / H); pass(mBright, down[0]);
-      for (let i = 1; i < N; i++) { mDown.uniforms.tMap.value = down[i - 1].texture; mDown.uniforms.uTexel.value.set(0.5 / down[i - 1].width, 0.5 / down[i - 1].height); pass(mDown, down[i]); }
-      let src = down[N - 1];
-      for (let i = N - 2; i >= 0; i--) {
+      for (let i = 1; i < n; i++) { mDown.uniforms.tMap.value = down[i - 1].texture; mDown.uniforms.uTexel.value.set(0.5 / down[i - 1].width, 0.5 / down[i - 1].height); pass(mDown, down[i]); }
+      let src = down[n - 1];
+      for (let i = n - 2; i >= 0; i--) {
         mUp.uniforms.tMap.value = src.texture; mUp.uniforms.tAdd.value = down[i].texture; mUp.uniforms.uTexel.value.set(1 / src.width, 1 / src.height);
         pass(mUp, up[i]); src = up[i];
       }

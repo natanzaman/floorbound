@@ -14,8 +14,9 @@
 // hitJuice, frame(dt, vdt) after the characters are animated, applyKick(camera) after the camera is placed, warm(on).
 import * as THREE from 'three';
 import { Q } from '/quality.js';
-import { GLOW_BLEND } from '/post.js';
+import { GLOW_BLEND, glowMaterial, applyGlowLook } from '/post.js';
 import { paletteMode } from '/palette.js';
+import { FXL } from '/fxlook.js';
 
 // A colour per class for trails and skill effects. The colour-blind palettes move the danger colours (palette.js), so the
 // classes that would sit too close to them there move away (danger is amber under 'deuter', pink under 'trit').
@@ -25,8 +26,28 @@ const CLASS_COL = {
   trit: { bard: 0xa5f3fc, berserker: 0xff8a3d },
 };
 // Gold (finishers, Breaks, completed chains) sits next to the red-green palette's amber danger colour: pale ice instead.
-const gold = () => (paletteMode() === 'deuter' ? 0xcfeaff : GOLD_);
-export const classColor = cls => CLASS_COL[paletteMode()]?.[cls] ?? CLASS_COL.off[cls] ?? 0xdbeafe;
+const gold = () => { // (... as the look draws it: fx.gold / fx.goldMix)
+  if (paletteMode() === 'deuter') return 0xcfeaff;
+  if (goldRev !== FXL.rev) { goldRev = FXL.rev; goldHex = FXL.fx.goldMix ? _lc.set(GOLD_).lerp(_lt.set(FXL.fx.gold), FXL.fx.goldMix).getHex() : GOLD_; }
+  return goldHex;
+};
+let goldRev = -1, goldHex = 0xffd76a;
+const baseColor = cls => CLASS_COL[paletteMode()]?.[cls] ?? CLASS_COL.off[cls] ?? 0xdbeafe;
+// ... as the look draws it (public/fxlook.js fx.tint / fx.vivid): worked out once per look, palette and class.
+const _lc = new THREE.Color(), _lt = new THREE.Color(), lookCols = new Map();
+let lookRev = -1;
+export function classColor(cls) {
+  if (lookRev !== FXL.rev) { lookCols.clear(); lookRev = FXL.rev; }
+  const key = paletteMode() + cls;
+  let v = lookCols.get(key);
+  if (v === undefined) {
+    const K = FXL.fx; _lc.set(baseColor(cls));
+    if (K.vivid) _lc.offsetHSL(0, K.vivid, 0);
+    if (K.tintMix) _lc.lerp(_lt.set(K.tint), K.tintMix);
+    lookCols.set(key, v = _lc.getHex());
+  }
+  return v;
+}
 const WHITE = 0xffffff, GOLD_ = 0xffd76a;
 // How far along the hand slot's +Y the weapon reaches (rig units), for the trail's outer edge.
 const REACH = { swordsman: 1.7, guardian: 1.7, cleric: 2.0, ranger: 1.3, berserker: 2.3, lancer: 3.1, bard: 1.4 };
@@ -48,7 +69,7 @@ void main() {
   gl_Position = projectionMatrix * mv;
 }`;
 const FRAG = `
-varying vec4 vC; varying vec2 vUv; varying float vRim;
+varying vec4 vC; varying vec2 vUv; varying float vRim; uniform vec4 uTr; uniform float uWhite; uniform float uSolid; // (the look: trail cross-section, hot cores)
 void main() {
   float a;
   #if SHAPE == 0
@@ -61,16 +82,17 @@ void main() {
   #elif SHAPE == 3
     a = pow(vUv.y, 1.5);
   #else
-    a = mix(0.22, 1.0, vUv.y * vUv.y);
+    a = mix(uTr.x, 1.0, pow(vUv.y, uTr.y)) + uTr.z * smoothstep(0.84, 0.98, vUv.y);
   #endif
   a = clamp(a * vC.a, 0.0, 1.0);
   #if SHAPE == 4
-    gl_FragColor = vec4(mix(vC.rgb, vec3(1.0), a * a * 0.3) * a, a * 0.8);
+    gl_FragColor = vec4(mix(vC.rgb, vec3(1.0), a * a * uTr.w) * a, a * 0.8 * uSolid);
   #else
-    gl_FragColor = vec4(mix(vC.rgb, vec3(1.0), a * a * 0.55) * a, a);
+    gl_FragColor = vec4(mix(vC.rgb, vec3(1.0), a * a * uWhite) * a, a * uSolid);
   #endif
 }`;
-const glowMat = shape => new THREE.ShaderMaterial({ defines: { SHAPE: shape }, vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide, ...GLOW_BLEND });
+const GLOW_U = { uTr: { value: new THREE.Vector4(0.22, 2, 0, 0.3) }, uWhite: { value: 0.55 } }; // shared by every glow material
+const glowMat = shape => glowMaterial(new THREE.ShaderMaterial({ defines: { SHAPE: shape }, uniforms: { ...GLOW_U }, vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide, ...GLOW_BLEND }));
 
 // A crescent blade lying flat (XZ), its middle towards +Z: outer radius 1, widest in the middle, tapering to the ends.
 function crescentGeo(span = 2.5, seg = 20, width = 0.42) {
@@ -113,7 +135,7 @@ class Batch {
     r.x = o.x || 0; r.y = o.y || 0; r.z = o.z || 0; r.vx = o.vx || 0; r.vy = o.vy || 0; r.vz = o.vz || 0; r.grav = o.grav || 0; r.fol = o.fol || null;
     r.sx = o.sx ?? 1; r.sy = o.sy ?? r.sx; r.sz = o.sz ?? r.sx; r.ex = o.ex ?? r.sx; r.ey = o.ey ?? r.sy; r.ez = o.ez ?? (o.ex ?? r.sz);
     r.rx = o.rx || 0; r.ry = o.ry || 0; r.rz = o.rz || 0; r.spin = o.spin || 0; r.pop = o.pop || 0;
-    _c.set(o.col ?? WHITE); r.r = _c.r; r.g = _c.g; r.b = _c.b; r.a = o.a ?? 1; r.fi = o.fi ?? 0.12; r.fo = o.fo ?? 1.6;
+    _c.set(o.col ?? WHITE); r.r = _c.r; r.g = _c.g; r.b = _c.b; r.a = (o.a ?? 1) * FXL.fx.a; r.fi = o.fi ?? 0.12; r.fo = o.fo ?? 1.6;
     return r;
   }
   update(dt) {
@@ -145,7 +167,7 @@ class Batch {
 }
 
 // ---------- weapon trails: every ribbon in one mesh ----------
-const T_PTS = 20, T_LIFE = 0.28, T_REC = 7; // points per ribbon, seconds a point lives, floats per sample (base xyz, tip xyz, age)
+const T_PTS = 32, T_REC = 7; // points per ribbon, seconds a point lives, floats per sample (base xyz, tip xyz, age)
 class Trails {
   constructor(scene, cap) {
     this.cap = cap;
@@ -161,7 +183,7 @@ class Trails {
     g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(idx);
     this.mesh = new THREE.Mesh(g, glowMat(4)); this.mesh.frustumCulled = false; this.mesh.visible = false; this.mesh.renderOrder = 4;
     scene.add(this.mesh);
-    this.slots = Array.from({ length: cap }, () => ({ ent: null, n: 0, h: new Float32Array(T_PTS * T_REC), r: 1, g: 1, b: 1, gain: 1, lx: 0, ly: 0, lz: 0, ex: 0, ez: 0, has: false }));
+    this.slots = Array.from({ length: cap }, () => ({ ent: null, n: 0, h: new Float32Array(T_PTS * T_REC), r: 1, g: 1, b: 1, tr: 1, tg: 1, tb: 1, gain: 1, lx: 0, ly: 0, lz: 0, ex: 0, ez: 0, has: false }));
     this.live = 0;
   }
   slotFor(ent, max) {
@@ -197,7 +219,7 @@ class Trails {
   }
   update(dt, mine, mdt) { // (mine: your own character, whose clock isn't slowed by slow motion; mdt: its seconds)
     let any = false;
-    const P = this.pos, C = this.col, vdt = dt;
+    const P = this.pos, C = this.col, vdt = dt, T_LIFE = FXL.trail.life;
     for (let si = 0; si < this.cap; si++) {
       const s = this.slots[si], h = s.h, v0 = si * T_PTS * 2;
       if (!s.n) { if (s.drawn) { s.drawn = false; for (let i = 0; i < T_PTS * 2; i++) C[(v0 + i) * 4 + 3] = 0; any = true; } continue; }
@@ -206,9 +228,10 @@ class Trails {
       for (let i = 0; i < n; i++) { h[i * T_REC + 6] += dt; if (h[i * T_REC + 6] >= T_LIFE) { n = i; break; } }
       s.n = n; s.drawn = true; any = true;
       for (let i = 0; i < T_PTS; i++) {
-        const k = Math.min(i, Math.max(0, n - 1)) * T_REC, v = v0 + i * 2, f = i < n ? (1 - h[k + 6] / T_LIFE) ** 1.4 * s.gain : 0;
+        const k = Math.min(i, Math.max(0, n - 1)) * T_REC, v = v0 + i * 2, u = Math.min(1, h[k + 6] / T_LIFE), f = i < n ? (1 - u) ** 1.4 * s.gain : 0;
+        const cr = s.r + (s.tr - s.r) * u, cg = s.g + (s.tg - s.g) * u, cb = s.b + (s.tb - s.b) * u; // head colour → tail colour
         P[v * 3] = h[k]; P[v * 3 + 1] = h[k + 1]; P[v * 3 + 2] = h[k + 2]; P[v * 3 + 3] = h[k + 3]; P[v * 3 + 4] = h[k + 4]; P[v * 3 + 5] = h[k + 5];
-        C[v * 4] = C[v * 4 + 4] = s.r; C[v * 4 + 1] = C[v * 4 + 5] = s.g; C[v * 4 + 2] = C[v * 4 + 6] = s.b; C[v * 4 + 3] = C[v * 4 + 7] = n > 1 ? f : 0;
+        C[v * 4] = C[v * 4 + 4] = cr; C[v * 4 + 1] = C[v * 4 + 5] = cg; C[v * 4 + 2] = C[v * 4 + 6] = cb; C[v * 4 + 3] = C[v * 4 + 7] = n > 1 ? f : 0;
       }
     }
     this.mesh.visible = any;
@@ -272,16 +295,17 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
 
   // ---------- building blocks ----------
   const HALF = Math.PI / 2;
-  const shock = (x, z, r, col, o = {}) => bands.add({ x, y: 0.05, z, sx: r * 0.25, sy: o.h ?? 1.3, ex: r, ey: 0.35, life: 0.42, col, a: 0.7, ...o });
-  const pillar = (x, z, w, h, col, o = {}) => bands.add({ x, y: 0, z, sx: w * 0.5, sy: h, ex: w, ey: h * 1.15, life: 0.45, col, a: 0.85, fo: 1.2, ...o });
+  const shock = (x, z, r, col, o = {}) => bands.add({ x, y: 0.05, z, sx: r * 0.25, ex: r, ey: 0.35, life: 0.42, col, a: 0.7, ...o, sy: (o.h ?? 1.3) * FXL.fx.tall });
+  const pillar = (x, z, w, h, col, o = {}) => bands.add({ x, y: 0, z, sx: w * 0.5, sy: h * FXL.fx.tall, ex: w, ey: h * 1.15 * FXL.fx.tall, life: 0.45, col, a: 0.85, fo: 1.2, ...o });
   // a standing hoop facing along `f` (sound waves, sonic rings): the band turned on its side
   const hoop = (x, y, z, f, r0, r1, col, o = {}) => bands.add({ x, y, z, rx: HALF, ry: f, sx: r0, sy: 0.25, sz: r0, ex: r1, ey: 0.12, ez: r1, life: 0.35, col, a: 0.9, ...o });
   // a flat resonance ring at height y
   const disc = (x, y, z, r0, r1, col, o = {}) => bands.add({ x, y, z, sx: r0, sy: 0.14, ex: r1, ey: 0.1, life: 0.6, col, a: 0.8, ...o });
-  const blade = (x, y, z, f, tilt, r0, r1, col, o = {}) => blades.add({ x, y, z, ry: f, rz: tilt, sx: r0, ex: r1, life: 0.28, col, a: 1, fi: 0.08, ...o });
+  const blade = (x, y, z, f, tilt, r0, r1, col, o = {}) => blades.add({ x, y, z, ry: f, rz: tilt, sx: r0 * FXL.fx.blade, ex: r1 * FXL.fx.blade, life: 0.28, col, a: 1, fi: 0.08, ...o });
   // a lance of light from (x, y, z) pointing along f (level), `len` long
   const streak = (x, y, z, f, len, w, col, o = {}) => lances.add({ x, y, z, rx: HALF, ry: f, sx: w, sy: len * 0.5, sz: w, ex: w * 0.4, ey: len, ez: w * 0.4, life: 0.3, col, a: 1, fi: 0.05, ...o });
   function rocks(x, z, r, n, h, tint = 0x8a8078, delay = 0) {
+    n = Math.max(3, Math.round(n * FXL.fx.rocks));
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + rnd(-0.25, 0.25), d = r * rnd(0.45, 0.8), w = rnd(0.16, 0.34);
       shards.add({ x: x + Math.sin(a) * d, y: -0.05, z: z + Math.cos(a) * d, ry: a, rx: rnd(0.2, 0.55), sx: w, sy: h * rnd(0.6, 1.15), sz: w, life: rnd(0.7, 1.05), pop: 1, col: tint, delay: delay + rnd(0, 0.06) });
@@ -524,14 +548,19 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
       if (!slot) continue;
       slot.updateWorldMatrix(true, false);
       const L = REACH[p.cls] || 1.7;
-      _p.set(0, L, 0).applyMatrix4(slot.matrixWorld); _s.set(0, L * 0.42, 0).applyMatrix4(slot.matrixWorld);
+      _p.set(0, L, 0).applyMatrix4(slot.matrixWorld); _s.set(0, L * FXL.trail.inner, 0).applyMatrix4(slot.matrixWorld);
       // only while the weapon really moves (relative to the body): the wind-up and the recovery leave no ribbon
       const sp = s.has ? Math.hypot(_p.x - s.lx - (g.x - s.ex0), _p.y - s.ly, _p.z - s.lz - (g.z - s.ez0)) / dt : 0;
       s.lx = _p.x; s.ly = _p.y; s.lz = _p.z; s.ex0 = g.x; s.ez0 = g.z; s.has = true;
       if (sp > 3.2) {
         const n = chainN(p.id);
         _c.set(classColor(p.cls)).lerp(_white, Math.min(0.5, 0.13 * n)); s.r = _c.r; s.g = _c.g; s.b = _c.b;
-        s.gain = (0.8 + 0.2 * Math.min(4, n)) * Math.min(1, sp / 7);
+        const K = FXL.trail;
+        if (K.headMix) { _c.lerp(_lc.set(K.head), K.headMix); s.r = _c.r; s.g = _c.g; s.b = _c.b; }
+        if (K.hue) _c.offsetHSL(K.hue, 0, 0);
+        if (K.tailMix) _c.lerp(_lc.set(K.tail), K.tailMix);
+        s.tr = _c.r; s.tg = _c.g; s.tb = _c.b;
+        s.gain = (0.8 + 0.2 * Math.min(4, n)) * Math.min(1, sp / 7) * K.gain;
         trails.push(s, _s.x, _s.y, _s.z, _p.x, _p.y, _p.z, g.x, g.z, dt);
       }
     }
@@ -542,6 +571,7 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
     event, hit, kick, applyKick, chainN,
     /** dt: real seconds (the camera kick); vdt: visual seconds (slow motion and hit-stop hold the effects too). */
     frame(dt, vdt) {
+      applyGlowLook(); GLOW_U.uTr.value.set(FXL.trail.body, FXL.trail.tipPow, FXL.trail.edge, FXL.trail.white); GLOW_U.uWhite.value = FXL.fx.white;
       for (const b of batches) b.update(vdt);
       trailFrame(vdt, dt);
       chainFrame();
