@@ -520,7 +520,7 @@ function renderEditor() {
   </div>
   <section class="card esec" id="e-sec-mastery"><h2>Skill mastery &amp; evolutions</h2>
     <table><thead><tr><th>Skill</th><th>Mastery</th><th>Points</th><th>Evolution (Mastery ${MASTERY.evolveAt}+)</th></tr></thead><tbody>
-    ${Object.entries(c.mastery).map(([sk, e]) => { const def = CLASSES[c.cls].skills.find(s => s.id === sk), B = BRANCHES[sk]; return `<tr>
+    ${Object.entries(c.mastery).map(([sk, e]) => { const def = CLASSES[c.cls].skills.find(s => s.id === sk) || Object.values(SUBCLASSES).find(x => x.skill.id === sk)?.skill, B = BRANCHES[sk]; return `<tr>
       <td><b>${esc(def?.name || sk)}</b></td>
       <td><select data-mlvl="${sk}">${[1, 2, 3, 4, 5].map(l => `<option ${masteryLevel(e.pts) === l ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
       <td><input type="number" data-mpts="${sk}" value="${e.pts}" min="0" style="width:100px" /></td>

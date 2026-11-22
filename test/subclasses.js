@@ -45,7 +45,7 @@ const ok = name => console.log(`  ok ${++n} - ${name}`);
     assert.ok(!CLASSES[D.cls].skills.some(s => s.id === sk.id), `${id}: not one of the class's own ids`);
     assert.equal(typeof SIG_FNS[sk.id], 'function', `${id}: has its code`);
     assert.ok(['melee', 'ranged', 'crowd', 'party', 'heal', 'buff'].includes(sk.bot?.use), `${id}: a bot rule`);
-    const nodes = TREES[D.cls].branches.find(b => b.id === D.branch).nodes.filter(x => x.sub === id);
+    const nodes = TREES[D.cls].branches.find(b => b.id === D.branch).nodes.filter(x => x.sub === id && !x.lvl); // (the level-22 and Crown nodes: test/path.js)
     assert.deepEqual(nodes.map(x => [x.tier, x.x]), [[2, -1], [2, 1]], `${id}: two nodes, tier 2 left and right`);
   }
   for (const [cls, sub] of Object.entries(S.BOT_SUB)) assert.equal(SUBCLASSES[sub].cls, cls);

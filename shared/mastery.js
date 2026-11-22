@@ -10,6 +10,7 @@ import { LANCER_BRANCHES } from './classes/lancer.js';
 import { BARD_BRANCHES } from './classes/bard.js';
 import { RANGER_BRANCHES } from './classes/ranger.js';
 import { BERSERKER_BRANCHES } from './classes/berserker.js';
+import { SIG_EVOS, sigIdsOf } from './subclasses.js';
 
 export const MASTERY = {
   max: 5,
@@ -84,7 +85,11 @@ Object.assign(BRANCHES, LANCER_BRANCHES, BARD_BRANCHES); // Lancer, Bard (shared
 
 Object.assign(BRANCHES, RANGER_BRANCHES, BERSERKER_BRANCHES); // Ranger and Berserker (shared/classes/)
 
-export const masterySkills = cls => (CLASSES[cls]?.skills || []).slice(1).map(s => s.id);
+Object.assign(BRANCHES, SIG_EVOS); // the signature skills' two forms (shared/subclasses.js; `sig: 1` on each form)
+export const isSigForm = skId => !!BRANCHES[skId]?.A?.sig;
+
+// The skills with a mastery record: slots 1-3, then the signature skill of each of the class's subclasses.
+export const masterySkills = cls => [...(CLASSES[cls]?.skills || []).slice(1).map(s => s.id), ...sigIdsOf(cls)];
 
 // Sanitise a saved mastery record for a class: { [skillId]: { pts, br } }.
 export function newMastery(raw, cls, startLevel = 0) {
@@ -134,6 +139,62 @@ export function masteryCd(sk, entry) {
   return sk.cd * (l >= 2 ? MASTERY.cd2 : 1) * (branchDef(sk.id, activeBranch(entry))?.cd || 1);
 }
 export const masteryPow = entry => (entry && masteryLevel(entry.pts) >= 4 ? MASTERY.pow4 : 1);
+
+
+// ---------- awakenings (Mastery 5; docs/briefs/path.md, Phase 3) ----------
+// At Mastery 5 the chosen form gains one more rule (shared/effects.js; server/effects.js runs it): 'cast' fires once
+// per use, 'hit' on that skill's hits (most have an icd so a multi-hit skill can't chain them), 'heal' on its heals.
+const W = (on, d, o = {}) => ({ on, do: d, ...o });
+export const AWAKEN = {
+  // Swordsman
+  rush: { A: W('hit', 'mark', { v: 0.12, d: 4, icd: 1 }), B: W('hit', 'stun', { d: 0.6, icd: 1 }) },
+  whirl: { A: W('cast', 'pull', { r: 9, v: 2 }), B: W('hit', 'slow', { v: 0.3, d: 2 }) },
+  burst: { A: W('hit', 'burn', { v: 0.15, d: 3, icd: 2 }), B: W('break', 'team', { v: 0.1, r: 12, d: 5 }) },
+  // Guardian
+  taunt: { A: W('cast', 'dr', { v: 0.2, d: 5 }), B: W('cast', 'team', { v: 0.06, r: 12, d: 6 }) },
+  wall: { A: W('cast', 'shield', { v: 0.08, r: 8, d: 6 }), B: W('cast', 'heal', { v: 0.1, r: 0 }) },
+  gslam: { A: W('hit', 'posture', { frac: [0.1, 0.03] }), B: W('hit', 'slow', { v: 0.35, d: 3 }) },
+  // Cleric
+  heal: { A: W('heal', 'shield', { v: 0.06, r: 0, to: 't', d: 6, icd: 2 }), B: W('cast', 'cdcut', { v: 2 }) },
+  bless: { A: W('cast', 'cdcut', { v: 1.5 }), B: W('cast', 'heal', { v: 0.06, r: 12 }) },
+  sanct: { A: W('cast', 'dr', { v: 0.15, d: 6 }), B: W('hit', 'mark', { v: 0.1, d: 3, icd: 1 }) },
+  // Lancer
+  lcharge: { A: W('hit', 'burst', { mult: 0.6, r: 3, icd: 1 }), B: W('cast', 'dr', { v: 0.2, d: 3 }) },
+  lsweep: { A: W('cast', 'pull', { r: 7, v: 1.5 }), B: W('hit', 'mark', { v: 0.1, d: 4, icd: 0.5 }) },
+  skylance: { A: W('hit', 'posture', { frac: [0.12, 0.04], icd: 1 }), B: W('hit', 'stun', { d: 0.8, icd: 1 }) },
+  // Bard
+  anthem: { A: W('cast', 'team', { v: 0.05, r: 14, d: 8 }), B: W('cast', 'heal', { v: 0.05, r: 14 }) },
+  dissonance: { A: W('hit', 'posture', { frac: [0.08, 0.03], icd: 0.5 }), B: W('hit', 'slow', { v: 0.3, d: 3 }) },
+  crescendo: { A: W('hit', 'burst', { mult: 0.8, r: 3.5, icd: 1 }), B: W('cast', 'cdcut', { v: 2 }) },
+  // Ranger
+  pierce: { A: W('hit', 'burn', { v: 0.1, d: 3, icd: 0.5 }), B: W('crit', 'cdcut', { v: 1.5, icd: 2, text: 'Its critical hits' }) },
+  disengage: { A: W('hit', 'stun', { d: 0.8, icd: 1 }), B: W('cast', 'dr', { v: 0.25, d: 2 }) },
+  mark: { A: W('cast', 'team', { v: 0.06, r: 12, d: 6 }), B: W('hit', 'mark', { v: 0.08, d: 6 }) },
+  // Berserker
+  cleave: { A: W('hit', 'slow', { v: 0.25, d: 2 }), B: W('kill', 'rage', { v: 15, text: 'Each kill it lands' }) },
+  leap: { A: W('hit', 'stun', { d: 0.5, icd: 0.5 }), B: W('hit', 'heal', { v: 0.04, r: 0, icd: 1 }) },
+  bloodrage: { A: W('cast', 'cdcut', { v: 2 }), B: W('cast', 'heal', { v: 0.05, r: 12 }) },
+  // Signature skills
+  flashstep: { A: W('hit', 'mark', { v: 0.1, d: 4, icd: 1 }), B: W('cast', 'cdcut', { v: 2 }) },
+  rallycut: { A: W('break', 'team', { v: 0.08, r: 12, d: 5, text: 'A Break it causes' }), B: W('cast', 'shield', { v: 0.06, r: 16, d: 6 }) },
+  aegisline: { A: W('cast', 'heal', { v: 0.1, r: 0 }), B: W('cast', 'heal', { v: 0.06, r: 14 }) },
+  conqroar: { A: W('hit', 'mark', { v: 0.1, d: 5 }), B: W('cast', 'shield', { v: 0.1, r: 0, d: 6 }) },
+  dawnburst: { A: W('cast', 'shield', { v: 0.08, r: 12, d: 6 }), B: W('cast', 'team', { v: 0.06, r: 18, d: 6 }) },
+  judgeray: { A: W('hit', 'burn', { v: 0.2, d: 3 }), B: W('hit', 'slow', { v: 0.3, d: 3 }) },
+  deadeye: { A: W('crit', 'burst', { mult: 1.2, r: 3, text: 'Its critical hits' }), B: W('hit', 'mark', { v: 0.12, d: 4 }) },
+  snarefield: { A: W('hit', 'burn', { v: 0.12, d: 3 }), B: W('cast', 'pull', { r: 8, v: 2 }) },
+  rampage: { A: W('cast', 'dr', { v: 0.2, d: 3 }), B: W('kill', 'cdcut', { v: 3, icd: 4, text: 'A kill it lands' }) },
+  crimsonpact: { A: W('cast', 'shield', { v: 0.08, r: 0, d: 6 }), B: W('hit', 'burn', { v: 0.2, d: 3, icd: 0.5 }) },
+  wyverndive: { A: W('hit', 'burn', { v: 0.15, d: 3 }), B: W('cast', 'dr', { v: 0.25, d: 2 }) },
+  spearwall: { A: W('cast', 'heal', { v: 0.06, r: 8 }), B: W('hit', 'mark', { v: 0.1, d: 4 }) },
+  encore: { A: W('cast', 'shield', { v: 0.06, r: 14, d: 6 }), B: W('cast', 'heal', { v: 0.06, r: 14 }) },
+  sirenwail: { A: W('hit', 'mark', { v: 0.1, d: 4 }), B: W('hit', 'posture', { frac: [0.08, 0.03] }) },
+};
+// The awakening of a skill's active form, once it reaches Mastery 5 (null otherwise).
+export function awakening(skId, entry) {
+  const br = activeBranch(entry);
+  return br && masteryLevel(entry.pts) >= MASTERY.max ? AWAKEN[skId]?.[br] || null : null;
+}
 
 // Short list of the automatic upgrades a level grants (for the panel).
 export const UPGRADES = [

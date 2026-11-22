@@ -133,3 +133,71 @@ export function specBlock(path, cls, lvl, sub, gold) {
   if (cur && (gold | 0) < specFee(lvl)) return `Changing specialisation costs ${specFee(lvl)} gold.`;
   return null;
 }
+
+// ---------- signature mastery (docs/briefs/path.md, Phase 2) ----------
+// A signature skill earns mastery like slots 1-3 (shared/mastery.js): Mastery 2 -10% cooldown, Mastery 3 it evolves into
+// one of these two forms, Mastery 4 +10% effect. A form changes the skill's numbers (`n`, merged over the skill's own)
+// and may change its cooldown (`cd`, a multiplier). coop: leans into the party (Break -> Switch, buffs).
+const form = (id, name, desc, n, extra = {}) => ({ id, name, desc, n, sig: 1, ...extra });
+export const SIG_EVOS = {
+  flashstep: {
+    A: form('thousandcuts', 'A Thousand Cuts', 'Land and cut five times, faster and lighter: the same damage spread over more hits.', { cuts: 5, cut: 0.45, gap: 0.12 }),
+    B: form('longstep', 'Long Step', 'Blink up to 11 m and stay untouchable longer; two heavy cuts where you land.', { len: 11, iframes: 0.7, cuts: 2, cut: 1.0 }),
+  },
+  rallycut: {
+    A: form('breakingcut', 'Breaking Cut', 'A heavier cut that tears almost half the target\'s posture off (a smaller rally).', { mult: 2.4, frac: [0.45, 0.15], dmg: 0.08 }, { coop: 1 }),
+    B: form('warbanner', 'Warbanner Cut', 'A lighter cut, but the rally reaches 16 m: +15% damage for 7 s.', { mult: 1.6, allyR: 16, dmg: 0.15, d: 7 }, { coop: 1 }),
+  },
+  aegisline: {
+    A: form('bastion', 'Bastion', 'Hold the line yourself: you take 60% less damage for 6 s (allies within 8 m 25% less).', { r: 8, self: 0.6, ally: 0.25, d: 6 }),
+    B: form('longwatch', 'Long Watch', 'A wider, longer shield: allies within 14 m take 30% less for 8 s (you 30%).', { r: 14, self: 0.3, ally: 0.3, d: 8 }, { coop: 1 }),
+  },
+  conqroar: {
+    A: form('shatterroar', 'Shattering Roar', 'The roar fills 40% of their posture (12% on bosses) and staggers longer.', { mult: 1.6, stun: 1.0, frac: [0.4, 0.12] }, { coop: 1 }),
+    B: form('ironroar', 'Iron Roar', 'Taunt as before, and brace: you take 30% less damage for 5 s.', { selfDr: 0.3, d: 5 }),
+  },
+  dawnburst: {
+    A: form('highnoon', 'High Noon', 'A stronger burst in a smaller circle: 32% of their health within 12 m.', { r: 12, frac: 0.32 }),
+    B: form('firstlight', 'First Light', 'A softer, wider light (18% within 18 m) that comes back sooner.', { r: 18, frac: 0.18 }, { cd: 0.8 }),
+  },
+  judgeray: {
+    A: form('finalverdict', 'Final Verdict', 'A narrow ray that hits much harder and breaks more posture.', { mult: 2.7, width: 1.1, frac: [0.25, 0.1] }),
+    B: form('widejudgement', 'Wide Judgement', 'A 3 m wide beam: lighter, but it catches a whole pack.', { width: 3.0, len: 12, mult: 1.7 }),
+  },
+  deadeye: {
+    A: form('heartseeker', 'Heartseeker', 'Draw longer (0.8 s) for a devastating shot and a big posture hit.', { draw: 0.8, mult: 3.6, frac: [0.3, 0.12] }),
+    B: form('snapshot', 'Snap Shot', 'Barely a draw (0.15 s) and back sooner; a lighter arrow.', { draw: 0.15, mult: 2.4 }, { cd: 0.72 }),
+  },
+  snarefield: {
+    A: form('ironsnare', 'Iron Snare', 'A tighter net (3.5 m) that holds for over 3 s.', { r: 3.5, stun: 3.2 }, { coop: 1 }),
+    B: form('widenet', 'Wide Net', 'A 7 m net: a shorter hold, but the slow lasts 7 s.', { r: 7, stun: 1.4, slowFor: 7 }),
+  },
+  rampage: {
+    A: form('endlessrampage', 'Endless Rampage', 'Five lighter spins instead of three, a little faster: longer to keep a crowd hit.', { spins: 5, gap: 0.3, mult: 0.7 }),
+    B: form('executionerspin', 'Executioner Spin', 'Two spins; the second lands like an execution.', { spins: 2, mult: 1.1, last: 2.6 }),
+  },
+  crimsonpact: {
+    A: form('bloodfeast', 'Blood Feast', 'Heal for 60% of the damage (up to 30% of your health); a lighter cleave.', { mult: 1.8, leech: 0.6, cap: 0.3 }),
+    B: form('crimsonedge', 'Crimson Edge', 'A wider, much heavier cleave that heals less.', { r: 5, mult: 2.5, leech: 0.25 }),
+  },
+  wyverndive: {
+    A: form('meteordive', 'Meteor Dive', 'Hang in the air longer and land like a meteor: 6 m, heavy damage and posture.', { air: 0.8, r: 6, mult: 2.8, frac: [0.35, 0.12] }, { coop: 1 }),
+    B: form('swiftdive', 'Swift Dive', 'A quick hop that lands lighter but comes back much sooner.', { air: 0.4, mult: 2.0 }, { cd: 0.73 }),
+  },
+  spearwall: {
+    A: form('ironwall', 'Iron Wall', 'The guard is the point: you and allies within 8 m take 30% less damage for 7 s.', { dr: 0.3, d: 7 }, { coop: 1 }),
+    B: form('spearhedge', 'Spear Hedge', 'A 6 m hedge of spears: heavier, throws enemies further and stuns longer.', { r: 6, mult: 2.2, knock: 3, stun: 1.6 }),
+  },
+  encore: {
+    A: form('ovation', 'Standing Ovation', 'The crowd roars: +14% damage for 7 s (3 s back on skills).', { dmg: 0.14, d: 7, cut: 3 }, { coop: 1 }),
+    B: form('dacapo', 'Da Capo', 'From the top: 7 s back on every skill, a small buff, and it comes back sooner.', { cut: 7, dmg: 0.06 }, { cd: 0.85 }),
+  },
+  sirenwail: {
+    A: form('shattersong', 'Shatter Song', 'A harder note: more damage and 35% of their posture (12% on bosses).', { mult: 1.8, frac: [0.35, 0.12] }, { coop: 1 }),
+    B: form('lullaby', 'Lullaby', 'A softer song that puts them to sleep: a 1.2 s hold and a 60% slow for 6 s.', { mult: 1.0, stun: 1.2, slow: 0.6, slowFor: 6 }),
+  },
+};
+// The numbers a signature skill runs with in a form ('A' / 'B' / null).
+export const sigNums = (sk, br) => ({ ...sk.n, ...(br ? SIG_EVOS[sk.id]?.[br]?.n : null) });
+// Every class's signature skill ids (mastery records keep both subclasses': a change of subclass keeps its progress).
+export const sigIdsOf = cls => subsOf(cls).map(id => SUBCLASSES[id].skill.id);

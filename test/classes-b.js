@@ -83,7 +83,7 @@ const evolve = (p, sk, br) => { p.mastery[sk] = { pts: MASTERY.need[3], br }; };
   for (const c of ['lancer', 'bard']) {
     assert.equal(CLASSES[c].skills.length, 4);
     for (const s of CLASSES[c].skills.slice(1)) assert.ok(BRANCHES[s.id]?.A && BRANCHES[s.id]?.B, `${s.id} has two branches`);
-    assert.ok(Object.keys(lancer.mastery).length === 3 && Object.keys(bard.mastery).length === 3);
+    assert.ok(Object.keys(lancer.mastery).length === 5 && Object.keys(bard.mastery).length === 5);
     for (let r = 0; r < 4; r++) assert.equal(makeItem('weapon', r, c).cls, c);
   }
   assert.equal(makeItem('weapon', 0, 'lancer').name, 'Ash Spear');

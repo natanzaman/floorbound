@@ -22,7 +22,7 @@ import { NamedManager, makeNamedStore, namedOn } from '../server/named.js';
 import * as hall from '../server/hall.js';
 import { MAX_LEVEL, WORLD, GATE, CLASSES } from '../shared/data.js';
 import { pointsAt } from '../shared/talents.js';
-import { masteryLevel } from '../shared/mastery.js';
+import { masteryLevel, masterySkills } from '../shared/mastery.js';
 import { loadoutFor } from '../shared/playerbots.js';
 import { buildCard } from '../shared/mvp.js';
 import {
@@ -150,7 +150,7 @@ function world({ store = null, presence = false } = {}) { // (presence: PRESENCE
   ok(cairn.look === 'cairn' && hp.look === 'halvard' && g.looksSnap().length === 5 && !nat.look, 'each wears their own look (I2)');
   ok(heroes.every(p => p.inv.eq.weapon?.r === L.rarity && p.inv.eq.armor && p.inv.eq.charm) && cairn.inv.eq.weapon.style === 'glaive' && P('sennet').inv.eq.weapon.style === 'halberd', 'gear is the premade setup for their level, in their own weapon style');
   ok(cairn.cls === 'lancer' && cairn.style === 'glaive' && cairn.inv.eq.weapon.cls === 'lancer' && /Glaive/.test(cairn.inv.eq.weapon.name), 'Cairn is a Lancer with a Glaive (the weapon his look carries)');
-  ok(Object.keys(cairn.mastery).sort().join() === CLASSES.lancer.skills.map(s => s.id).filter(id => cairn.mastery[id]).sort().join() && Object.values(cairn.mastery).every(x => masteryLevel(x.pts) === L.mastery && (!L.evolved || x.br)), 'his premade setup is a Lancer\'s: Lancer skills at the level\'s mastery, evolved');
+  ok(Object.keys(cairn.mastery).sort().join() === masterySkills('lancer').sort().join() && Object.values(cairn.mastery).every(x => masteryLevel(x.pts) === L.mastery && (!L.evolved || x.br)), 'his premade setup is a Lancer\'s: Lancer skills at the level\'s mastery, evolved');
   nat.lvl = 16; clock.t += 61000; tick(2);
   ok(P('halvard').lvl === 18 && P('halvard').inv.eq.weapon.r === loadoutFor(18).rarity, 'they level as the players do (gear follows)');
   nat.lvl = 4; clock.t += 61000; tick(2);

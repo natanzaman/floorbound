@@ -51,6 +51,7 @@ import { installLife } from './life.js'; // life classes: gathering, the garden,
 import { GARDEN } from '../shared/life.js';
 import { installAcademy } from './academy.js'; // Initiates, class trials, drills, ranks, cohorts (docs/briefs/academy.md)
 import { installSubclasses } from './subclasses.js'; // subclasses at level 15, signature skills in slot 5 (docs/briefs/subclasses.md)
+import { installEffects } from './effects.js';
 import { installBossParts } from './bossparts.js'; // breakable boss parts (docs/briefs/combat-quickwins.md)
 import { installMobRoles } from './mobroles.js'; // enemies that force a role: armoured, shielded, flyer, caster
 import { installWeaponSwap } from './weaponswap.js'; // a second weapon, swapped mid-fight
@@ -788,6 +789,7 @@ export class Game {
     const dealt = Math.min(amount, Math.max(0, m.hp)); // overkill doesn't count toward mastery
     m.hp -= amount;
     if (m.hp <= 0 && this.lastAttackHeld(m, p)) m.hp = 1; // a reserved Last Attack (server/staging.js)
+    sk = this.mSk(p, sk); // (the signature skill while it runs)
     if (sk) this.masteryGain(p, sk, dealt, 'dmg');
     this.bookBuffs(p, dealt); // Blessing / Zeal / War Cry mastery
     this.afterHitA?.(m, p, dealt, sw); // Rage, lifesteal, Mark mastery (server/classes-a.js)
@@ -915,6 +917,7 @@ export class Game {
     t.hp = Math.min(t.maxHp, t.hp + Math.round(amount));
     if (t.hp > before) this.events.push({ t: 'heal', id: t.id, a: t.hp - before });
     if (by && this.boss && !this.boss.dead && this.boss.threat.size && inArena(t.x, t.z)) this.boss.contributors.add(by.id);
+    if (by) sk = this.mSk(by, sk);
     if (by && sk && t.hp > before) this.masteryGain(by, sk, t.hp - before, 'heal');
     return t.hp - before;
   }
@@ -1556,6 +1559,7 @@ installGuilds(Game); // guilds (server/guilds.js): outside the kill, XP and stat
 installAcademy(Game); // the Academy: Initiates, trials, drills, ranks, cohorts (server/academy.js); outside the skill, damage and heal wrappers
 installTowns(Game); // floor towns (server/towns.js): after the Academy, the duels and the life classes it wraps
 installSubclasses(Game); // subclasses (server/subclasses.js); after the Academy (wraps its initPath, swapClass, markPath, pathMsg, academyOp)
+installEffects(Game); // the effect engine: awakenings and rule talents (server/effects.js); after every skill, damage and heal wrapper
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last
 if (process.env.TUNE_STATS) installTuneStats(Game); // testing aid (scripts/tuneboss.js): log boss moves used and hits taken; outermost
 
