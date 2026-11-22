@@ -225,7 +225,6 @@ const CSS = `
 #chain-hud.pop span { display: inline-block; animation: chainpop .22s ease-out; }
 @keyframes chainpop { from { transform: scale(1.5); filter: brightness(1.8); } to { transform: scale(1); } }
 .bubble.call { font-weight: 800; letter-spacing: .03em; border-color: rgba(125, 211, 252, .8); box-shadow: 0 0 12px rgba(56, 189, 248, .45); }
-.combo-lbl.self { font-size: 13px; opacity: .85; }
 `;
 
 // Which accent (world.js ACCENTS) a skill's fx event plays, and which 3D effect (FX below). Keys: the event's kind and
@@ -551,7 +550,7 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
       for (const b of batches) { if (on) { _m.makeScale(0, 0, 0).toArray(b.mesh.instanceMatrix.array, 0); b.mesh.count = 1; b.mesh.visible = true; } else if (!b.n) { b.mesh.count = 0; b.mesh.visible = false; } }
       trails.mesh.visible = on || trails.mesh.visible;
     },
-    stats: () => ({ bands: bands.n, blades: blades.n, domes: domes.n, lances: lances.n, shards: shards.n, trails: trails.slots.filter(s => s.n).length, pts: Math.max(...trails.slots.map(s => s.n)), kick: kickAmt }),
+    stats: () => ({ bands: bands.n, blades: blades.n, domes: domes.n, lances: lances.n, shards: shards.n, trails: trails.slots.filter(s => s.n).length, pts: Math.max(...trails.slots.map(s => s.n)), draws: batches.filter(b => b.mesh.visible).length + (trails.mesh.visible ? 1 : 0) + (fx.pool.points.visible ? 1 : 0), kick: kickAmt }),
     FX, TRAIT,
   };
 }

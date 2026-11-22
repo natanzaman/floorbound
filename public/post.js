@@ -27,7 +27,7 @@ export const GLOW_BLEND = {
   blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor, transparent: true, depthWrite: false,
 };
 
-export const BLOOM = { threshold: 0.78, knee: 0.2, bright: 0.55, mask: 1.0, strength: 0.85, shoulder: 0.72, vignette: 0.16, levels: 4 };
+export const BLOOM = { threshold: 0.78, knee: 0.2, bright: 0.55, mask: 1.0, strength: 0.85, shoulder: 0.8, vignette: 0.16, levels: 4 };
 
 const VERT = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 // (bloom buffers hold sqrt(light): 8 bits go a long way, and no float-texture extension is needed)
@@ -62,14 +62,14 @@ const FINAL = `
 uniform sampler2D tMap; uniform sampler2D tBloom; uniform vec4 uP; varying vec2 vUv;
 // The tone map: light below the shoulder passes untouched (the game keeps its colours), light above it rolls off
 // towards white instead of clipping, so a glow over a bright floor keeps its shape.
-vec3 shoulder(vec3 x) { float a = uP.y, w = 1.0 - a; vec3 t = max(x - a, 0.0) / w; return min(x, vec3(a)) + w * (1.0 - exp(-t)); }
-float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+vec3 shoulder(vec3 x) { float a = uP.y, w = 1.0 - a; vec3 t = max(x - a, 0.0) / w; return min(x, vec3(a)) + w * (1.0 - 1.0 / (1.0 + t + t * t)); }
+float hash(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
 void main() {
   vec3 s = texture2D(tMap, vUv).rgb, b = texture2D(tBloom, vUv).rgb;
-  vec3 lin = pow(s, vec3(2.2)) + b * b * uP.x;
+  vec3 lin = s * s + b * b * uP.x; // (gamma 2 in, sqrt out: exact for an untouched pixel, and no pow per pixel)
   lin = min(shoulder(lin), 1.0);
   vec2 q = vUv - 0.5; lin *= 1.0 - uP.z * smoothstep(0.25, 0.95, dot(q, q) * 2.0);
-  gl_FragColor = vec4(pow(lin, vec3(1.0 / 2.2)) + (hash(gl_FragCoord.xy) - 0.5) / 255.0, 1.0);
+  gl_FragColor = vec4(sqrt(lin) + (hash(gl_FragCoord.xy) - 0.5) / 255.0, 1.0);
 }`;
 
 export function createPost(renderer, { samples = 0 } = {}) {
@@ -124,6 +124,8 @@ export function createPost(renderer, { samples = 0 } = {}) {
     render(scene, camera) {
       if (!W) api.setSize();
       sceneRT ||= makeScene();
+      const info = renderer.info, reset = info.autoReset; // count the whole frame (the F3 overlay's draw calls), not just the last pass
+      info.autoReset = false; info.reset();
       renderer.setRenderTarget(sceneRT);
       renderer.render(scene, camera);
       const auto = renderer.autoClear; renderer.autoClear = false; // (every pass covers its whole target)
@@ -137,6 +139,7 @@ export function createPost(renderer, { samples = 0 } = {}) {
       mFinal.uniforms.tMap.value = sceneRT.texture; mFinal.uniforms.tBloom.value = src.texture;
       pass(mFinal, null);
       renderer.autoClear = auto;
+      info.autoReset = reset;
     },
   };
   return api;
