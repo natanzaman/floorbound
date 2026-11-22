@@ -307,7 +307,7 @@ export function rollTable(table, rnd = Math.random) {
 }
 // Which set piece to give: one the player doesn't own yet (worn or in the bag) if any, else any.
 export function pickSetSlot(id, inv, rnd = Math.random) {
-  const own = new Set([...(inv?.bag || []), ...SLOTS.map(s => inv?.eq?.[s])].filter(it => it?.set === id).map(it => it.slot));
+  const own = new Set([...(inv?.bag || []), ...SLOTS.map(s => inv?.eq?.[s]), inv?.eq?.weapon2].filter(it => it?.set === id).map(it => it.slot));
   const all = setSlots(id), missing = all.filter(s => !own.has(s)), list = missing.length ? missing : all;
   return list[Math.floor(rnd() * list.length)];
 }

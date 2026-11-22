@@ -87,11 +87,11 @@ const TIPS = {
   mvp: 'That was the post-fight card: everyone in the fight sees it after a boss kill or wipe. Titles go to whoever led: Lifeline for revives, Rescuer for freeing trapped partymates, Wall for tanking, Conductor for combos, Last Word for the Last Attack...',
   menu: () => `${touch() ? 'Tap ☰' : `Press ${K('menu')}`} for the Game Menu: Settings (graphics quality and accessibility too), controls (and Combat: how attacks pick their target, Cleave), change character, log out. The game keeps running while it's open.`,
   // Combat quick wins (docs/briefs/combat-quickwins.md)
-  bparts: 'BOSS PART BROKEN! The pips under the boss bar are its breakable parts: the Warden\'s horns (in front), the Sovereign\'s trident hand (its right side), the Colossus\'s knees (sides and back). Hits from that side wear a part down; melee counts x1.5, ranged x0.5. Each broken part weakens a move and gives everyone a bonus loot roll; both knees down and the Colossus kneels, taking +25% damage.',
+  bparts: 'BOSS PART BROKEN! The pips under the boss bar are its breakable parts: the Warden\'s horns (in front), the Sovereign\'s trident hand (its right side), the Colossus\'s knees (sides and back). Hits from that side wear a part down; melee counts x1.5, ranged x0.5. Each broken part weakens a move, and when the boss dies everyone gets a bonus loot roll per part broken; both knees down and the Colossus kneels, taking +25% damage.',
   plate: 'Ironhide Boar: its plate turns away 70% of your damage. BREAK it (fill its posture bar: Burst Combo, Ground Slam, heavy finishers) and it takes extra damage while Broken.',
   bulwark: 'Mire Bulwark: its shield blocks most hits from the front. Get beside or behind it, or BREAK it: the shield stays down for 6 s.',
   hexer: 'A Mire Hexer is MENDING its allies (the ring): interrupt it with a stun, a Break, an interrupting hit like Smite, a big knock-back or 3 quick hits, and it is stunned for a moment.',
-  wswap: () => `Weapon swap! Only the worn weapon counts (stats and style); ${K('weaponSwap')} trades it with your 2nd weapon (1 s apart, not mid-skill). Cooldowns carry over and a swap is a step in a skill chain.`,
+  wswap: () => `Weapon swap! Only the worn weapon counts (stats and style); ${K('weaponSwap')} trades it with your 2nd weapon (1 s apart, not mid-skill). Cooldowns carry over, and a swap into another style is a step in a skill chain once your next hit lands.`,
   tbsync: () => `A partner started a TEAM BURST: ${touch() ? 'tap the prompt' : `press ${K('teamBurst')}`} now to join it. More joiners, bigger burst.`,
   ...Object.fromEntries(Object.entries(COMBOS).map(([k, c]) => [`combo_${k}`, c.tip])),
 };

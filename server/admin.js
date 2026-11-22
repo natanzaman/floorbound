@@ -257,13 +257,13 @@ function maxOut(c) {
     if (old && c.inv.bag.length < BAG_SIZE) c.inv.bag.push(old);
     gear[s].u = freeU(c.inv); c.inv.eq[s] = gear[s];
   }
-  const owns = la => [...c.inv.bag, ...SLOTS.map(s => c.inv.eq[s])].some(it => it?.la === la);
+  const owns = la => [...c.inv.bag, ...SLOTS.map(s => c.inv.eq[s]), c.inv.eq.weapon2].some(it => it?.la === la);
   for (const [la, make] of [[1, lastAttackItem], [2, lastAttackItem2], [3, lastAttackItem3]]) if (!owns(la) && c.inv.bag.length < BAG_SIZE) giveToBag(c, make());
   for (const k of CONSUMABLE_IDS) c.inv.cons[k] = Math.max(c.inv.cons[k] | 0, 20);
 }
 
 function freeU(inv) {
-  const used = new Set([...inv.bag, ...SLOTS.map(s => inv.eq[s]).filter(Boolean)].map(it => it.u));
+  const used = new Set([...inv.bag, ...SLOTS.map(s => inv.eq[s]), inv.eq.weapon2].filter(Boolean).map(it => it.u));
   let u = Date.now() % 1e6 + 7e5;
   while (used.has(u)) u++;
   return u;
@@ -294,7 +294,7 @@ function applyOp(c, op) {
       return;
     }
     case 'editItem': { // { u, ax: [{ k, v, s?, c? }] | 'roll', set: id | null }: an item's affixes and set
-      const it = [...c.inv.bag, ...SLOTS.map(s => c.inv.eq[s])].find(x => x && x.u === (op.u | 0));
+      const it = [...c.inv.bag, ...SLOTS.map(s => c.inv.eq[s]), c.inv.eq.weapon2].find(x => x && x.u === (op.u | 0)); // (the 2nd weapon too)
       if (!it) throw new Bad('No such item.');
       if (it.ks) throw new Bad('Keepsakes have no affixes.');
       if (op.ax === 'roll') { const t = rollAffixes({ ...it, la: 0 }, it.cls || c.cls); it.ax = t.ax; } // fresh affixes by rarity (Last Attack items too)

@@ -7,11 +7,13 @@ import { MOBS, MOB_IDS, WORLD, PERFECT, angleTo } from '../shared/data.js';
 import { F2 } from '../shared/floor2.js';
 import { F3 } from '../shared/floor3.js';
 import { BOSS_PARTS, PART, relAngle, inArc, partsAt, partDamage, applyPartTable, arcMid } from '../shared/bossparts.js';
-import { ROLE_MOB_IDS, HEXER } from '../shared/mobroles.js';
+import { ROLE_MOB_IDS, ROLE_MOBS, HEXER } from '../shared/mobroles.js';
 import { LAST_STAND, FINISHER, lastStandReady } from '../shared/clutch.js';
 import { SWAP, STYLES, CLASS_STYLES } from '../shared/styles.js';
+import { CHAIN } from '../shared/chains.js';
+const CHAIN_WINDOW = CHAIN.window;
 import { DEFAULTS, ACTION } from '../shared/controls.js';
-import { lootFor, sourceOf } from '../shared/loot.js';
+import { lootFor, sourceOf, pickSetSlot, SETS } from '../shared/loot.js';
 import { makeItem } from '../shared/items.js';
 import { roleScore } from '../shared/bots/roles.js';
 
@@ -80,6 +82,18 @@ function advance(dt) {
   }
 }
 const rnd = Math.random;
+// Role enemies come after every other mob (old ids unchanged); bonus part rolls are spied on.
+{
+  const role = [...g.mobs.values()].filter(m => ROLE_MOBS[m.type]), rest = [...g.mobs.values()].filter(m => !ROLE_MOBS[m.type]);
+  assert.ok(role.length >= 15 && Math.min(...role.map(m => m.id)) > Math.max(...rest.map(m => m.id)), 'role enemies spawn last');
+  assert.ok(role.filter(m => m.def.f2 || m.def.f3).every(m => m.engaged === false), 'their floor set them up');
+  const set = Object.keys(SETS)[0];
+  const inv = { bag: [], eq: { weapon2: { set, slot: 'weapon', u: 1 } } };
+  for (const v of [0, 0.3, 0.6, 0.99]) assert.notEqual(pickSetSlot(set, inv, () => v), 'weapon', 'a set weapon worn as the 2nd counts as owned');
+  ok('role enemies spawn after every floor (older mob ids unchanged); set pieces see the 2nd weapon');
+}
+const partRolls = [];
+{ const real = g.dropLoot; g.dropLoot = function (p, src, ...a) { if (src?.def?.part) partRolls.push([p.id, src.type]); return real.call(this, p, src, ...a); }; }
 const at = (p, m, a, d) => { const A = m.face + a; p.x = m.x + Math.sin(A) * d; p.z = m.z + Math.cos(A) * d; p.face = angleTo(p.x, p.z, m.x, m.z); };
 g.time = 20;
 
@@ -101,21 +115,39 @@ g.time = 20;
   const hp2 = st.hp[0], whp = w.hp; g.damageMob(w, s, 50, {}); const dealt = whp - w.hp;
   assert.ok(Math.abs((hp2 - st.hp[0]) - dealt * PART.meleeMul) < 1e-6, 'melee from the front: x1.5');
   assert.ok(dealtR > 0 && dealtR < dealt, 'ranged from the front: x0.5');
+  { // a hit inside another hit (a Shatter Chorus out of a Break): each counts its own damage once
+    let once = true;
+    g.twistAfterHit = function (m) { if (once && m === w) { once = false; g.damageMob(w, s, 50, {}); } return Object.getPrototypeOf(g).twistAfterHit.call(this, m); };
+    const hpN = st.hp[0], whpN = w.hp; g.damageMob(w, s, 50, {});
+    delete g.twistAfterHit;
+    assert.ok(!once, 'the nested hit ran');
+    assert.ok(Math.abs((hpN - st.hp[0]) - (whpN - w.hp) * PART.meleeMul) < 1e-6, `nested hits not counted twice (${hpN - st.hp[0]} vs ${(whpN - w.hp) * PART.meleeMul})`);
+  }
   for (let i = 0; i < 400 && st.hp[0] > 0; i++) { w.hp = w.maxHp; g.damageMob(w, s, 80, {}); }
   assert.equal(st.hp[0], 0, 'horns broken');
   assert.equal(ev('bpart').length, 1); assert.equal(ev('bpart')[0].k, 'horns');
-  assert.ok(ev('loot').some(e => e.to === s.id) && ev('loot').some(e => e.to === r.id), 'a bonus loot roll for each fighter');
+  assert.equal(partRolls.length, 0, 'no bonus roll yet: it is paid when the boss dies');
   assert.ok(Math.abs(w.tm.charge.wind - wind0 * 1.35) < 1e-9, 'the charge winds up slower');
   clear(); w.windupAt = 0;
   assert.equal(g.wardenMove(w, 'sweep', null, [], () => null), g.time, 'no Horn Sweep any more (a combo step)'); assert.equal(ev('tele').length, 0);
   w.sweepT = 0; w.stunUntil = 0; w.busyUntil = 0; w.closeAt = -99; g.updateCombat(0.05); assert.equal(ev('tele').length, 0, 'nor from its own timer');
-  ok('Warden horns: front arc only, melee x1.5 / ranged x0.5, break -> callout, bonus loot, no Horn Sweep, slower charge');
+  ok('Warden horns: front arc only, melee x1.5 / ranged x0.5, nested hits once, break -> callout, no Horn Sweep, slower charge');
+
+  // a reset fight (wipe / walk-out) gives fresh parts but pays nothing; the kill pays the parts of the winning fight
+  g.fight = { ...g.fight, ids: new Set(g.fight.ids) };
+  const st2 = g.partsOf(w);
+  assert.ok(st2 !== st && st2.hp[0] === st2.max[0], 'a new fight: fresh parts');
+  at(s, w, 0.2, w.def.radius + 1.5);
+  for (let i = 0; i < 400 && st2.hp[0] > 0; i++) { w.hp = w.maxHp; w.staggerUntil = 0; g.damageMob(w, s, 80, {}); }
+  assert.equal(partRolls.length, 0, 'breaking parts again pays nothing by itself (no farming by resets)');
 
   // the finisher: a Team Burst kill
   clear(); g._tbIn = true; w.hp = 1; g.damageMob(w, s, 999, {}); g._tbIn = false;
   const fin = ev('finisher');
   assert.equal(fin.length, 1); assert.equal(fin[0].tb, 1); assert.ok(fin[0].ids.includes(s.id) && fin[0].ids.includes(r.id));
-  ok('a Team Burst kill on the Warden: finisher event for everyone in the fight');
+  assert.deepEqual(partRolls.map(([id]) => id).sort(), [s.id, r.id].sort(), 'the kill: one bonus roll per fighter for the broken horns');
+  assert.ok(partRolls.every(([, t]) => t === 'warden_horns'));
+  ok('a Team Burst kill on the Warden: finisher event for everyone in the fight; part rolls paid on the kill only');
 
   // a director show: no parts
   g.director = { running: true }; assert.equal(g.partsOn(), false); g.director = null;
@@ -129,6 +161,8 @@ g.time = 20;
   c.threat.set(p.id, 1);
   g.updateMob(c, 0.05);
   assert.ok(c.engaged && g.fight3, 'engaged');
+  g.updateParts(); assert.ok(c.bp && c.bp.fight === g.fight3 && c.bp.hp.every(h => h > 0), 'part state from the engage (pips from the start)');
+  assert.deepEqual(g.partsSnap().find(r => r[0] === c.id)?.[1], [100, 100]);
   c.face = 0; clear();
   const st = g.partsOf(c);
   for (const [a, k] of [[Math.PI / 2, 0], [-Math.PI / 2, 1]]) {
@@ -137,8 +171,12 @@ g.time = 20;
     assert.equal(st.hp[k], 0);
   }
   assert.equal(ev('bpart').length, 2);
+  const ep0 = c.ep || 0; let struck = 0;
+  g.f3Circle(c, p.x, p.z, 3, 0.5, 50, 'strike', 'colossus lightning'); // a strike already under way
+  const dp = g.damagePlayer; g.damagePlayer = function (...a) { struck++; return dp.apply(this, a); };
   g.updateParts();
   assert.equal(ev('kneel').length, 1); assert.ok(g.kneeling(c) && c.stunUntil >= g.time + 5.9);
+  assert.equal(c.ep, ep0 + 1); advance(0.6); delete g.damagePlayer; assert.equal(struck, 0, 'kneeling drops a strike under way');
   const snap = g.partsSnap(); assert.deepEqual(snap[0].slice(0, 2), [c.id, [0, 0]]); assert.ok(snap[0][2] > 5);
   Math.random = () => 0.5; p.crit = 0;
   c.hp = c.maxHp; const h0 = c.hp; g.damageMob(c, p, 100, {}); const kneelHit = h0 - c.hp;
@@ -158,11 +196,23 @@ g.time = 20;
   const boar = [...g.mobs.values()].find(m => m.type === 'ironboar');
   assert.ok(boar, 'Floor 1 has Ironhide Boars');
   p.x = boar.x; p.z = boar.z - 2; boar.face = angleTo(boar.x, boar.z, p.x, p.z);
-  clear(); boar.hp = boar.maxHp; g.damageMob(boar, p, 100, {});
+  clear(); boar.hp = boar.maxHp; boar.posture = 0; g.damageMob(boar, p, 100, {});
   assert.equal(boar.maxHp - boar.hp, 30, 'plate: 70% less'); assert.equal(ev('mrole')[0]?.k, 'plate');
+  assert.ok(Math.abs(boar.posture - 100 * (g.postureMul?.(p, boar) ?? 1)) < 1e-6, `posture from the uncut damage (${boar.posture})`);
+  boar.posture = 0;
   boar.hp = boar.maxHp; boar.staggerUntil = g.time + 2; boar.staggerBy = p.id; boar.switched = true;
   g.damageMob(boar, p, 100, {});
   assert.equal(boar.maxHp - boar.hp, 125, 'Broken: x1.25'); boar.staggerUntil = 0;
+  // a director show: the role enemies sit out, plate off; back after
+  g.director = { running: true }; g.roleShowBench();
+  assert.ok(boar.dead && boar.benched && [...g.mobs.values()].filter(m => ROLE_MOBS[m.type]).every(m => m.dead), 'a show: role enemies sit out');
+  assert.equal(g.plateMul(boar, p), 1, 'no plate in a show');
+  g.updateMob(boar, 0.05); assert.ok(boar.dead, 'and stay out');
+  g.director = null; g.roleShowBench(); g.updateMob(boar, 0.05);
+  assert.ok(!boar.dead && boar.hp === boar.maxHp, 'back after the show');
+  for (const m of g.mobs.values()) if (m.benched === false && m.dead && ROLE_MOBS[m.type]) m.deadUntil = 0;
+  for (const m of [...g.mobs.values()].filter(m => ROLE_MOBS[m.type] && m.dead)) g.updateMob(m, 0.05);
+  assert.ok([...g.mobs.values()].filter(m => ROLE_MOBS[m.type]).every(m => !m.dead), 'all of them');
 
   const bw = [...g.mobs.values()].find(m => m.type === 'bulwark');
   p.x = bw.x; p.z = bw.z - 2; bw.face = angleTo(bw.x, bw.z, p.x, p.z); clear();
@@ -190,8 +240,12 @@ g.time = 20;
   g.updateMob(hx, 0.05);
   assert.equal(hx.chan, null); assert.ok(hx.stunUntil >= g.time + HEXER.stun - 0.01, 'interrupted: stunned'); assert.equal(ev('mrole').at(-1).k, 'interrupt');
   hx.stunUntil = 0; hx.hexT = g.time - 1; const hpH = hx.hp = Math.round(hx.maxHp / 2);
+  const hx2 = [...g.mobs.values()].find(m => m.type === 'hexer' && m !== hx); hx2.x = hx.x + 2; hx2.z = hx.z; const hp2 = hx2.hp = Math.round(hx2.maxHp / 2);
   g.updateMob(hx, 0.05); advance(HEXER.channel + 0.05); g.updateMob(hx, 0.05);
   assert.ok(hx.hp > hpH, 'an uninterrupted channel heals'); assert.equal(ev('mrole').at(-1).k, 'mend');
+  assert.equal(hx2.hp, hp2, 'it never mends another Hexer');
+  hx.hp = Math.round(hx.maxHp / 2); assert.equal(g.hexMendable(hx, hx), false, 'one mend per mob per 10 s'); assert.equal(g.hexHurtAlly(hx), false);
+  advance(HEXER.healCd + 0.05); assert.equal(g.hexMendable(hx, hx), true);
   ok('Ironhide Boar plate (x0.3, x1.25 Broken); Bulwark shield (front x0.15, 6 s down after a Break); Harrier (no melee aloft; jump, swoop, range hit); Hexer (channel, 3 hits interrupt + stun, else it mends)');
   g.removePlayer(p);
 }
@@ -211,17 +265,39 @@ g.time = 20;
   p.cds[1] = g.time + 4;
   g.handle(p, { type: 'swap' });
   assert.equal(p.style, alt); assert.equal(ev('wswap').length, 1); assert.equal(p.cds[1], g.time + 4, 'cooldowns carry over');
-  assert.equal(p.chain?.k, SWAP.step, 'a swap is a chain step');
+  assert.ok(p.chain?.k !== SWAP.step && p.swapPend, 'no free chain step: pending until a hit lands');
+  const tgt = [...g.mobs.values()].find(m => m.type === 'wolf' && !m.dead);
+  g.damageMob(tgt, p, 5, {});
+  assert.ok(p.chain?.used.includes(SWAP.step) && !p.swapPend, 'a hit in the new style: the swap is a step');
   assert.equal(g.swapWeapon(p), false, '1 s cooldown');
   advance(SWAP.cd + 0.05);
   (p.chPress ||= {}).slash = g.time;
   assert.equal(g.swapWeapon(p), false, 'not mid-skill');
   advance(SWAP.busy + 0.05);
+  for (const [k, v] of [['rollUntil', g.time + 0.3], ['airUntil', g.time + 0.3], ['useUntil', g.time + 0.3], ['trap', { x: 1 }], ['pose', 'kneel']]) {
+    const old = p[k]; p[k] = v; assert.equal(g.swapBlock(p), 'busy', `no swap while ${k}`); p[k] = old;
+  }
   assert.equal(g.swapWeapon(p), true); assert.equal(p.style, style0);
+  advance(CHAIN_WINDOW + 0.1); assert.ok(p.swapPend, 'pending'); const c0 = JSON.stringify(p.chain);
+  g.damageMob(tgt, p, 5, {}); // too late: no step
+  assert.ok(!p.swapPend && JSON.stringify(p.chain) === c0, 'a hit long after the swap: no step');
+  { // a skill with delayed hits: busy until its last one
+    advance(SWAP.cd + 0.1); p.cds[1] = 0; p.chPress = {};
+    const sch = g.scheduled.length; g.useSkill(p, 1, 0);
+    const later = g.scheduled.slice(sch).reduce((a, s) => Math.max(a, s.at), 0);
+    if (later > g.time + SWAP.busy) { advance(SWAP.busy + 0.05); assert.equal(g.swapBlock(p), 'busy', 'mid-skill: its own delayed hits'); }
+    advance(3); p.chPress = {};
+  }
+  // a loadout that wears the spare swaps the two
+  const spare = p.inv.eq.weapon2, worn = p.inv.eq.weapon;
+  assert.deepEqual(g.applyLoadout(p, { eq: { weapon: spare.u } }), []); assert.equal(p.inv.eq.weapon, spare); assert.equal(p.inv.eq.weapon2, worn);
+  // two weapons of one style: never a step
+  const same = makeItem('weapon', 1, 'swordsman', Math.random, undefined, p.style); p.inv.bag.push(same); g.equip2(p, same.u);
+  advance(SWAP.cd + 0.1); assert.equal(g.swapWeapon(p), true); assert.equal(p.swapPend, null, 'same style: no step');
   const ally = makeItem('weapon', 1, 'cleric', Math.random); p.inv.bag.push(ally);
   g.equip2(p, ally.u); assert.notEqual(p.inv.eq.weapon2, ally, 'another class\'s weapon is refused');
   g.unequip(p, 'weapon2'); assert.equal(p.inv.eq.weapon2, null);
-  ok('weapon swap: equip2, swap changes the style, keeps cooldowns, chain step, 1 s apart, not mid-skill, own class only');
+  ok('weapon swap: equip2, style, cooldowns, a step only once a hit lands in the new style, 1 s apart, not mid-skill / roll / jump / trap / pose, loadouts, own class only');
   g.removePlayer(p);
 }
 

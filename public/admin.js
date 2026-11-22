@@ -609,7 +609,7 @@ function wireEditor() {
   $('s-set').onchange = setOpts; setOpts();
   $('s-add').onclick = () => patch({ ops: [{ op: 'addSet', set: $('s-set').value, slot: $('s-slot').value }] }, 'Set piece added.');
   // affix editor
-  const findIt = u => [...c.inv.bag, ...SLOTS.map(s => c.inv.eq[s])].find(it => it?.u === u);
+  const findIt = u => [...c.inv.bag, ...SLOTS.map(s => c.inv.eq[s]), c.inv.eq.weapon2].find(it => it?.u === u);
   for (const b of document.querySelectorAll('[data-axopen]')) b.onclick = () => {
     const it = findIt(+b.dataset.axopen);
     axEdit = axEdit?.u === it.u ? null : { u: it.u, ax: (it.ax || []).map(a => ({ ...a })), set: it.set || '' };

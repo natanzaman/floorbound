@@ -14,7 +14,8 @@ export function initClutch({ state, players, fx, sfx, callout, floatNum, slowMot
     }
     if (e.t === 'finisher') {
       if (!state.spectator && !(e.ids || []).includes(state.myId)) return true;
-      slowMotion(FINISHER.secs, FINISHER.scale); // (nothing under Reduce motion)
+      if (state.bossFallSlow !== e.id) slowMotion(FINISHER.secs, FINISHER.scale); // (nothing under Reduce motion; once per death: main.js 'die' may have played it)
+      state.bossFallSlow = 0;
       if (e.tb) callout('TEAM FINISHER', 'The Team Burst brought it down!', 1.6);
       return true;
     }

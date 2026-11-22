@@ -1,6 +1,7 @@
 // Enemies that force a role (docs/briefs/combat-quickwins.md 2). Appended to MOBS / MOB_IDS in shared/data.js after
 // every other table (append only, never reorder: the index is wire format). No imports (data.js imports this).
-//   plate: damage taken is cut by this share until its posture Breaks; while Broken it takes x plateBroken (Ironhide Boar).
+//   plate: damage taken is cut by this share until its posture Breaks (posture still builds from the uncut damage, so
+//     any class can Break it); while Broken it takes x plateBroken (Ironhide Boar).
 //   shell / shellArc / shieldBreak: a front shield (server/floor2.js f2DamageMod) over shellArc radians either side of
 //     its facing; a Break drops the shield for shieldBreak s (Mire Bulwark).
 //   aloft / swoopHit: a flyer (the harpy AI) that takes x aloft from close hits while it hovers; swoopHit: close hits
@@ -20,10 +21,17 @@ export const ROLE_MOBS = {
 };
 export const ROLE_BITE = { ironboar: [2.8, 0.75], bulwark: [3.2, 0.8] }; // [reach, half-angle]
 
-// Floor 1's field (Floors 2 and 3: F2_SPAWNS / F3_SPAWNS): [type, count, x range, z range]
-export const F1_ROLE_SPAWNS = [['ironboar', 3, [36, 58], [56, 90]]]; // (the meadow's east side, clear of the tests' spots near the road)
+// Where they live: [type, count, x range, z range]. Spawned after every floor and the labyrinths are set up, so every
+// older mob keeps its id (and its spot). They sit out director shows (server/mobroles.js), so filmed episodes are unchanged.
+export const ROLE_SPAWNS = [
+  ['ironboar', 3, [36, 58], [56, 90]], // Floor 1: the meadow's east side, clear of the tests' spots near the road
+  ['bulwark', 4, [540, 660], [60, 120]], // Floor 2
+  ['hexer', 4, [540, 660], [70, 140]],
+  ['harrier', 4, [1140, 1260], [50, 130]], // Floor 3
+];
 
 // The Mire Hexer: keeps its distance, throws a hex circle, and every `every` s channels a heal (`channel` s, a ring
 // telegraph of radius r) that restores `heal` of max health to every other mob within r. Interrupted (stunned, Broken,
 // an interrupting hit, a knock-back that cancels wind-ups, or `breakHits` hits during the channel): stunned `stun` s.
-export const HEXER = { keep: [7, 12], leash: 24, every: 10, first: 3, channel: 2.4, r: 12, heal: 0.25, breakHits: 3, stun: 2.5, boltWind: 1.4, boltR: 2.4, boltMult: 1.3 };
+// It never mends another caster or an elite, and a mob is mended at most once every `healCd` s (two Hexers can't chain).
+export const HEXER = { keep: [7, 12], leash: 24, every: 10, first: 3, channel: 2.4, r: 12, heal: 0.25, healCd: 10, breakHits: 3, stun: 2.5, boltWind: 1.4, boltR: 2.4, boltMult: 1.3 };

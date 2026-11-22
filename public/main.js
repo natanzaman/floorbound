@@ -793,7 +793,7 @@ function handleEvent(e) {
     }
     case 'die': {
       sfx.play('shatter', { x: e.x, z: e.z });
-      if (e.b && Math.hypot(e.x - state.x, e.z - state.z) < 60) slowMotion(0.7, 0.3); // the Warden falls
+      if (e.b && Math.hypot(e.x - state.x, e.z - state.z) < 60) { slowMotion(0.7, 0.3); state.bossFallSlow = e.id; } // the Warden falls (the finisher's beat that follows doesn't play it twice: public/clutch.js)
       if (state.lock === e.id) state.lock = 0;
       const bm = mobs.get(e.id);
       if (bm?.model.anim && !bm.dying) { // the boss collapses first, then shatters
