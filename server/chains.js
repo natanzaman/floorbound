@@ -65,10 +65,15 @@ export function installChains(Game) {
 
   wrap('useSkill', function (orig, p, slot, face) {
     const sk = CLASSES[p?.cls]?.skills[slot | 0], before = p?.cds?.[slot];
+    // The press time goes in before the skill runs: instant skills (Rush, Whirl, Ground Slam...) land their hits inside
+    // useSkill itself, so the step check in damageMob must already see this press. Put back if the skill didn't fire.
+    const prev = sk ? p.chPress?.[sk.id] : undefined;
+    if (sk) (p.chPress ||= {})[sk.id] = this.time;
     const out = orig.call(this, p, slot, face);
     if (sk && p.cds[slot] !== before && !p.dead) { // it was used
-      (p.chPress ||= {})[sk.id] = this.time;
       if (SUPPORT.has(sk.id) && !this.duelOf?.(p)) this.chainNote(p, sk.id, null);
+    } else if (sk) {
+      if (prev === undefined) delete p.chPress[sk.id]; else p.chPress[sk.id] = prev;
     }
     return out;
   });

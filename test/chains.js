@@ -136,6 +136,24 @@ const hit = (p, opts) => { if (opts.sk) press(p, opts.sk); flush(); const k = ev
   ok('a combo or Team Burst hit is never a chain step');
 }
 
+{ // live presses: instant skills (Rush, Whirl) land inside useSkill, and still count as steps
+  clear();
+  g.time += 10;
+  const s2 = mk('Swo2', 'swordsman'); s2.x = X; s2.z = Z - 1.5; s2.chain = null; s2.chPress = {};
+  const f = angleTo(s2.x, s2.z, mob.x, mob.z);
+  g.useSkill(s2, 1, f); // Rush through it
+  g.time += 0.5; s2.x = mob.x; s2.z = mob.z - 1.2;
+  g.useSkill(s2, 2, angleTo(s2.x, s2.z, mob.x, mob.z)); // Whirl
+  const e = ev('chain').filter(x => x.id === s2.id);
+  assert.ok(e.length >= 1 && e.at(-1).n === 2 && e.at(-1).k === 'cyclonecut', `Rush then Whirl by real presses: Cyclone Cut (${JSON.stringify(e)})`);
+  const cd = s2.cds[1]; s2.cds[1] = g.time + 9; const pr = s2.chPress.rush;
+  g.useSkill(s2, 1, 0); // still cooling: nothing fires, the old press stays
+  assert.equal(s2.chPress.rush, pr, 'a press that does not fire leaves the press time alone');
+  s2.cds[1] = cd;
+  g.removePlayer?.(s2);
+  ok('real presses of instant skills are chain steps (Rush -> Whirl: Cyclone Cut)');
+}
+
 // ---------- bots ----------
 {
   const sent = [];
