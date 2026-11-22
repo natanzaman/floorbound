@@ -19,7 +19,7 @@ import {
   TOWNS, TOWN_FLOORS, BOARD, TRADER, STAGES, STAGE_MAX, stageOf, stageName, stageProgress, TXP, BOT_RATE, TRICKLE, RAID,
   RAID_MOBS, raidLoss, raidWinXp, raidWaveSize, wardHpFor, UNLOCKS, PROJECTS, projectOf, matValue, projectNeed, projectDone,
   openProjects, activeUnlocks, plotSlots, clampTax, CITIZEN_DISCOUNT, priceMul, COOLDOWN, newCitizen, moveBlock, bountyDay, bountiesFor,
-  ELECTION, AGENDAS, BOT_CANDIDATES, NAMED_HOMES, NAMED_LEANS, LONERS, platformFor, cleanText, leanOf, botVote, tally,
+  ELECTION, AGENDAS, agendaOf, BOT_CANDIDATES, NAMED_HOMES, NAMED_LEANS, LONERS, platformFor, cleanText, leanOf, botVote, tally,
   pickByVote, pickByContrib, seedBracket, paperDuel, stewardProject, stewardTax, stewardMsg, isMat, DAY, HOUR,
 } from '../shared/towns.js';
 import { MOBS, inArena, resolveCollision, walkable } from '../shared/data.js';
@@ -27,7 +27,7 @@ import { MERCHANT } from '../shared/items.js';
 import { floorOf, inArena2, nearAwakeWaypoint, floorUnlocked } from '../shared/floor2.js';
 import { inArena3 } from '../shared/floor3.js';
 import { labAt } from '../shared/labyrinth.js';
-import { SPOT_BY_ID } from '../shared/life.js';
+import { SPOT_BY_ID, tileGrowth } from '../shared/life.js';
 import { MATS } from '../shared/crafting.js';
 import { NAMED_BY_ID } from '../shared/named.js';
 
@@ -35,7 +35,9 @@ const r2 = v => Math.round(v * 100) / 100;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const own = (o, k) => (o && Object.hasOwn(o, k) ? o[k] : undefined);
 const inBossRoom = p => inArena(p.x, p.z) || inArena2(p.x, p.z) || inArena3(p.x, p.z);
-const PAD = 1.5, MSG_GAP = 0.15, TOUR_WAIT = 120, SAVE_MS = 10000;
+const PAD = 1.5, MSG_GAP = 0.15, TOUR_WAIT = 120;
+const BOT_SEEN_MIN = 1800;     // s a free bot must be seen living in a town this cycle to vote, unless it's there at the close
+const BOT_VOTES_PER_CREATOR = 2; // free-bot votes counted per creator (only the first carries the creator's weight)
 const randIn = ([a, b], rnd = Math.random) => a + rnd() * (b - a);
 
 // A fresh town record (also what the table row holds).
@@ -57,10 +59,11 @@ export function cleanTown(f, row, now) {
   T.given = { gold: Math.max(0, +P.given?.gold || 0), mats: {} };
   for (const [k, v] of Object.entries(P.given?.mats || {})) if (isMat(k) && v > 0) T.given.mats[k] = v | 0;
   T.tax = clampTax(D.tax); T.msg = cleanText(D.msg, ELECTION.msgMax);
-  T.steward = D.steward && typeof D.steward.key === 'string' ? { key: D.steward.key, name: cleanText(D.steward.name, 32), kind: D.steward.kind, ag: AGENDAS[D.steward.ag] ? D.steward.ag : 'build', since: +D.steward.since || now } : null;
+  T.steward = D.steward && typeof D.steward.key === 'string' ? { key: D.steward.key, name: cleanText(D.steward.name, 32), kind: D.steward.kind, ag: Object.hasOwn(AGENDAS, D.steward.ag) ? D.steward.ag : 'build', since: +D.steward.since || now } : null;
   T.raidNext = +D.raidNext || T.raidNext; T.raidLast = D.raidLast || null;
   T.trickleAt = +D.trickleAt || now; T.el = D.el && Array.isArray(D.el.cands) ? D.el : null; T.last = D.last || null;
   T.tour = D.tour && Array.isArray(D.tour.rounds) ? D.tour : null;
+  if (T.tour) { T.tour.live = null; T.tour.at = now; T.tour.out ||= []; } // (a duel can't survive a restart: its match is fought again; at: wall-clock ms)
   return T;
 }
 const rowOf = T => ({
@@ -91,6 +94,18 @@ export const TownMethods = {
   },
   town(f) { return this.townsAll()[f] || null; },
   townKey(p) { return p.charId ? `c${p.charId}` : `s${p.sid}`; },
+  // Who may join, stand and vote: a saved character (anonymous players only on a server without accounts, where
+  // nothing is kept anyway: this.townsAnonOk).
+  townCitizenOk(p) { return !!p?.charId || !!this.townsAnonOk; },
+  // '' or why p can't vote or stand in town f's election now: a citizen since before it opened, at least ELECTION.minLvl.
+  townBallotBlock(p, f) {
+    const c = this.citizenOf(p), E = this.town(f).el;
+    if (!this.townCitizenOk(p)) return 'Only saved characters take part in town elections.';
+    if (c.home !== f) return `Only citizens of ${TOWNS[f].name} take part in its election.`;
+    if ((p.lvl || 1) < ELECTION.minLvl) return `You need level ${ELECTION.minLvl} to take part in town elections.`;
+    if (c.moved >= E.opens) return 'You moved here after this election opened: you take part in the next one.';
+    return '';
+  },
   citizenOf(p) { return (p.town ||= newCitizen()); },
   townFloorAt(x, z) { return labAt(x, z)?.floor || floorOf(x); },
   townChanged(T) { T.dirty = true; this.townsVer = (this.townsVer || 0) + 1; },
@@ -112,7 +127,13 @@ export const TownMethods = {
     }
     this.townsVer = (this.townsVer || 0) + 1;
   },
+  // One flush at a time: a call while one is in flight waits for it, then flushes what changed since (shutdown too).
   async townsFlush() {
+    while (this._townFlushP) await this._townFlushP;
+    this._townFlushP = this.townsFlushNow().finally(() => { this._townFlushP = null; });
+    return this._townFlushP;
+  },
+  async townsFlushNow() {
     if (!this.townStore || !this.towns) return;
     const writes = [];
     for (const T of Object.values(this.towns)) if (T.dirty) { T.dirty = false; writes.push(this.townStore.save(rowOf(T)).catch(e => { T.dirty = true; console.error('[towns] save failed:', e.message); })); }
@@ -128,8 +149,7 @@ export const TownMethods = {
     T.xp += who?.bot ? n * BOT_RATE : n;
     const after = stageOf(T.xp);
     if (after > before) this.townStageUp(T, after);
-    T.dirty = true;
-    if (Math.floor(T.xp) !== shown) this._townsBumped = true; // (the panels refresh when the shown number moves)
+    if (Math.floor(T.xp) !== shown) { T.dirty = true; this._townsBumped = true; } // (saved and shown when the shown number moves)
   },
   townStageUp(T, s) {
     const name = TOWNS[T.floor].name;
@@ -178,10 +198,11 @@ export const TownMethods = {
   townAction(p, msg) {
     if (!p || p.bot || !msg) return false;
     const op = String(msg.op || ''), f = msg.f | 0, T = this.town(f);
-    if (op === 'state') { p.townsDirty = true; return true; }
-    if (!T) return false;
+    if (op === 'state' && msg.watch !== undefined) p.townWatch = !!msg.watch; // the Town panel is open: every change comes
     if (this.time - (p.townMsgT ?? -9) < MSG_GAP) return false;
     p.townMsgT = this.time;
+    if (op === 'state') { p.townsDirty = true; return true; }
+    if (!T) return false;
     if (op === 'gate') return this.townGate(p, f);
     if (p.dead || Math.hypot(p.x - TOWNS[f].board.x, p.z - TOWNS[f].board.z) > BOARD.use + PAD) return false; // (everything else at the town's board)
     switch (op) {
@@ -196,13 +217,19 @@ export const TownMethods = {
     return false;
   },
   townJoin(p, f) {
+    if (!this.townCitizenOk(p)) { this.sys('Only saved characters can become citizens: sign in to keep a character.', p.id); return false; }
     const c = this.citizenOf(p), now = this.townNow(), why = moveBlock(c, f, now);
     if (why) { this.sys(why, p.id); return false; }
     const old = c.home;
     if (old) {
-      const O = this.town(old); O.citizens = Math.max(0, O.citizens - 1); this.townChanged(O);
+      const O = this.town(old), key = this.townKey(p); O.citizens = Math.max(0, O.citizens - 1); this.townChanged(O);
       const E = O.el; // leaving: your candidacy and vote there go
-      if (E) { E.cands = E.cands.filter(k => k.key !== this.townKey(p)); delete E.votes[this.townKey(p)]; }
+      if (E) { E.cands = E.cands.filter(k => k.key !== key); delete E.votes[key]; }
+      if (O.tour && !O.tour.out.includes(key)) O.tour.out.push(key); // (a tournament: you lose by walkover)
+      if (O.steward?.key === key) { // a Steward who moves away gives up the office
+        O.steward = null; O.tax = 0;
+        this.townSay(old, `${p.name} moved away and is no longer Steward of ${TOWNS[old].name}.`);
+      }
     }
     c.home = f; c.moved = now;
     this.town(f).citizens++;
@@ -234,16 +261,17 @@ export const TownMethods = {
     this.citizenOf(p).given += value;
     this.sys(`You gave ${[gold ? `${gold} gold` : '', ...gave].filter(Boolean).join(', ')} to the ${pr.name}.`, p.id);
     this.track(p, 'town_donate', { f, value });
-    this.townXp(f, Math.ceil(value / TXP.donate), p);
+    this.townXp(f, value / TXP.donate, p); // (fractions add up: no rounding a 1-gold gift up)
     this.invChanged(p); p.townsDirty = true;
     this.checkProject(T);
     this.townChanged(T);
     return true;
   },
   townStand(p, f, ag, plat) {
-    const T = this.town(f), E = T.el, key = this.townKey(p);
-    if (this.citizenOf(p).home !== f) { this.sys(`Only citizens of ${TOWNS[f].name} can stand for Steward there.`, p.id); return false; }
-    if (!AGENDAS[ag]) ag = 'build';
+    const T = this.town(f), E = T.el, key = this.townKey(p), why = this.townBallotBlock(p, f);
+    if (why) { this.sys(why, p.id); return false; }
+    if (T.tour) { this.sys('The tournament is on: stand in the next election.', p.id); return false; }
+    if (!Object.hasOwn(AGENDAS, ag)) ag = 'build';
     plat = cleanText(plat, ELECTION.platMax) || AGENDAS[ag].line;
     const had = E.cands.find(c => c.key === key);
     if (had) { had.ag = ag; had.plat = plat; had.name = p.name; }
@@ -256,9 +284,10 @@ export const TownMethods = {
     return true;
   },
   townWithdraw(p, f) {
-    const E = this.town(f).el, key = this.townKey(p), n = E.cands.length;
+    const T = this.town(f), E = T.el, key = this.townKey(p), n = E.cands.length;
     E.cands = E.cands.filter(c => c.key !== key);
     if (E.cands.length === n) return false;
+    if (T.tour && !T.tour.out.includes(key)) T.tour.out.push(key); // (a tournament: a withdrawn candidate loses by walkover)
     for (const [v, k] of Object.entries(E.votes)) if (k === key) delete E.votes[v];
     this.sys('You withdrew from the election.', p.id);
     this.townChanged(this.town(f)); p.townsDirty = true;
@@ -267,7 +296,8 @@ export const TownMethods = {
   townVote(p, f, k) {
     const T = this.town(f), E = T.el;
     if (T.tour) { this.sys('The vote is closed: the tournament is on.', p.id); return false; }
-    if (this.citizenOf(p).home !== f) { this.sys(`Only citizens of ${TOWNS[f].name} vote there.`, p.id); return false; }
+    const why = this.townBallotBlock(p, f);
+    if (why) { this.sys(why, p.id); return false; }
     if (!E.cands.some(c => c.key === k)) return false;
     E.votes[this.townKey(p)] = k;
     this.sys(`Your vote is in for ${E.cands.find(c => c.key === k).name}. You can change it until the election closes.`, p.id);
@@ -377,7 +407,7 @@ export const TownMethods = {
   platformAI(T, c) {
     const ai = this.townAI, def = NAMED_BY_ID[c.key.slice(2)], n = T.el.n;
     if (!ai?.platform || !def) return;
-    Promise.resolve(ai.platform(def, TOWNS[T.floor].name, AGENDAS[c.ag].line)).then(line => {
+    Promise.resolve(ai.platform(def, TOWNS[T.floor].name, agendaOf(c.ag).line)).then(line => {
       const s = cleanText(line, ELECTION.platMax);
       if (s && T.el?.n === n) { c.plat = s; this.townChanged(T); }
     }).catch(() => {});
@@ -391,7 +421,17 @@ export const TownMethods = {
       for (const c of E.cands) if (c.kind === 'player' && c.fr?.[id]) fr[c.key] = c.fr[id];
       out.push({ key, lean: NAMED_LEANS[id], fr, rap: E.rap[key] || {}, min: LONERS[id] || 0 });
     }
-    for (const [key, s] of Object.entries(E.seen)) out.push({ key, lean: s.lean, creator: s.creator || '', rap: E.rap[key] || {} });
+    // free bots: seen living here long enough this cycle, or here at the close; per creator, at most
+    // BOT_VOTES_PER_CREATOR votes, and only the first carries the creator's own weight
+    const here = new Set();
+    for (const b of this.players.values()) if (b.bot && !b.named && !b.dead && this.botHome(b) === T.floor) here.add(this.botKey(b));
+    const per = {};
+    for (const [key, s] of Object.entries(E.seen)) {
+      if ((s.t || 0) < BOT_SEEN_MIN && !here.has(key)) continue;
+      const cr = s.creator || '', n = cr ? (per[cr] = (per[cr] || 0) + 1) : 0;
+      if (n > BOT_VOTES_PER_CREATOR) continue;
+      out.push({ key, lean: s.lean, creator: n === 1 ? cr : '', rap: E.rap[key] || {} });
+    }
     return out;
   },
   electionVotes(T) {
@@ -406,7 +446,7 @@ export const TownMethods = {
     const rule = TOWNS[f].rule;
     if (rule === 'duel' && cands.length > 1) {
       const first = seedBracket(cands, t);
-      T.tour = { rounds: [first.map(([a, b]) => [a, b, ''])], round: 0, at: this.time, live: null, cands, t, voted: Object.keys(votes).length };
+      T.tour = { rounds: [first.map(([a, b]) => [a, b, ''])], round: 0, at: this.townNow(), live: null, out: [], cands, t, voted: Object.keys(votes).length }; // at: wall-clock ms (game time restarts with the server)
       this.sys(`The duel tournament for Steward of ${TOWNS[f].name} begins: ${first.map(([a, b]) => `${this.candName(T, a)} vs ${b ? this.candName(T, b) : 'a bye'}`).join(', ')}.`);
       this.townChanged(T);
       if (paper) this.tourRun(T, true);
@@ -439,7 +479,9 @@ export const TownMethods = {
   candLive(key) {
     for (const p of this.players.values()) {
       if (key.startsWith('n:') ? p.named !== key.slice(2) : p.bot || this.townKey(p) !== key) continue;
+      // free only on Floor 3, out of the labyrinths, boss rooms, fights and raids: nobody is pulled out of a run
       if (p.dead || p.downed || p.trap || p.trial || this.duelOf?.(p) || inBossRoom(p) || this.activeFightOf?.(p)) return null;
+      if (floorOf(p.x) !== 3 || labAt(p.x, p.z) || this.towns?.[3]?.raid) return null;
       return p;
     }
     return null;
@@ -455,7 +497,7 @@ export const TownMethods = {
         if (winners.length === 1) { this.electionDone(T, winners[0], 'duel', R.t, R.cands, R.voted); return; }
         const next = [];
         for (let i = 0; i < winners.length; i += 2) next.push([winners[i], winners[i + 1] || '', winners[i + 1] ? '' : winners[i]]);
-        R.rounds.push(next); R.round++; R.at = this.time; this.townChanged(T);
+        R.rounds.push(next); R.round++; R.at = this.townNow(); this.townChanged(T);
         continue;
       }
       const [a, b] = m;
@@ -463,13 +505,18 @@ export const TownMethods = {
       const ca = R.cands.find(c => c.key === a), cb = R.cands.find(c => c.key === b);
       if (paper) { m[2] = paperDuel(ca, cb, T.el.n); continue; }
       if (R.live) return; // a duel is on: tourDuelEnd fills it in
+      const gone = k => R.out?.includes(k); // withdrawn or moved away: a walkover
+      if (gone(a) || gone(b)) {
+        m[2] = gone(a) && gone(b) ? paperDuel(ca, cb, T.el.n) : gone(a) ? b : a;
+        R.at = this.townNow(); this.townChanged(T); continue;
+      }
       const pa = this.candLive(a), pb = this.candLive(b);
       if (pa && pb) { this.tourDuel(T, m, pa, pb); return; }
-      const waited = this.time - R.at, busy = (k, live) => !live && !k.startsWith('npc:') && this.candOnline(k);
+      const waited = (this.townNow() - R.at) / 1000, busy = (k, live) => !live && !k.startsWith('npc:') && this.candOnline(k);
       if (waited < TOUR_WAIT && (busy(a, pa) || busy(b, pb))) return; // online but busy (a fight, a trial): wait a while
       if (pa || pb) { m[2] = pa ? a : b; this.sys(`${(pa ? ca : cb).name} goes through: ${(pa ? cb : ca).name} did not come to the duel.`); }
       else { m[2] = paperDuel(ca, cb, T.el.n); this.sys(`${this.candName(T, m[2])} goes through to the next round of the tournament.`); }
-      R.at = this.time; this.townChanged(T);
+      R.at = this.townNow(); this.townChanged(T);
     }
   },
   tourDuel(T, m, pa, pb) {
@@ -489,7 +536,7 @@ export const TownMethods = {
       const side = [...d.f.values()].filter(f => f.side === won)[0];
       const p = side && this.players.get(side.id);
       if (m) m[2] = p ? (p.named ? `n:${p.named}` : this.townKey(p)) : paperDuel(R.cands.find(c => c.key === m[0]), R.cands.find(c => c.key === m[1]), T.el.n);
-      R.live = null; R.at = this.time; this.townChanged(T);
+      R.live = null; R.at = this.townNow(); this.townChanged(T);
     }
   },
 
@@ -554,9 +601,10 @@ export const TownMethods = {
     if (!mgr) return;
     const W = TOWNS[f].ward;
     for (const e of mgr.bots) {
-      if (e.b.closed || e.director) continue;
+      if (e.townDef && !this.towns?.[e.townDef]?.raid && e.townDef !== f) e.townDef = 0; // (left over from a raid that ended)
+      if (e.b.closed || e.director) { if (!on && e.townDef === f) e.townDef = 0; continue; } // (a director show took it: its order is the show's)
       const p = mgr.livePlayer(e);
-      if (!p || typeof e.b.command !== 'function') continue;
+      if (!p || typeof e.b.command !== 'function') { if (!on && e.townDef === f) e.townDef = 0; continue; }
       if (on) {
         if (floorOf(p.x) !== f || e.townDef) continue;
         const party = this.partyOf(p);
@@ -633,7 +681,7 @@ export const TownMethods = {
     const now = this.townNow(), towns = this.townsAll();
     // quests turned in to the Named: town XP (wrapped once, lazily: the quests module may come after the game)
     const Q = this.named?.quests;
-    if (Q && !Q._townHook) { Q._townHook = true; const orig = Q.complete.bind(Q); Q.complete = (p, id) => { const r = orig(p, id); if (p && !p.bot) this.townXp(this.townFloorAt(p.x, p.z), TXP.request, p); return r; }; }
+    if (Q && !Q._townHook) { Q._townHook = true; const orig = Q.complete.bind(Q); Q.complete = (p, id) => { const r = orig(p, id); if (r && p && !p.bot) this.townXp(this.townFloorAt(p.x, p.z), TXP.request, p); return r; }; }
     const homes = { 1: 0, 2: 0, 3: 0 };
     if (this.named) for (const f of Object.values(NAMED_HOMES)) homes[f]++;
     const liveBots = { 1: 0, 2: 0, 3: 0 };
@@ -646,8 +694,9 @@ export const TownMethods = {
       const key = this.botKey(b);
       if (!E.seen[key] && Object.keys(E.seen).length < 40) {
         const e = this.botMgr?.entryOf?.(b), cr = e?.creator, owner = cr?.pid ? this.players.get(cr.pid) : null;
-        E.seen[key] = { lean: leanOf(b.name), creator: owner ? this.townKey(owner) : cr?.charId ? `c${cr.charId}` : '' };
+        E.seen[key] = { lean: leanOf(b.name), creator: owner ? this.townKey(owner) : cr?.charId ? `c${cr.charId}` : '', t: 0 };
       }
+      if (E.seen[key]) E.seen[key].t = (E.seen[key].t || 0) + step;
     }
     for (const p of this.players.values()) {
       if (p.bot) continue;
@@ -661,8 +710,10 @@ export const TownMethods = {
         if (party) for (const id of party.members) {
           const b = this.players.get(id);
           if (!b?.bot) continue;
-          const bk = this.botKey(b), rap = (T.el.rap[bk] ||= {});
-          if (Object.keys(T.el.rap).length <= 48) rap[key] = (rap[key] || 0) + step;
+          const bk = this.botKey(b);
+          if (!T.el.rap[bk] && Object.keys(T.el.rap).length >= 48) continue;
+          const rap = (T.el.rap[bk] ||= {});
+          rap[key] = (rap[key] || 0) + step;
         }
       }
     }
@@ -691,12 +742,18 @@ export const TownMethods = {
     for (const p of this.players.values()) {
       const home = p.town?.home;
       if (!home || p.bot || !p.life?.plot || !this.unlocksOf(home).garden) continue;
-      for (const tile of p.life.plot) if (tile) { tile.boost = (tile.boost || 0) + step * 1000 * (UNLOCKS.garden.mult - 1); }
+      const lnow = this.lifeNow?.() ?? now;
+      let grew = false;
+      for (const tile of p.life.plot) if (tile && tileGrowth(tile, lnow) < 1) { tile.boost = (tile.boost || 0) + step * 1000 * (UNLOCKS.garden.mult - 1); grew = true; }
+      if (grew) p.dirty = true;
     }
     if (this._townsBumped) { this._townsBumped = false; this.townsVer = (this.townsVer || 0) + 1; }
-    if (this.townsVer !== this._townsSent) { // everyone's Town panel, at most once a second
-      this._townsSent = this.townsVer;
-      for (const p of this.players.values()) if (!p.bot) p.townsDirty = true;
+    if (this.townsVer !== this._townsSent) { // at most once a second: open Town panels get every change; everyone else
+      this._townsSent = this.townsVer;      // only what shows outside it (stage, unlocks, the Steward, prices, a raid)
+      const sig = JSON.stringify(TOWN_FLOORS.map(f => { const T = towns[f]; return [stageOf(T.xp), Object.keys(this.unlocksOf(f)), T.steward?.key || '', T.tax, !!T.raid]; }));
+      const all = sig !== this._townsSig;
+      this._townsSig = sig;
+      for (const p of this.players.values()) if (!p.bot && (all || p.townWatch)) p.townsDirty = true;
     }
   },
 
@@ -720,6 +777,7 @@ export const TownMethods = {
         },
         last: T.last ? { name: T.last.name, how: T.last.how, ago: Math.round((now - T.last.at) / 1000), voted: T.last.voted, tally: T.last.tally } : null,
         mul: r2(this.priceMulFor(p, f)),
+        why: this.townBallotBlock(p, f), // '' or why p can't vote or stand here now
         bounty: U.bounty ? (() => { const B = this.bountyState(p, f, now); return bountiesFor(f, bountyDay(now)).map((b, i) => ({ mob: b.mob, name: MOBS[b.mob]?.name || b.mob, n: b.n, gold: b.gold, prog: B.prog[i], got: B.got[i] })); })() : null,
       });
     }

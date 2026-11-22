@@ -321,8 +321,8 @@ function command(b, c) {
       return ack(c.k);
     }
     case 'stay': b.cmd = { ...base, k: 'stay', x: b.x, z: b.z }; return ack('stay');
-    case 'defend': b.cmd = { ...base, by: 0, k: 'stay', x: +c.x || b.x, z: +c.z || b.z, defend: 1 }; return say(b, 'defend', { who }, { force: true, text: `To the ward of ${c.byName || 'the town'}!` }); // a raid on a town (server/towns.js raidBots)
-    case 'release': if (b.cmd?.defend) b.cmd = null; return;
+    case 'defend': b.cmd = { ...base, by: 0, k: 'stay', x: +c.x || b.x, z: +c.z || b.z, defend: 1, prev: b.cmd?.defend ? b.cmd.prev : b.cmd || null }; return say(b, 'defend', { who }, { force: true, text: `To the ward of ${c.byName || 'the town'}!` }); // a raid on a town (server/towns.js raidBots)
+    case 'release': if (b.cmd?.defend) b.cmd = b.cmd.prev || null; return; // (back to the order it had before the raid)
     case 'tend': if (floorOf(b.x) !== 1) return ack('notFloor1'); b.cmd = { ...base, by: 0, k: 'stay', x: +c.x || b.x, z: +c.z || b.z, tend: 1 }; return ack('stay'); // hold at the garden (life classes: server/playerbots.js)
     case 'attack': {
       const m = b.mobs.find(m => m.id === c.tgt) || b.allMobs?.find(m => m.id === c.tgt && floorOf(m.x) === floorOf(b.x)); // (an order may name a mob out of sight)

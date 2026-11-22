@@ -201,7 +201,7 @@ export function bountiesFor(f, day) {
 }
 
 // ---------- elections ----------
-export const ELECTION = { days: 7, candMax: 8, platMax: 90, msgMax: 120 };
+export const ELECTION = { days: 7, candMax: 8, platMax: 90, msgMax: 120, minLvl: 5 }; // minLvl: to vote or stand (guess)
 export const AGENDAS = {
   build: { name: 'Build', line: 'Build the next project fast.', prefer: ['trader', 'bounty', 'stock', 'garden', 'plot', 'gate', 'discount'], cheapest: true, tax: 0.05,
     msgs: ['Every coin goes to the next building. Bring ore.', 'Donate at the board: the next project is close.'] },
@@ -211,6 +211,7 @@ export const AGENDAS = {
     msgs: ['Cheaper stock for citizens. Buy local.', 'The market is open. Trade here, not elsewhere.'] },
 };
 export const AGENDA_IDS = Object.keys(AGENDAS);
+export const agendaOf = ag => (Object.hasOwn(AGENDAS, ag) ? AGENDAS[ag] : AGENDAS.build);
 // Bot and Named candidates per town (1-2), with their agenda; npc: a citizen of the town who isn't a live bot.
 export const BOT_CANDIDATES = {
   1: [{ key: 'n:halvard', named: 'halvard', ag: 'defend' }, { key: 'npc:odessa', name: 'Odessa', ag: 'build', title: 'the Quartermaster' }],
@@ -227,7 +228,7 @@ export const PLATFORMS = {
   defend: ['Nobody gets left at the stop. The ward holds while I\'m here.', 'Raids come. We\'ll be ready when they do.', 'Every citizen home by dark. That\'s the whole platform.'],
   trade: ['Cheaper stock for citizens, and a market worth the walk.', 'Fair prices, full shelves, honest scales.', 'Let the coin flow and the town grows with it.'],
 };
-export const platformFor = (ag, seed = 0) => { const L = PLATFORMS[ag] || PLATFORMS.build; return L[Math.abs(seed | 0) % L.length]; };
+export const platformFor = (ag, seed = 0) => { const L = Object.hasOwn(PLATFORMS, ag) ? PLATFORMS[ag] : PLATFORMS.build; return L[Math.abs(seed | 0) % L.length]; };
 export const cleanText = (s, max) => String(s ?? '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, max);
 export const hashStr = s => { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 export const leanOf = name => AGENDA_IDS[hashStr(name) % AGENDA_IDS.length];
@@ -278,13 +279,13 @@ export function paperDuel(a, b, seed = 0) {
 }
 // A bot Steward's choices by its agenda: the next project, the tax, the pinned message.
 export function stewardProject(ag, open) {
-  const A = AGENDAS[ag] || AGENDAS.build;
+  const A = agendaOf(ag);
   if (!open.length) return '';
   if (A.cheapest) return [...open].sort((a, b) => costValue(a.cost) - costValue(b.cost))[0].id;
   return [...open].sort((a, b) => A.prefer.indexOf(a.unlock) - A.prefer.indexOf(b.unlock))[0].id;
 }
-export const stewardTax = ag => clampTax((AGENDAS[ag] || AGENDAS.build).tax);
-export const stewardMsg = (ag, n = 0) => { const L = (AGENDAS[ag] || AGENDAS.build).msgs; return L[Math.abs(n) % L.length]; };
+export const stewardTax = ag => clampTax(agendaOf(ag).tax);
+export const stewardMsg = (ag, n = 0) => { const L = agendaOf(ag).msgs; return L[Math.abs(n) % L.length]; };
 
 // The materials a donation may name: every known material id.
 export const isMat = id => Object.hasOwn(MATS, id);

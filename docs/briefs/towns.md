@@ -37,32 +37,38 @@ floor. Bots and the Named live in towns, vote, stand and defend. Graphics are on
   `TOWN_RAIDS=0` turns automatic raids off.
 - **Elections** (`ELECTION`): a cycle of 7 days. Candidates: citizens who stand at the board (agenda: Build, Defend or
   Trade, and a one-line platform) plus 1-2 bot or Named candidates per town (`BOT_CANDIDATES`). Citizens vote, one vote
-  per character per cycle, changeable until it closes. Bots and the Named vote by plain rules (`botVote`): agenda match,
+  per character per cycle, changeable until it closes. **Who takes part**: saved characters only (anonymous players
+  only on a server without accounts), level 5+, citizens since before the election opened (a newcomer waits for the
+  next one). Anonymous joins never count as citizens. Bots and the Named vote by plain rules (`botVote`): agenda match,
   friendship points with a player candidate (the Named), party time with a candidate this cycle (rapport), a bot's
   creator, a little for what a candidate gave; a candidate votes for itself; the loner Cairn only votes for a friend.
+  A free bot votes only if it lived in the town 30 min this cycle or is there at the close; per creator at most 2 bot
+  votes count, and only the first carries the creator's weight.
   - Floor 1: by vote (ties: what they gave, then who stood first).
   - Floor 2: by contribution (most given to town projects this cycle; bot candidates' pledges count).
   - Floor 3: a single-elimination duel tournament (seeded by votes, byes for the top seeds), using the duel system
     (`server/duels.js`, rule `half`). A match needs both online and free; one who is online but busy gets 2 minutes; one
-    who's away loses by walkover; both away (or an NPC candidate): decided on paper (level, what they gave, a fixed coin).
+    who's away, withdrew or moved away loses by walkover (no standing once the tournament is on); both away (or an NPC candidate): decided on paper (level, what they gave, a fixed coin).
   - **Platforms**: the Named write theirs through the AI mind when it's on and within the day's budget (one call per Named
     per election, `namedtalk.platform`); otherwise (and NPC candidates always) a line from `PLATFORMS`. No AI per vote.
 - **The Steward**: chooses the next project (what was given moves to the treasury, materials stay given), sets the tax
-  from -5% to +10% in 1% steps, pins a message on the board. A bot Steward governs by its agenda at once
+  from -5% to +10% in 1% steps, pins a message on the board. A Steward who moves to another town gives up the office (tax back to 0). A bot Steward governs by its agenda at once
   (`stewardProject`, `stewardTax`, `stewardMsg`). The Steward's name shows over the board.
 
 ## Wire
 - Client → server `{ type: 'town', op, f, ... }`: `state` (send me the panel), `join`, `donate { gold, mats }`,
   `stand { ag, plat }`, `withdraw`, `vote { k }`, `steward { project | tax | msg }`, `claim { i }` (a bounty), `gate`
   (from the waypoint panel). Everything but `state` and `gate` needs the player at that town's board; 0.15 s apart.
-- Server → client `{ type: 'towns', towns: [...], me: { home, move, given } }` when `p.townsDirty` (set for everyone at
-  most once a second after a change); raids in the snapshot `w.tr: [[floor, fighting, wave, waves, ward%, secs, raiders]]`;
+- Server → client `{ type: 'towns', towns: [...], me: { home, move, given } }` when `p.townsDirty`, at most once a
+  second: every change to a player with the Town panel open (`op: 'state', watch: 1/0`), and to everyone only when
+  what shows outside the panel changes (stage, unlocks, Steward, tax, a raid); raids in the snapshot `w.tr: [[floor, fighting, wave, waves, ward%, secs, raiders]]`;
   events `traid` (warn, tele with points, won, lost, gone), `townup`, `townbuilt`, `steward`.
 - Test hooks (TEST_HOOKS=1) `{ type: 'test', town: { skip: ms, xp: [f, n], mats: { id: n }, close: f, paper: 1, raid: f, raidEnd: [f, won] } }`.
 
 ## DB
 - `towns (floor INT PRIMARY KEY, xp, stage, treasury, projects JSONB, data JSONB, updated_at)`: one row per town, saved
-  every 10 s when changed (`TOWN_SAVE_MS`) and on shutdown. `characters.town JSONB`: home, moved, given, today's bounty
+  every 10 s when changed (`TOWN_SAVE_MS`) and on shutdown (one flush at a time; shutdown waits for one in flight,
+  then saves again). A tournament survives a restart without its live duel (that match is fought again). `characters.town JSONB`: home, moved, given, today's bounty
   progress. Both `IF NOT EXISTS` (safe to run twice). Citizen counts come from `characters.town` at start.
 
 ## Files

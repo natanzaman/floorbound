@@ -174,7 +174,9 @@ const sysTo = p => g.events.filter(e => e.t === 'sys' && (e.to === p.id || e.to 
 const step = secs => { for (let i = 0; i < Math.round(secs * 20); i++) g.update(0.05); };
 const act = (p, msg) => { g.time += 0.2; return g.handle(p, { type: 'town', ...msg }); }; // (past the rate limit)
 const atBoard = (p, f) => { p.x = TOWNS[f].board.x + 1; p.z = TOWNS[f].board.z + 1.5; };
-const fresh = (f = 1) => { const p = g.addPlayer(ws, `T${g.nextId}`, 'swordsman'); p.testWard = true; atBoard(p, f); p.inv.mats = {}; g.events.length = 0; return p; };
+let charSeq = 9000;
+const fresh = (f = 1) => { const p = g.addPlayer(ws, `T${g.nextId}`, 'swordsman'); p.charId = ++charSeq; p.lvl = 10; p.testWard = true; atBoard(p, f); p.inv.mats = {}; g.events.length = 0; return p; };
+const newCycle = f => { clock += 1000; g.electionOpen(f, g.townNow(), true); }; // (citizens from before it opened may take part)
 
 await t('towns start as Camps with a project and an election with bot and Named candidates', () => {
   const all = g.townsAll();
@@ -254,9 +256,16 @@ await t('bounties: kills on the floor count; claim at the board for gold and tow
 });
 
 await t('Floor 1 election: citizens stand and vote (changeable); the vote picks a player Steward', () => {
-  const T = g.town(1), a = fresh(), c = fresh(), out = fresh();
-  for (const p of [a, c]) act(p, { op: 'join', f: 1 });
+  const T = g.town(1), a = fresh(), c = fresh(), out = fresh(), low = fresh(), anon = fresh(), late = fresh();
+  low.lvl = 2; anon.charId = 0;
+  for (const p of [a, c, low]) act(p, { op: 'join', f: 1 });
+  assert.equal(act(anon, { op: 'join', f: 1 }), false, 'no citizenship without a saved character (a server with accounts)');
+  assert.equal(act(a, { op: 'stand', f: 1, ag: 'trade' }), false, 'joined after this election opened');
+  newCycle(1);
+  act(late, { op: 'join', f: 1 });
   assert.equal(act(out, { op: 'stand', f: 1, ag: 'trade' }), false, 'only citizens stand');
+  assert.equal(act(low, { op: 'stand', f: 1, ag: 'trade' }), false, 'a minimum level');
+  assert.equal(act(late, { op: 'vote', f: 1, k: 'n:halvard' }), false, 'moved in after it opened: the next one');
   assert.equal(act(a, { op: 'stand', f: 1, ag: 'trade', plat: '  Lower <b>prices</b>\n now ' }), true);
   const me = T.el.cands.find(x => x.key === g.townKey(a));
   assert.equal(me.plat, 'Lower bprices/b now');
@@ -290,7 +299,9 @@ await t('the Steward: next project, tax within limits (to the treasury), a pinne
 await t('Floor 2 election: the biggest giver wins, whatever the votes', () => {
   const T = g.town(2), rich = fresh(2), loud = fresh(2);
   clock += COOLDOWN;
-  for (const p of [rich, loud]) { act(p, { op: 'join', f: 2 }); act(p, { op: 'stand', f: 2, ag: 'build' }); }
+  for (const p of [rich, loud]) act(p, { op: 'join', f: 2 });
+  newCycle(2);
+  for (const p of [rich, loud]) act(p, { op: 'stand', f: 2, ag: 'build' });
   T.el.contrib[g.townKey(rich)] = 5000;
   act(loud, { op: 'vote', f: 2, k: g.townKey(loud) });
   g.electionClose(2);
@@ -309,17 +320,93 @@ await t('Floor 3 election: a duel tournament between the candidates (on paper wh
 await t('Floor 3 tournament: an online candidate fights; one who stays away loses by walkover', () => {
   const T = g.town(3), p = fresh(3);
   clock += COOLDOWN;
-  act(p, { op: 'join', f: 3 }); act(p, { op: 'stand', f: 3, ag: 'defend' });
+  act(p, { op: 'join', f: 3 }); newCycle(3); act(p, { op: 'stand', f: 3, ag: 'defend' });
   for (const c of T.el.cands) if (c.kind !== 'player') c.at = 1e15; // (the player is top seed: it meets a Named who isn't in the world)
   T.el.contrib[g.townKey(p)] = 900;
   g.electionClose(3);
   assert.ok(T.tour);
-  g.time += 1; g.tourRun(T);
+  // a restart mid-tournament: no stored duel is trusted, and the wait restarts on the wall clock
+  const saved = cleanTown(3, { xp: T.xp, projects: {}, data: { el: T.el, tour: { ...T.tour, live: { id: 77 }, at: 5 } } }, clock);
+  assert.equal(saved.tour.live, null); assert.equal(saved.tour.at, clock);
+  clock += 1000; g.tourRun(T);
   const r0 = T.tour?.rounds[0] || [];
   assert.ok(!T.tour || r0.some(m => m.includes(g.townKey(p))));
-  for (let i = 0; i < 6 && T.tour; i++) { g.time += 200; g.tourRun(T); }
+  for (let i = 0; i < 6 && T.tour; i++) { clock += 200e3; g.tourRun(T); }
   assert.equal(T.tour, null);
   assert.equal(T.steward.key, g.townKey(p), 'walkovers: the only one who came');
+});
+
+await t('Floor 3 tournament: a candidate who withdraws (or moves away) loses by walkover', () => {
+  const T = g.town(3), a = fresh(3), b = fresh(3);
+  clock += COOLDOWN;
+  for (const p of [a, b]) act(p, { op: 'join', f: 3 });
+  newCycle(3);
+  for (const p of [a, b]) act(p, { op: 'stand', f: 3, ag: 'build' });
+  T.el.cands = T.el.cands.filter(c => c.kind === 'player');
+  g.electionClose(3);
+  assert.ok(T.tour);
+  assert.equal(act(a, { op: 'stand', f: 3, ag: 'trade' }), false, 'no standing mid-tournament');
+  act(b, { op: 'withdraw', f: 3 });
+  g.tourRun(T);
+  assert.equal(T.tour, null); assert.equal(T.steward.key, g.townKey(a));
+});
+
+await t('a Steward who moves to another town gives up the office (tax back to 0)', () => {
+  const T = g.town(3), st = [...g.players.values()].find(p => g.townKey(p) === T.steward.key);
+  T.tax = 0.08;
+  clock += COOLDOWN; atBoard(st, 1);
+  assert.equal(act(st, { op: 'join', f: 1 }), true);
+  assert.equal(T.steward, null); assert.equal(T.tax, 0);
+});
+
+await t('donations: town XP keeps its fractions (no rounding a 1-gold gift up)', () => {
+  const T = g.town(2), p = fresh(2);
+  T.cur = PROJECTS[2].find(pr => !T.done.includes(pr.id) && pr.stage <= stageOf(T.xp))?.id || T.cur;
+  if (!projectOf(T.cur)) { T.done = []; T.cur = PROJECTS[2][0].id; T.given = { gold: 0, mats: {} }; }
+  p.gold = 100;
+  const x0 = T.xp;
+  for (let i = 0; i < 5; i++) act(p, { op: 'donate', f: 2, gold: 1 });
+  assert.ok(Math.abs(T.xp - x0 - 5 / TXP.donate) < 1e-9, `${T.xp - x0}`);
+});
+
+await t('bot voters: seen long enough (or here at the close); per creator a capped number, one with the creator\'s weight', () => {
+  const T = g.town(2), E = T.el;
+  E.seen = {};
+  for (let i = 0; i < 5; i++) E.seen[`b:Spam${i}`] = { lean: 'trade', creator: 'c42', t: 99999 };
+  E.seen['b:Brief'] = { lean: 'trade', creator: 'c43', t: 5 };
+  const voters = g.botVoters(T).filter(v => v.key.startsWith('b:'));
+  assert.equal(voters.length, 2, 'two per creator; the brief visitor not at all');
+  assert.deepEqual(voters.map(v => v.creator), ['c42', '']);
+});
+
+await t('saving: one flush at a time; a change made meanwhile is saved by the next', async () => {
+  const saved = [];
+  let release;
+  g.townStore = { save: r => { saved.push(r.floor); return new Promise(res => { release = res; }); } };
+  for (const T of Object.values(g.towns)) T.dirty = false;
+  g.town(1).dirty = true;
+  const a = g.townsFlush();
+  g.town(1).dirty = true; // changed while the first write is in flight
+  const b = g.townsFlush();
+  assert.deepEqual(saved, [1]);
+  release(); await new Promise(r => setTimeout(r, 0));
+  release(); await a; await b;
+  assert.deepEqual(saved, [1, 1]); assert.equal(g.town(1).dirty, false);
+  g.townStore = null;
+});
+
+await t('the towns message: an open panel gets every change, others only what shows outside it', () => {
+  const watcher = fresh(), idle = fresh();
+  for (const T of Object.values(g.towns)) { if (T.raid) g.raidEnd(T, 'gone'); T.raidNext = clock + 30 * DAY; T.tour = null; T.el.closes = clock + 30 * DAY; }
+  act(watcher, { op: 'state', watch: 1 });
+  step(1.2);
+  for (const p of [watcher, idle]) p.townsDirty = false;
+  g.townChanged(g.town(2)); g.town(2).el.voted = 1; step(1.2);
+  assert.equal(watcher.townsDirty, true); assert.equal(idle.townsDirty, false);
+  watcher.townsDirty = false;
+  g.townSetXp(2, STAGES[STAGE_MAX].xp); step(1.2);
+  assert.equal(idle.townsDirty, true, 'a new stage shows to everyone');
+  for (const p of [watcher, idle]) g.players.delete(p.id);
 });
 
 await t('raids: a warning, waves with telegraphs; an undefended ward falls and the town loses XP (bounded)', () => {
@@ -355,7 +442,7 @@ await t('raids: beaten, the town gains XP; none during a director show; none whe
   // nobody on Floor 3: due, but it waits
   for (const q of g.players.values()) if (q.x > 900) q.x = 0;
   g.town(3).raidNext = 0; step(1.2);
-  assert.equal(g.town(3).raid, null);
+  assert.ok(!g.town(3).raid);
 });
 
 await t('free bots on the floor hold the ward during a raid and are released after', () => {
@@ -429,7 +516,7 @@ try {
   const tok = (await call('POST', '/api/guest')).token;
   const ch = (await call('POST', '/api/characters', tok, { name: `Town${Math.random().toString(36).slice(2, 7)}`, cls: 'guardian' })).character;
   assert.ok(ch?.id, 'character made');
-  { const pool = new pg.Pool({ connectionString: DB }); await pool.query('UPDATE characters SET gold = 2000 WHERE id = $1', [ch.id]); await pool.end(); }
+  { const pool = new pg.Pool({ connectionString: DB }); await pool.query('UPDATE characters SET gold = 2000, lvl = 6 WHERE id = $1', [ch.id]); await pool.end(); }
   let c = client({ type: 'join', session: tok, character: ch.id });
   globalThis.lastSys = () => c.sys.slice(-8).join(' / ');
   await until(() => c.last.towns, 8000, 'towns message on join');
@@ -443,6 +530,10 @@ try {
   c.send({ type: 'town', op: 'donate', f: 1, gold: pr.cost.gold, mats: pr.cost.mats });
   await until(() => town(1).done.includes(pr.id), 4000, 'project built');
   await sleep(200);
+  c.send({ type: 'town', op: 'stand', f: 1, ag: 'defend' }); await sleep(300);
+  assert.ok(!town(1).el.cands.some(x => x.me) && /after this election opened/.test(town(1).why), 'new citizens wait for the next election');
+  c.send({ type: 'test', town: { close: 1 } }); // (a new cycle: now a citizen from before it opened)
+  await until(() => !town(1).why, 4000, 'eligible in the new cycle');
   c.send({ type: 'town', op: 'stand', f: 1, ag: 'defend', plat: 'Hold the ward.' });
   await until(() => town(1).el.cands.some(x => x.me), 4000, 'standing');
   await sleep(200);

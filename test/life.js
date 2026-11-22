@@ -343,9 +343,9 @@ try {
   await until(() => !life().act && c.last.inv?.mats?.meadowleaf >= 1, 6000, 'herbs gathered');
   assert.ok(life().spots[s.id] > 0, 'the spot is spent for us');
   await tp(MERCHANT);
-  const si = SHOP.findIndex(x => x.id === 'wheatseed');
+  const si = SHOP.findIndex(x => x.id === 'wheatseed'), seeds0 = c.last.inv?.mats?.wheatseed || 0; // (a herb patch may have dropped a Wheat Seed already)
   for (let k = 0; k < 3; k++) { c.send({ type: 'buy', i: si }); await sleep(120); }
-  await until(() => c.last.inv?.mats?.wheatseed === 3, 4000, 'seeds bought');
+  await until(() => c.last.inv?.mats?.wheatseed === seeds0 + 3, 4000, 'seeds bought');
   await tp(GARDEN);
   c.send({ type: 'life', a: 'plant', tile: 0, seed: 'wheatseed' }); await sleep(200);
   c.send({ type: 'life', a: 'plant', tile: 3, seed: 'wheatseed' });

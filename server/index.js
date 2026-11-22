@@ -337,6 +337,7 @@ accounts.onCharacterDeleted(id => game.guildCharGone(id)); // a deleted characte
 if (process.env.TEST_HOOKS) globalThis.floorbound = { game, bots, playerBots, localHub }; // testing aid: a test that imports this file reaches the live objects (test/localws.js)
 const aiMinds = installAI({ game, bots, server });
 game.townAI = aiMinds.namedTalk || null; // the Named's election platforms, when the AI mind is on (server/towns.js platformAI)
+game.townsAnonOk = !db.enabled; // towns: anonymous players join and vote only on a server without accounts (nothing is kept there)
 installDirectorAdmin({ server, director: game.director }); // /api/admin/director (admin page: Director tab)
 installNamedAdmin({ server, named }); // /api/admin/named (admin page: The Named card)
 installTownsAdmin({ server, game }); // /api/admin/towns (admin page: the Towns card)

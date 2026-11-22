@@ -9,7 +9,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PORT = int(os.environ.get('PORT', '3363'))
 SHOTS = os.path.join(ROOT, 'docs', 'briefs', 'towns-shots')
 CHROME = os.environ.get('CHROME') or next((p for p in ['/opt/pw-browsers/chromium-1243/chrome-linux64/chrome'] if os.path.exists(p)), None)
-srv = subprocess.Popen(['node', 'server/index.js'], cwd=ROOT, env={**os.environ, 'PORT': str(PORT), 'SPAWN_AT': '6,16', 'TEST_HOOKS': '1', 'DATABASE_URL': '',
+srv = subprocess.Popen(['node', 'server/index.js'], cwd=ROOT, env={**os.environ, 'PORT': str(PORT), 'SPAWN_AT': '6,16', 'START_LEVEL': '5', 'TEST_HOOKS': '1', 'DATABASE_URL': '',
                        'NAMED_ENABLED': '0', 'MAX_BOTS': '0', 'TOWN_RAIDS': '0'}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 n = 0
 def ok(name):
@@ -41,6 +41,10 @@ try:
         p.wait_for_function("() => __fb.towns.data()?.me?.home === 1 && document.querySelector('#town .body').textContent.includes('You live here')", timeout=10000)
         p.screenshot(path=os.path.join(SHOTS, 'town-tab.png'))
         ok('Join: a citizen of the Town of Beginnings')
+        p.click('#town .tabs button[data-t=vote]'); frames(2)
+        assert 'after this election opened' in S("() => document.querySelector('#town .body').textContent")
+        S("() => __fb.send({ type: 'test', town: { close: 1 } })")  # a new cycle: now a citizen from before it opened
+        p.wait_for_function("() => __fb.towns.data().towns[0].why === '' && document.getElementById('town-plat')", timeout=10000)
         p.click('#town .tabs button[data-t=vote]'); frames(2)
         assert S("() => document.querySelectorAll('#town .body .it').length") >= 2
         p.fill('#town-plat', 'Hold the ward, every night.')
