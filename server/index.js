@@ -137,7 +137,8 @@ function onConnection(ws) {
       game.joinWeapon = msg.weapon;
       try { return game.addPlayer(ws, msg.name, WEAPONS[msg.weapon].base); } finally { game.joinWeapon = null; }
     }
-    return game.addPlayer(ws, msg.name, msg.cls);
+    game.joinSub = typeof msg.sub === 'string' ? msg.sub : null; // a subclass from level 15 (bot runners, tests: server/subclasses.js)
+    try { return game.addPlayer(ws, msg.name, msg.cls); } finally { game.joinSub = null; }
   }
   let budget = 60; // simple flood guard: messages per second
   const refill = setInterval(() => { budget = 60; }, 1000);

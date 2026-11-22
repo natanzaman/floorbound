@@ -2,13 +2,16 @@
 // the training enemies' looks (makeAcademyMob, for world.js), the Ward Post and the fallen dummy, the trial HUD, and the
 // #academy panel (path, rank, trials, drills, armory, graduation, class change, the hall heads, classmates).
 // The server decides everything (server/academy.js); the panel asks with { type: 'academy', op, ... }.
+// Specialise (level 15+, server/subclasses.js): the subclasses of your class, the signature skill for slot 5 (sig()),
+// subclass names on nameplates and the Players list; the lectern behind the hall (atLectern / readLectern).
 import * as THREE from 'three';
 import { CLASSES, CLASS_IDS } from '/shared/data.js';
 import {
   ACADEMY, PENS, nearAcademy, WEAPONS, WEAPON_IDS, TRIALS, DRILLS, DRILL_IDS, DRILL_REWARD, MEDALS, MEDAL_COLORS, RANKS,
   INITIATE, HEADS, kitName, rankName, medalPoints, changeFee, trialBlock,
 } from '/shared/academy.js';
-import { YARD } from '/shared/academyyard.js';
+import { YARD, LECTERN, nearLectern } from '/shared/academyyard.js';
+import { SPEC, SUBCLASSES, subName, branchName } from '/shared/subclasses.js'; // specialisation (docs/briefs/subclasses.md)
 import { keyHtml, tapping } from '/keyname.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -79,6 +82,17 @@ function buildHall(scene, occluders) { // a small stone hall with a slate roof, 
   scene.add(g); occluders?.push(g);
   return g;
 }
+function buildLectern(scene) { // a dusty reading stand against the hall's back wall, an open book on it
+  const g = new THREE.Group(), wood = 0x5b3a22;
+  box(0.16, 1.05, 0.16, wood, 0, 0.52, 0, g);
+  box(0.6, 0.06, 0.45, wood, 0, 0.02, 0, g);
+  const top = box(0.75, 0.06, 0.55, wood, 0, 1.08, 0, g); top.rotation.x = -0.35;
+  const book = box(0.6, 0.05, 0.42, 0xe7dcc0, 0, 1.13, 0.02, g); book.rotation.x = -0.35;
+  g.position.set(LECTERN.x, 0, LECTERN.z);
+  g.rotation.y = Math.atan2(LECTERN.x, LECTERN.z); // (faces away from the hall)
+  scene.add(g);
+  return g;
+}
 function buildYard(scene) { // each pen: sand floor, a low stone wall round it, posts at the corners
   const g = new THREE.Group(), S = YARD.size;
   const floorM = mat(0xc9b48a), wallM = mat(0x8d8577), postM = mat(0x6b4f33);
@@ -140,6 +154,9 @@ const CSS = `
 #trialhud .tiers { display: flex; justify-content: center; gap: 10px; font-size: 11px; opacity: .8; }
 #trialhud button { margin-top: 4px; padding: 3px 10px; border-radius: 7px; border: 1px solid rgba(255,255,255,.3); background: transparent; font-size: 11px; }
 .lbl.npc.academy { color: #fde68a; }
+#academy .spec { margin: 4px 0; } #academy .spec .sig { display: block; font-size: 11px; color: #fde68a; opacity: .9; margin-top: 2px; }
+#academy .row.on { background: rgba(233,185,73,.1); border-radius: 8px; }
+#academy .hb { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 #create .wpn { text-align: left; } #create .wpn .leads { display: block; font-size: 11px; opacity: .7; margin-top: 3px; }
 #create .dev-cls h5 { margin: 10px 0 4px; font-size: 11px; opacity: .6; font-weight: 600; letter-spacing: .04em; }
 `;
@@ -148,6 +165,7 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
   const style = document.createElement('style'); style.textContent = CSS; document.head.appendChild(style);
   buildHall(scene, occluders);
   buildYard(scene);
+  buildLectern(scene);
   const post = buildPost(), fallen = buildFallen(); scene.add(post, fallen);
   const panel = document.createElement('div'); panel.id = 'academy'; panel.className = 'panel hidden'; panel.dataset.nav = 'academy';
   $('bag').parentNode.appendChild(panel);
@@ -157,7 +175,7 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
   $('labels').appendChild(lbl);
   const postLbl = document.createElement('div'); postLbl.className = 'lbl npc'; postLbl.style.display = 'none';
   $('labels').appendChild(postLbl);
-  const ui = { confirm: '', html: '', ac: null };
+  const ui = { confirm: '', html: '', ac: null, hb: { c: 0, s: 0, b: 0 } };
 
   const A = () => state.academy || null; // the last `path` message
   const ini = () => !!A()?.ini;
@@ -173,10 +191,21 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
   const kitPath = () => (ini() ? { stage: 'initiate' } : null);
   const name = i => kitName(kitPath(), state.cls, i); // an Initiate's plain skill names (null: the normal ones)
   const locked = i => ini() && i === INITIATE.lockedSlot;
-  const label = () => (ini() ? `Initiate · ${WEAPONS[A().path?.weapon]?.name || ''}` : CLASSES[state.cls]?.name || '');
-  // Roster rows: "Initiate · Sword", else the class with its rank from Adept up.
-  const rosterLabel = r => (r?.ini ? `Initiate · ${WEAPONS[r.ini]?.name || ''}` : `${r?.rk ? `${rankName(r.rk)} ` : ''}${CLASSES[r?.cls]?.name || ''}`);
-  const plateTag = r => (r?.ini ? ' <small class="ttl" style="color:#fde68a">Initiate</small>' : r?.rk ? ` <small class="ttl" style="color:#fde68a">${esc(rankName(r.rk))}</small>` : '');
+  const spec = () => A()?.spec || null; // specialisation (server/subclasses.js specMsg)
+  const label = () => (ini() ? `Initiate · ${WEAPONS[A().path?.weapon]?.name || ''}` : subName(spec()?.sub) || CLASSES[state.cls]?.name || '');
+  // Roster rows: "Initiate · Sword", else the subclass (or class) with its rank from Adept up.
+  const rosterLabel = r => (r?.ini ? `Initiate · ${WEAPONS[r.ini]?.name || ''}` : `${r?.rk ? `${rankName(r.rk)} ` : ''}${subName(r?.sub) || CLASSES[r?.cls]?.name || ''}`);
+  const plateTag = r => {
+    if (r?.ini) return ' <small class="ttl" style="color:#fde68a">Initiate</small>';
+    const t = [r?.rk ? rankName(r.rk) : '', subName(r?.sub)].filter(Boolean).join(' ');
+    return t ? ` <small class="ttl" style="color:#fde68a">${esc(t)}</small>` : '';
+  };
+  // Slot 5 (main.js): the signature skill { id, name, desc, cd, aim, anim }, or null before a specialisation.
+  const sig = () => (!ini() && !A()?.loan ? spec()?.sig || null : null);
+  const SIG_ANIM = Object.fromEntries(Object.values(SUBCLASSES).map(S => [S.skill.id, S.skill.anim]));
+  const sigAnim = id => SIG_ANIM[id] || null;
+  const atLectern = () => !state.dead && !state.spectator && state.joined && !inTrial() && nearLectern(state.x, state.z);
+  const readLectern = () => { send({ type: 'academy', op: 'lectern' }); sfx?.play('ui'); };
 
   // ---------- the panel ----------
   function render() {
@@ -208,6 +237,7 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
       else if (m && !cur) { const fee = changeFee(lvl); act += ui.confirm === cls ? `<button class="warn" data-a="change" data-id="${cls}">Confirm (${fee}g)</button>` : `<button data-a="askchange" data-id="${cls}" ${gold < fee ? 'disabled' : ''} title="Mastery and talents stay with each class">Change class · ${fee}g</button>`; }
       h += `<div class="row">${medalDot(m)}<span class="nm"><b style="color:${hex(CLASSES[cls].color)}">${esc(CLASSES[cls].name)}</b> · ${esc(T.name)}${cur ? ' <small style="display:inline">(your class)</small>' : ''}<small>${esc(T.goal)} Bronze / Silver / Gold: ${T.tiers.join(' / ')}${esc(T.unit)}.</small></span>${act}</div>`;
     }
+    h += specHtml(a, lvl, gold);
     h += `<h4>Drills</h4><p class="note">Open to everyone. Each medal pays once: ${DRILL_REWARD.slice(1).map((r, i) => `${MEDALS[i + 1]} ${r.gold}g${r.cons ? ' + ' + Object.keys(r.cons).join(', ') : ''}`).join(' · ')}.</p>`;
     for (const id of DRILL_IDS) {
       const D = DRILLS[id], m = P?.drills?.[id] | 0;
@@ -220,6 +250,28 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
     h += '</div>';
     if (h !== ui.html) { panel.innerHTML = ui.html = h; }
   }
+  // ---------- Specialise (level 15+) ----------
+  function specHtml(a, lvl, gold) {
+    const S = a.spec;
+    if (ini() || !S) return '';
+    if (lvl < S.lvl) return `<h4>Specialise</h4><p class="note">At level ${S.lvl} you choose one of your class's two specialisations: two new talents and a signature skill for a 5th slot.</p>`;
+    let h = `<h4>Specialise</h4><p class="note">${S.sub ? `Changing costs ${S.fee}g.` : 'Your first choice is free.'} Each one adds two talents to its branch of your tree and a signature skill (slot 5, ${tapping() ? 'its button' : keyHtml('skill4')}).</p>`;
+    for (const id of S.opts) {
+      const D = SUBCLASSES[id], cur = S.sub === id, sk = D.skill;
+      let act = '';
+      if (!cur) act = ui.confirm === `s:${id}` ? `<button class="warn" data-a="spec" data-id="${id}">Confirm${S.sub ? ` (${S.fee}g)` : ''}</button>` : `<button class="go" data-a="askspec" data-id="${id}" ${S.sub && gold < S.fee ? 'disabled' : ''}>${S.sub ? `Change · ${S.fee}g` : 'Specialise'}</button>`;
+      h += `<div class="row spec ${cur ? 'on' : ''}"><span class="nm"><b>${esc(D.name)}</b> · ${esc(branchName(D.cls, D.branch))} branch${cur ? ' <small style="display:inline">(yours)</small>' : ''}<small>${esc(D.blurb)}</small><span class="sig">${esc(sk.name)} (${sk.cd} s): ${esc(sk.desc)}</span></span>${act}</div>`;
+    }
+    const H = S.hid; // (only sent once found: its words come from the server)
+    if (H && H.from?.length) {
+      const hb = ui.hb, F = H.from[hb.c % H.from.length], sk = F.skills[hb.s % F.skills.length], br = F.branches[hb.b % F.branches.length];
+      const cur = H.on && H.on.c === F.cls && H.on.sk === sk.id && H.on.br === br.id;
+      h += `<div class="row spec ${H.on ? 'on' : ''}"><span class="nm"><b>${esc(H.name)}</b>${H.on ? ' <small style="display:inline">(yours)</small>' : ''}<small>${esc(H.text)}</small>
+        <span class="hb"><button data-a="hb" data-k="c">${esc(F.name)} ▸</button><button data-a="hb" data-k="s">${esc(sk.name)} ▸</button><button data-a="hb" data-k="b">${esc(br.name)} ▸</button></span></span>
+        ${cur ? '' : ui.confirm === 'h' ? `<button class="warn" data-a="hid" data-c="${F.cls}" data-s="${sk.id}" data-b="${br.id}">Confirm${S.sub || H.on ? ` (${S.fee}g)` : ''}</button>` : `<button class="go" data-a="askhid" ${(S.sub || H.on) && gold < S.fee ? 'disabled' : ''}>Choose</button>`}</div>`;
+    }
+    return h;
+  }
   panel.addEventListener('click', e => {
     const b = e.target.closest('button[data-a]'); if (!b) return;
     const a = b.dataset.a, id = b.dataset.id;
@@ -227,12 +279,17 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
     if (a === 'close') return toggle(false);
     if (a === 'leave') { send({ type: 'academy', op: 'leave' }); return toggle(false); }
     if (a === 'askgrad' || a === 'askchange') { ui.confirm = id; return render(); }
+    if (a === 'askspec') { ui.confirm = `s:${id}`; return render(); }
+    if (a === 'askhid') { ui.confirm = 'h'; return render(); }
+    if (a === 'hb') { const k = b.dataset.k; ui.hb[k]++; if (k === 'c') ui.hb.s = ui.hb.b = 0; ui.confirm = ''; return render(); }
     ui.confirm = '';
     if (a === 'weapon') send({ type: 'academy', op: 'weapon', w: b.dataset.w });
     else if (a === 'trial' || a === 'drill') send({ type: 'academy', op: a, id });
     else if (a === 'graduate' || a === 'change') send({ type: 'academy', op: a, cls: id });
     else if (a === 'talk') send({ type: 'academy', op: 'talk', cls: id });
     else if (a === 'cohort') send({ type: 'academy', op: 'cohort' });
+    else if (a === 'spec') send({ type: 'academy', op: 'specialise', sub: id });
+    else if (a === 'hid') send({ type: 'academy', op: 'specialise', sub: state.academy?.spec?.hid?.id, borrow: { c: b.dataset.c, sk: b.dataset.s, br: b.dataset.b } });
     render();
   });
   hud.addEventListener('click', e => { if (e.target.closest('[data-a=leave]')) send({ type: 'academy', op: 'leave' }); });
@@ -252,6 +309,11 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
         if (e.medal) { banner(`${MEDALS[e.medal].toUpperCase()} MEDAL`, `${e.n}: ${e.sc}${e.pass ? ' · trial passed' : ''}`); sfx?.play('levelup'); }
         else if (e.result !== 'quit') callout(`${e.n}: not passed`, e.why || '', 'warn');
       } else if (e.op === 'open') { banner('CLASS TRIALS OPEN', 'Visit the Academy in the Town of Beginnings'); tip('academy'); }
+      return true;
+    }
+    if (e.t === 'spec' && e.id === state.myId) {
+      if (e.found) { banner('A NEW CHOICE', 'Open the Academy\'s Specialise section'); sfx?.play('levelup'); }
+      else { banner(e.n ? e.n.toUpperCase() : 'YOUR OWN ROAD', e.n ? 'Your signature skill is in slot 5; two new talents wait in your tree' : 'A borrowed skill is in slot 5'); sfx?.play('levelup'); }
       return true;
     }
     if (e.t === 'grad' && e.id === state.myId) {
@@ -292,7 +354,7 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
     }
   }
 
-  return { near, inTrial, toggle, isOpen, render, onMessage, event, snapMe, frame, name, locked, label, rosterLabel, plateTag };
+  return { near, inTrial, toggle, isOpen, render, onMessage, event, snapMe, frame, name, locked, label, rosterLabel, plateTag, sig, sigAnim, atLectern, readLectern, spec };
 }
 
 // ---------- the creation screen: weapon cards ----------

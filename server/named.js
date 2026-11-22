@@ -405,6 +405,7 @@ export class NamedManager {
       if (L.evolved && !m.br) m.br = defaultBranch(sk);
     }
     g.autoSpendTalents?.(p);
+    g.botSpecialise?.(p, st.def.sub); // their subclass from level 15 (shared/named.js `sub`, server/subclasses.js)
     g.recompute(p); p.hp = p.maxHp;
     p.invDirty = true; p.masteryDirty = true; p.masteryNow = true;
     g.setLook?.(p, st.def.look?.id); // their look (I2: shared/looks.js), on every join

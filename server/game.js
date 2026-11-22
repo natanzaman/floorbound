@@ -49,6 +49,7 @@ import { installTargeting } from './targeting.js'; // targeting modes + cleave (
 import { installLife } from './life.js'; // life classes: gathering, the garden, cooking, alchemy, meals (docs/briefs/life-classes.md)
 import { GARDEN } from '../shared/life.js';
 import { installAcademy } from './academy.js'; // Initiates, class trials, drills, ranks, cohorts (docs/briefs/academy.md)
+import { installSubclasses } from './subclasses.js'; // subclasses at level 15, signature skills in slot 5 (docs/briefs/subclasses.md)
 import { rollGear } from '../shared/loot.js'; // affixes, boss sets, loadouts, drop tables (H2)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
@@ -128,7 +129,7 @@ export class Game {
     const [x, z] = this.spawnPoint();
     const p = {
       id: this.id(), ws, name, cls, lvl: 1, xp: 0, x, z, face: 0, dead: false, respawnAt: 0,
-      cds: [0, 0, 0, 0], dr: { until: 0, v: 0 }, dmg: { until: 0, v: 0 }, party: null,
+      cds: [0, 0, 0, 0, 0], dr: { until: 0, v: 0 }, dmg: { until: 0, v: 0 }, party: null,
       posSeq: 0, lastMoveT: this.time, lastHurt: -99, invite: null, dodgeCd: 0, rollUntil: 0, iframeUntil: 0, combo: 0, lastBasic: -9, jumpCd: 0, airFrom: 0, airUntil: 0,
       gold: 0, inv: newInventory(), consCd: {}, tonicUntil: 0, draughtUntil: 0, lfg: false,
       sid: crypto.randomBytes(6).toString('hex'), joinedAt: this.time, kills: 0, deaths: 0, switches: 0, trackN: 0,
@@ -611,6 +612,7 @@ export class Game {
 
   useSkill(p, slot, face) {
     if (p.dead || p.guarding) return; // a guarding Guardian can't attack
+    if ((slot | 0) === 4) return this.useSignature?.(p, face); // slot 5: a subclass's signature skill (server/subclasses.js)
     const sk = CLASSES[p.cls].skills[slot];
     if (!sk || p.lvl < sk.lvl || this.time < p.cds[slot]) return;
     if (this.kitLocked?.(p, slot)) return; // an Initiate's level-3 skill opens at graduation (server/academy.js)
@@ -1532,6 +1534,7 @@ installNamed(Game); // the Named: humans-first rules, friendship, invites by tie
 installRescue(Game); // rescue traps (server/rescue.js); after the Named: its trap-object and crystal wrappers sit outside everyone's
 installDuels(Game); // duels (server/duels.js): outside the damage, heal and skill wrappers above, so a stand-in's hits skip them
 installAcademy(Game); // the Academy: Initiates, trials, drills, ranks, cohorts (server/academy.js); outside the skill, damage and heal wrappers
+installSubclasses(Game); // subclasses (server/subclasses.js); after the Academy (wraps its initPath, swapClass, markPath, pathMsg, academyOp)
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last
 if (process.env.TUNE_STATS) installTuneStats(Game); // testing aid (scripts/tuneboss.js): log boss moves used and hits taken; outermost
 

@@ -2,6 +2,7 @@
 // class ranks, the hall heads and cohorts. Data and pure rules, shared by the server (server/academy.js), the client
 // (public/academy.js, the creation screen) and the tests. The yard and its enemies: shared/academyyard.js.
 import { CLASSES, MAX_LEVEL } from './data.js';
+import { cleanSubs, cleanBorrow } from './subclasses.js'; // specialisation at level 15 (docs/briefs/subclasses.md)
 export { ACADEMY, YARD, PENS, nearAcademy, penAt, inYard } from './academyyard.js';
 
 // ---------- weapons ----------
@@ -152,7 +153,8 @@ export function cohortClasses(playerCls, botWeapons) {
 
 // ---------- the path record (characters.path) ----------
 // { stage: 'initiate' | 'class', weapon, trials: { cls: medal }, drills: { id: medal }, keep: { cls: { mastery, talents } },
-//   cohort: [bot names], armed (the starter weapon was given), enrolled (first Academy visit done), paid: { drill: medal paid } }
+//   cohort: [bot names], armed (the starter weapon was given), enrolled (first Academy visit done), paid: { drill: medal paid },
+//   subs: { cls: subclass id } (shared/subclasses.js: specialised at level 15, per class) }
 export function newPath(weapon, stage = 'initiate') {
   return { stage, weapon: isWeapon(weapon) ? weapon : 'sword', trials: {}, drills: {}, keep: {}, cohort: [], armed: 0, enrolled: 0, paid: {}, gear: {} };
 }
@@ -174,6 +176,9 @@ export function cleanPath(raw) {
   p.cohort = Array.isArray(raw.cohort) ? raw.cohort.filter(s => typeof s === 'string').map(s => s.slice(0, 16)).slice(0, COHORT_MAX) : [];
   p.armed = raw.armed ? 1 : 0; p.enrolled = raw.enrolled ? 1 : 0;
   if (raw.gear && typeof raw.gear === 'object' && !Array.isArray(raw.gear)) for (const [w, u] of Object.entries(raw.gear)) if (isWeapon(w) && Number.isInteger(u)) p.gear[w] = u;
+  const subs = cleanSubs(raw.subs); if (Object.keys(subs).length) p.subs = subs; // (absent until a first specialisation)
+  if (raw.found) p.found = 1;
+  const wb = cleanBorrow(raw.wb); if (Object.keys(wb).length) p.wb = wb;
   return p;
 }
 

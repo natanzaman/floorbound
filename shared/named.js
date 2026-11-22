@@ -89,7 +89,7 @@ export const GROUPS = {
 // server/looks.js; lookSwatch(def.look.id) in public/looks.js draws its badge); look.color is the plain portrait colour.
 export const NAMED = [
   {
-    id: 'halvard', name: 'Halvard', cls: 'guardian', style: 'shield', group: 'heroes', role: 'Tank',
+    id: 'halvard', name: 'Halvard', cls: 'guardian', style: 'shield', sub: 'bulwark', group: 'heroes', role: 'Tank',
     look: { id: 'halvard', color: 0xe0a53a },
     home: { floor: 1, zone: 'the Verdant Field' },
     blurb: 'Captain of the Hearthward. Counts heads before every pull.',
@@ -97,7 +97,7 @@ export const NAMED = [
     trust: HERO_TRUST,
   },
   {
-    id: 'maribel', name: 'Maribel', cls: 'cleric', style: 'staff', group: 'heroes', role: 'Healer',
+    id: 'maribel', name: 'Maribel', cls: 'cleric', style: 'staff', sub: 'lightbringer', group: 'heroes', role: 'Healer',
     look: { id: 'maribel', color: 0x7fd6a4 },
     home: { floor: 1, zone: 'the Verdant Field' },
     blurb: 'The Hearthward\'s healer. Remembers who skipped their potions.',
@@ -105,7 +105,7 @@ export const NAMED = [
     trust: HERO_TRUST,
   },
   {
-    id: 'tovin', name: 'Tovin', cls: 'ranger', style: 'longbow', group: 'heroes', role: 'Damage',
+    id: 'tovin', name: 'Tovin', cls: 'ranger', style: 'longbow', sub: 'sharpshooter', group: 'heroes', role: 'Damage',
     look: { id: 'tovin', color: 0x4fc3d9 },
     home: { floor: 1, zone: 'the Verdant Field' },
     blurb: 'The Hearthward\'s archer. Keeps score of everything.',
@@ -113,7 +113,7 @@ export const NAMED = [
     trust: HERO_TRUST,
   },
   {
-    id: 'sennet', name: 'Sennet', cls: 'lancer', style: 'halberd', group: 'heroes', role: 'Damage',
+    id: 'sennet', name: 'Sennet', cls: 'lancer', style: 'halberd', sub: 'phalanx', group: 'heroes', role: 'Damage',
     look: { id: 'sennet', color: 0xb18cf2 },
     home: { floor: 1, zone: 'the Verdant Field' },
     blurb: 'The Hearthward\'s lancer. Writes every boss pattern in a notebook.',
@@ -121,7 +121,7 @@ export const NAMED = [
     trust: HERO_TRUST,
   },
   {
-    id: 'cairn', name: 'Cairn', cls: 'lancer', style: 'glaive', group: 'loner', role: 'Damage', // (his look's lantern glaive: shared/looks.js)
+    id: 'cairn', name: 'Cairn', cls: 'lancer', style: 'glaive', sub: 'dragoon', group: 'loner', role: 'Damage', // (his look's lantern glaive: shared/looks.js)
     look: { id: 'cairn', color: 0xd8ff5a },
     home: { floor: 1, zone: 'the far side of the Verdant Field' },
     blurb: 'Hunts alone. Trusts what you do, not what you say.',

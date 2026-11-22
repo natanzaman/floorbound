@@ -69,7 +69,7 @@ export const AcademyMethods = {
     p.cls = cls;
     this.initMastery(p, kept?.mastery || null);
     p.talents = newTalents(kept?.talents || null, cls, p.lvl); p.tal = talentTotals(cls, p.talents); p.talentsDirty = true;
-    p.cds = [0, 0, 0, 0]; p.combo = 0; p.chain = null;
+    p.cds = [0, 0, 0, 0, 0]; p.combo = 0; p.chain = null;
     p.masteryDirty = p.masteryNow = true;
   },
   // Weapons the Academy hands out are tagged `ac`: worth nothing, never sold, salvaged, dropped or worked by the Smith
@@ -241,7 +241,7 @@ export const AcademyMethods = {
       this.swapClass(p, id, null);
       p.talents = {}; p.tal = talentTotals(id, {});
     }
-    this.recompute(p); p.hp = p.maxHp; p.cds = [0, 0, 0, 0];
+    this.recompute(p); p.hp = p.maxHp; p.cds = [0, 0, 0, 0, 0];
     const [x, z] = penStart(pen);
     p.face = 0;
     this.teleport(p, x, z);
@@ -381,7 +381,7 @@ export const AcademyMethods = {
   acRestore(p) {
     const L = p.loan; p.loan = null;
     p.cls = L.cls; this.initMastery(p, null); p.mastery = L.mastery; p.talents = L.talents; p.tal = talentTotals(p.cls, p.talents);
-    p.cds = [0, 0, 0, 0]; p.chain = null; p.talentsDirty = true; p.masteryDirty = p.masteryNow = true;
+    p.cds = [0, 0, 0, 0, 0]; p.chain = null; p.talentsDirty = true; p.masteryDirty = p.masteryNow = true;
     this.recompute(p);
   },
   // Out of the pen, back at the Academy's door.

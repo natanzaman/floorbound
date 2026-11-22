@@ -432,6 +432,7 @@ export class PlayerBots {
       if (L.evolved && !m.br) m.br = defaultBranch(sk);
     }
     g.autoSpendTalents?.(b); // talent tree, if there is one
+    g.botSpecialise?.(b); // its role's subclass from level 15 (shared/subclasses.js BOT_SUB, server/subclasses.js)
     g.recompute(b); b.hp = b.maxHp;
     b.invDirty = true; b.masteryDirty = true; b.masteryNow = true;
     b.pbOwned = true; // (no XP of its own)
