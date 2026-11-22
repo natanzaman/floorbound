@@ -93,7 +93,7 @@ await check('forced swings', async () => {
 
 // ---- 2. The Colossus's fight health (finding 3: x ~0.80, verified with scripts/tuneboss.js) ----
 await check('colossus hp', async () => {
-  assert.deepEqual([COLOSSUS.hpBase, COLOSSUS.hpPer, COLOSSUS.hpExp, COLOSSUS.hpLvl], [6400, 5050, 1.9, 0.05]);
+  assert.deepEqual([COLOSSUS.hpBase, COLOSSUS.hpPer, COLOSSUS.hpExp, COLOSSUS.hpLvl], [8640, 6820, 1.9, 0.05]);
   assert.equal(MOBS.colossus.hp, 16000, 'the MOBS entry is not the fight health (left alone)');
   const g = quiet(() => new Game());
   process.env.F3_TWIST = 'calm'; quiet(() => g.newTwist3()); delete process.env.F3_TWIST;
