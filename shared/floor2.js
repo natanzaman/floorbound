@@ -116,6 +116,8 @@ export const F2_SPAWNS = [
   ['shieldback', 8, [540, 660], [34, 96]],
   ['wisp', 8, [540, 660], [40, 140]],
   ['lurker', 9, [540, 660], [102, 146]],
+  ['bulwark', 4, [540, 660], [60, 120]], // enemies that force a role (shared/mobroles.js): appended, so the ones above keep their spots
+  ['hexer', 4, [540, 660], [70, 140]],
 ];
 export const F2_MATRONS = [[566, 124], [636, 118]];
 

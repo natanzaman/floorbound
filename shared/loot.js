@@ -286,8 +286,13 @@ export const LOOT = {
   'rare:skyrender': { gold: [90, 140], item: 1, potion: 1, table: 'spireRare', sets: [{ id: 'stormforged', chance: 0.05 }] },
   'rare:bastion': { gold: [110, 160], item: 2, potion: 1, table: 'spireRare', sets: [{ id: 'stormforged', chance: 0.06 }] },
   'boss:colossus': { gold: [420, 520], item: 2, potion: 2, table: 'boss3', sets: [{ id: 'stormforged', chance: 0.2, la: 0.5 }] },
+  // Broken boss parts (shared/bossparts.js): a bonus personal roll for every fighter when a part breaks.
+  'part:warden_horns': { gold: [30, 50], item: 1, potion: 0, table: 'elite' },
+  'part:sovereign_trident': { gold: [60, 90], item: 1, potion: 0, table: 'mireElite' },
+  'part:colossus_knee': { gold: [70, 110], item: 1, potion: 0, table: 'spireRare' },
+  // Role enemies (shared/mobroles.js): their drops are in DROPS (shared/items.js).
 };
-export const sourceOf = m => `${m.def?.boss ? 'boss' : m.rare ? 'rare' : 'mob'}:${m.type}`;
+export const sourceOf = m => `${m.def?.part ? 'part' : m.def?.boss ? 'boss' : m.rare ? 'rare' : 'mob'}:${m.type}`;
 export function lootFor(src) {
   const type = src.slice(src.indexOf(':') + 1), base = DROPS[type], e = LOOT[src];
   if (!base && !e) return null;

@@ -109,6 +109,7 @@ export const F3_SPAWNS = [
   ['harpy', 7, [1140, 1260], [40, 140]],
   ['acolyte', 6, [1140, 1260], [60, 146]],
   ['sentinel', 5, [1140, 1260], [102, 146]],
+  ['harrier', 4, [1140, 1260], [50, 130]], // a role enemy (shared/mobroles.js): appended, so the ones above keep their spots
 ];
 // Rare spawns (merged into RARE.spawns in data.js): x range, z range, and the area named in the announcement.
 export const F3_RARES = {

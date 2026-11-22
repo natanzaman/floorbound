@@ -122,13 +122,18 @@ function cleanInv(inv) {
     if (c.slot !== s) throw new Bad(`eq.${s} holds a ${c.slot}.`);
     out.eq[s] = c;
   }
+  if (inv.eq.weapon2 != null) { // the spare weapon (server/weaponswap.js)
+    const c = cleanItem(inv.eq.weapon2, 'eq.weapon2');
+    if (c.slot !== 'weapon') throw new Bad(`eq.weapon2 holds a ${c.slot}.`);
+    out.eq.weapon2 = c;
+  }
   for (const k of Object.keys(inv.cons || {})) if (!CONSUMABLE_IDS.includes(k)) throw new Bad(`Unknown consumable ${k}.`);
   for (const k of CONSUMABLE_IDS) out.cons[k] = int(inv.cons?.[k] ?? 0, 0, 999, `cons.${k}`);
   for (const k of Object.keys(inv.mats || {})) if (!MAT_IDS.includes(k)) throw new Bad(`Unknown material ${k}.`);
   for (const k of MAT_IDS) { const n = int(inv.mats?.[k] ?? 0, 0, 99999, `mats.${k}`); if (n) out.mats[k] = n; }
   const seen = new Set();
   let u = Date.now() % 1e6 + 5e5;
-  for (const it of [...out.bag, ...SLOTS.map(s => out.eq[s]).filter(Boolean)]) {
+  for (const it of [...out.bag, ...SLOTS.map(s => out.eq[s]).filter(Boolean), ...(out.eq.weapon2 ? [out.eq.weapon2] : [])]) {
     if (!Number.isInteger(it.u) || seen.has(it.u)) it.u = ++u;
     while (seen.has(it.u)) it.u = ++u;
     seen.add(it.u);
@@ -175,6 +180,11 @@ function applyEdit(c, body, online) {
     if (w?.cls && w.cls !== c.cls) {
       if (c.inv.bag.length >= BAG_SIZE) throw new Bad('Bag full: make room for the old weapon first.');
       c.inv.bag.push(w); c.inv.eq.weapon = null;
+    }
+    const w2 = c.inv.eq.weapon2; // so does a spare weapon (server/weaponswap.js)
+    if (w2?.cls && w2.cls !== c.cls) {
+      if (c.inv.bag.length >= BAG_SIZE) throw new Bad('Bag full: make room for the old spare weapon first.');
+      c.inv.bag.push(w2); c.inv.eq.weapon2 = null;
     }
   }
   if (body.lvl !== undefined) c.lvl = int(body.lvl, 1, MAX_LEVEL, 'Level');

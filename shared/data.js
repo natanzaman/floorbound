@@ -3,6 +3,7 @@ import { F2, F2_MOB_IDS, F2_MOBS, F2_BITE, inCamp2, walkable2, areaName2, floor2
 import { F3, F3_MOB_IDS, F3_MOBS, F3_BITE, F3_RARES, inCamp3, walkable3, areaName3, floor3Obstacles } from './floor3.js';
 import { RESCUE_MOB_IDS, RESCUE_MOBS } from './rescue.js';
 import { DUEL_MOB_IDS, DUEL_MOBS } from './duels.js';
+import { ROLE_MOB_IDS, ROLE_MOBS, ROLE_BITE } from './mobroles.js'; // enemies that force a role (docs/briefs/combat-quickwins.md)
 import { TIMED, movesOf } from './bosstiming.js'; // boss timing tables (J3)
 import { AREA_COLLIDERS } from './arenas.js'; // multi-area boss fights (J2): the active area's walls and pillars
 import { LABS, LAB_MOB_IDS, LAB_MOBS, LAB_BITE, labAt, walkLab } from './labyrinth.js'; // the labyrinths before each boss
@@ -237,12 +238,15 @@ Object.assign(MOBS, LAB_MOBS);
 // Duel stand-ins (shared/duels.js): one on each duelist, so attacks reach opponents; appended after the trap objects.
 MOB_IDS.push(...DUEL_MOB_IDS);
 Object.assign(MOBS, DUEL_MOBS);
+// Enemies that force a role (shared/mobroles.js): armoured, shielded, flyer, caster; appended after the duel stand-ins.
+MOB_IDS.push(...ROLE_MOB_IDS);
+Object.assign(MOBS, ROLE_MOBS);
 
 export const xpToNext = lvl => 50 * lvl;
 
 // Melee bites hit a wedge in front of the attacker (shown as a red wedge during the wind-up).
 export const BITE = { boar: [2.6, 0.7], wolf: [2.8, 0.6], alpha: [3.4, 0.85], hound: [2.8, 0.6], oldtusk: [3.6, 0.8], ghostfang: [3.4, 0.85] }; // [reach, half-angle]
-Object.assign(BITE, F2_BITE, F3_BITE, LAB_BITE);
+Object.assign(BITE, F2_BITE, F3_BITE, LAB_BITE, ROLE_BITE);
 export const PACK = { auraRange: 12, auraAtk: 0.25, howlEvery: 12, howlRange: 16, frenzy: 6 };
 // The Warden's three phases: 100-66% (cleave + slams), 66-33% (+ hounds, horn charge), <33% (+ spin, rockfall).
 // Quake Rings and the Horn Sweep come in every phase (more rings / more often later).
