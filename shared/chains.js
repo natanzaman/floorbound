@@ -13,7 +13,7 @@
 import { CLASSES } from './data.js';
 
 export const CHAIN = {
-  window: 1.4, hold: 2.5, max: 4, step: 0.06, refund: 1, minGap: 0.15,
+  window: 1.4, hold: 2.5, max: 4, step: 0.04, refund: 1, minGap: 0.15,
   doneFrac: [0.12, 0.03],
 };
 

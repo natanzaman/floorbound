@@ -75,7 +75,7 @@ export const COMBO_IDS = Object.keys(COMBOS);
 // BREAKs the target (n >= 2; solo: a posture chunk) and gives the team +dmg for buffD s.
 export const BURST = {
   max: 100,
-  fill: { combo: 8, switch: 5, break: 4, parry: 4, revive: 15, save: 8, cover: 4, mechanic: 5, perfect: 2, chain: 1.5, chainDone: 4 },
+  fill: { combo: 8, switch: 5, break: 4, parry: 4, revive: 15, save: 8, cover: 4, mechanic: 5, perfect: 2, chain: 0.5, chainDone: 2 },
   soloFill: 0.5, drain: 4, idle: 6, sync: 3, range: 40,
   power: [0, 0.6, 1, 1.2, 1.35, 1.45, 1.55],
   per: 4, soloFrac: [0.5, 0.18], buff: [0, 0.08, 0.12, 0.14, 0.16, 0.17, 0.18], buffD: 6, buffR: 20, targetR: 14,
