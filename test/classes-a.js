@@ -7,6 +7,7 @@ import WebSocket from 'ws';
 import { Game } from '../server/game.js';
 import { CLASSES, CLASS_IDS, SWITCH, angleTo, statsFor, paced } from '../shared/data.js';
 import { MASTERY, BRANCHES, newMastery } from '../shared/mastery.js';
+import { sigIdsOf } from '../shared/subclasses.js';
 import { makeItem } from '../shared/items.js';
 import { RECIPES, recipeName, SMITH } from '../shared/crafting.js';
 import { RANGER_TUNE as RT } from '../shared/classes/ranger.js';
@@ -427,7 +428,7 @@ async function persistence() {
       let got = null, lvl = 0;
       const ws = await session(token, c.id, msg => { if (msg.type === 'welcome') lvl = msg.lvl; if (msg.type === 'mastery') { got = msg.m; return true; } return false; });
       ws.close();
-      assert.deepEqual(Object.keys(got), keys, `${c.cls} skills`);
+      assert.deepEqual(Object.keys(got), [...keys, ...sigIdsOf(c.cls)], `${c.cls} skills (plus the signature skills)`);
       assert.equal(got[sk].br, 'B', 'branch saved');
       assert.equal(got[sk].pts, MASTERY.need[3], 'mastery saved');
       assert.equal(lvl, c.lvl, 'level loaded');

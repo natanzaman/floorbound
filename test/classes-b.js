@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import WebSocket from 'ws';
 import { CLASSES, CLASS_IDS, OBSTACLES, POSTURE, angleTo, postureMax, resolveCollision } from '../shared/data.js';
 import { MASTERY, BRANCHES } from '../shared/mastery.js';
+import { sigIdsOf } from '../shared/subclasses.js';
 import { makeItem } from '../shared/items.js';
 import { RECIPE_BY_ID, recipeName } from '../shared/crafting.js';
 import { LANCE } from '../shared/classes/lancer.js';
@@ -471,7 +472,7 @@ async function persistence() {
       if (msg.type === 'mastery' && !first) { first = msg.m; ws.send(JSON.stringify({ type: 'evolve', sk: 'lcharge', br: 'B' })); }
       return msg.type === 'mastery' && msg.m.lcharge?.br === 'B';
     });
-    assert.deepEqual(Object.keys(first), ['lcharge', 'lsweep', 'skylance']);
+    assert.deepEqual(Object.keys(first), ['lcharge', 'lsweep', 'skylance', ...sigIdsOf('lancer')]);
     assert.equal(first.skylance.pts, MASTERY.need[3]);
     assert.ok(id && inv, 'joined');
     ws.send(JSON.stringify({ type: 'skill', slot: 0, face: 0 })); // a thrust at nothing: harmless
