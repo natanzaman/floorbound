@@ -29,7 +29,7 @@ with the mini-boss and the key. Layers live in their own patches of Floor 1's co
 - **Noise:** wading, lighting torches and fighting wake Tomb Wardens in range and send them to the sound.
   A **bone rattle** (from chests; you start with one) thrown with interact when nothing else is in reach draws them away.
 - **Levers:** both pulled within the window raises the portcullis for 45 s; alone, the window is the walk between them
-  at run speed ×1.25 plus 6 s.
+  at run speed ×1.25 plus 6 s, never under 15 s; with two or more it is 12 s (owner, 2026-11-22).
 - **Checkpoint:** dying in the labyrinth brings you back at the last threshold you crossed.
 - **Key lock:** `labGateOk` at the Chamber Gate; waived with `SPAWN_AT` or `LAB_GATE=0` (tests), and for bot-only groups.
 
@@ -44,5 +44,21 @@ breathing, keeper, gate lock, snapshot `lb`), `public/labyrinth.js` (scenery, at
 `python3 test/labyrinth.py` (browser: stair, dark air and torch, walls hold you, a chest, the stairs down, the
 Gravekeeper, out again). Test hooks (TEST_HOOKS=1): `{ type: 'test', labkey: f }`, `{ labgo: layer id | 'out' }`.
 
-## Next
-Floor 2's Weeping Thicket and Floor 3's Windrift Causeways, per the plan doc.
+## Floors 2 and 3 (owner go-ahead, 2026-11-22)
+Same engine, with what each floor changes:
+- **Shifting ways** (`shift`): closed edges that open on a clock, set 0 or set 1 at a time. Each is a real shortcut, so
+  the maze is connected in both phases; never round the portcullis (not touching the end cell). Steering keeps a
+  next-hop table per phase (`nextBy`). A way shutting on someone pushes them out of its band (as the portcullis does).
+- **Bridges** (`bridge`, Floor 3): an open edge strip is walkable only within `bridge` m of its middle; labSteer lines up
+  with a bridge before crossing. **Wind** (`wind`): turns every `every` s; the client drifts you (×0.3 on isles, ×0.35
+  guarding). No falling: walkable() keeps you on.
+- **Events** (`breathe.kind`): `rise` (Floor 1), `wisps` (true and false wisps; a false one's dead end hides an
+  ambush), `squall` (marked lightning strikes).
+- **Keepers** (`KEEPERS`): the Mother of Mire (`dive`: under ×0.15 damage, ripples, burst, stranded ×1.5) and the Gale
+  Matriarch (`lanes`: lane dive, perch ×1.6, gale pull toward the rim with rim damage). Both call help at half health.
+- **Locks:** the Tide Lock (Sunken Gate) and Storm Lock (Storm Gate), `labGateOk` in `updateGate2/3`.
+- **Looks:** designed and built by a Fable subagent to an interface (`AIR`, `COLORS`, `buildTerrain`, `buildEntry`,
+  `makeMob`) in `public/labthicket.js` and `public/labcauseway.js`, about 20–28 draw calls a layer, no extra lights.
+- **Simplified from the plan (guesses):** the sluice puzzle is the two-lever window (not drain one path / flood
+  another); Kite Riders don't cut ropes; no falling off bridges; frogs, reed-hiding and drowsy spores left out.
+- Checks: `node test/labyrinth.js` (16), `python3 test/labyrinth23.py` (browser, both floors).

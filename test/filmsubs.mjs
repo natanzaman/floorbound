@@ -1,11 +1,12 @@
 // Film dialogue in a real browser (docs/handoffs/film-dialogue-brief.md): the director's say lines show as subtitles in
 // the film view (inside the lower letterbox bar, replaced by the next line, gone after their hold) and play their
 // voice-over file in the film view and a plain spectator; a plain spectator gets no subtitles.
-// Needs Playwright for Node (not a dependency: `npm i --no-save playwright`) and the Episode 1 voice files.
+// Needs Playwright for Node (not a dependency: `npm i --no-save playwright`, or point PLAYWRIGHT at its index.mjs) and the
+// Episode 1 voice files.
 // Usage: PORT=37xx node test/filmsubs.mjs [shots dir]
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { chromium } from 'playwright';
+const { chromium } = await import(process.env.PLAYWRIGHT || 'playwright'); // (as test/keys.mjs: PLAYWRIGHT points at its index.mjs when it isn't installed here)
 import { voiceKey } from '../server/director-sheet.js';
 
 const PORT = +(process.env.PORT || 3791), base = `http://localhost:${PORT}`, shots = process.argv[2];
@@ -41,6 +42,10 @@ scenes:
       - { do: wait, secs: 6, after: prev }
 ` });
   assert.ok(ld.ok, JSON.stringify(ld.errors));
+  // Warm both pages' voice cache first: the game drops a line whose file arrives over 1.2 s after it was said, and a loaded
+  // headless box can take that long to fetch and decode the first one (a real browser has it in well under a second).
+  const warm = p => p.evaluate(keys => { const s = window.__fb.sfx; s.unlock(); return s.ctx && Promise.all(keys.map(k => { if (!s.lines.has(k)) s.lines.set(k, fetch(`/voice/${k}.mp3`).then(r => r.arrayBuffer()).then(b => s.ctx.decodeAudioData(b))); return s.lines.get(k); })).then(() => true); }, [`ep1/${voiceKey('corvin', L1)}`, `ep1/${voiceKey('bram', L2)}`]);
+  assert.ok(await warm(film) && await warm(spec), 'the voice files load');
   await post('run', { force: true });
 
   const sub = p => p.evaluate(() => { const el = document.getElementById('cine-sub'), r = el.getBoundingClientRect(), bar = document.querySelector('#cine-bars i:last-child').getBoundingClientRect(); return { text: window.__fb.cine.view.sub, shown: el.classList.contains('show'), top: r.top, bottom: r.bottom, barTop: bar.top, h: innerHeight }; });

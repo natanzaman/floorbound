@@ -70,6 +70,82 @@ export const LABS = {
       },
     ],
   },
+  // Floor 2: the Weeping Thicket, a drowned forest east of the Mire. Its walls are root tangles and deep water, and the
+  // tide redraws it: every `shift.every` s the water turns, opening one set of ways (low tide: mud paths) and closing
+  // the other (high tide: root bridges and lily rafts). The Drowned Wood's event is the wisps: a true one drifts toward
+  // the way on, false ones into dead ends where lurkers wait.
+  2: {
+    floor: 2, id: 'thicket', name: 'The Weeping Thicket', style: 'thicket', keyName: 'Tide Key', key: 'lab2Keys', lureName: 'reed whistle',
+    entry: { x: 583, z: 141, use: 3.0, clear: 5 },
+    exitTo: { x: 600, z: 146 },
+    use: 3.0,
+    layers: [
+      {
+        id: 'reedmarch', name: 'The Reedmarch', x0: 780, z0: 20, cols: 5, rows: 5, cell: 10, wall: 2.4, height: 5,
+        seeds: { walls: 2111, traps: 2213, mobs: 2317, loot: 2419 }, braid: 0.4,
+        start: [2, 0], end: [2, 4],
+        traps: { n: 4, cycle: 5.0, warn: 1.3, up: 1.0, dmg: 0.12 },
+        water: { n: 6, slow: 0.8, loud: true },
+        shift: { every: 75, n: 2, names: ['Low tide', 'High tide'] },
+        mobs: [['mirelurker', 6]], loot: { n: 3, onPath: 0.25, cd: 600 }, torches: { lit: 900 },
+      },
+      {
+        id: 'drownedwood', name: 'The Drowned Wood', x0: 780, z0: 90, cols: 7, rows: 7, cell: 10, wall: 2.4, height: 6,
+        seeds: { walls: 2531, traps: 2633, mobs: 2737, loot: 2839 }, braid: 0.15,
+        start: [3, 0], end: [3, 6],
+        traps: { n: 5, cycle: 4.5, warn: 1.2, up: 1.0, dmg: 0.14 },
+        water: { n: 12, slow: 0.75, loud: true },
+        shift: { every: 55, n: 4, names: ['Low tide', 'High tide'] },
+        mobs: [['mirelurker', 8], ['mosshag', 3]], loot: { n: 5, onPath: 0.25, cd: 600 }, torches: { lit: 900 },
+        breathe: { kind: 'wisps', every: [55, 85], first: [25, 40], press: 0.5, pressAfter: 300, secs: 12, rise: 2, type: 'mirelurker', cap: 9, ttl: 40, wisp: 30 },
+        levers: { open: 45, solo: 6 },
+      },
+      {
+        id: 'heartwillow', name: 'The Heartwillow', x0: 860, z0: 20, cols: 3, rows: 3, cell: 12, wall: 2.4, height: 7,
+        seeds: { walls: 2941, traps: 2943, mobs: 2947, loot: 2953 }, braid: 0,
+        start: [1, 0], end: [1, 2], hall: [0, 0, 2, 2],
+        mobs: [], keeper: 'motherofmire',
+      },
+    ],
+  },
+  // Floor 3: the Windrift Causeways, floating isles above the Gale Spires. No walls: the gaps are drops, the ways are
+  // narrow bridges (`bridge`: half their width), and some spans swing between two places on a clock (`shift`). The wind
+  // turns every `wind.every` s: it pushes you along bridges and slows you against it. The Turning Isles' event is the
+  // squall: lightning strikes marked on the ground near everyone.
+  3: {
+    floor: 3, id: 'causeways', name: 'The Windrift Causeways', style: 'causeway', keyName: 'Storm Key', key: 'lab3Keys', lureName: 'storm chime',
+    entry: { x: 1172, z: 139, use: 3.0, clear: 5 },
+    exitTo: { x: 1200, z: 146 },
+    use: 3.0,
+    layers: [
+      {
+        id: 'kitesteps', name: 'The Kite Steps', x0: 1300, z0: 20, cols: 5, rows: 5, cell: 12, wall: 4, height: 0, bridge: 1.6,
+        seeds: { walls: 3121, traps: 3223, mobs: 3327, loot: 3429 }, braid: 0.4,
+        start: [2, 0], end: [2, 4],
+        traps: { n: 4, cycle: 5.0, warn: 1.3, up: 1.0, dmg: 0.12 },
+        shift: { every: 40, n: 2, names: ['Spans east', 'Spans west'] },
+        wind: { every: 30, push: 1.6, seed: 7 },
+        mobs: [['stormharpy', 6]], loot: { n: 3, onPath: 0.25, cd: 600 }, torches: { lit: 900 },
+      },
+      {
+        id: 'turningisles', name: 'The Turning Isles', x0: 1300, z0: 100, cols: 6, rows: 6, cell: 12, wall: 4, height: 0, bridge: 1.5,
+        seeds: { walls: 3531, traps: 3633, mobs: 3737, loot: 3839 }, braid: 0.2,
+        start: [2, 0], end: [3, 5],
+        traps: { n: 5, cycle: 4.5, warn: 1.2, up: 1.0, dmg: 0.14 },
+        shift: { every: 30, n: 4, names: ['Spans east', 'Spans west'] },
+        wind: { every: 22, push: 2.2, seed: 11 },
+        mobs: [['stormharpy', 7], ['kiterider', 3]], loot: { n: 5, onPath: 0.25, cd: 600 }, torches: { lit: 900 },
+        breathe: { kind: 'squall', every: [50, 75], first: [25, 40], press: 0.5, pressAfter: 300, secs: 10, rise: 3, type: 'stormharpy', cap: 8, ttl: 40, strike: { r: 3.2, wind: 1.6, dmg: 0.16, gap: 0.9 } },
+        levers: { open: 45, solo: 6 },
+      },
+      {
+        id: 'eyespire', name: 'The Eye-Spire', x0: 1400, z0: 20, cols: 3, rows: 3, cell: 14, wall: 4, height: 0,
+        seeds: { walls: 3941, traps: 3943, mobs: 3947, loot: 3953 }, braid: 0,
+        start: [1, 0], end: [1, 2], hall: [0, 0, 2, 2],
+        mobs: [], keeper: 'galematriarch',
+      },
+    ],
+  },
 };
 export const LAB_FLOORS = Object.keys(LABS).map(Number);
 export const LAYERS = LAB_FLOORS.flatMap(f => LABS[f].layers);
@@ -77,19 +153,48 @@ export const LAYERS = LAB_FLOORS.flatMap(f => LABS[f].layers);
 // ---------- enemies (appended to MOBS / MOB_IDS in data.js) ----------
 // lab: the floor whose labyrinth they live in (the leash and the steering stay inside it). hears: a noise-hearing enemy
 // (dormant until a noise reaches it: wading, a torch lit, a fight, a lure).
-export const LAB_MOB_IDS = ['ghoul', 'gravekeeper', 'tombwarden'];
+export const LAB_MOB_IDS = ['ghoul', 'gravekeeper', 'tombwarden', 'mirelurker', 'mosshag', 'motherofmire', 'stormharpy', 'kiterider', 'galematriarch'];
 export const LAB_MOBS = {
   ghoul: { name: 'Crypt Ghoul', hp: 150, atk: 13, speed: 5.6, aggro: 13, range: 2.0, atkCd: 1.3, xp: 45, radius: 0.8, level: 9, lab: 1 },
   gravekeeper: { name: 'The Gravekeeper', hp: 2200, atk: 24, posture: 900, speed: 3.8, aggro: 15, range: 3.0, atkCd: 2.0, xp: 450, radius: 1.5, level: 10, elite: true, lab: 1, respawn: 75 },
   tombwarden: { name: 'Tomb Warden', hp: 700, atk: 22, speed: 4.6, aggro: 0, range: 2.6, atkCd: 1.8, xp: 140, radius: 1.2, level: 10, lab: 1, hears: true, armor: 0.3 },
+  // the Weeping Thicket (Floor 2)
+  mirelurker: { name: 'Thicket Lurker', hp: 520, atk: 26, speed: 5.2, aggro: 13, range: 2.2, atkCd: 1.5, xp: 110, radius: 1.0, level: 15, lab: 2 },
+  mosshag: { name: 'Moss Hag', hp: 1300, atk: 34, speed: 4.8, aggro: 0, range: 2.8, atkCd: 1.8, xp: 260, radius: 1.1, level: 16, lab: 2, hears: true },
+  motherofmire: { name: 'The Mother of Mire', hp: 6200, atk: 40, posture: 2000, speed: 3.4, aggro: 16, range: 3.4, atkCd: 2.2, xp: 1100, radius: 2.0, level: 17, elite: true, lab: 2, respawn: 75 },
+  // the Windrift Causeways (Floor 3)
+  stormharpy: { name: 'Squall Harpy', hp: 1000, atk: 38, speed: 5.8, aggro: 14, range: 2.4, atkCd: 1.5, xp: 230, radius: 0.9, level: 24, lab: 3 },
+  kiterider: { name: 'Kite Rider', hp: 2000, atk: 46, speed: 6.0, aggro: 0, range: 2.8, atkCd: 1.7, xp: 420, radius: 1.1, level: 25, lab: 3, hears: true },
+  galematriarch: { name: 'The Gale Matriarch', hp: 12000, atk: 56, posture: 3600, speed: 4.4, aggro: 16, range: 3.2, atkCd: 2.0, xp: 2400, radius: 1.8, level: 26, elite: true, lab: 3, respawn: 75 },
 };
-export const LAB_BITE = { ghoul: [2.7, 0.7], gravekeeper: [3.8, 0.9], tombwarden: [3.4, 0.8] };
+export const LAB_BITE = { ghoul: [2.7, 0.7], gravekeeper: [3.8, 0.9], tombwarden: [3.4, 0.8], mirelurker: [2.8, 0.7], mosshag: [3.2, 0.8], motherofmire: [4.4, 0.9], stormharpy: [2.8, 0.7], kiterider: [3.2, 0.75], galematriarch: [4.0, 0.9] };
 
 // The Gravekeeper: swings its lantern-flail (a wide bite), and every so often rings its Grave Bell: a ring of force
 // rolls out (jump it or roll through it, like the Warden's Quake Ring). At half health it calls up the dead, once.
 export const KEEPER = {
   toll: { first: 6, every: 11, wind: 1.5, r: 15, band: 1.6, speed: 9, mult: 1.6 },
   call: { at: 0.5, n: 4, type: 'ghoul' },
+};
+// Per mini-boss (KEEPER above is the Gravekeeper's):
+// The Mother of Mire dives under the water (takes `under` damage while down), ripples mark a spot under each fighter
+// near her, and she bursts up there `wind` s later (step out of the ring); then she lies stranded for `strand` s
+// (takes `stranded` damage). At half health she calls the tide early: lurkers surface.
+// The Gale Matriarch marks a lane through one fighter and dives along it (`wind` s to step out of it), then perches
+// for `perch` s (takes `perched` damage). Her gale pulls everyone toward the rim of the ring for `secs` s, and the
+// rim's edge stings. At half health she calls harpies.
+export const KEEPERS = {
+  gravekeeper: { kind: 'toll', ...KEEPER, name: 'The Gravekeeper', calls: 'The Gravekeeper rings for the dead. They answer.' },
+  motherofmire: {
+    kind: 'dive', name: 'The Mother of Mire', calls: 'The Mother of Mire calls the tide early. Lurkers surface!',
+    dive: { first: 6, every: 13, under: 0.15, wind: 1.7, r: 3.2, mult: 1.5, strand: 5, stranded: 1.5, reach: 18 },
+    call: { at: 0.5, n: 4, type: 'mirelurker' },
+  },
+  galematriarch: {
+    kind: 'lanes', name: 'The Gale Matriarch', calls: 'The Gale Matriarch shrieks. Harpies answer from the clouds!',
+    lane: { first: 5, every: 11, wind: 1.4, len: 26, w: 1.8, mult: 1.5, perch: 5, perched: 1.6 },
+    gale: { first: 16, every: 24, secs: 4, pull: 3.0, rim: 3.0, dmg: 0.05 },
+    call: { at: 0.5, n: 3, type: 'stormharpy' },
+  },
 };
 // Noise: how far each sound carries (m), how long a woken Tomb Warden stays up with nobody to fight (s).
 // The lure (a bone rattle): thrown `throw` m ahead, rattles for `secs` s, heard `r` m away. Found in chests.
@@ -131,6 +236,28 @@ for (const f of LAB_FLOORS) for (const [li, L] of LABS[f].layers.entries()) {
     open.add(edge(i, j, di, dj));
   }
   L.open = open;
+  // shifting ways (the tide, the swinging spans): closed edges that open on a clock, set 0 or set 1 at a time. Each
+  // one is a real shortcut (its two cells are far apart through the maze), so the maze stays connected whatever the
+  // phase and the clock changes which way is short.
+  L.shiftEdges = new Map(); // edge -> set (0 / 1)
+  if (L.shift) {
+    const n0 = cols * rows, dist0 = (a, b) => { const d = new Int16Array(n0).fill(-1), q = [a]; d[a] = 0; while (q.length) { const c = q.shift(); const [ii, jj] = ci(c); for (const [di, dj] of DIRS) { const x = cid(ii + di, jj + dj); if (inGrid(ii + di, jj + dj) && open.has(edge(ii, jj, di, dj)) && d[x] < 0) { d[x] = d[c] + 1; q.push(x); } } } return d[b]; };
+    const rs = rng(L.seeds.walls + 31), cand = [];
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) for (const [di, dj] of [[1, 0], [0, 1]]) {
+      const e = edge(i, j, di, dj);
+      if (!inGrid(i + di, j + dj) || open.has(e) || L.inHallCell(i, j) || L.inHallCell(i + di, j + dj)) continue;
+      if (key(i, j) === key(...L.end) || key(i + di, j + dj) === key(...L.end)) continue; // (never round the portcullis)
+      const gain = dist0(cid(i, j), cid(i + di, j + dj));
+      if (gain >= 4) cand.push({ e, score: gain + rs() * 3 });
+    }
+    cand.sort((a, b) => b.score - a.score);
+    const used = new Set();
+    for (const { e } of cand) {
+      if (L.shiftEdges.size >= L.shift.n * 2) break;
+      const [i, j] = e.split(',').map(Number); if (used.has(key(i, j))) continue; // (spread out: one per cell)
+      used.add(key(i, j)); L.shiftEdges.set(e, L.shiftEdges.size % 2);
+    }
+  }
 
   const nbrs = c => {
     const [i, j] = ci(c), out = [];
@@ -139,13 +266,18 @@ for (const f of LAB_FLOORS) for (const [li, L] of LABS[f].layers.entries()) {
   };
   L.nbrs = nbrs;
   const bfs = from => { const d = new Int16Array(n).fill(-1), q = [from]; d[from] = 0; while (q.length) { const c = q.shift(); for (const x of nbrs(c)) if (d[x] < 0) { d[x] = d[c] + 1; q.push(x); } } return d; };
-  // next-hop table: L.next[from * n + to] = the neighbouring cell to step into
-  const next = new Int16Array(n * n).fill(-1);
-  for (let to = 0; to < n; to++) { const q = [to], got = new Uint8Array(n); got[to] = 1; while (q.length) { const c = q.shift(); for (const d of nbrs(c)) if (!got[d]) { got[d] = 1; next[d * n + to] = c; q.push(d); } } }
-  L.next = next;
+  // next-hop table: L.next[from * n + to] = the neighbouring cell to step into (one per shift phase where ways shift)
+  const hops = more => {
+    const next = new Int16Array(n * n).fill(-1);
+    const nb = c => { const out = nbrs(c), [i, j] = ci(c); for (const [di, dj] of DIRS) if (inGrid(i + di, j + dj) && more(edge(i, j, di, dj))) out.push(cid(i + di, j + dj)); return out; };
+    for (let to = 0; to < n; to++) { const q = [to], got = new Uint8Array(n); got[to] = 1; while (q.length) { const c = q.shift(); for (const d of nb(c)) if (!got[d]) { got[d] = 1; next[d * n + to] = c; q.push(d); } } }
+    return next;
+  };
+  L.next = hops(() => false);
+  if (L.shiftEdges.size) L.nextBy = [0, 1].map(ph => hops(e => L.shiftEdges.get(e) === ph));
   // the main route: start -> end
   const sc = cid(...L.start), ec = cid(...L.end), dS = bfs(sc), path = [ec];
-  while (path[0] !== sc) path.unshift(next[path[0] * n + sc]);
+  while (path[0] !== sc) path.unshift(L.next[path[0] * n + sc]);
   L.path = path; L.onPath = new Set(path); L.distStart = dS;
   const center = c => [L.x0 + (ci(c)[0] + 0.5) * L.cell, L.z0 + (ci(c)[1] + 0.5) * L.cell];
   const free = c => !L.inHallCell(...ci(c)) && c !== sc && c !== ec;
@@ -247,24 +379,60 @@ export function walkLab(L, x, z) {
   if ((west || east) && (south || north)) return false; // the corner posts
   const e = west ? `${i - 1},${j},E` : east ? `${i},${j},E` : south ? `${i},${j - 1},N` : north ? `${i},${j},N` : null;
   if (!e) return true;
-  if (e === L.portEdge && !portOpen(L)) return portSide(L, x, z) === 0 ? false : L.open.has(e);
+  if (L.bridge && Math.abs(west || east ? v - C / 2 : u - C / 2) > L.bridge) return false; // (a bridge: narrow, the rest is a drop)
+  if (e === L.portEdge && !portOpen(L)) return edgeSide(L, e, x, z) === 0 ? false : L.open.has(e);
+  const sh = L.shiftEdges.get(e);
+  if (sh !== undefined) return sh === shiftPhase(L) || edgeSide(L, e, x, z) !== 0; // (shut: only its middle band blocks)
   return L.open.has(e);
 }
+
+// The side strip (x, z) is in, as an edge id, or null (inside a cell, a hall, or a corner post).
+export function stripEdge(L, x, z) {
+  const lx = x - L.x0, lz = z - L.z0, C = L.cell, h = L.h;
+  if (inHall(L, x, z)) return null;
+  const i = Math.floor(lx / C), j = Math.floor(lz / C), u = lx - i * C, v = lz - j * C;
+  const west = u < h, east = u > C - h, south = v < h, north = v > C - h;
+  if ((west || east) && (south || north)) return null;
+  return west ? `${i - 1},${j},E` : east ? `${i},${j},E` : south ? `${i},${j - 1},N` : north ? `${i},${j},N` : null;
+}
+// Is edge e shut right now (a portcullis down, a shifting way in its other phase)?
+export function edgeShut(L, e, t) {
+  if (e === L.portEdge) return !portOpen(L, t);
+  const sh = L.shiftEdges.get(e);
+  return sh !== undefined && sh !== shiftPhase(L, t);
+}
+// The edges that open and shut (for pushing people out of a shutting one's band).
+export const gatedEdges = L => (L.gated ||= [...(L.portEdge ? [L.portEdge] : []), ...L.shiftEdges.keys()]);
+
+// The shift clock: phase 0 or 1 at time t (server clock), and seconds until it turns.
+export const shiftPhase = (L, t = RUN.now ?? 0) => L.shift ? Math.floor(t / L.shift.every) % 2 : 0;
+export const shiftLeft = (L, t = RUN.now ?? 0) => L.shift ? L.shift.every - (t % L.shift.every) : 0;
+
+// The wind (Floor 3): a direction [dx, dz] (unit), turning every `wind.every` s; null where there is none.
+const WIND_DIRS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+export function windAt(L, t = RUN.now ?? 0) {
+  if (!L?.wind) return null;
+  const k = Math.floor(t / L.wind.every), h = ((k + L.wind.seed) * 2654435761) >>> 0;
+  return WIND_DIRS[(h >>> 7) % 4];
+}
+export const windLeft = (L, t = RUN.now ?? 0) => L?.wind ? L.wind.every - (t % L.wind.every) : 0;
+export const onBridge = (L, x, z) => !!L?.bridge && !!stripEdge(L, x, z);
 
 // The shut portcullis is a thin line, not the whole 2 m gateway, so nobody standing in the gateway when it drops is
 // frozen there: portSide() says which side of it (x, z) is (-1 / +1), or 0 inside the bars' band (PORT_BAND m each way).
 export const PORT_BAND = 0.45;
-export function portSide(L, x, z) {
-  if (!L.portEdge) return 1;
-  const [i, j, d] = L.portEdge.split(','), C = L.cell;
+export function edgeSide(L, e, x, z) {
+  const [i, j, d] = e.split(','), C = L.cell;
   const off = d === 'E' ? x - (L.x0 + (+i + 1) * C) : z - (L.z0 + (+j + 1) * C);
   return Math.abs(off) < PORT_BAND ? 0 : Math.sign(off);
 }
-// A point just off the portcullis on side s (for pushing people and mobs out of its band when it drops).
-export function portOff(L, x, z, s) {
-  const [i, j, d] = L.portEdge.split(','), C = L.cell, k = PORT_BAND + 0.35;
+export const portSide = (L, x, z) => L.portEdge ? edgeSide(L, L.portEdge, x, z) : 1;
+// A point just off edge e on side s (for pushing people and mobs out of its band when it shuts).
+export function edgeOff(L, e, x, z, s) {
+  const [i, j, d] = e.split(','), C = L.cell, k = PORT_BAND + 0.35;
   return d === 'E' ? [L.x0 + (+i + 1) * C + s * k, z] : [x, L.z0 + (+j + 1) * C + s * k];
 }
+export const portOff = (L, x, z, s) => edgeOff(L, L.portEdge, x, z, s);
 
 // Steering: heading for (tx, tz) from (x, z) inside layer L, aim for the next cell's centre on the way instead
 // (corridors are as wide as the cells' insides, so a straight line to a neighbour's centre never clips a corner).
@@ -275,8 +443,16 @@ export function labSteer(x, z, tx, tz) {
   if (from === to) return [tx, tz];
   const [fi, fj] = [from % L.cols, (from / L.cols) | 0], [ti, tj] = [to % L.cols, (to / L.cols) | 0];
   if (L.inHallCell(fi, fj) && L.inHallCell(ti, tj)) return [tx, tz]; // one open room
-  const hop = L.next[from * L.cols * L.rows + to];
-  return hop < 0 ? [tx, tz] : L.center(hop);
+  const hop = (L.nextBy ? L.nextBy[shiftPhase(L)] : L.next)[from * L.cols * L.rows + to];
+  if (hop < 0) return [tx, tz];
+  const [hx, hz] = L.center(hop);
+  { // line up with the way (a bridge, or a corridor between corner posts) from this side first, then go through
+    const half = L.bridge || (L.cell - L.wall) / 2 - 0.6;
+    const [cx, cz] = L.center(from), dx = Math.sign(hx - cx), dz = Math.sign(hz - cz);
+    const lat = dx ? z - cz : x - cx, along = dx ? (x - cx) * dx : (z - cz) * dz;
+    if (Math.abs(lat) > half * 0.5 && along < L.cell / 2 - L.h - 0.2) return [cx + dx * (L.cell / 2 - L.h - 0.6), cz + dz * (L.cell / 2 - L.h - 0.6)];
+  }
+  return [hx, hz];
 }
 
 // Spike plates: 0 down, 1 warning (glow), 2 up, at game time t.
@@ -286,9 +462,17 @@ export function trapState(L, tr, t) {
 }
 export const onTrap = (tr, x, z) => Math.abs(x - tr.x) < tr.half && Math.abs(z - tr.z) < tr.half;
 
+// The labyrinth's names for its bits (the lure, the levers, the torches), per floor.
+export const LAB_WORDS = {
+  1: { lure: 'bone rattle', lever: 'Bone lever', torch: 'Torch', chest: 'Chest', deep: 'Gilded chest', gate: 'portcullis', event: 'THE CRYPT BREATHES' },
+  2: { lure: 'reed whistle', lever: 'Sluice wheel', torch: 'Glowcap lantern', chest: 'Mossy chest', deep: 'Sunken coffer', gate: 'root gate', event: 'THE WISPS RISE' },
+  3: { lure: 'storm chime', lever: 'Wind shrine', torch: 'Beacon', chest: 'Sky chest', deep: 'Stormglass coffer', gate: 'wind wall', event: 'THE SQUALL' },
+};
+export const labWords = L => LAB_WORDS[L?.floor || 1];
+
 // The levers' window: how long the first pull waits for the second. With one person it's the real walk between them
-// at running speed (+ `solo` s); with two or more it's short (they're meant to pull together).
-export const leverWindow = (L, people, speed = 10) => people <= 1 ? L.leverWalk / speed * 1.25 + L.levers.solo : 6;
+// at running speed (+ `solo` s); with two or more it's 12 s (they're meant to pull together). Never under 12 s (owner, 2026-11-22).
+export const leverWindow = (L, people, speed = 10) => people <= 1 ? Math.max(15, L.leverWalk / speed * 1.25 + L.levers.solo) : 12;
 
 // The stairs of a labyrinth, by kind: 'in' (field -> first layer's start), 'down' (a layer's end -> the next one's
 // start), 'up' (a layer's start -> back: the previous layer's end, or the field), 'out' (the Heart's end -> the boss gate).

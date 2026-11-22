@@ -29,14 +29,14 @@ export async function openPad(browser, base, { onError } = {}) {
   const p = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   p.on('pageerror', e => onError?.(e.message));
   await p.addInitScript(() => {
-    window.__sent = []; window.__quakes = []; window.__pbot = null; window.__ev = []; // __ev: the server's cover / revive events
+    window.__sent = []; window.__quakes = []; window.__jumpEcho = []; window.__pbot = null; window.__ev = []; // __ev: the server's cover / revive events
     const ws = WebSocket.prototype.send;
     WebSocket.prototype.send = function (d) { try { window.__sent.push(JSON.parse(d)); } catch {} return ws.call(this, d); };
-    const W = window.WebSocket; // what the server tells us: the Quake Rings (event 'quake': d = seconds until the ring starts rolling)
+    const W = window.WebSocket; // what the server tells us: the Quake Rings (event 'quake': d = seconds until the ring starts rolling), our own jumps as it took them (__jumpEcho)
     window.WebSocket = class extends W {
       constructor(...a) {
         super(...a);
-        this.addEventListener('message', ev => { try { const m = JSON.parse(ev.data); if (m.type === 'pbot') window.__pbot = m; for (const e of m.w?.events || []) { if (e.t === 'quake') window.__quakes.push({ ...e, at: performance.now() }); if (['cover', 'covered', 'down', 'rev', 'revived'].includes(e.t)) window.__ev.push(e); } } catch {} });
+        this.addEventListener('message', ev => { try { const m = JSON.parse(ev.data); if (m.type === 'pbot') window.__pbot = m; for (const e of m.w?.events || []) { if (e.t === 'quake') window.__quakes.push({ ...e, at: performance.now() }); if (e.t === 'jump' && e.id === window.__fb?.state?.myId) window.__jumpEcho.push(performance.now()); if (['cover', 'covered', 'down', 'rev', 'revived'].includes(e.t)) window.__ev.push(e); } } catch {} });
       }
     };
     const pad = { id: 'Xbox Wireless Controller (STANDARD GAMEPAD)', index: 0, connected: true, mapping: 'standard', timestamp: 0,
