@@ -53,6 +53,10 @@ const r2 = v => Math.round(v * 100) / 100;
 // The Warden's own timer per move (a combo step pushes it back: server/openings.js bossCombo)
 const WARDEN_TIMERS = { slam: 'slamT', quake: 'quakeT', charge: 'chargeT', spin: 'spinT', rock: 'rockT', hounds: 'houndT', sweep: 'sweepT' };
 
+// Interest management (viewFor): how far a browser sees players and mobs, in metres. The fog closes in from 70 m and
+// hides everything by 230 m (public/world.js), so entities come in well inside it.
+export const VIEW = { in: 140, out: 165 };
+
 export class Game {
   constructor() {
     this.players = new Map();
@@ -938,9 +942,11 @@ export class Game {
     this.time += dt;
     const t = this.time;
 
-    const due = this.scheduled.filter(s => s.at <= t);
-    this.scheduled = this.scheduled.filter(s => s.at > t);
-    for (const s of due) s.fn();
+    const S = this.scheduled; // (in place: no new arrays per tick when nothing is due; what a due fn schedules runs next tick)
+    let due = null, j = 0;
+    for (let i = 0; i < S.length; i++) { const s = S[i]; if (s.at <= t) (due ||= []).push(s); else S[j++] = s; }
+    S.length = j;
+    if (due) for (const s of due) s.fn();
 
     for (const p of this.players.values()) {
       if (p.dead) {
@@ -1415,33 +1421,46 @@ export class Game {
       const buffs = (t < p.dr.until ? 1 : 0) | (dmgOn && !zeal && !cresc ? 2 : 0) | (p.lfg || party?.open ? 4 : 0) | (t < p.tonicUntil ? 8 : 0) | (t < p.draughtUntil ? 16 : 0)
         | (p.shield && !sk ? 32 : 0) | (p.bulwark ? 64 : 0) | (t < (p.iron?.until || 0) ? 128 : 0) | (p.renew ? 256 : 0) | (t < p.cry.until ? 512 : 0) | (zeal ? 1024 : 0) | (t < (p.purifyUntil || 0) ? 2048 : 0)
         | (cresc ? 4096 : 0) | (sk === 'cresc' ? 8192 : 0) | (sk === 'talent' ? 16384 : 0);
-      players.push([p.id, r2(p.x), r2(p.z), r2(p.face), p.hp, p.maxHp, p.lvl, CLASS_IDS.indexOf(p.cls), p.party || 0, p.dead ? 1 : 0, buffs, this.styleIdx(p)]); // [11]: weapon style (shared/styles.js STYLE_IDS, -1 none)
+      players.push({ id: p.id, x: p.x, z: p.z, fl: floorOf(p.x), party: p.party || 0, duel: p.duel || 0,
+        s: JSON.stringify([p.id, r2(p.x), r2(p.z), r2(p.face), p.hp, p.maxHp, p.lvl, CLASS_IDS.indexOf(p.cls), p.party || 0, p.dead ? 1 : 0, buffs, this.styleIdx(p)]) }); // [11]: weapon style (shared/styles.js STYLE_IDS, -1 none)
     }
-    const mobs = [], fl = [];
+    const mobs = [];
     for (const m of this.mobs.values()) {
       if (m.dead || m.hidden) continue; // burrowed lurkers are sent as w.f2.bur
-      fl.push(floorOf(m.x));
-      mobs.push([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase >= 2 ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0) | (m.windupAt ? 16 : 0) | (this.time < m.staggerUntil ? 32 : 0) | (this.time < m.frenzyUntil ? 64 : 0) | (this.time < (m.launchUntil || 0) ? 128 : 0) | (this.time < (m.weakUntil || 0) ? 256 : 0), this.posturePct(m)]);
+      mobs.push({ id: m.id, x: m.x, z: m.z, fl: floorOf(m.x), boss: !!m.def.boss, s: JSON.stringify([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase >= 2 ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0) | (m.windupAt ? 16 : 0) | (this.time < m.staggerUntil ? 32 : 0) | (this.time < m.frenzyUntil ? 64 : 0) | (this.time < (m.launchUntil || 0) ? 128 : 0) | (this.time < (m.weakUntil || 0) ? 256 : 0), this.posturePct(m)]) });
     }
     const g = this.gate;
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
     const gate = [g.open ? 1 : 0, waiting, g.ready.size, g.countAt ? r1(Math.max(0, g.countAt - this.time)) : 0];
-    // The mobs go in last-minute (one JSON array per floor, joined for the full world): browsers get only their floor's
-    // (snapFor); spectators, the director's film view and the server's own bots get every floor (this string).
-    const parts = [[], [], [], []];
-    for (let i = 0; i < mobs.length; i++) parts[fl[i]].push(JSON.stringify(mobs[i]));
-    const pre = JSON.stringify({ players, mobs: 0, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.(), op: this.openSnap(), du: this.duelsSnap?.() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
-    const at = pre.indexOf('"mobs":0') + 7; // (the first "mobs" key: the players array before it holds only numbers)
-    const head = pre.slice(0, at), tail = pre.slice(at + 1);
-    this.snapParts = { head, tail, floors: parts.map(a => a.join(',')), byFloor: [] };
+    // Players and mobs go in last-minute: spectators, the director's film view and the server's own bots get the whole
+    // world (this string); a browser gets only what is near it (viewFor: interest management, bandwidth).
+    const pre = JSON.stringify({ players: 0, mobs: 0, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.(), op: this.openSnap(), du: this.duelsSnap?.() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
+    const tail = pre.slice('{"players":0,"mobs":0'.length); // (the first two keys, as written above)
+    this.snapParts = { players, mobs, tail, show: !!this.director?.running };
     this.events = [];
-    return `${head}[${parts.slice(1).map(a => a.join(',')).filter(Boolean).join(',')}]${tail}`;
+    return `{"players":[${players.map(r => r.s).join(',')}],"mobs":[${mobs.map(r => r.s).join(',')}]${tail}`;
   }
-  /** The last snapshot for a browser on `floor`: only that floor's mobs (bandwidth); the rest is the same. */
-  snapFor(floor) {
+
+  /**
+   * The last snapshot as browser `v` sees it: everyone and everything on its floor within VIEW of it, its party and
+   * duel wherever they are, and its floor's boss. Hysteresis (in at VIEW.in, out past VIEW.out) keeps an entity from
+   * popping in and out at the edge; `v.inView` remembers who is shown. During a director show: everything.
+   */
+  viewFor(v) {
     const S = this.snapParts;
     if (!S) return null;
-    return S.byFloor[floor] ||= `${S.head}[${S.floors[floor] || ''}]${S.tail}`;
+    if (S.show) return `{"players":[${S.players.map(r => r.s).join(',')}],"mobs":[${S.mobs.map(r => r.s).join(',')}]${S.tail}`;
+    const fl = floorOf(v.x), was = v.inView || new Set(), now = new Set(), inR = VIEW.in * VIEW.in, outR = VIEW.out * VIEW.out;
+    const near = r => {
+      if (r.fl !== fl) return false;
+      const dx = r.x - v.x, dz = r.z - v.z, d = dx * dx + dz * dz;
+      return d <= inR || (d <= outR && was.has(r.id));
+    };
+    const ps = [], ms = [];
+    for (const r of S.players) if (r.id === v.id || (v.party && r.party === v.party) || (v.duel && r.duel === v.duel) || near(r)) { ps.push(r.s); now.add(r.id); }
+    for (const r of S.mobs) if ((r.boss && r.fl === fl) || near(r)) { ms.push(r.s); now.add(r.id); }
+    v.inView = now;
+    return `{"players":[${ps.join(',')}],"mobs":[${ms.join(',')}]${S.tail}`;
   }
 
   meFor(p) {

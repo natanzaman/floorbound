@@ -109,8 +109,35 @@ export const OBSTACLES = (() => {
   return out;
 })();
 
+// OBSTACLES bucketed on a coarse grid (built once: they never move), so a step checks the few obstacles around it
+// instead of all of them. Each bucket lists obstacle indices in OBSTACLES order, and a query visits them in that order,
+// so the result is exactly the full scan's.
+const CELL = 8, OB_R = Math.max(...OBSTACLES.map(o => o.r));
+const cellKey = (cx, cz) => cx * 4096 + cz; // (cx, cz within ±2048 cells: ±16 km)
+const OB_GRID = (() => {
+  const g = new Map();
+  OBSTACLES.forEach((o, i) => {
+    for (let cx = Math.floor((o.x - o.r) / CELL); cx <= Math.floor((o.x + o.r) / CELL); cx++)
+      for (let cz = Math.floor((o.z - o.r) / CELL); cz <= Math.floor((o.z + o.r) / CELL); cz++) {
+        const k = cellKey(cx, cz); let a = g.get(k); if (!a) g.set(k, a = []); a.push(i);
+      }
+  });
+  return g;
+})();
+const near = []; // (reused: indices near the query, sorted)
+function obstaclesNear(x, z, reach) {
+  near.length = 0;
+  const x0 = Math.floor((x - reach) / CELL), x1 = Math.floor((x + reach) / CELL), z0 = Math.floor((z - reach) / CELL), z1 = Math.floor((z + reach) / CELL);
+  for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) { const a = OB_GRID.get(cellKey(cx, cz)); if (a) for (const i of a) near.push(i); }
+  if (near.length > 1) { near.sort((a, b) => a - b); let j = 0; for (let i = 0; i < near.length; i++) if (i === 0 || near[i] !== near[i - 1]) near[j++] = near[i]; near.length = j; }
+  return near;
+}
+
 export function resolveCollision(x, z, rad = PLAYER_RADIUS) {
-  for (const o of OBSTACLES) {
+  // A push moves the point by less than OB_R + rad, so obstacles within twice that of the start cover every one the
+  // full scan could touch.
+  for (const i of obstaclesNear(x, z, 2 * (OB_R + rad))) {
+    const o = OBSTACLES[i];
     const dx = x - o.x, dz = z - o.z;
     const m = o.r + rad;
     if (Math.abs(dx) > m || Math.abs(dz) > m) continue;

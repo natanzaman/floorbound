@@ -159,7 +159,14 @@ export function initCombat(ctx) {
   // dashed amber boundary marks how far the rings reach). Every ring: at its start, a low wall of rock and dust rolls
   // out to that boundary. Jump over it as it reaches you, roll through it, or stand outside the boundary.
   const isTouch = () => document.body.classList.contains('touch');
-  function band(mesh, inner, outer) { mesh.geometry.dispose(); mesh.geometry = new THREE.RingGeometry(Math.max(0.01, inner), outer, 96); }
+  // Resize a flat ring in place (a RingGeometry with one radial step: the first row of vertices is the inner edge, the
+  // second the outer): no new geometry or GPU buffer every frame while the wave rolls out.
+  function band(mesh, inner, outer) {
+    const pos = mesh.geometry.attributes.position, n = pos.count / 2, rs = [Math.max(0.01, inner), Math.max(0.02, outer)];
+    for (let j = 0; j < 2; j++) for (let i = 0; i < n; i++) { const a = (i / (n - 1)) * Math.PI * 2; pos.setXY(j * n + i, rs[j] * Math.cos(a), rs[j] * Math.sin(a)); }
+    pos.needsUpdate = true;
+    mesh.geometry.boundingSphere = null; // (recomputed for culling)
+  }
   function quakeWindup(e) {
     const m = mobs.get(e.by), last = e.d + (e.n - 1) * (e.g ?? 1), life = last + e.max / e.sp + 0.2;
     const g = new THREE.Group();

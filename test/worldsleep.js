@@ -1,9 +1,9 @@
-// The empty world sleeps and browsers get only their floor's mobs (docs/ROADMAP.md, perf review #6 and #10).
+// The empty world sleeps and browsers get only what is near them (docs/ROADMAP.md, perf review #6 and #10).
 //   in process  nobody online: no mob moves anywhere, but the dead still respawn on time; a human on a floor wakes that
 //               floor only (town counts); a server bot out of the safe zones wakes its floor (bot-only parties), one
 //               resting in a camp doesn't; a boss mid-fight keeps its floor awake with nobody there (its wipe reset
 //               runs); a director show wakes every floor with anyone on it; mobs are only pushed apart on awake floors;
-//               snapFor(floor): that floor's mobs, the rest of the snapshot as the full one
+//               viewFor(player): players and mobs near them (+ party, duel, the floor's boss), with hysteresis
 //   server      a real server on PORT (default 6620, no database, no Named): a browser on Floor 1 gets only Floor 1's
 //               mobs, a spectator (the film view) every floor's; /status shows the bytes
 // Usage: node test/worldsleep.js   (PORT=66xx)
@@ -11,7 +11,8 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
-import { Game } from '../server/game.js';
+import { Game, VIEW } from '../server/game.js';
+import { MOBS, MOB_IDS } from '../shared/data.js';
 import { floorOf, F2 } from '../shared/floor2.js';
 import { F3 } from '../shared/floor3.js';
 
@@ -88,17 +89,43 @@ console.log('# in process');
   g.update(0.05);
   ok(Math.hypot(c.x - d.x, c.z - d.z) > 0.1 + 1e-6, 'an awake floor: stacked mobs are pushed apart');
 
-  // snapshots: the full one for bots and spectators, snapFor(floor) for browsers
+  // snapshots: the full one for bots and spectators, viewFor(player) for browsers (only what is near them)
   const full = JSON.parse(g.snapshot());
-  const per = [1, 2, 3].map(f => JSON.parse(g.snapFor(f)));
-  ok(per.every((w, i) => w.mobs.length && w.mobs.every(m => floorOf(m[2]) === i + 1)), 'snapFor(floor): only that floor\'s mobs');
-  ok(per.reduce((s, w) => s + w.mobs.length, 0) === full.mobs.length && full.mobs.length > 60, `together they're the full world's (${full.mobs.length})`);
-  const strip = w => JSON.stringify({ ...w, mobs: 0 });
-  ok(per.every(w => strip(w) === strip(full)), 'everything else is the same (players, events, gates, Floor 2/3 state, …)');
-  ok(g.snapFor(1) === g.snapFor(1), 'built once per floor per tick');
-  g.events.push({ t: 'chat', text: '"mobs":0 "mobs":[1] ]' });
+  ok(new Set(full.mobs.map(m => floorOf(m[2]))).size === 3 && full.mobs.length > 60, `the full world has every floor's mobs (${full.mobs.length})`);
+  const dm = (a, x, z) => Math.hypot(a[2] - x, a[3] - z), dp = (a, x, z) => Math.hypot(a[1] - x, a[2] - z);
+  const v = { id: -1, x: 0, z: 70, party: 0, duel: 0 };
+  let w = JSON.parse(g.viewFor(v));
+  ok(w.mobs.length && w.mobs.every(m => floorOf(m[2]) === 1 && (dm(m, v.x, v.z) <= VIEW.in || MOBS[MOB_IDS[m[1]]].boss)), `a viewer gets only its floor's mobs within ${VIEW.in} m, and its floor's boss (${w.mobs.length})`);
+  ok(full.mobs.filter(m => floorOf(m[2]) === 1 && dm(m, v.x, v.z) <= VIEW.in).every(m => w.mobs.some(x => x[0] === m[0])), 'every mob in range is there');
+  ok(w.mobs.some(m => MOBS[MOB_IDS[m[1]]].boss && dm(m, v.x, v.z) > VIEW.in) || !full.mobs.some(m => MOBS[MOB_IDS[m[1]]].boss && floorOf(m[2]) === 1 && dm(m, v.x, v.z) > VIEW.in), 'the floor\'s boss is there even out of range');
+  const strip = w => JSON.stringify({ ...w, mobs: 0, players: 0 });
+  ok(strip(w) === strip(full), 'everything else is the same (events, gates, Floor 2/3 state, …)');
+  // hysteresis: a mob between VIEW.in and VIEW.out stays only if it was already shown
+  const edge = field(g).find(m => floorOf(m.x) === 1);
+  const at = (VIEW.in + VIEW.out) / 2;
+  const v2 = { id: -2, x: edge.x, z: edge.z - at, party: 0, duel: 0 };
+  g.snapshot();
+  w = JSON.parse(g.viewFor(v2));
+  ok(!w.mobs.some(m => m[0] === edge.id), `a mob ${at} m away isn't shown to a newcomer`);
+  v2.inView.add(edge.id);
+  w = JSON.parse(g.viewFor(v2));
+  ok(w.mobs.some(m => m[0] === edge.id), '…but stays for a viewer that already had it (no popping at the edge)');
+  // players: near ones, the party and the duel wherever they are
+  const near = human(g, 'Nearby', 2, 72), far = human(g, 'Faraway', F2.x, 0), mate = human(g, 'Mate', far.x + 1, far.z), foe = human(g, 'Foe', far.x + 2, far.z);
+  const me = human(g, 'Viewer', 0, 70);
+  me.party = mate.party = 77; me.duel = foe.duel = 'd1';
+  g.snapshot();
+  w = JSON.parse(g.viewFor(me));
+  const ids = new Set(w.players.map(p => p[0]));
+  ok(ids.has(me.id) && ids.has(near.id), 'myself and a player nearby are there');
+  ok(!ids.has(far.id), 'a stranger on another floor isn\'t');
+  ok(ids.has(mate.id) && ids.has(foe.id), 'my party and my duel are, wherever they are');
+  ok(w.players.every(p => [me, near, mate, foe].some(q => q.id === p[0]) || dp(p, me.x, me.z) <= VIEW.in), 'nobody else out of range');
+  me.party = mate.party = 0; me.duel = foe.duel = 0;
+  for (const q of [near, far, mate, foe, me]) g.removePlayer(q);
+  g.events.push({ t: 'chat', text: '"mobs":0 "players":0 ]' });
   const tricky = g.snapshot();
-  ok(JSON.parse(tricky).events.at(-1).text === '"mobs":0 "mobs":[1] ]' && JSON.parse(g.snapFor(1)).events.at(-1).text === '"mobs":0 "mobs":[1] ]', 'chat text that looks like the mobs key changes nothing');
+  ok(JSON.parse(tricky).events.at(-1).text === '"mobs":0 "players":0 ]' && JSON.parse(g.viewFor(v)).events.at(-1).text === '"mobs":0 "players":0 ]', 'chat text that looks like the keys changes nothing');
   void nat;
 }
 

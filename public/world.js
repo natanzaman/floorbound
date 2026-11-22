@@ -783,11 +783,11 @@ export class Effects {
     return new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false });
   }
 
-  arc(x, z, face, r, half, color = 0xe0f2ff) {
-    const geo = new THREE.RingGeometry(r * 0.35, r, 24, 1, face - Math.PI / 2 - half, half * 2);
+  arc(x, z, face, r, half, color = 0xe0f2ff) { // (a shared unit wedge per width, turned and scaled: no new geometry per swing)
+    const h = Math.round(half * 50) / 50, geo = this.shared(`arc${h}`, () => new THREE.RingGeometry(0.35, 1, 24, 1, -h, h * 2));
     const m = new THREE.Mesh(geo, this.fadeMat(color, 0.85));
-    m.rotation.x = -Math.PI / 2; m.position.set(x, 1.0, z);
-    this.add(m, 0.22 * PACE, (mesh, k) => { mesh.material.opacity = 0.85 * (1 - k); mesh.scale.setScalar(0.85 + k * 0.2); });
+    m.rotation.set(-Math.PI / 2, 0, face - Math.PI / 2); m.position.set(x, 1.0, z);
+    this.add(m, 0.22 * PACE, (mesh, k) => { mesh.material.opacity = 0.85 * (1 - k); mesh.scale.setScalar(r * (0.85 + k * 0.2)); });
   }
 
   ring(x, z, r, color = 0xe0f2ff, life = 0.4) {

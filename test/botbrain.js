@@ -105,7 +105,7 @@ try {
   const pchat = (t0, who) => H.since(t0).filter(e => e.t === 'chat' && e.ch === 'p' && e.id !== H.id && (!who || e.id === who.id));
   const T0 = Date.now() - 10000;
   await until(() => pchat(T0).length >= 3, 6000, 'greetings');
-  ok(pchat(T0).every(e => e.party === H.party()) && pchat(T0).some(e => /here|joining|reporting/i.test(e.text)), `bots greet in party chat: "${pchat(T0)[0]?.text}"`);
+  ok(pchat(T0).every(e => e.party === H.party()) && pchat(T0).some(e => /here|joining|reporting|\bhi\b|\byo\b/i.test(e.text)), `bots greet in party chat: "${pchat(T0)[0]?.text}"`);
   ok(!H.since(T0).some(e => e.t === 'chat' && !e.ch && list.some(b => b.id === e.id)), 'no bot chatter in global chat');
 
   // ---------- they follow the human ----------

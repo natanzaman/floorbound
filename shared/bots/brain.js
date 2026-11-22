@@ -117,14 +117,47 @@ function evolve(b, m) {
   }
 }
 
+// The world as bots read it, decoded once per snapshot and shared by every bot handed the same snapshot (the server's
+// in-process bots all are: server/index.js parses the world once a tick). Read-only: per-bot notes live on the bot
+// (a few per-snapshot marks, p.trap / p.downed / partyView's names, are the same for every bot, so sharing them is safe).
+const DECODED = new WeakMap(); // w.mobs (the shared array) -> { mobs, players }
+function decodeWorld(w) {
+  let d = DECODED.get(w.mobs);
+  if (d) return d;
+  const th = new Map(w.th || []); // who a boss / elite is after (server/threat.js)
+  const mobs = [];
+  for (const m of w.mobs) {
+    const type = MOB_IDS[m[1]], def = MOBS[type];
+    if (def) mobs.push({ id: m[0], type, x: m[2], z: m[3], hp: m[5], maxHp: m[6], engaged: !!(m[7] & 2), enraged: !!(m[7] & 4), winding: !!(m[7] & 16), staggered: !!(m[7] & 32), marked: !!(m[7] & 256), def, tgt: th.get(m[0]) || 0 });
+  }
+  const players = w.players.map(p => ({ id: p[0], x: p[1], z: p[2], face: p[3], hp: p[4], maxHp: p[5], lvl: p[6], cls: CLASS_IDS[p[7]], party: p[8], dead: !!p[9], style: STYLE_IDS[p[11]] || null }));
+  d = { mobs, players };
+  DECODED.set(w.mobs, d);
+  return d;
+}
+
+// What a bot can perceive, like a player on screen: mobs on its floor within AWARE m (about where the fog closes in),
+// its floor's boss wherever it stands, and whatever it was told to attack or is already fighting.
+export const AWARE = 120;
+function perceivable(b, mobs) {
+  const fl = floorOf(b.x), keep = b.cmd?.tgt, cur = b.tgtId, r2 = AWARE * AWARE, out = [];
+  for (const m of mobs) {
+    if (m.id === keep || m.id === cur) { out.push(m); continue; }
+    if (floorOf(m.x) !== fl) continue;
+    const dx = m.x - b.x, dz = m.z - b.z;
+    if (m.def.boss || dx * dx + dz * dz <= r2) out.push(m);
+  }
+  return out;
+}
+
 function onSnap(b, msg) {
   b.dt = msg.dt || DT; b.t += b.dt; // (msg.dt: the server thinks this bot at 10 Hz while it's far from humans and fights, server/index.js)
   b.me = msg.me;
   b.cds = msg.me.cds.map((c, k) => (b.t - (b.pressed?.[k] || -9) < 0.3 ? Math.max(c, 0.2) : c));
   if (b.t - (b.dodgePressed || -9) > 0.3) b.dodgeCd = msg.me.dodge || 0;
-  b.mobs = msg.w.mobs.map(m => ({ id: m[0], type: MOB_IDS[m[1]], x: m[2], z: m[3], hp: m[5], maxHp: m[6], engaged: !!(m[7] & 2), enraged: !!(m[7] & 4), winding: !!(m[7] & 16), staggered: !!(m[7] & 32), marked: !!(m[7] & 256), def: MOBS[MOB_IDS[m[1]]] })).filter(m => m.def);
+  const world = decodeWorld(msg.w);
+  b.mobs = perceivable(b, world.mobs);
   readDuel(b, msg.w.du); // duels: drop every stand-in but my live opponents' (b.duel: my duel while I'm still in it)
-  const th = new Map(msg.w.th || []); for (const m of b.mobs) m.tgt = th.get(m.id) || 0; // who a boss / elite is after (server/threat.js)
   const f2 = msg.w.f2, f3 = msg.w.f3, fl = floorOf(b.x), gate = fl === 3 ? f3?.gate : fl === 2 ? f2?.gate : msg.w.gate;
   b.gateOpen = !!gate?.[0];
   b.gateReady = gate?.[2] || 0;
@@ -132,7 +165,7 @@ function onSnap(b, msg) {
   applyArenaSnap(f3?.ar); // boss arenas: which area (colliders, sludge, fire) (shared/arenas.js; a no-op inside the server)
   b.orbs = f2?.orbs || []; b.pools = f2?.pools || []; b.deluge = !!(f2?.del || f2?.dcall); // (dcall: the Deluge is being called: head in now)
   b.tb = msg.w.tb || null; // Team Burst gauges (server/teamplay.js teamSnap)
-  b.players = msg.w.players.map(p => ({ id: p[0], x: p[1], z: p[2], face: p[3], hp: p[4], maxHp: p[5], lvl: p[6], cls: CLASS_IDS[p[7]], party: p[8], dead: !!p[9], style: STYLE_IDS[p[11]] || null }));
+  b.players = world.players; // (shared by every bot on this snapshot: read-only, see decodeWorld)
   const mine = b.players.find(p => p.id === b.id);
   if (mine) {
     if (mine.party !== b.party) onPartyChange(b, mine.party);
