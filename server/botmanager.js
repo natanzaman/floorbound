@@ -20,6 +20,7 @@ import { startTeam } from '../shared/teambots.js';
 import { CLASSES, MAX_LEVEL, PARTY_MAX, areaName, walkable, resolveCollision, inArena } from '../shared/data.js';
 import { floorOf, inArena2 } from '../shared/floor2.js';
 import { inArena3 } from '../shared/floor3.js';
+import { inYard, ACADEMY } from '../shared/academyyard.js'; // the Academy's trial yard: solo, followers wait at the door
 import { clampSkill, skillName } from '../shared/botskill.js'; // capability levels 1-5
 import { BotEditMethods } from './botedit.js'; // live edits + actions (admin page)
 import { canControlBot, accessOf, ACCESS } from '../shared/accesslevels.js'; // who may control a bot
@@ -217,6 +218,11 @@ export class BotManager {
 
   // Too far behind (or on another floor): appear next to the player.
   catchUp(p, t) {
+    if (inYard(t.x, t.z)) { // a class trial or drill is solo: wait outside the Academy instead
+      const door = { x: ACADEMY.x + 6, z: ACADEMY.z + 2 };
+      if (Math.hypot(p.x - door.x, p.z - door.z) < 12) return;
+      t = door;
+    }
     for (let i = 0; i < 8; i++) {
       const a = Math.random() * Math.PI * 2;
       const [x, z] = resolveCollision(t.x + Math.sin(a) * 2.5, t.z + Math.cos(a) * 2.5);

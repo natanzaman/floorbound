@@ -38,6 +38,7 @@ import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
 import { comboTurn, burstTurn, setupTurn, chainTurn } from './teamplay.js'; // combo payoffs + Team Burst (G2), setups for partners and skill chains
 import { readOpenings, openingTurn, gustDodge } from './openings.js'; // boss openings, Gale Push (J3)
 import { easeOff } from './threat.js'; // DPS ease off near 90% threat (J4)
+import { inYard, ACADEMY } from '../academyyard.js'; // the Academy's trial yard: solo, so followers wait at the door
 import { readDuels, foeMobs } from '../duels.js'; // duels: only my opponents' stand-ins are targets (server/duels.js)
 
 const BOSS_LVL = { 1: 5, 2: 15, 3: 25 }; // a leader levels on its floor's field until this, then goes for the boss
@@ -91,11 +92,13 @@ function onMessage(b, msg) {
   if (msg.type === 'roster') { b.roster = msg.players; b.names = new Map(msg.players.map(r => [r.id, r])); }
   if (msg.type === 'mastery') evolve(b, msg.m);
   if (msg.type === 'talents') spendTalent(b, msg);
+  if (msg.type === 'path' && msg.cls && msg.cls !== b.cls) { b.cls = msg.cls; b.role = roleOf(msg.cls); } // graduated or changed class at the Academy (server/academy.js)
   if (msg.type === 'snap') onSnap(b, msg);
 }
 
 // Talents: spend the next unspent point along the class's `bot` path (one rank per round trip; the server answers with a new 'talents').
 function spendTalent(b, msg) {
+  if (msg.locked) return; // an Initiate (or a class trial): the tree opens at graduation
   const r = msg.r || {}, path = TREES[b.cls]?.bot || [], want = {};
   for (const id of path) {
     want[id] = (want[id] || 0) + 1;
@@ -298,7 +301,7 @@ function onBotCmd(b, e) {
   if (!mine && !((e.adm || e.free) && named)) return;
   if (e.tgt) b.locks.set(e.by, e.tgt);
   const group = named ? [b.id] : partyBots(b).filter(id => !e.no?.includes(id));
-  command(b, { k: e.cmd, by: e.by, byName: e.byName, tgt: e.tgt || b.locks.get(e.by) || 0, group, all: group.length > 1, adm: !mine });
+  command(b, { k: e.cmd, by: e.by, byName: e.byName, tgt: e.tgt || b.locks.get(e.by) || 0, group, all: group.length > 1, adm: !mine, x: e.x, z: e.z }); // (x, z: tend's garden)
 }
 
 // c: { k, by (player id, 0 = admin page), byName, tgt (mob id), group (bot ids addressed), all, adm }
@@ -316,6 +319,7 @@ function command(b, c) {
       return ack(c.k);
     }
     case 'stay': b.cmd = { ...base, k: 'stay', x: b.x, z: b.z }; return ack('stay');
+    case 'tend': if (floorOf(b.x) !== 1) return ack('notFloor1'); b.cmd = { ...base, by: 0, k: 'stay', x: +c.x || b.x, z: +c.z || b.z, tend: 1 }; return ack('stay'); // hold at the garden (life classes: server/playerbots.js)
     case 'attack': {
       const m = b.mobs.find(m => m.id === c.tgt) || b.allMobs?.find(m => m.id === c.tgt && floorOf(m.x) === floorOf(b.x)); // (an order may name a mob out of sight)
       if (!m) return ack('noTarget');
@@ -434,6 +438,7 @@ function thinkFree(b) {
   if (arenaTurn(b, moveToward)) return; // a boss arena: frozen through the fall, cover from the Tempest Beam
   if (b.healFocus && (b.healFocus.until < b.t || !P.all.some(p => p.id === b.healFocus.id))) b.healFocus = null;
   const M = decideMode(b, P);
+  if (M.anchor && inYard(M.anchor.x, M.anchor.z) && !inYard(b.x, b.z)) M.anchor = { ...M.anchor, x: ACADEMY.x + 6, z: ACADEMY.z + 2, face: 0 }; // (a class trial: wait outside)
   b.mode = M.mode;
   b.anchor = M.anchor ? { id: M.anchor.id, name: M.anchor.name, bot: !!M.anchor.bot } : null;
   upkeep(b, P, M);

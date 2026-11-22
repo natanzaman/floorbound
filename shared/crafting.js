@@ -3,6 +3,7 @@
 import { RANGER_CRAFT } from './classes/ranger.js';
 import { BERSERKER_CRAFT } from './classes/berserker.js';
 import { STYLE_RECIPES } from './styles.js';
+import { LIFE_MATS } from './life.js'; // life-class materials: herbs, ore, fish, crops, seeds, meals (shared/life.js)
 
 // Materials live in inv.mats { id: count }, not in bag slots.
 export const MATS = {
@@ -16,6 +17,7 @@ export const MATS = {
   ess: { name: 'Essence', color: '#60a5fa', from: 'salvaging Uncommon and Rare gear' },
   prism: { name: 'Prism', color: '#e879f9', from: 'salvaging Epic gear' },
 };
+Object.assign(MATS, LIFE_MATS); // (life: true: gathered or made with the life skills, shared/life.js)
 export const MAT_IDS = Object.keys(MATS);
 
 // Material drops per mob type: [mat, chance, min, max]. Each eligible player rolls their own.
@@ -82,7 +84,7 @@ export function applyRefine(it) {
 export const SALVAGE = [{ dust: 2 }, { dust: 1, ess: 1 }, { ess: 2 }, { ess: 2, prism: 1 }];
 // What salvaging returns: the rarity yield plus half the main/second materials spent refining it.
 export function salvageYield(it) {
-  if (!SALVAGE[it.r] || it.ks) return null; // Last Attack items and keepsakes can't be salvaged
+  if (!SALVAGE[it.r] || it.ks || it.ac) return null; // Last Attack items, keepsakes and Academy weapons can't be salvaged
   const out = { ...SALVAGE[it.r] };
   const [main, second] = SLOT_MATS[it.slot] || SLOT_MATS.charm;
   let m = 0, s = 0;
@@ -127,6 +129,12 @@ export const RECIPES = [
   { id: 'thornheart', name: 'Thornheart Talisman', slot: 'charm', r: 3, st: { haste: 12, sw: 25 },
     gold: 400, mats: { core: 2, resin: 8, prism: 1 }, desc: 'A rare core wrapped in living thorn.' },
 ];
+RECIPES.push( // ore from the life skills (Miner: shared/life.js)
+  { id: 'oremail', name: 'Ore-Forged Mail', slot: 'armor', r: 2, st: { hp: 18, dr: 4 },
+    gold: 120, mats: { iron: 8, copper: 6, ess: 1 }, desc: 'Copper rings over iron plates, from your own mining.' },
+  { id: 'stormedge', name: 'Stormite', slot: 'weapon', r: 3, cls: true, st: { atk: 22, crit: 5 },
+    gold: 450, mats: { stormite: 6, silver: 4, core: 1, ess: 3 }, desc: 'Stormite edged in Mire Silver. Your class.' },
+);
 RECIPES.push(...STYLE_RECIPES); // weapon-style recipes (shared/styles.js): rc.style, for that style's class only
 export const RECIPE_BY_ID = Object.fromEntries(RECIPES.map(r => [r.id, r]));
 export const recipeName = (rc, cls) => (rc.style ? rc.name : rc.cls ? `${rc.name} ${CLASS_WEAPON[cls] || 'Blade'}` : rc.name);

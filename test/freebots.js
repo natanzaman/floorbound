@@ -73,6 +73,12 @@ if (DB) await (await import('../server/db.js')).migrate(); // (the allow-list ch
   const eRook = mgr.entryOf(rook), eLyra = mgr.entryOf(lyra);
   ok(eRook.creator?.pid === ann.id && eRook.creator.name === 'Ann' && eRook.allow.length === 0, 'a bot records its creator (and an empty allow list)');
   ok(!rook.party && lyra.party && lyra.party === ann.party && eRook.behaviour === 'field', 'unticked: Rook roams and farms; ticked: Lyra joins Ann\'s party');
+  { // life classes: "Tend my garden" off Floor 1 is refused before anything changes (server/playerbots.js edit)
+    const x = rook.x; rook.x = 650;
+    let err = ''; try { pb.edit(ann, { bid: eRook.bid, mode: 'tend' }, false); } catch (e) { err = e.message; }
+    ok(/another floor/.test(err) && eRook.behaviour === 'field' && pb.owned.get(eRook.bid).mode === 'field', 'tend off Floor 1: refused, nothing changed');
+    rook.x = x;
+  }
 
   // orders by name to a free bot
   g.events = [];

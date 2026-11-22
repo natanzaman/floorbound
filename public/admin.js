@@ -11,6 +11,7 @@ import { STYLES, CLASS_STYLES, styleLine } from '/shared/styles.js';
 import { TREES, pointsAt, spentOf } from '/shared/talents.js';
 import { AFFIXES, AFFIX_IDS, SETS, affixText, isTeamAffix, setSlots, bestSetFor } from '/shared/loot.js';
 import { LOOKS } from '/shared/looks.js';
+import { WEAPONS, WEAPON_IDS, MEDALS, TRIALS, DRILLS, newPath, rankName, rankOf } from '/shared/academy.js'; // the Academy path
 import { ACCESS_MIN, ACCESS_MAX, ACCESS_ADMIN, ACCESS } from '/shared/accesslevels.js'; // account access levels (permissions)
 
 const $ = id => document.getElementById(id);
@@ -452,6 +453,15 @@ async function patch(body, okText = 'Saved.') {
 }
 const setTag = it => (it.set && SETS[it.set] ? `<span class="settag" style="color:${SETS[it.set].color}">${esc(SETS[it.set].name)}</span>` : '');
 const axLines = it => (it.ax || []).map(a => `<span class="ax${isTeamAffix(a) ? ' team' : ''}">◆ ${esc(affixText(a, ch?.cls))}</span>`).join('');
+// The Academy path at a glance: stage, weapon, rank, medals (shared/academy.js).
+function academySummary(c) {
+  const P = c.path;
+  if (!P) return '<div class="dim">No path: a character from before the Academy (graduated in its class). Its first Academy visit makes one.</div>';
+  const med = (m, k, T) => `${esc(T[k]?.name || k)} <b style="color:${['', '#d97706', '#cbd5e1', '#facc15'][m]}">${esc(MEDALS[m] || '')}</b>`;
+  const rk = rankOf(P, c.stats);
+  return `<div>${P.stage === 'initiate' ? `<b>Initiate</b> · ${esc(WEAPONS[P.weapon]?.name || P.weapon)}` : `<b>Graduated</b> (${esc(clsName(c.cls))}; weapon ${esc(WEAPONS[P.weapon]?.name || P.weapon)})`} · rank ${esc(rankName(rk))}${c.loan ? ' · <span class="pill on">in a trial</span>' : ''}</div>
+    <div class="dim" style="font-size:12px">Trials: ${Object.entries(P.trials || {}).map(([k, m]) => med(m, k, Object.fromEntries(Object.keys(TRIALS).map(x => [x, { name: clsName(x) }])))).join(', ') || 'none'} · Drills: ${Object.entries(P.drills || {}).map(([k, m]) => med(m, k, DRILLS)).join(', ') || 'none'} · Classmates: ${esc((P.cohort || []).join(', ') || 'none')} · Kept classes: ${esc(Object.keys(P.keep || {}).map(clsName).join(', ') || 'none')}</div>`;
+}
 const itemLine = it => `<span class="nm" style="color:${RARITY[it.r]?.color || '#fff'}">${esc(it.name)}${it.la ? ' ★' : ''}${setTag(it)}${axLines(it)}</span><span class="st">${Object.entries(it.st || {}).map(([k, v]) => statLabel(k, v)).join(', ')}${it.cls ? ` · ${esc(clsName(it.cls))}` : ''}${it.slot === 'weapon' && it.cls ? ` · ${esc(styleLine(it).split(':')[0])}` : ''}</span>`;
 // Affix + set editor under an item row (H2): kind, value, skill (skill affixes), set; saved with the editItem op.
 let axEdit = null; // { u, ax: [...], set }
@@ -477,12 +487,12 @@ function renderEditor() {
   const xpNext = c.lvl >= MAX_LEVEL ? 0 : xpToNext(c.lvl);
   $('e-body').innerHTML = `
   <div class="lead" style="--cc:${clsColor(c.cls)}">${clsIcon(c.cls)}
-    <div><h2>${esc(c.name)}</h2><div class="sub"><span class="cls-name">Lv ${c.lvl} ${esc(clsName(c.cls))}</span>
+    <div><h2>${esc(c.name)}</h2><div class="sub"><span class="cls-name">Lv ${c.lvl} ${esc(c.path?.stage === 'initiate' ? `Initiate · ${WEAPONS[c.path.weapon]?.name || ''} (${clsName(c.cls)})` : clsName(c.cls))}</span>
       ${c.online ? `<span class="pill on">online · F${c.floor} · ${esc(c.area)}</span>` : '<span class="pill">offline</span>'}
       <span>account: ${esc(c.account.label)} (#${c.account.id})${c.account.admin ? ' <span class="pill adm">ADMIN</span>' : ''}</span>
       <span class="faint">created ${date(c.created_at)} · last seen ${c.online ? 'now' : ago(c.updated_at)}</span></div></div>
     <span class="grow"></span><button id="e-max" class="primary" title="Max level, Floors 2 and 3, Mastery 5 + evolutions, all talents, a full boss set with top affixes, 20 of each consumable">⚡ Maxed preset</button><button id="e-reload" class="ghost">↻ Reload</button><button id="e-back">← Players</button></div>
-  <div class="secnav"><a href="#" data-go="e-sec-char">Character</a><a href="#" data-go="e-sec-cons">Consumables &amp; materials</a><a href="#" data-go="e-sec-titles">Titles &amp; stats</a><a href="#" data-go="e-sec-mastery">Skill mastery</a><a href="#" data-go="e-sec-items">Items</a><a href="#" data-go="e-sec-raw">Raw JSON</a><a href="#" data-go="e-sec-danger" style="color:#fca5a5">Delete</a></div>
+  <div class="secnav"><a href="#" data-go="e-sec-char">Character</a><a href="#" data-go="e-sec-cons">Consumables &amp; materials</a><a href="#" data-go="e-sec-titles">Titles &amp; stats</a><a href="#" data-go="e-sec-mastery">Skill mastery</a><a href="#" data-go="e-sec-academy">Academy</a><a href="#" data-go="e-sec-items">Items</a><a href="#" data-go="e-sec-raw">Raw JSON</a><a href="#" data-go="e-sec-danger" style="color:#fca5a5">Delete</a></div>
   <div class="grid">
     <section class="card esec" id="e-sec-char"><h2>Character</h2>
       <div class="row"><label class="f">Name<input id="e-name" value="${esc(c.name)}" maxlength="16" /></label><button id="e-rename" style="margin-bottom:10px">Rename</button></div>
@@ -521,6 +531,11 @@ function renderEditor() {
     ${TREES[c.cls] ? `<div class="grid">${TREES[c.cls].branches.map(b => `<div><b style="color:${b.color}">${esc(b.name)}</b>${b.nodes.map(nd => `<label class="f" style="display:flex;justify-content:space-between;gap:8px;align-items:center">${esc(nd.name)}${nd.keystone ? ' ★' : ''} <span class="dim" style="font-size:11px">T${nd.tier + 1}</span><input type="number" data-tal="${nd.id}" value="${c.talents?.[nd.id] || 0}" min="0" max="${nd.max}" style="width:60px" /></label>`).join('')}</div>`).join('')}</div>
     <div class="row" style="margin-top:8px"><button id="t-save" class="primary">Save talents</button><button id="t-reset">Reset talents (refund all)</button><span class="dim" style="font-size:12px">Checked against the tree: tier gates, prerequisites, max ranks and the level's points.</span></div>` : '<div class="dim">No talent tree for this class.</div>'}
   </section>
+  <section class="card esec" id="e-sec-academy"><h2>Academy path</h2>${academySummary(c)}
+    <div class="row" style="margin-top:8px"><label class="f">Weapon<select id="ac-w">${WEAPON_IDS.map(w => `<option value="${w}" ${w === (c.path?.weapon || 'sword') ? 'selected' : ''}>${esc(WEAPONS[w].name)}</option>`).join('')}</select></label>
+      <button id="ac-ini" ${c.online ? 'disabled title="Only while offline (the class changes)"' : ''}>Make an Initiate</button><button id="ac-grad">Mark graduated</button><button id="ac-null" title="path = null: a character from before the Academy (graduated in its class)">Clear (legacy)</button></div>
+    <div class="dim" style="font-size:12px">An Initiate's class is its weapon's base class. Making an Initiate (or changing the weapon) changes the class, so only offline; medals, drills and graduation can be edited live. Raw editor: Advanced.</div>
+  </section>
   <div class="grid" id="e-sec-items">
     <section class="card items esec"><h2>Equipped</h2>
       ${SLOTS.map(s => (inv.eq[s] ? itemRow(s, inv.eq[s], `<button class="small" data-uneq="${s}">To bag</button><button class="small danger" data-rmu="${inv.eq[s].u}">Remove</button>`) : `<div class="it"><span class="slot">${s}</span><span class="nm faint">—</span></div>`)).join('')}
@@ -549,7 +564,7 @@ function renderEditor() {
   </div>
   <section class="card esec" id="e-sec-raw"><h2>Advanced: raw JSON</h2>
     <div class="dim" style="font-size:12px;margin-bottom:8px">Edit the stored inventory, stats, skill mastery and talents directly (validated on the server; unknown stats keys are kept).</div>
-    <div class="grid" style="margin:0"><div><b>inv</b><textarea id="r-inv" spellcheck="false"></textarea></div><div><b>stats</b><textarea id="r-stats" spellcheck="false"></textarea></div><div><b>mastery</b><textarea id="r-mastery" spellcheck="false"></textarea></div><div><b>talents</b><textarea id="r-talents" spellcheck="false"></textarea></div></div>
+    <div class="grid" style="margin:0"><div><b>inv</b><textarea id="r-inv" spellcheck="false"></textarea></div><div><b>stats</b><textarea id="r-stats" spellcheck="false"></textarea></div><div><b>mastery</b><textarea id="r-mastery" spellcheck="false"></textarea></div><div><b>talents</b><textarea id="r-talents" spellcheck="false"></textarea></div><div><b>path</b> <span class="faint">(null = legacy)</span><textarea id="r-path" spellcheck="false"></textarea></div></div>
     <div class="row c" style="margin-top:8px"><button id="r-apply" class="primary">Apply raw JSON</button><span id="r-err" style="color:var(--bad)"></span></div>
   </section>
   <section class="card esec danger-zone" id="e-sec-danger"><h2>Delete character</h2>
@@ -561,6 +576,7 @@ function renderEditor() {
   $('r-stats').value = JSON.stringify(st, null, 2);
   $('r-mastery').value = JSON.stringify(c.mastery, null, 2);
   $('r-talents').value = JSON.stringify(c.talents || {}, null, 2);
+  $('r-path').value = JSON.stringify(c.path ?? null, null, 2);
   wireEditor();
 }
 
@@ -637,6 +653,9 @@ function wireEditor() {
       document.querySelector('[data-axcancel]').onclick = () => { axEdit = null; rr(); };
     }
   }
+  $('ac-ini').onclick = () => patch({ rawPath: { ...(c.path || {}), ...newPath($('ac-w').value), trials: c.path?.trials || {}, drills: c.path?.drills || {}, paid: c.path?.paid || {}, keep: c.path?.keep || {}, cohort: c.path?.cohort || [] } }, 'Now an Initiate.');
+  $('ac-grad').onclick = () => patch({ rawPath: { ...(c.path || newPath($('ac-w').value)), stage: 'class', armed: 1 } }, 'Marked graduated.');
+  $('ac-null').onclick = () => { if (confirm('Clear the Academy path (a legacy character: graduated, no medals)?')) patch({ rawPath: null }, 'Path cleared.'); };
   $('a-la1').onclick = () => patch({ ops: [{ op: 'addLastAttack', which: 1 }] }, 'Item added.');
   $('a-la2').onclick = () => patch({ ops: [{ op: 'addLastAttack', which: 2 }] }, 'Item added.');
   $('a-la3').onclick = () => patch({ ops: [{ op: 'addLastAttack', which: 3 }] }, 'Item added.');
@@ -647,8 +666,12 @@ function wireEditor() {
     try { rawMastery = JSON.parse($('r-mastery').value); } catch (e) { $('r-err').textContent = `mastery: ${e.message}`; return; }
     let rawTalents;
     try { rawTalents = JSON.parse($('r-talents').value); } catch (e) { $('r-err').textContent = `talents: ${e.message}`; return; }
+    let rawPath;
+    try { rawPath = JSON.parse($('r-path').value); } catch (e) { $('r-err').textContent = `path: ${e.message}`; return; }
     $('r-err').textContent = '';
-    patch({ rawInv, rawStats, rawMastery, rawTalents }, 'Raw JSON applied.');
+    const body = { rawInv, rawStats, rawMastery, rawTalents };
+    if (JSON.stringify(rawPath) !== JSON.stringify(c.path ?? null)) body.rawPath = rawPath; // (only when changed: a path edit ends a running trial)
+    patch(body, 'Raw JSON applied.');
   };
   if ($('t-save')) {
     $('t-save').onclick = () => patch({ talents: Object.fromEntries([...document.querySelectorAll('[data-tal]')].map(x => [x.dataset.tal, +x.value]).filter(([, v]) => v > 0)) }, 'Talents saved.');

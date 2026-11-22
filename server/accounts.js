@@ -9,8 +9,10 @@
 import crypto from 'node:crypto';
 import * as db from './db.js';
 const q = (...a) => db.q(...a);
-import { CLASSES, MAX_LEVEL } from '../shared/data.js';
+import { MAX_LEVEL } from '../shared/data.js';
 import { isNamedName } from '../shared/named.js';
+import { lifeRecord } from './life.js';
+import { WEAPONS, newPath, isWeapon, isClass } from '../shared/academy.js';
 import { cleanControls, CONTROLS_MAX_BYTES } from '../shared/controls.js';
 import { cleanAllow, ALLOW_CREATOR, ALLOW_MAX } from '../shared/accesslevels.js';
 
@@ -64,7 +66,7 @@ export async function resolveAllow(input) {
 export class AllowError extends Error { constructor(msg) { super(msg); this.code = 400; } }
 
 export async function listCharacters(accountId) {
-  return q('SELECT id, name, cls, lvl, xp FROM characters WHERE account_id = $1 ORDER BY created_at', [accountId]);
+  return q('SELECT id, name, cls, lvl, xp, path FROM characters WHERE account_id = $1 ORDER BY created_at', [accountId]);
 }
 
 // Each character's writes (saves, guild bank moves: server/guilds.js) and loads run one after another, so an older save
@@ -82,14 +84,17 @@ export async function loadCharacter(accountId, charId) {
   return charLock(charId | 0, () => loadCharacterNow(accountId, charId));
 }
 async function loadCharacterNow(accountId, charId) {
-  const rows = await q('SELECT id, name, cls, lvl, xp, gold, inv, stats, mastery, talents FROM characters WHERE id = $1 AND account_id = $2', [charId | 0, accountId]);
+  const rows = await q('SELECT id, name, cls, lvl, xp, gold, inv, stats, mastery, talents, life, path FROM characters WHERE id = $1 AND account_id = $2', [charId | 0, accountId]);
   return rows[0] || null;
 }
 
-// p: an in-game player with charId, lvl, xp, gold, inv, stats (lifetime stats + titles), mastery (skill mastery + evolutions), talents (talent tree)
+// p: an in-game player with charId, lvl, xp, gold, inv, stats (lifetime stats + titles), mastery (skill mastery + evolutions), talents (talent tree),
+// cls and path (the Academy: an Initiate or graduated; null for characters from before it). During a class trial the
+// loaned kit is never saved: p.loan holds the real class, mastery and talents (server/academy.js).
 export async function saveCharacter(p) {
-  await charLock(p.charId, () => q('UPDATE characters SET lvl = $2, xp = $3, gold = $4, inv = $5, stats = $6, mastery = $7, talents = $8, updated_at = now() WHERE id = $1',
-    [p.charId, Math.min(MAX_LEVEL, p.lvl), p.xp, Math.max(0, p.gold | 0), JSON.stringify(p.inv), JSON.stringify(p.stats || null), JSON.stringify(p.mastery || null), JSON.stringify(p.talents || null)]));
+  const real = p.loan || p;
+  await charLock(p.charId, () => q('UPDATE characters SET lvl = $2, xp = $3, gold = $4, inv = $5, stats = $6, mastery = $7, talents = $8, cls = $9, path = $10, life = $11, updated_at = now() WHERE id = $1',
+    [p.charId, Math.min(MAX_LEVEL, p.lvl), p.xp, Math.max(0, p.gold | 0), JSON.stringify(p.inv), JSON.stringify(p.stats || null), JSON.stringify(real.mastery || null), JSON.stringify(real.talents || null), real.cls || p.cls, p.path ? JSON.stringify(p.path) : null, JSON.stringify(lifeRecord(p))])); // life: server/life.js
 }
 
 // Controls that follow the account (roadmap K2): the whole fb_controls object, cleaned (unknown ids dropped), with a
@@ -185,15 +190,16 @@ export async function handle(req, res, url) {
     if (url.pathname === '/api/characters' && req.method === 'POST') {
       const a = await accountFromToken(bearer(req));
       if (!a) return json(res, 401, { error: 'signed out' }), true;
-      const { name: raw, cls } = await readBody(req);
+      const { name: raw, cls: clsIn, weapon } = await readBody(req); // a weapon: a new Initiate (docs/briefs/academy.md); a cls alone: graduated in it (admin tools, tests)
+      const cls = isWeapon(weapon) ? WEAPONS[weapon].base : clsIn, path = isWeapon(weapon) ? JSON.stringify(newPath(weapon)) : null;
       const name = String(raw || '').trim().replace(/\s+/g, ' ');
       if (!NAME_RE.test(name)) return json(res, 400, { error: 'Names are 3–16 letters or numbers (spaces, _ . - allowed inside).' }), true;
-      if (!CLASSES[cls]) return json(res, 400, { error: 'Pick a class.' }), true;
+      if (!isClass(cls)) return json(res, 400, { error: 'Pick a weapon.' }), true;
       if (process.env.NAMED_ENABLED !== '0' && isNamedName(name)) return json(res, 409, { error: 'That name is taken.' }), true; // the Named's names are theirs (shared/named.js)
       const [{ n }] = await q('SELECT count(*)::int AS n FROM characters WHERE account_id = $1', [a.id]);
       if (n >= MAX_CHARACTERS) return json(res, 400, { error: `You can have up to ${MAX_CHARACTERS} characters.` }), true;
       try {
-        const [c] = await q('INSERT INTO characters (account_id, name, cls) VALUES ($1, $2, $3) RETURNING id, name, cls, lvl, xp', [a.id, name, cls]);
+        const [c] = await q('INSERT INTO characters (account_id, name, cls, path) VALUES ($1, $2, $3, $4) RETURNING id, name, cls, lvl, xp, path', [a.id, name, cls, path]);
         return json(res, 200, { character: c }), true;
       } catch (e) {
         if (e.code === '23505') return json(res, 409, { error: 'That name is taken.' }), true;

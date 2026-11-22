@@ -10,6 +10,7 @@ import { LANCER } from './classes/lancer.js';
 import { BARD } from './classes/bard.js';
 import { RANGER } from './classes/ranger.js';
 import { BERSERKER } from './classes/berserker.js';
+import { ACADEMY, ACADEMY_MOB_IDS, ACADEMY_MOBS, ACADEMY_BITE, inYard } from './academyyard.js'; // the Academy and its yard (docs/briefs/academy.md)
 
 export const TICK_RATE = 20;
 // Ability pacing (PACE, paced, paceMoves): shared/pace.js, re-exported here.
@@ -60,6 +61,7 @@ export const crossesGate = (x0, z0, x1, z1) => (z0 < GATE.z) !== (z1 < GATE.z) &
 
 export function walkable(x, z, gateClosed = false) {
   const lab = labAt(x, z); if (lab) return walkLab(lab, x, z); // a labyrinth (shared/labyrinth.js)
+  if (inYard(x, z)) return true; // the Academy yard's pens (shared/academyyard.js): their edges are their walls
   if (x > F3.split) return walkable3(x, z, gateClosed); // Floor 3 (shared/floor3.js): gateClosed means its Storm Gate
   if (x > F2.split) return walkable2(x, z, gateClosed); // Floor 2: gateClosed means Floor 2's gate there
   if (gateClosed && gateBlocks(x, z)) return false;
@@ -71,6 +73,7 @@ export function walkable(x, z, gateClosed = false) {
 
 export function areaName(x, z) {
   const lab = labAt(x, z); if (lab) return lab.name; // a labyrinth's layer (shared/labyrinth.js)
+  if (inYard(x, z)) return 'The Academy Yard';
   if (x > F3.split) return areaName3(x, z);
   if (x > F2.split) return areaName2(x, z);
   if (inTown(x, z)) return 'Town of Beginnings';
@@ -93,6 +96,7 @@ export const OBSTACLES = (() => {
   const houses = [[-16, -12], [16, -12], [-18, 8], [18, 8], [-8, -20], [8, -20]];
   for (const [x, z] of houses) out.push({ kind: 'house', x, z, r: 3.4, rot: Math.atan2(-x, -z) });
   out.push({ kind: 'fountain', x: 0, z: 0, r: 3 }); // the town's waypoint (shared/floor2.js WAYPOINTS)
+  out.push({ kind: 'academy', x: ACADEMY.x, z: ACADEMY.z, r: ACADEMY.r }); // the Academy (drawn by public/academy.js)
   let n = 0, tries = 0;
   while (n < 110 && tries < 8000) {
     tries++;
@@ -237,12 +241,15 @@ Object.assign(MOBS, LAB_MOBS);
 // Duel stand-ins (shared/duels.js): one on each duelist, so attacks reach opponents; appended after the trap objects.
 MOB_IDS.push(...DUEL_MOB_IDS);
 Object.assign(MOBS, DUEL_MOBS);
+// The Academy's training enemies (shared/academyyard.js), appended after the duel stand-ins.
+MOB_IDS.push(...ACADEMY_MOB_IDS);
+Object.assign(MOBS, ACADEMY_MOBS);
 
 export const xpToNext = lvl => 50 * lvl;
 
 // Melee bites hit a wedge in front of the attacker (shown as a red wedge during the wind-up).
 export const BITE = { boar: [2.6, 0.7], wolf: [2.8, 0.6], alpha: [3.4, 0.85], hound: [2.8, 0.6], oldtusk: [3.6, 0.8], ghostfang: [3.4, 0.85] }; // [reach, half-angle]
-Object.assign(BITE, F2_BITE, F3_BITE, LAB_BITE);
+Object.assign(BITE, F2_BITE, F3_BITE, LAB_BITE, ACADEMY_BITE);
 export const PACK = { auraRange: 12, auraAtk: 0.25, howlEvery: 12, howlRange: 16, frenzy: 6 };
 // The Warden's three phases: 100-66% (cleave + slams), 66-33% (+ hounds, horn charge), <33% (+ spin, rockfall).
 // Quake Rings and the Horn Sweep come in every phase (more rings / more often later).

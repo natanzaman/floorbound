@@ -147,6 +147,16 @@ try {
   r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { name: `Ren${tag}`, cls: 'guardian' });
   [db] = await sql('SELECT name, cls, inv FROM characters WHERE id = $1', [off.id]);
   ok(r.status === 200 && db.name === `Ren${tag}` && db.cls === 'guardian' && !db.inv.eq.weapon && db.inv.bag.some(it => it.u === weapon.u), 'rename + class change (old-class weapon back to the bag)');
+  // the Academy path (characters.path): an Initiate path moves the class to the weapon's base class; null = legacy
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { rawPath: { stage: 'initiate', weapon: 'spear', trials: { lancer: 2 } } });
+  [db] = await sql('SELECT cls, path FROM characters WHERE id = $1', [off.id]);
+  ok(r.status === 200 && db.cls === 'lancer' && db.path?.stage === 'initiate' && db.path.trials.lancer === 2 && r.body.character.path?.weapon === 'spear', 'path: an Initiate · Spear (class Lancer)');
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { rawPath: { weapon: 'axe' } });
+  ok(r.status === 400, 'path: an unknown weapon is rejected');
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { rawPath: null });
+  [db] = await sql('SELECT cls, path FROM characters WHERE id = $1', [off.id]);
+  ok(r.status === 200 && db.path === null && db.cls === 'lancer', 'path: cleared (legacy), the class stays');
+  r = await call('PATCH', `/api/admin/characters/${off.id}`, adminTok, { cls: 'guardian' });
 
   // ---------- online edit ----------
   const pc = client({ type: 'join', session: userTok, character: on.id });

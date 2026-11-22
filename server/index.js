@@ -25,6 +25,8 @@ import { TICK_RATE, inArena } from '../shared/data.js';
 import { floorOf, inArena2 } from '../shared/floor2.js';
 import { inArena3 } from '../shared/floor3.js';
 import { clampAccess } from '../shared/accesslevels.js'; // account access levels (permissions, not character levels)
+import { WEAPONS, isWeapon } from '../shared/academy.js'; // Initiates pick a weapon (docs/briefs/academy.md)
+import { carveRanks } from './academy.js';
 import { makeGuildStore } from './guilds.js'; // guilds in Postgres (docs/briefs/guilds.md); in memory without a database
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -51,7 +53,9 @@ setInterval(() => { crashes = Math.max(0, crashes - 5); }, 60000).unref();
 
 const game = new Game();
 game.track = track.record;
-game.onClear = rec => { hall.add(game.guildTagClear(rec)); broadcastHall(); }; // Hall of Clearers (DB insert + in-memory cache); the engraved stones update live; clearers carry their guild tag
+// Hall of Clearers (DB insert + in-memory cache); the engraved stones update live. Each name's class rank is carved
+// beside it (server/academy.js carveRanks), and each clearer's guild tag (server/guilds.js guildTagClear).
+game.onClear = rec => { hall.add(game.guildTagClear(carveRanks(game, rec))); broadcastHall(); };
 const spectators = new Set(); // watch-only clients (?spectate=1)
 // The server's own bots (admin, player-added, the Named) talk to it through in-process sockets (server/localws.js):
 // no JSON or loopback socket per bot per tick. BOT_TRANSPORT=ws puts them back on real WebSockets (benchmarks, tests).
@@ -124,12 +128,16 @@ function onConnection(ws) {
         other.ws.close();
         c = await accounts.loadCharacter(acct.id, msg.character);
       }
-      const p = game.addPlayer(ws, c.name, c.cls, { charId: c.id, accountId: acct.id, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats, mastery: c.mastery, talents: c.talents });
+      const p = game.addPlayer(ws, c.name, c.cls, { charId: c.id, accountId: acct.id, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats, mastery: c.mastery, talents: c.talents, life: c.life, path: c.path }); // life: life classes (server/life.js); path: the Academy (server/academy.js)
       admin.isAdmin(acct).then(v => { p.admin = v; }).catch(() => {}); // admins can order any bot (botcmd with a name)
       p.access = clampAccess(acct.access_level); // access level 1-5 (shared/accesslevels.js; admins count as 5)
       return p;
     }
     if (bots.isBotJoin(msg)) return bots.addBotPlayer(ws, msg); // server-run bot (server/botmanager.js)
+    if (isWeapon(msg.weapon)) { // an anonymous Initiate: a weapon instead of a class (a join with cls stays graduated: bots, tests, old links)
+      game.joinWeapon = msg.weapon;
+      try { return game.addPlayer(ws, msg.name, WEAPONS[msg.weapon].base); } finally { game.joinWeapon = null; }
+    }
     return game.addPlayer(ws, msg.name, msg.cls);
   }
   let budget = 60; // simple flood guard: messages per second
@@ -163,6 +171,8 @@ function onConnection(ws) {
         ws.send(JSON.stringify(game.invFor(player))); player.invDirty = false;
         ws.send(JSON.stringify(game.masteryMsg(player))); player.masteryDirty = false; player.mSentT = game.time;
         ws.send(JSON.stringify(game.talentsMsg(player))); player.talentsDirty = false; // talent tree (server/talents.js)
+        ws.send(JSON.stringify(game.lifeMsg(player))); player.lifeDirty = false; // life classes (server/life.js)
+        ws.send(JSON.stringify(game.pathMsg(player))); player.pathDirty = false; // the Academy path (server/academy.js)
         ws.send(JSON.stringify(hall.message())); // the engraved stones
         ws.send(JSON.stringify({ type: 'cine', state: game.cineState() })); // players only use its light (public/cine.js)
         broadcastRoster();
@@ -248,6 +258,8 @@ function tick(dt) {
     } else sendCounted(p.ws, `{"type":"snap","st":${st},"me":${JSON.stringify(game.meFor(p))},"w":${p.bot ? world : game.viewFor(p)}}`); // a human: only what is near them (Game.viewFor, bandwidth); a bot on a socket: the same world as in process
     if (p.invDirty) { p.invDirty = false; p.ws.send(JSON.stringify(game.invFor(p))); }
     if (p.talentsDirty) { p.talentsDirty = false; p.ws.send(JSON.stringify(game.talentsMsg(p))); } // talent tree: points, ranks
+    if (p.lifeDirty && !p.bot) { p.lifeDirty = false; p.ws.send(JSON.stringify(game.lifeMsg(p))); } // life classes (server/life.js)
+    if (p.pathDirty) { p.pathDirty = false; p.ws.send(JSON.stringify(game.pathMsg(p))); } // the Academy path: class, kit names, medals (server/academy.js)
     if (p.masteryDirty && (p.masteryNow || game.time - (p.mSentT || 0) >= 1)) { // skill mastery: at most once a second, at once on a level-up/evolve
       p.masteryDirty = p.masteryNow = false; p.mSentT = game.time;
       p.ws.send(JSON.stringify(game.masteryMsg(p)));

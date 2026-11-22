@@ -242,9 +242,19 @@ The stone itself is engraved: its face carries the names of the latest Floor 1 c
   - **Reforge** an item's stats within its rarity range, or give a charm a different affix, for Essence and gold (Epics also take a Prism). Crafted and Last Attack items are fixed.
 - Everything is validated on the server and saved with the character. Tuning lives in `shared/crafting.js` (drops, costs, recipes); the server side is `server/smith.js`, the forge and panel `public/smith.js`. Tests: `node test/craft.js`.
 
+## Life classes
+
+A second track beside your combat class (plan: `docs/briefs/life-classes.md`). Life skills level 1–10 by doing them: **Herbalist, Miner, Fisher, Farmer** (gathering) and **Cook, Alchemist** (making), plus **Smith**, which levels from everything you do at the Smith. Learn them free at the **Life Hall** (the green-roofed booth just east of the plaza, toward the south). Game Menu → Life skills opens the Life panel anywhere (levels, garden, recipes, meals).
+- **Gathering spots** in the fields of Floors 1–3 (herb patches, ore veins, fishing pools; a few rare glowing ones in the labyrinths). Press F at one: herbs and ore take a few seconds standing still (moving or a hit stops it); fishing waits for the bite (“A BITE!”), then press F within about a second. A spot you emptied refills for you after a few minutes; nobody else can use up yours. Higher levels open better spots and add to every yield.
+- **Your garden**: six tiles of your own in the town garden (north-west of the plaza; everyone sees their own crops). Seeds from the merchant (Wheat, Carrot, Sunberry) or herb patches (Moonroot from Floor 3 and the labyrinths). Crops grow in real time, also while you're away, and are ripe in 20 min to 6 h. Your own bots near the garden (`/b tend`, or the bot behaviour “Tend my garden”) make it grow 25% faster.
+- **Cooking fire** (north-east of the plaza): meals are fight buffs, one at a time (a new one replaces it), 15–20 min of play: Field Bread (health back every second, even in fights), Fisher's Stew (+12% posture damage), Carrot Pie (+8% max health), Spiced Eel (+6% damage), Tower Feast (a bit of everything). Eat from the bag or the Meals tab.
+- **Alchemy bench** (east of the plaza): brews the usual Health Potions, Battle Tonics and Ironbark Draughts from herbs and ore.
+- Ore also feeds the Smith: Ore-Forged Mail and a Stormite weapon in the Craft tab. Life materials stack to 99 in the Materials pouch.
+- Data: `shared/life.js` (skills, XP curve, spots, crops, recipes, meals); rules: `server/life.js`; client: `public/life.js`. Saved in `characters.life`. Tests: `node test/life.js` (with `DATABASE_URL`: a real server, restarts and all), `python3 test/life.py` (browser).
+
 ## New players and the party finder
 
-New characters get a short step-by-step guide card (move, hit, dodge, kill, bag, party, Switch, raid gate, boss) plus one-time tips the first time they see each attack type. **Find party** puts you in the party finder: solo players are matched together, or into any party that has turned on recruiting.
+New characters start as Initiates (see The Academy) and get a short step-by-step guide card (move, hit, dodge, kill, bag, party, Switch, raid gate, boss) plus one-time tips the first time they see each attack type. **Find party** puts you in the party finder: solo players are matched together, or into any party that has turned on recruiting.
 
 ## Duels
 
@@ -442,6 +452,32 @@ Talents are saved with the character (a `talents` JSONB column, `{ nodeId: rank 
 
 **Adding a class or changing a tree is data only:** add an entry to `TREES` in `shared/talents.js` (branches → nodes with `tier`, `x`, `max`, `req`, `fx`, optional `touches` for the Abilities pane, plus a `bot` path); a class without an entry just shows "no talent tree yet". Effect kinds are listed at the top of that file; keystones are `{ key }` rules in `server/talents.js`. The server applies everything (hooks in `recompute`, `addPosture`, `damagePlayer` and `addPlayer`, plus wrappers around `useSkill`, `skillCd`, `damageMob`, `healPlayer`, `hitCircle`/`hitArc`, `dodge`, `evadeHit`, `guardHit`, `breakMob`, `killMob` and `giveXp`, installed last in `game.js`). The newer classes' keystones sit in their own section of `server/talents.js` (wrappers around their class methods: `fireArrowA`/`arrowHitA`, `markA`, `gainRageA`, `updateTrapsA`, `startSong`/`songTick`, `addDiscord`, `crescBurst`, ...); `schedule` is wrapped too, so a delayed hit (Rain of Arrows, Leap Slam, Sky Lance's landing, Crescendo) keeps the skill that queued it and its per-skill damage / radius talents, and arrows and sonic bolts count as the basic attack. The window is `public/talents.js`. Tests: `node test/talents.js` (add `DATABASE_URL=...` for the save/load round trip), `node test/newclass.js` (the newer classes' trees and styles).
 
+## The Academy: Initiates, class trials, drills and ranks
+
+New characters start as **Initiates**: you pick a name and a **weapon** (sword, spear, bow, staff or wand), not a class. An Initiate fights with the weapon's base class at 85% power, with plain skill names (a sword's Rush is "Lunge") and no level-3 skill; the talent tree stays locked but points bank up by level, and skill mastery still grows.
+
+- **The Academy** is the stone hall west of the Town of Beginnings' square (interact to open it). From **level 5** an Initiate may take the **class trials** its weapon leads to (sword: Swordsman, Guardian, Berserker; spear: Lancer, Guardian; bow: Ranger; staff and wand: Cleric, Bard). The armory changes your weapon for free until you graduate (Academy weapons are lent: worth nothing, never sold or salvaged, and handed back when you switch; the weapon you graduate with is yours).
+- **Trials** run in the walled yard behind the hall, one pen per player, with that class's full kit on loan (nothing is saved). The enemies are yours alone and give no XP or loot. Medals: bronze, silver, gold.
+
+| Class | Trial | Bronze / Silver / Gold |
+| --- | --- | --- |
+| Swordsman | Break the Training Golem, then bring it down | 45 / 30 / 20 s |
+| Guardian | Hold three Training Wolves off the Ward Post for 30 s | 50 / 75 / 90% |
+| Berserker | Fell six Training Dummies | 40 / 30 / 20 s |
+| Lancer | Tip-of-reach hits on advancing dummies (30 s) | 8 / 12 / 16 |
+| Ranger | Down strafing targets (30 s) | 5 / 8 / 11 |
+| Cleric | Keep the Ward Post alive 30 s (your heals mend it) | alive / 50 / 70% |
+| Bard | Keep the Ward Post buffed 30 s (songs, Crescendo) | 14 / 22 / 30 pts |
+
+- **Graduating** (a passed trial and a confirm): the class, a matching Uncommon weapon, full names and power, the level-3 skill and the talent tree with every banked point. Graduates can **change class** later at the Academy for gold (100 + 20 per level) into any class whose trial they passed; mastery and talents are kept per class.
+- **Drills** (open to everyone): Perfect Dodge, Break then Switch, Read the Wind-up, Interrupt the Cast, Revive Under Fire, Skill Chain. Each medal tier pays once (25 gold; 50 gold and a tonic; 100 gold and a draught).
+- **Class rank:** Novice, Adept, Expert, Master, from medal points (bronze 1, silver 2, gold 3) and floors cleared. Shown from Adept up on nameplates, the Players list and next to your name in the Hall of Clearers.
+- **Hall heads:** the Named head the class halls (Halvard, Maribel, Tovin, Sennet, Cairn); passing their class's trial earns their friendship.
+- **Classmates:** on your first visit two bot classmates enrol with you as your own bots. They level with you and graduate when you do, into classes that fill out your party. Re-summon them at the Academy.
+- Characters made before the Academy are graduated in their class; nothing changes for them. Bots and the Named are not Initiates.
+
+Code: `shared/academy.js` (rules and tables), `shared/academyyard.js` (the building, the yard, training enemies), `server/academy.js`, `public/academy.js`. Brief: `docs/briefs/academy.md`. Tests: `node test/academy.js` (with `DATABASE_URL` it also runs a server: create, trial, graduate, restart) and `python3 test/academy.py` (browser).
+
 ## Classes
 
 | Class | Role | Skills |
@@ -463,6 +499,7 @@ shared/data.js   classes, skills, mobs, map, collision — used by server AND cl
 shared/floor2.js Floor 2: map, waypoints (every floor's), enemies, Sovereign tuning (appended into data.js)
 server/floor2.js Floor 2 AI (Shieldback, Wisp, Lurker, Matron, Sovereign), Sunken Gate, waypoint travel/Stairway
 public/floor2world.js, public/floor2client.js  Floor 2 scene, models, effects, waypoint glows and UI
+shared/academy.js, shared/academyyard.js, server/academy.js, public/academy.js  the Academy: Initiates, class trials, drills, ranks, classmates
 public/wellwake.js     the well waking (Floor 1's waypoint sleeps until your Floor 2 opens; the short shot of it lighting up)
 shared/floor3.js Floor 3: map, enemies, Colossus tuning and twists (appended into data.js)
 server/floor3.js Floor 3 AI (Ram, Harpy, Acolyte, Sentinel, rares, the Colossus: Overload, Tempest Beam), Storm Gate, Stairway, travel
@@ -471,6 +508,7 @@ shared/arenas.js, server/arenas.js, public/arenas.js  multi-area boss fights: ar
 shared/bots/floor3.js  bots: Tempest Beam jumps, Breaks into an Overload
 shared/bots/arenas.js  bots in a boss's lower area: the landing, round sludge and fire, cover from the beam
 server/game.js   authoritative simulation: combat, AI, boss, XP, parties
+shared/life.js, server/life.js, public/life.js  life classes: life skills, gathering spots, the garden, cooking, alchemy, meals, the Life panel
 server/combat.js posture/Break, perfect dodge, guard/parry, Horn Sweep, Quake Rings (mixed into Game)
 shared/threat.js, server/threat.js, public/threat.js  team threat: targetOf (the one target picker), taunt locks, clean-damage multiplier, who bosses target (snapshot `th`), threat meter (`me.th`), healer threat, Guardian Cover, flank / Pincer; bots in shared/bots/threat.js; test/threat.js, test/threatrules.js
 server/bossteam.js boss team mechanics: shared meteor (stack), spread markers, tether (mixed into Game; public/bossteam.js, shared/bots/bossteam.js)
@@ -500,6 +538,7 @@ public/xboxusb.js  WebUSB driver for wired third-party Xbox pads on a Mac (GIP: 
 public/focusnav.js  controller menu navigation: spatial focus over the top window marked data-nav, A / B, focus restore by key; test/focusnav.js (DOM-free parts), test/padnav.mjs (a fake pad in a real browser)
 shared/gamepad.js  pad reading (deadzones, trigger hysteresis, button edges, the LB layer, glyph families; DOM-free); test/gamepad.js, test/padsmoke.mjs (a fake pad in a real browser)
 test/combat.js   in-process checks for posture, perfect dodge, guard/parry and the Horn Sweep (node test/combat.js)
+test/academy.js  the Academy: rules, trials and drills in process, graduation and class change; with DATABASE_URL a server run (port 3941); test/academy.py: the creation screen, panel and a trial in a browser
 test/wellwake.js the well's dormant rule (no warp before Floor 2 opens, warp after), the film's wake cue, Episode 1's sheet; test/wellwake.py: the shot in a browser (Python Playwright)
 test/bubbles.js  speech bubble logic: duration, one per speaker, who sees which line; film subtitle hold (public/bubbles.js)
 test/filmsubs.mjs  film dialogue in a browser: subtitles in the letterbox bar, voice-over files played (needs Playwright for Node)
@@ -569,7 +608,7 @@ The page has three tabs:
 
     Test runners take it too: `BOT_SKILL=3 node test/team.js`, and `BOT_SKILL=3 RUNS=2 node test/wardenskill.js` (its own server, Lv 10 party at the raid gate; prints kill/wipe, fight time, deaths, downs and revives, and Quake Rings jumped / rolled / hit per run; `ROLES=guardian,ranger,berserker,lancer,bard,cleric` for a full party; `BOSS=sovereign` fights the Drowned Sovereign instead (Lv 18 party at the Sunken Gate) and reports Tidal Waves rolled / hit, geyser hits and Deluge ticks).
 - **Players:** every saved character merged with the live game: class (icon and colour), level, account (Discord name or `guest #id`), **access level** (a 1-5 select per account; admins show 5), online/offline, current floor and area, last seen and created. Search, filter by status, class and level range, and sort (click a column).
-- **Edit** (click a character), in sections with a jump bar and a sticky *Save changes* bar: level and XP, gold, consumables, materials, equipped and bag items (remove, equip, add any slot/rarity/class with or without rolled affixes, add the Last Attack items, add a set piece or a full set; **Affixes** on any item edits its affixes (kind, value, skill) and set, or rolls fresh ones), a **⚡ Maxed preset** (max level, Floors 2 and 3, Mastery 5 and evolutions, all talents, a full boss set for the class role with 3 top affixes per piece, the Last Attack items in the bag, 20 of each consumable), titles earned and worn, lifetime stats, skill mastery (level/points and evolution branch per skill), the Floor 2 and Floor 3 unlocks, rename, class change (offline only; a weapon for the old class goes back to the bag), delete (type the name to confirm), and an **Advanced: raw JSON** editor for the stored inventory, stats and mastery (validated; unknown stats keys are kept). If the character is online, the edit is applied to the live player straight away (they get "An admin updated your character") and saved.
+- **Edit** (click a character), in sections with a jump bar and a sticky *Save changes* bar: level and XP, gold, consumables, materials, equipped and bag items (remove, equip, add any slot/rarity/class with or without rolled affixes, add the Last Attack items, add a set piece or a full set; **Affixes** on any item edits its affixes (kind, value, skill) and set, or rolls fresh ones), a **⚡ Maxed preset** (max level, Floors 2 and 3, Mastery 5 and evolutions, all talents, a full boss set for the class role with 3 top affixes per piece, the Last Attack items in the bag, 20 of each consumable), titles earned and worn, lifetime stats, skill mastery (level/points and evolution branch per skill), the Floor 2 and Floor 3 unlocks, rename, class change (offline only; a weapon for the old class goes back to the bag), the **Academy path** (Initiate or graduated, weapon, rank, medals, classmates; *Make an Initiate* (offline: the class becomes the weapon's base class), *Mark graduated*, *Clear (legacy)*), delete (type the name to confirm), and an **Advanced: raw JSON** editor for the stored inventory, stats, mastery, talents and path (validated; unknown stats keys are kept). If the character is online, the edit is applied to the live player straight away (they get "An admin updated your character") and saved.
 
 **Access levels** (`shared/accesslevels.js`, `accounts.access_level`): every account has a permission level from 1 to 5, never to be confused with a character's level. Everyone starts at 1 (guests and anonymous players too); admin accounts count as 5. Devs set it on the admin page's Players tab (`POST /api/admin/accounts/:id/access { level }`; online players get it at once). `ACTION_MIN` maps each gated action (`botAdd`, `botCommand`, `botInvite`, `botKick`, `botDespawn`, `botRespawn`) to its minimum level, all 1 for now: raising one is a one-line change. Named levels: `ACCESS.overrideBots` (3) controls and manages any bot.
 

@@ -8,9 +8,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 input { font: inherit; }
 
 /* ---------- login ---------- */
-#login { position: fixed; inset: 0; display: grid; place-items: center; z-index: 20;
+#login { position: fixed; inset: 0; display: grid; place-items: safe center; overflow: auto; z-index: 20;
   background: radial-gradient(ellipse at 50% 30%, rgba(40,70,140,.55), rgba(5,8,20,.92)); }
-.login-card { width: min(560px, 92vw); padding: 28px; border-radius: 14px; background: rgba(12,18,38,.82);
+.login-card { width: min(560px, 92vw); margin: 16px 0; padding: 28px; border-radius: 14px; background: rgba(12,18,38,.82);
   border: 1px solid rgba(160,200,255,.25); box-shadow: 0 0 60px rgba(80,140,255,.25); }
 .logo { font-size: clamp(30px, 7vw, 44px); font-weight: 800; letter-spacing: .25em; text-align: center;
   background: linear-gradient(180deg, #fff, #9cc4ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
@@ -743,3 +743,30 @@ body.pad #talentsp .tn.nav-focus .core { stroke: #facc15 !important; stroke-widt
 #players .gd-empty { opacity: .6; font-size: 12px; padding: 4px 0; }
 #players .gd-foot { opacity: .65; font-size: 11.5px; margin-top: 8px; }
 #players .gd-end { margin-top: 12px; }
+
+/* life classes (public/life.js): the Life panel, the gathering bar */
+.lbl.npc.life { color: #86efac; }
+#life { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 44px); left: 50%; transform: translateX(-50%); width: min(480px, calc(94vw / var(--ui-scale))); max-height: calc(100vh / var(--ui-scale) - 140px); display: flex; flex-direction: column; padding: 12px 14px; font-size: 13px; z-index: 3; border-color: rgba(134,239,172,.5); }
+#life.hidden { display: none; }
+#life .top { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 16px; letter-spacing: .1em; color: #86efac; }
+#life .x { padding: 2px 9px; border-radius: 6px; border: 1px solid rgba(160,200,255,.3); background: transparent; }
+#life .tabs { display: flex; gap: 4px; margin: 8px 0; }
+#life .tabs button { flex: 1; padding: 6px 0; border-radius: 8px; border: 1px solid rgba(134,239,172,.3); background: rgba(255,255,255,.03); font-size: 12px; font-weight: 700; }
+#life .tabs button.on { background: rgba(134,239,172,.2); border-color: rgba(134,239,172,.7); color: #dcfce7; }
+#life .body { overflow: auto; min-height: 0; flex: 1; }
+#life .hint { margin: 0 0 8px; font-size: 11px; opacity: .7; line-height: 1.35; }
+#life .it .btns { display: flex; flex-direction: column; gap: 4px; flex: none; }
+#life .it button:disabled { opacity: .35; cursor: default; }
+#life em { font-style: normal; font-size: 11px; opacity: .85; margin-left: 4px; }
+#life .no { color: #f87171; }
+#life .ok { color: #86efac; }
+#life .cost { display: flex; flex-wrap: wrap; gap: 3px 8px; margin-top: 3px; font-size: 11px; }
+#life .cost span { color: var(--c, #e5e7eb); }
+#life .cost span.no { color: #f87171; }
+#life .cost i { font-style: normal; opacity: .6; }
+#life .lb, #life-bar .lb { height: 5px; border-radius: 3px; background: rgba(255,255,255,.1); margin: 3px 0 1px; overflow: hidden; }
+#life .lb > div, #life-bar .lb > div { height: 100%; background: #86efac; }
+#life-bar { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%); z-index: 5; min-width: 200px; text-align: center; padding: 6px 12px; border-radius: 10px; background: rgba(10,20,15,.75); border: 1px solid rgba(134,239,172,.45); color: #dcfce7; font: 600 13px system-ui, sans-serif; pointer-events: none; }
+#life-bar.hidden { display: none; }
+#life-bar small { opacity: .7; }
+#life-bar .bite { color: #fde047; font-size: 16px; }

@@ -11,6 +11,7 @@ export const GroundMethods = {
     const i = p.inv.bag.findIndex(it => it.u === u);
     if (i < 0) return;
     if (p.inv.bag[i].ks) return this.sys('A keepsake stays with you.', p.id);
+    if (p.inv.bag[i].ac) return this.sys('Academy weapons stay with you (discard it if you want it gone).', p.id);
     const [it] = p.inv.bag.splice(i, 1);
     this.ground ||= new Map();
     let x = p.x + Math.sin(p.face || 0) * 1.1, z = p.z + Math.cos(p.face || 0) * 1.1;
@@ -31,6 +32,7 @@ export const GroundMethods = {
     if (Math.hypot(p.x - g.x, p.z - g.z) > GROUND.reach + 1) return;
     if (g.by === p.id && this.time < g.byUntil) return;
     if (g.stack) { // potions or materials: no bag slot needed
+      if (g.stack.kind !== 'cons' && this.lifeRoom && !this.lifeRoom(p, g.stack.id, g.stack.n)) return this.sys(`You can't carry that many ${g.name}: a life material stack stops at 99.`, p.id); // (server/life.js)
       const pool = g.stack.kind === 'cons' ? p.inv.cons : (p.inv.mats ||= {});
       pool[g.stack.id] = (pool[g.stack.id] || 0) + g.stack.n;
     } else {

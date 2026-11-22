@@ -123,4 +123,9 @@ async function setup() {
     char_id INT REFERENCES characters(id) ON DELETE CASCADE, named_id TEXT, rank SMALLINT NOT NULL DEFAULT 0,
     name TEXT NOT NULL, cls TEXT, joined_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   await q(`CREATE INDEX IF NOT EXISTS guild_members_guild ON guild_members (guild_id)`);
+  // Life classes (server/life.js, shared/life.js newLife): { skills: { id: xp }, learned, plot (the garden tiles), food, spots }
+  await q(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS life JSONB`);
+  // The Academy (docs/briefs/academy.md): an Initiate's weapon or a graduate's record, medals, mastery and talents kept per
+  // class, classmates (shared/academy.js cleanPath). NULL: a character from before the Academy, graduated in its class.
+  await q(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS path JSONB`);
 }
