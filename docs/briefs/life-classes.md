@@ -6,7 +6,7 @@ Herbs, ore, fish and crops become meals (fight buffs), potions and Smith gear. G
 ## Design
 - **Life skills**, levels 1-10, earned by doing them: Herbalist, Miner, Fisher, Farmer (gathering), Cook, Alchemist
   (making) and Smith (levels from every Smith action: refine, salvage, reforge, craft, affix reroll; known from the start).
-  The others are learned, free, at the **Life Hall** in the Town of Beginnings (a small booth east of the plaza, kept
+  The others are learned, free, at the **Life Hall** in the Town of Beginnings (a small booth just east of the plaza, toward the south, kept
   separate so it can move under the Academy later). No limit on how many you learn.
 - **Gathering spots** placed by data (`SPOTS` in `shared/life.js`): herb patches, ore veins and fishing pools in the
   fields of Floors 1-3 (11-14 per floor), plus six rare ones in the labyrinths (glowing ring). Each spot type has a

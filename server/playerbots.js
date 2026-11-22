@@ -191,6 +191,7 @@ export class PlayerBots {
       if (this.mgr.nameReserved?.(name)) fail(`${name} is one of the Named: pick another name.`);
     }
     if (!this.mgr.livePlayer(e)) fail('That bot is still joining.');
+    if (mode && MODES[mode].tend && floorOf(this.mgr.livePlayer(e).x) !== 1) fail(`${e.b.name} is on another floor: bring it to Floor 1 to tend your garden.`); // (before any change)
     const said = [], was = e.b.name;
     if (name !== undefined && name !== e.b.name) { try { this.mgr.edit(e.bid, { name }); } catch (err) { fail(err.message); } said.push(`renamed to ${name}`); }
     if (skill !== undefined && skill !== e.b.skill) { this.mgr.edit(e.bid, { skill }); said.push(`skill ${skillName(skill)}`); }
@@ -216,7 +217,7 @@ export class PlayerBots {
     const p = this.mgr.livePlayer(e);
     if (p && M.behaviour === 'follow') p.stats.floor2 = 1; // followers use the waypoints
     if (M.tend && typeof e.b.command === 'function' && p) { // walk to the garden and stay there (server/life.js lifeTend)
-      if (floorOf(p.x) !== 1) { if (by) this.game.sys(`${p.name} is on another floor: send it to Floor 1 first.`, by.id); return; }
+      if (floorOf(p.x) !== 1) return; // (edit() refuses this first)
       try { e.b.command({ k: 'tend', x: GARDEN.x + 4, z: GARDEN.z + 3, by: 0, byName: by?.name || '', group: [p.id] }); } catch (err) { console.error('pbot order', err); }
       return;
     }

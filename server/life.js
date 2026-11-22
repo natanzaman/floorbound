@@ -18,7 +18,7 @@
 // Meals count down only while you're online (game time).
 import {
   LIFE_SKILLS, LIFE_MATS, SPOT_BY_ID, SPOT_TYPES, SPOT_KINDS, SPOT_USE, STACK_MAX, FOODS, foodText, CROPS, PLOT_TILES,
-  TEND, GARDEN, LIFE_RECIPE_BY_ID, STATION_OF, STATIONS, DOUBLE_AT, XP_SMITH, LIFE_XP, LIFE_MAX,
+  TEND, GARDEN, LIFE_RECIPE_BY_ID, STATION_OF, STATIONS, DOUBLE_AT, XP_SMITH, LIFE_XP, LIFE_MAX, BONUS_EVERY,
   newLife, knows, lifeLevel, rollSpot, nearStation, tileGrowth, tileLeft, cropOfSeed,
 } from '../shared/life.js';
 import { MATS } from '../shared/crafting.js';
@@ -79,8 +79,11 @@ export const LifeMethods = {
   lifeFull(p, out) { return Object.keys(out).find(k => !this.lifeRoom(p, k, out[k])) || null; },
 
   lifeAction(p, msg) {
-    if (!p || p.dead || !msg) return false;
-    if (this.time - (p.lifeMsgT ?? -9) < MSG_GAP && msg.a !== 'hook') return false; // rate limit (a strike always gets through)
+    if (!p || p.dead || p.downed || !msg) return false;
+    if (this.time - (p.lifeMsgT ?? -9) < MSG_GAP && msg.a !== 'hook') { // rate limit (a strike always gets through)
+      if (this.time - (p.lifeBusyT ?? -9) > 1) { p.lifeBusyT = this.time; this.sys('Too fast: try that again.', p.id); }
+      return false;
+    }
     p.lifeMsgT = this.time;
     switch (msg.a) {
       case 'learn': return this.lifeLearn(p, String(msg.id || ''));
@@ -180,7 +183,7 @@ export const LifeMethods = {
       const t = L.plot[i], C = CROPS[t?.c];
       if (!C || tileGrowth(t, now) < 1) continue;
       const lvl = lifeLevel(L.skills.farmer);
-      const got = { [t.c]: C.yield[0] + Math.floor(this.lifeRand() * (C.yield[1] - C.yield[0] + 1)) + Math.floor(Math.max(0, lvl - C.lvl) / 3) };
+      const got = { [t.c]: C.yield[0] + Math.floor(this.lifeRand() * (C.yield[1] - C.yield[0] + 1)) + Math.floor(Math.max(0, lvl - C.lvl) / BONUS_EVERY) };
       if (this.lifeRand() < C.seedBack) got[C.seed] = 1;
       const full = this.lifeFull(p, got);
       if (full) { this.sys(`You can't carry more ${matName(full)} (${STACK_MAX}): the crop stays in the ground.`, p.id); break; }
@@ -251,7 +254,7 @@ export const LifeMethods = {
     for (const p of this.players.values()) {
       const a = p.lifeAct;
       if (!a) continue;
-      if (p.dead || Math.hypot(p.x - a.x, p.z - a.z) > MOVE_CANCEL) { this.lifeEnd(p, p.dead ? null : 'You stopped.'); continue; }
+      if (p.dead || p.downed || Math.hypot(p.x - a.x, p.z - a.z) > MOVE_CANCEL) { this.lifeEnd(p, p.dead || p.downed ? null : 'You stopped.'); continue; }
       if (p.lastHurt > a.at) { this.lifeEnd(p, 'Interrupted!'); continue; }
       if (a.until && t >= a.until) { this.lifeDone(p); continue; }
       if (a.k === 'fish') {
@@ -266,6 +269,7 @@ export const LifeMethods = {
         const f = p.life?.food;
         if (!f) continue;
         f.left -= step * 1000;
+        if ((p.foodSaveAcc = (p.foodSaveAcc || 0) + step) >= 60) { p.foodSaveAcc = 0; p.dirty = true; } // (saved about once a minute)
         if (f.left <= 0) { p.life.food = null; this.recompute(p); this.sys('Your meal wore off.', p.id); this.lifeTouched(p); continue; }
         const regen = FOODS[f.id].fx.regen;
         if (regen && !p.dead && !p.downed && p.hp < p.maxHp) {
@@ -314,9 +318,12 @@ export function installLife(Game) {
       const L = msg.life;
       if (+L.skip > 0) { this.lifeSkew = (this.lifeSkew || 0) + Math.min(30 * 86400e3, +L.skip); for (const q of this.players.values()) q.lifeDirty = true; }
       if (Array.isArray(L.tp)) this.teleport(p, +L.tp[0] || 0, +L.tp[1] || 0);
-      return;
-    }
+    } // (the message's other test fields still apply below)
     return orig.call(this, p, msg);
+  });
+  wrap('useSkill', function (orig, p, ...a) { // a skill or basic attack stops gathering
+    if (p?.lifeAct) this.lifeEnd(p, 'You stopped.');
+    return orig.call(this, p, ...a);
   });
   wrap('update', function (orig, dt, ...a) { const r = orig.call(this, dt, ...a); this.lifeTick(dt); return r; });
   wrap('recompute', function (orig, p, ...a) { // a meal's max health

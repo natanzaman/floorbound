@@ -316,7 +316,7 @@ function command(b, c) {
       return ack(c.k);
     }
     case 'stay': b.cmd = { ...base, k: 'stay', x: b.x, z: b.z }; return ack('stay');
-    case 'tend': if (floorOf(b.x) !== 1) return; b.cmd = { ...base, by: 0, k: 'stay', x: +c.x || b.x, z: +c.z || b.z, tend: 1 }; return ack('stay'); // hold at the garden (life classes: server/playerbots.js)
+    case 'tend': if (floorOf(b.x) !== 1) return ack('notFloor1'); b.cmd = { ...base, by: 0, k: 'stay', x: +c.x || b.x, z: +c.z || b.z, tend: 1 }; return ack('stay'); // hold at the garden (life classes: server/playerbots.js)
     case 'attack': {
       const m = b.mobs.find(m => m.id === c.tgt) || b.allMobs?.find(m => m.id === c.tgt && floorOf(m.x) === floorOf(b.x)); // (an order may name a mob out of sight)
       if (!m) return ack('noTarget');

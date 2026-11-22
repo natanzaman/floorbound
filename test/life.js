@@ -150,6 +150,13 @@ await t('gathering: needs the skill, takes its time, cancels on a move, refills 
   clock += SPOT_KINDS.herb.respawn * 1000;
   assert.equal(act(p, { a: 'gather', id: s.id }), true); // refilled
   p.lastHurt = g.time + 0.01; step(0.1); assert.equal(p.lifeAct, null, 'a hit interrupts');
+  clock += SPOT_KINDS.herb.respawn * 1000;
+  assert.equal(act(p, { a: 'gather', id: s.id }), true);
+  g.useSkill(p, 0, 0); assert.equal(p.lifeAct, null, 'an attack stops it');
+  assert.equal(act(p, { a: 'gather', id: s.id }), true);
+  p.downed = { at: g.time }; step(0.1); assert.equal(p.lifeAct, null, 'going down stops it');
+  assert.equal(act(p, { a: 'gather', id: s.id }), false, 'nothing while downed');
+  p.downed = null;
   assert.equal(act(p, { a: 'gather', id: 'f1h5' }), false); // Bloodcap needs Herbalist 3 (and to be there)
 });
 
@@ -265,6 +272,12 @@ await t('Smith life skill levels from Smith actions; rate limit; the saved recor
   g.time += 1;
   assert.equal(g.handle(p, { type: 'life', a: 'cancel' }), true);
   assert.equal(g.handle(p, { type: 'life', a: 'cancel' }), false, 'a second message in the same instant is dropped');
+  assert.match(sysTo(p).join(), /Too fast/);
+  // a ground stack of a life material never takes you past the cap
+  p.inv.mats.copper = STACK_MAX - 2;
+  g.ground ||= new Map(); g.ground.set(999, { id: 999, x: p.x, z: p.z, name: 'Copper Ore x5', stack: { kind: 'mat', id: 'copper', n: 5 }, by: 0, byUntil: 0 });
+  g.pickUp(p, 999);
+  assert.equal(p.inv.mats.copper, STACK_MAX - 2); assert.ok(g.ground.has(999)); assert.match(sysTo(p).join(), /stops at 99/);
   p.life.food = { id: 'bread', left: 1234.4 };
   const rec = JSON.parse(JSON.stringify(lifeRecord(p)));
   assert.deepEqual(newLife(rec).food, { id: 'bread', left: 1234 });

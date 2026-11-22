@@ -215,6 +215,7 @@ export function createLife({ scene, floor1, send, state, project, log, sfx, guid
   let renderT = 0;
   function frame(dt) {
     ui.t += dt;
+    if (isOpen() && state.dead) toggle(false);
     if (town.flame) town.flame.scale.y = 1 + Math.sin(ui.t * 9) * 0.12;
     const px = state.x, pz = state.z;
     for (let i = 0; i < SPOTS.length; i++) {
@@ -259,7 +260,6 @@ export function createLife({ scene, floor1, send, state, project, log, sfx, guid
     if (!sp) { lbl.style.display = 'none'; return; }
     lbl.style.display = ''; lbl.style.left = `${sp[0]}px`; lbl.style.top = `${sp[1]}px`;
     if (lbl.innerHTML !== html) lbl.innerHTML = html;
-    if (isOpen() && state.dead) toggle(false);
   }
 
   // A meal row's Eat button in the bag (public/main.js materials section).

@@ -45,9 +45,9 @@ import { installMvp } from './mvp.js'; // post-fight MVP card (G5)
 import { installLoot } from './loot.js';
 import { installLooks } from './looks.js'; // character looks: setLook, w.looks (I2)
 import { installDuels } from './duels.js'; // solo and team duels: challenges, stand-ins, rules, w.du (docs/briefs/duels.md)
-import { installTargeting } from './targeting.js';
-import { installLife } from './life.js';
-import { GARDEN } from '../shared/life.js'; // life classes: gathering, the garden, cooking, alchemy, meals (docs/briefs/life-classes.md) // targeting modes + cleave (player settings, Controls → Combat)
+import { installTargeting } from './targeting.js'; // targeting modes + cleave (player settings, Controls → Combat)
+import { installLife } from './life.js'; // life classes: gathering, the garden, cooking, alchemy, meals (docs/briefs/life-classes.md)
+import { GARDEN } from '../shared/life.js';
 import { rollGear } from '../shared/loot.js'; // affixes, boss sets, loadouts, drop tables (H2)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
