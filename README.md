@@ -125,6 +125,16 @@ Health scales with the party's role weight (like the Warden), damage a little wi
 
 A portcullis blocks the corridor to the Warden's chamber. Everyone standing at the gate presses **F** (or taps Ready); when all of them are ready, it counts down 5 seconds and rises. It closes again once the chamber is empty. The Warden scales to the fighters inside when the fight starts: health by the party's size and make-up (each fighter weighted by role, damage dealers most, then raised to a power, so a full party of six with three damage dealers and a Bard faces about 4× the health of a Guardian/Swordsman/Cleric trio), damage by size (+25% per fighter above three), and both by level when the party's average is above 10 (+12% health and +6% damage per level). Slams target one fighter per three in the chamber. Tuning: `WARDEN` in `shared/data.js`. Whoever lands the killing blow gets the **Last Attack Bonus**: the unique *Horn of the Warden* charm.
 
+## The Undercrypt (Floor 1's labyrinth)
+
+A stair in the field, just short of the Chamber Gate, leads down into a three-layer dungeon maze. Its mini-boss holds the **Horn Key**, and the Chamber Gate only counts you ready once someone at the gate has it: one keyholder opens it for the whole party, a character needs it once, and anyone who has already beaten the Warden counts. Plan: `docs/briefs/labyrinths.md`.
+
+- **The Catacombs:** spike plates (wait for them to sink, or jump or roll), Crypt Ghouls, chests (most in dead ends, a few on the way), wall torches you can light to mark your path.
+- **The Drowning Galleries:** flooded cells slow you and are loud. **Tomb Wardens** sleep until they hear noise (wading, lighting torches, fighting); throw a **bone rattle** (interact with nothing in reach) to send them elsewhere. Every so often the crypt breathes: torches gutter and the dead climb out, sooner the longer you stay. Two bone levers raise the portcullis to the way down; pull both together, or alone within the time it takes to run between them.
+- **The Ossuary:** the **Gravekeeper** rings the Grave Bell (jump or roll the low ring) and calls the dead at half health. Its stair up leaves you before the Chamber Gate.
+
+Dying in the Undercrypt brings you back at the last threshold you crossed. Each layer rolls walls, traps, mobs and loot from separate seeds (`shared/labyrinth.js`).
+
 ## Boss team mechanics
 
 With **two or more fighters alive** in the boss room, the Horned Warden and the Drowned Sovereign mix team mechanics into their rotation (one every ~26 s in phase 1, ~22 s in phase 2, ~18 s in phase 3; the first ~15 s in). Solo fights never see them. Rolling and jumping don't dodge them: it's about where you stand.

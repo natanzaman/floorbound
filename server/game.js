@@ -29,6 +29,7 @@ import { installPacing } from './pacing.js';
 import { installNamed } from './named.js';
 import { installTracking } from './trackgame.js';
 import { installBell } from './bell.js';
+import { installLabyrinth } from './labyrinth.js'; // the labyrinths before each boss
 import { installStaging } from './staging.js';
 import { installCine } from './cine.js'; // cinematic camera state for filming (F4)
 import { installPoses } from './poses.js';
@@ -80,6 +81,7 @@ export class Game {
     this.newTwist(); // Warden twist for the first fight
     this.initFloor2(); // Floor 2 — The Glimmering Mire (server/floor2.js)
     this.initFloor3(); // Floor 3 — The Gale Spires (server/floor3.js)
+    this.initLabs(); // the labyrinths before each boss (server/labyrinth.js)
   }
 
   id() { return this.nextId++; }
@@ -273,7 +275,7 @@ export class Game {
     if (!g.open) {
       // Everyone at the gate ready, OR someone has been ready for a while (so an idle player can't block the raid)
       if (!g.ready.size) g.firstReadyAt = 0; else if (!g.firstReadyAt) g.firstReadyAt = t;
-      const allReady = waiting.length > 0 && (g.ready.size === waiting.length || (g.firstReadyAt && t - g.firstReadyAt >= GATE.force));
+      const allReady = waiting.length > 0 && (g.ready.size === waiting.length || (g.firstReadyAt && t - g.firstReadyAt >= GATE.force)) && this.labGateOk(1, waiting); // the Horn Lock (server/labyrinth.js)
       if (allReady && !g.countAt) {
         g.countAt = t + GATE.count;
         this.events.push({ t: 'gate', s: 'count', d: GATE.count });
@@ -984,6 +986,7 @@ export class Game {
     this.updateGround();
     this.updateFloor2(dt);
     this.updateFloor3(dt);
+    this.updateLabs(dt); // labyrinths: spike plates, the floor's event, the mini-boss (server/labyrinth.js)
     this.updateRare();
     if (t >= this.lfgT) { this.lfgT = t + 1; this.matchParties(); }
 
@@ -1438,7 +1441,7 @@ export class Game {
     // players list now holds only who is near: [id, lvl, floor, lfg, dead].
     let pl;
     if (this.time >= (this._plT || 0)) { this._plT = this.time + 1; pl = []; for (const p of this.players.values()) pl.push([p.id, p.lvl, floorOf(p.x), p.lfg || this.partyOf(p)?.open ? 1 : 0, p.dead ? 1 : 0]); }
-    const pre = JSON.stringify({ players: 0, mobs: 0, pl, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.(), op: this.openSnap(), du: this.duelsSnap?.() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
+    const pre = JSON.stringify({ players: 0, mobs: 0, pl, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.(), op: this.openSnap(), du: this.duelsSnap?.(), lb: this.labSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
     const tail = pre.slice('{"players":0,"mobs":0'.length); // (the first two keys, as written above)
     this.snapParts = { players, mobs, tail, show: !!this.director?.running };
     this.events = [];
@@ -1497,6 +1500,7 @@ installClassesB(Game); // Lancer, Bard skills + their hooks (server/classes-b.js
 Object.assign(Game.prototype, ClassesAMethods); // Ranger and Berserker (server/classes-a.js)
 installStyles(Game); // weapon styles (server/styles.js)
 installBell(Game); // the Tower Bell: ringBell, bellAuto (server/bell.js)
+installLabyrinth(Game); // labyrinths: stairs, traps, the Gravekeeper, the boss gate's key lock (server/labyrinth.js)
 installCine(Game); // cine(op, data), cineState(): filming camera, titles, fades, light (server/cine.js)
 installPoses(Game); // kneel / sit / bow: setPose, /kneel chat, cleared by moving or acting (server/poses.js)
 installTracking(Game); // play-tracking hooks: boss fight rows, death / quit context (server/trackgame.js)
