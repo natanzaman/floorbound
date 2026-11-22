@@ -12,6 +12,7 @@ import { attachClassA } from '/classes-a.js';
 import { makeLabMob } from '/labyrinth.js'; // labyrinth enemies
 import { makePropModel } from '/rescue.js'; // rescue trap objects (J1)
 import { fxCount, segs } from '/quality.js'; // effect density and circle detail (graphics quality)
+import { SparkPool } from '/sparks.js'; // pooled hit sparks and impact flashes
 import { col, patterned } from '/palette.js'; // telegraph colours + the colour-blind dashed edge (Settings → Accessibility)
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
@@ -479,7 +480,7 @@ class Animator {
     if (k) this.pz ||= new PoseLayer(this.mixer.getRoot());
   }
   get posed() { return !!this.ps?.k; }
-  die() { this.ps = null; this.wind = null; this.shot('Death_A', 1, { clamp: true, fade: 0.1 }); this.dead = true; }
+  die() { this.endAccent(); this.ps = null; this.wind = null; this.shot('Death_A', 1, { clamp: true, fade: 0.1 }); this.dead = true; }
   revive() {
     this.dead = false; this.wind = null; this.ps = null;
     this.mixer.stopAllAction();
@@ -494,11 +495,24 @@ class Animator {
     this.pz ||= new PoseLayer(this.mixer.getRoot());
     this.wind = { W, t: 0, dur: Math.max(0.25, dur), struck: false };
   }
+  // A skill accent (players; ACCENTS below): a short procedural layer over the attack clip, so skills that share a clip
+  // read differently. Anticipation (pose `pre`, eased in over `a` s), then the strike (pose `hit` snapped in, held
+  // `hold` s, eased out over `out` s), with a lunge forward / a hop of the whole body. Boss wind-ups and held poses win.
+  accent(kind) {
+    const A = ACCENTS[kind];
+    if (!A || this.dead || this.wind || this.ps) return;
+    this.pz ||= new PoseLayer(this.mixer.getRoot());
+    this.acc = { A, t: 0 };
+  }
+  // Recoil: the blow you just landed kicks back through the chest for a moment (k: 0..1).
+  recoil(k) { if (!this.dead && !this.wind && !this.ps) { this.pz ||= new PoseLayer(this.mixer.getRoot()); this.rec = Math.max(this.rec || 0, k); } }
+  endAccent() { if (this.acc || this.rec) { this.acc = null; this.rec = 0; const r = this.mixer.getRoot(); r.position.z = 0; r.position.y = 0; } }
   cancelWindup() { if (this.wind) { this.wind = null; if (this.shotAct) { this.shotAct.fadeOut(0.15); this.shotAct = null; this.fadeInBase(0.15); } } }
   update(dt) {
     this.pz?.restore(); // undo last frame's pose offsets before the mixer writes this frame's clip pose
     this.mixer.update(dt);
     const w = this.wind;
+    if ((w || this.ps) && (this.acc || this.rec)) this.endAccent();
     if (w) {
       w.t += dt;
       const { W } = w, lead = W.clip ? W.clip[2] : 0.1, hitAt = w.dur, k = Math.min(1, w.t / Math.max(0.1, (hitAt - lead) * 0.8));
@@ -518,6 +532,20 @@ class Animator {
       if (!P.ow) P.out = null;
       if (!P.k && !P.out) this.ps = null;
       else this.pz.apply(P.k, ez(P.w), P.out && POSES[P.out], ez(P.ow));
+    } else if (this.acc || this.rec) { // skill accent / recoil
+      const c = this.acc, root = this.mixer.getRoot();
+      let pre = 0, hit = 0, A = null;
+      if (c) {
+        A = c.A; c.t += dt;
+        const s = (c.t - A.a) / 0.06, end = A.a + 0.06 + A.hold;
+        if (s < 0) { const k = c.t / A.a; pre = k * k * (3 - 2 * k); }
+        else { pre = Math.max(0, 1 - s); hit = Math.min(1, s) * (1 - Math.max(0, Math.min(1, (c.t - end) / A.out))); }
+        root.position.z = (A.lunge || 0) * (hit - 0.35 * pre);
+        root.position.y = (A.hop || 0) * pre;
+        if (c.t >= end + A.out) { this.acc = null; root.position.z = 0; root.position.y = 0; }
+      }
+      const r = this.rec = Math.max(0, (this.rec || 0) - dt * 5);
+      if (pre > 0 || hit > 0 || r > 0) this.pz.apply(A?.pre, pre, A?.hit && POSES[A.hit], hit, -0.3 * r * r);
     }
     if (this.head) this.head.scale.setScalar(HEAD_SCALE); // applied after the animation pose
   }
@@ -575,6 +603,33 @@ export const POSES = {
   downed: { drop: 0.11, hips: [16, 0, 0], spine: [16, 0, 0], chest: [12, 0, 0], head: [14, 0, 0],
     'upperleg.l': [8, 0, 0], 'lowerleg.l': [88, 0, 0], 'upperleg.r': [8, 0, 0], 'lowerleg.r': [88, 0, 0], 'foot.l': [-20, 0, 0], 'foot.r': [-20, 0, 0],
     'upperarm.l': [-35, 0, 12], 'lowerarm.l': [-10, 0, 0], 'upperarm.r': [-8, 0, -6], 'lowerarm.r': [-25, 0, 0], 'hand.r': [60, 0, 0] },
+};
+// Skill accents (Animator.accent; which skill gets which: public/vfx.js). They move the hips, spine and legs and leave the
+// arms to the clip, so the weapon keeps its swing.
+Object.assign(POSES, {
+  accCoil: { drop: 0.035, hips: [2, 16, 0], spine: [2, 20, 0], chest: [0, 24, 0], head: [0, -34, 0], 'upperleg.l': [-14, 0, 0], 'lowerleg.l': [20, 0, 0] }, // wound back
+  accCut: { drop: 0.03, hips: [6, -14, 0], spine: [8, -20, 0], chest: [6, -26, 0], head: [-6, 30, 0], 'upperleg.r': [-16, 0, 0], 'lowerleg.r': [22, 0, 0] }, // cut through
+  accSink: { drop: 0.07, hips: [10, 0, 0], spine: [10, 0, 0], chest: [6, 0, 0], head: [-10, 0, 0], 'upperleg.l': [-30, 0, 0], 'upperleg.r': [-30, 0, 0], 'lowerleg.l': [42, 0, 0], 'lowerleg.r': [42, 0, 0] }, // gathered low
+  accLunge: { drop: 0.055, hips: [16, 0, 0], spine: [14, 0, 0], chest: [8, 0, 0], head: [-24, 0, 0], 'upperleg.l': [-38, 0, 0], 'lowerleg.l': [34, 0, 0], 'upperleg.r': [24, 0, 0], 'lowerleg.r': [14, 0, 0] }, // long front leg, body thrown forward
+  accRear: { hips: [-8, 0, 0], spine: [-10, 0, 0], chest: [-12, 0, 0], head: [-10, 0, 0], 'upperleg.l': [-10, 0, 0] }, // drawn up tall
+  accSlam: { drop: 0.085, hips: [14, 0, 0], spine: [22, 0, 0], chest: [18, 0, 0], head: [-16, 0, 0], 'upperleg.l': [-40, 0, 0], 'upperleg.r': [-34, 0, 0], 'lowerleg.l': [52, 0, 0], 'lowerleg.r': [44, 0, 0] }, // driven into the ground
+  accLean: { drop: 0.045, hips: [6, 0, 8], spine: [8, 0, 10], chest: [4, 0, 10], 'upperleg.l': [-18, 0, 0], 'lowerleg.l': [26, 0, 0], 'upperleg.r': [-18, 0, 0], 'lowerleg.r': [26, 0, 0] }, // leaning into a spin
+  accDraw: { spine: [-4, 14, 0], chest: [-6, 22, 0], head: [0, -30, 0], 'upperleg.r': [10, 0, 0] }, // bow drawn / spell gathered
+  accLoose: { drop: 0.02, spine: [6, -6, 0], chest: [8, -10, 0], head: [-4, 12, 0] }, // let fly
+});
+// kind -> { pre, hit: poses · a: anticipation (s) · hold, out: the strike held and eased out (s) · lunge: metres forward · hop: metres up }
+export const ACCENTS = {
+  lunge: { pre: 'accSink', hit: 'accLunge', a: 0.09, hold: 0.16, out: 0.22, lunge: 0.55 },      // Rush, Charge, thrusts
+  thrust: { pre: 'accSink', hit: 'accLunge', a: 0.07, hold: 0.08, out: 0.16, lunge: 0.28 },     // spear / rapier basics
+  spin: { pre: 'accCoil', hit: 'accLean', a: 0.1, hold: 0.3, out: 0.25 },                        // Whirl, Sweep, Cyclone
+  slam: { pre: 'accRear', hit: 'accSlam', a: 0.12, hold: 0.22, out: 0.3, hop: 0.18 },            // Ground Slam, Leap Slam landing
+  cut: { pre: 'accCoil', hit: 'accCut', a: 0.08, hold: 0.1, out: 0.2, lunge: 0.18 },             // basic finishers, Burst Combo steps
+  finisher: { pre: 'accRear', hit: 'accSlam', a: 0.1, hold: 0.2, out: 0.3, lunge: 0.35, hop: 0.12 }, // the Burst Combo's last blow, Execute
+  cleave: { pre: 'accCoil', hit: 'accCut', a: 0.12, hold: 0.2, out: 0.28, lunge: 0.3 },          // Cleave: a wide heavy cut
+  leap: { pre: 'accSink', hit: 'accRear', a: 0.1, hold: 0.25, out: 0.2 },                        // taking off
+  draw: { pre: 'accDraw', hit: 'accDraw', a: 0.2, hold: 0.5, out: 0.2 },                         // Piercing Shot drawn
+  loose: { pre: 'accDraw', hit: 'accLoose', a: 0.05, hold: 0.12, out: 0.25, lunge: -0.12 },      // ... and loosed (a step of recoil)
+  cast: { pre: 'accDraw', hit: 'accLoose', a: 0.1, hold: 0.15, out: 0.25 },                      // Smite, Dissonance
 };
 export const STANCES = ['kneel', 'sit', 'bow']; // the held poses (server/poses.js POSE_KINDS)
 const POSE_T = 0.4; // ease in / out, seconds
@@ -757,7 +812,7 @@ class TreeFader {
 
 // ---------- effects ----------
 export class Effects {
-  constructor(scene) { this.scene = scene; this.list = []; }
+  constructor(scene) { this.scene = scene; this.list = []; this.pool = new SparkPool(scene); }
 
   add(mesh, life, update) {
     this.scene.add(mesh);
@@ -777,6 +832,7 @@ export class Effects {
       } else L[j++] = e;
     }
     L.length = j;
+    this.pool.update(dt);
   }
   // One geometry per shape and detail, shared by every effect that uses it (never disposed).
   shared(key, make) { const c = (this.geos ||= new Map()); let g = c.get(key); if (!g) { g = make(); g.userData.shared = true; c.set(key, g); } return g; }
@@ -938,30 +994,13 @@ export class Effects {
     this.add(m, life, (mesh, k) => { mesh.position.set(obj.position.x, 1.2, obj.position.z); mesh.material.opacity = 0.2 * (1 - k * k); });
   }
 
-  // Hit sparks: one tiny Points cloud per burst (a single draw call), flung outward and fading fast.
-  sparks(x, y, z, n = 8, color = 0xfff3c4, size = 0.22, speed = 7) {
-    n = fxCount(n, 2);
-    const pos = new Float32Array(n * 3), vel = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z;
-      const a = Math.random() * Math.PI * 2, up = 0.2 + Math.random() * 0.9, s = speed * (0.5 + Math.random() * 0.7);
-      vel[i * 3] = Math.cos(a) * s; vel[i * 3 + 1] = up * s; vel[i * 3 + 2] = Math.sin(a) * s;
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color, size, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending }));
-    pts.frustumCulled = false;
-    this.add(pts, 0.22 + Math.random() * 0.08, (mesh, k, dt) => {
-      const p = mesh.geometry.attributes.position.array;
-      for (let i = 0; i < n; i++) {
-        p[i * 3] += vel[i * 3] * dt; p[i * 3 + 1] += vel[i * 3 + 1] * dt; p[i * 3 + 2] += vel[i * 3 + 2] * dt;
-        vel[i * 3 + 1] -= 18 * dt; vel[i * 3] *= 0.9; vel[i * 3 + 2] *= 0.9;
-      }
-      mesh.geometry.attributes.position.needsUpdate = true;
-      mesh.material.opacity = 1 - k * k;
-      mesh.material.size = size * (1 - k * 0.6);
-    });
-  }
+  // Hit sparks and impact flashes: all of them share one pooled Points cloud (public/sparks.js): one draw call for
+  // every spark on screen, nothing allocated per burst.
+  sparks(x, y, z, n = 8, color = 0xfff3c4, size = 0.22, speed = 7) { this.pool.burst(x, y, z, fxCount(n, 2), color, size, speed, 0.22 + Math.random() * 0.08); }
+  // Sparks thrown in a cone around a unit direction (off the far side of a struck enemy).
+  spray(x, y, z, dx, dy, dz, n, color = 0xfff3c4, size = 0.22, speed = 8, spread = 0.6) { this.pool.spray(x, y, z, dx, dy, dz, fxCount(n, 2), color, size, speed, spread); }
+  // A four-point star that pops for a moment (heavy hits, crits, finishers, Breaks).
+  flash(x, y, z, size = 1.6, color = 0xffffff, life = 0.14) { this.pool.flash(x, y, z, size, color, life); }
 
   // A tall red-and-gold pillar of light marking where a rare named enemy appeared.
   rareBeam(x, z, life = 6) {
