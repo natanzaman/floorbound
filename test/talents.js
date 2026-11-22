@@ -76,7 +76,7 @@ g.time = 100;
       for (const nd of b.nodes) {
         assert.ok(nd.max >= 1 && nd.max <= 3 && nd.fx.length, nd.id);
         for (const q of nd.req || []) assert.ok(b.nodes.some(o => o.id === q && o.tier < nd.tier), `${nd.id}: req ${q} above it, same branch`);
-        for (const e of nd.fx) if (e.sk && e.sk !== 'basic') assert.ok(CLASSES[cls].skills.some(s => s.id === e.sk), `${nd.id}: skill ${e.sk}`);
+        for (const e of nd.fx) if (e.sk && e.sk !== 'basic' && !(nd.sub && e.sk === 'sig')) assert.ok(CLASSES[cls].skills.some(s => s.id === e.sk), `${nd.id}: skill ${e.sk}`);
         for (const e of nd.fx) if (e.key) assert.ok(KEYS[e.key], `${nd.id}: key ${e.key}`);
       }
     }
