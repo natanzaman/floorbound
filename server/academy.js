@@ -12,7 +12,7 @@
 // removePlayer.
 import { CLASSES, MOBS, walkable, angleTo, resolveCollision } from '../shared/data.js';
 import { makeItem, BAG_SIZE } from '../shared/items.js';
-import { newTalents, talentTotals } from '../shared/talents.js';
+import { newTalents, talentTotals, buildTag } from '../shared/talents.js';
 import { STYLES } from '../shared/styles.js';
 import {
   WEAPONS, INITIATE, TRIALS, DRILLS, DRILL_REWARD, REVIVE_SECS, REVIVE_R, HEAD_FRIENDSHIP, MEDALS, COHORT,
@@ -49,6 +49,7 @@ export const AcademyMethods = {
     if (isInitiate(p.path)) out.ini = p.path.weapon;
     const rk = this.rankOfP(p);
     if (rk) out.rk = rk;
+    if (!isInitiate(p.path)) { const bt = buildTag(p.cls, p.talents); if (bt) out.bt = bt; } // the build's leading tag (docs/briefs/path.md)
     return out;
   },
   // The `path` message: what the client shows (HUD names, the Academy panel). Mastery / talents kept per class: names only.
@@ -418,6 +419,13 @@ export function installAcademy(Game) {
     if (msg?.type === 'test' && process.env.TEST_HOOKS && msg.trialWin && p?.trial) { // testing aid: finish the running trial / drill with that medal
       const m = Math.max(1, Math.min(3, msg.trialWin | 0));
       return this.academyEnd(p, 'done', '', m);
+    }
+    if (msg?.type === 'test' && process.env.TEST_HOOKS && p && msg.become && CLASSES[msg.become.cls]) { // testing aid: { become: { cls, sub, mastery: { skId: pts } } } graduates (and specialises) at once
+      if (isInitiate(this.ensurePath(p))) this.graduate(p, msg.become.cls, { quiet: true });
+      if (msg.become.sub) this.specialise?.(p, String(msg.become.sub), null, { free: true });
+      for (const [k, v] of Object.entries(msg.become.mastery || {})) { p.mastery[k] = { pts: +v || 0, br: null, ...(p.mastery[k]?.br ? { br: p.mastery[k].br } : {}) }; }
+      p.masteryDirty = p.masteryNow = true; this.talentsUpdated?.(p); this.markPath(p);
+      return;
     }
     return orig.call(this, p, msg);
   });

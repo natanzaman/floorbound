@@ -608,3 +608,77 @@ export const MILESTONES = [
   { lvl: 25, text: 'The Storm Colossus (party Lv 25+)' },
   { lvl: MAX_LEVEL, text: 'Max level' },
 ];
+
+// ---------- build identity (docs/briefs/path.md) ----------
+// Every effect leans toward one of five tags; the summed shape names the build ("Swift Duelist"). Keystones and other
+// custom rules take their branch's tag. Used by the Path window and the Players list (the roster's `bt`).
+export const BUILD_TAGS = ['power', 'tempo', 'guard', 'team', 'control'];
+export const TAG_TEXT = {
+  power: { axis: 'Power', word: 'Fierce', line: 'Hit hard and finish what you start.' },
+  tempo: { axis: 'Tempo', word: 'Swift', line: 'Roll in, strike, roll out. Never where the blow lands.' },
+  guard: { axis: 'Guard', word: 'Stalwart', line: 'Hold the line and outlast whatever comes.' },
+  team: { axis: 'Team', word: 'Rallying', line: 'Every ally near you fights better.' },
+  control: { axis: 'Control', word: 'Tactical', line: 'Set the fight\'s pace: Breaks, slows and openings.' },
+};
+const STAT_TAG = { atk: 'power', crit: 'power', broken: 'power', haste: 'tempo', speed: 'tempo', dodge: 'tempo', counter: 'tempo',
+  hp: 'guard', dr: 'guard', guard: 'guard', threat: 'guard', sw: 'team', heal: 'team', posture: 'control' };
+const SK_TAG = { dmg: 'power', fin: 'power', cd: 'tempo', radius: 'control', dur: 'control' };
+export const BRANCH_TAG = {
+  blade: 'power', tempo: 'tempo', link: 'team', bulwark: 'guard', warlord: 'control', vanguard: 'team',
+  mercy: 'team', judgement: 'power', grace: 'team', marksman: 'power', trapper: 'control', packhunt: 'team',
+  carnage: 'power', bloodlust: 'guard', warcry: 'control', dragoon: 'power', skirmish: 'tempo', phalanx: 'control',
+  maestro: 'team', discord: 'control', harmony: 'team',
+};
+// The tags one node adds per rank (a node with several effects splits its weight).
+export function nodeTags(n) {
+  const out = {}, fx = n?.fx || [];
+  for (const e of fx) {
+    const t = e.key || e.proc ? BRANCH_TAG[n.branch] : e.stat ? STAT_TAG[e.stat] : e.aura ? 'team' : e.sk ? SK_TAG[Object.keys(SK_TAG).find(k => e[k])] : null;
+    if (t) out[t] = (out[t] || 0) + 1 / fx.length;
+  }
+  if (n?.keystone) for (const t of Object.keys(out)) out[t] *= 2; // a keystone says a lot about a build
+  return out;
+}
+// { power, tempo, guard, team, control } as fractions of the largest (0..1); all 0 with nothing spent.
+export function buildShape(cls, alloc) {
+  const s = Object.fromEntries(BUILD_TAGS.map(t => [t, 0]));
+  for (const n of nodesOf(cls)) {
+    const r = alloc?.[n.id] | 0;
+    if (r) for (const [t, w] of Object.entries(nodeTags(n))) s[t] += w * r;
+  }
+  const top = Math.max(...Object.values(s));
+  if (top > 0) for (const t of BUILD_TAGS) s[t] = Math.round((s[t] / top) * 100) / 100;
+  return s;
+}
+// The leading tag, or null below 3 points spent.
+export function buildTag(cls, alloc) {
+  if (spentOf(alloc) < 3) return null;
+  const s = buildShape(cls, alloc);
+  return BUILD_TAGS.reduce((a, t) => (s[t] > s[a] ? t : a), BUILD_TAGS[0]);
+}
+// "Swift Duelist" (title = the subclass name, else the class name).
+export const buildName = (tag, title) => (tag && TAG_TEXT[tag] ? `${TAG_TEXT[tag].word} ${title}` : title);
+
+// ---------- suggested path (the Talents tab's toggle) ----------
+// One entry per rank: the subclass's branch first (its own nodes included, tier by tier), then the class's bot order.
+export function suggestOrder(cls, sub = null, subBranch = null) {
+  const t = TREES[cls]; if (!t) return [];
+  const out = [], has = {};
+  const add = n => { while ((has[n.id] | 0) < n.max) { out.push(n.id); has[n.id] = (has[n.id] | 0) + 1; } };
+  const b = subBranch && t.branches.find(x => x.id === subBranch);
+  if (b) for (const n of [...b.nodes].filter(n => subOk(n, sub)).sort((p, q) => p.tier - q.tier || p.x - q.x)) add(n);
+  for (const id of t.bot || []) { const n = NODE.get(id); if (n && (has[id] | 0) < n.max) { out.push(id); has[id] = (has[id] | 0) + 1; } }
+  return out;
+}
+
+// ---------- plan, then confirm ----------
+// The allocation after taking ranks `ids` in order, or an error string for the first one that can't be taken.
+export function planAlloc(cls, alloc, lvl, ids, sub = null) {
+  const next = { ...(alloc || {}) };
+  for (const id of ids || []) {
+    const why = spendBlock(cls, next, lvl, String(id), sub);
+    if (why) return { error: `${NODE.get(String(id))?.name || id}: ${why}` };
+    next[id] = (next[id] | 0) + 1;
+  }
+  return { alloc: next };
+}

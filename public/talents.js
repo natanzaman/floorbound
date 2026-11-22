@@ -1,22 +1,30 @@
 // Client side of the talent trees (data and rules: shared/talents.js, server: server/talents.js).
-// The Skill Tree window (K, the Skills button, F at a Skill Shrine) with three panes:
-//   Progression  levels 1-20 on a track: skills, talent points, tier openings and floor milestones; class growth.
-//   Talents      the class's three branches drawn as a star chart: hover for exact numbers, click to learn,
-//                right-click to refund (at a Skill Shrine), Respec at a shrine.
-//   Abilities    every skill with its mastery, its evolution branches and the talents that change it.
-// Also: the unspent-points badge on the Skills chip, the one-time "talent point" tip, talent proc visuals,
-// and the client-side bits of talent effects (move speed, skill cooldown display).
+// The Path window (K, the Path button, F at a Skill Shrine; docs/briefs/path.md) with three tabs:
+//   Path       your journey (Initiate, class, subclass, subclass II, crown), what is coming up, your build's identity
+//              and your five skills.
+//   Abilities  the skill bar on the left; the chosen skill on the right: what it does, its shape, its mastery track,
+//              Base -> Evolved -> Awakened, and the talents that change it.
+//   Talents    the class's tree drawn in its own shape (public/treeshapes.js). Clicks plan ranks (gold "+n"), right-click
+//              takes a planned rank back (or refunds one at a Skill Shrine), Confirm sends the plan in one message.
+// Also: the unspent-points badge on the Path button, the one-time "talent point" tip, talent proc visuals, and the
+// client-side bits of talent effects (move speed, skill cooldown display).
 import { CLASSES, MAX_LEVEL, statsFor } from '/shared/data.js';
 import { MASTERY, BRANCHES, masteryLevel, masteryProgress, activeBranch, skillName, skillDesc, masteryCd } from '/shared/mastery.js';
 import {
   TALENTS, TREES, MILESTONES, pointsAt, levelForPoint, nodeDef, nodesOf, spentOf, branchSpent, spentAbove, spendBlock, refundBlock,
-  talentTotals, nodeLines, effectText, nodesForSkill, STAT_TEXT,
+  talentTotals, nodeLines, effectText, nodesForSkill, STAT_TEXT, BUILD_TAGS, TAG_TEXT, buildShape, buildTag, buildName, suggestOrder, planAlloc,
 } from '/shared/talents.js';
+import { SUBCLASSES, SPEC, subName } from '/shared/subclasses.js';
+import { WEAPONS } from '/shared/academy.js';
+import { STYLES, CLASS_STYLES } from '/shared/styles.js';
+import { VIEW, shapeOf, shortName, NODE_R, KEY_R } from '/treeshapes.js';
+import { skillDiagram as diagram } from '/skillshapes.js';
 import { keyName, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const hex = n => `#${n.toString(16).padStart(6, '0')}`;
 const SERIF = '"Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif';
+const short = (s, n = 15) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
 const CSS = `
 #talentsp { --cc: #60a5fa; --ink: #e8e2d0; --ember: #e9b949; --line: #33405c; --slate: #0f1626; --raised: #172036;
@@ -29,19 +37,22 @@ const CSS = `
 #tflash { position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%); max-width: 70%; padding: 8px 14px; border-radius: 10px; background: #2a1414; border: 1px solid #f87171; color: #fecaca; font: 600 13px system-ui; pointer-events: none; opacity: 0; transition: opacity .2s; z-index: 60; }
 #tflash.on { opacity: 1; } #tflash.off { opacity: 0; }
 body.tree-open #rare-hint { display: none !important; } /* the rare-enemy pointer sits over the window's tabs */
-#talentsp h3, #talentsp .serif { font-family: ${SERIF}; font-weight: 600; letter-spacing: .01em; }
+#talentsp h3, #talentsp h4, #talentsp .serif { font-family: ${SERIF}; font-weight: 600; letter-spacing: .01em; }
 #talentsp .hd { display: flex; align-items: center; gap: 14px; padding: 12px 16px 10px; border-bottom: 1px solid rgba(255,255,255,.06); }
-#talentsp .emb { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font: 600 20px ${SERIF};
-  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--cc) 70%, white), var(--cc) 55%, color-mix(in srgb, var(--cc) 40%, black));
-  color: #0d1424; box-shadow: 0 0 18px color-mix(in srgb, var(--cc) 55%, transparent); flex: none; }
+#talentsp .emb { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--cc) 40%, #1a2440), #0d1424 75%);
+  border: 1.5px solid var(--cc); box-shadow: 0 0 18px color-mix(in srgb, var(--cc) 45%, transparent); }
+#talentsp .emb svg { width: 24px; height: 24px; fill: none; stroke: var(--cc); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 #talentsp .who h3 { margin: 0; font-size: 20px; line-height: 1.1; }
-#talentsp .who small { display: block; opacity: .7; font-size: 12px; margin-top: 2px; }
-#talentsp .xpb { width: 150px; height: 4px; border-radius: 3px; background: rgba(255,255,255,.08); margin-top: 5px; overflow: hidden; }
+#talentsp .who small { display: block; opacity: .75; font-size: 12px; margin-top: 2px; }
+#talentsp .who small b { color: var(--cc); font-weight: 700; }
+#talentsp .xpb { width: 170px; height: 4px; border-radius: 3px; background: rgba(255,255,255,.08); margin-top: 5px; overflow: hidden; }
 #talentsp .xpb > i { display: block; height: 100%; background: var(--cc); }
 #talentsp .tabs { display: flex; gap: 4px; margin-left: 22px; }
-#talentsp .tabs button { background: transparent; border: 0; color: var(--ink); opacity: .6; font: 600 15px ${SERIF}; padding: 8px 12px 6px; border-bottom: 2px solid transparent; cursor: pointer; }
+#talentsp .tabs button { background: transparent; border: 0; color: var(--ink); opacity: .6; font: 600 15px ${SERIF}; padding: 8px 12px 6px; border-bottom: 2px solid transparent; cursor: pointer; position: relative; }
 #talentsp .tabs button:hover { opacity: .9; }
 #talentsp .tabs button.on { opacity: 1; border-bottom-color: var(--cc); }
+#talentsp .tabs button i { position: absolute; top: 2px; right: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--ember); box-shadow: 0 0 6px var(--ember); }
 #talentsp .tabs button:focus-visible, #talentsp button:focus-visible { outline: 2px solid var(--cc); outline-offset: 2px; }
 #talentsp .pts { margin-left: auto; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); font-weight: 700; white-space: nowrap; }
 #talentsp .pts.has { border-color: var(--ember); color: var(--ember); box-shadow: 0 0 14px rgba(233,185,73,.25); }
@@ -50,144 +61,202 @@ body.tree-open #rare-hint { display: none !important; } /* the rare-enemy pointe
 #talentsp .pane { position: absolute; inset: 0; overflow: auto; padding: 14px 16px; }
 #talentsp .note { opacity: .72; font-size: 12px; line-height: 1.45; }
 #talentsp .shrine-on { color: #c4b5fd; opacity: 1; }
+#talentsp .card { background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.06); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+#talentsp .card h3 { margin: 0 0 8px; font-size: 17px; }
+#talentsp .plbl { font: 700 10.5px system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; opacity: .6; margin-bottom: 6px; }
+#talentsp .btn { width: 100%; margin-top: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid #6d5bd0; background: rgba(124,58,237,.18); color: var(--ink); font-weight: 700; cursor: pointer; }
+#talentsp .btn:disabled { opacity: .4; cursor: default; border-color: var(--line); background: transparent; }
+#talentsp .btn.warn { border-color: #f59e0b; background: rgba(245,158,11,.18); }
+#talentsp .btn.gold { border-color: var(--ember); background: rgba(233,185,73,.18); color: #fde68a; }
+#talentsp .btn.ghost { border-color: var(--line); background: transparent; font-weight: 600; }
+#talentsp .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#talentsp .row2 .btn { margin-top: 0; }
 
-/* ---- talents ---- */
-#talentsp .tgrid { display: grid; grid-template-columns: minmax(0, 1fr) 262px; gap: 14px; height: 100%; }
+/* ---- Path tab ---- */
+#talentsp .journey { position: relative; margin: 6px 10px 18px; height: 128px; }
+#talentsp .journey .rail { position: absolute; left: 0; right: 0; top: 26px; height: 3px; border-radius: 2px; background: rgba(255,255,255,.08); }
+#talentsp .journey .rail > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: linear-gradient(90deg, color-mix(in srgb, var(--cc) 40%, transparent), var(--cc)); box-shadow: 0 0 10px var(--cc); }
+#talentsp .journey .you { position: absolute; top: 12px; width: 2px; height: 30px; background: #fff; transform: translateX(-1px); border-radius: 1px; }
+#talentsp .journey .you span { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); font: 700 10px system-ui; white-space: nowrap; color: #fff; }
+#talentsp .st { position: absolute; top: 14px; width: 168px; transform: translateX(-50%); text-align: center; }
+#talentsp .st.first { transform: none; text-align: left; } #talentsp .st.last { transform: translateX(-100%); text-align: right; }
+#talentsp .st .gem { width: 26px; height: 26px; margin: 0 auto; transform: rotate(45deg); border: 2px solid #33405c; background: #111a2d; border-radius: 5px; display: grid; place-items: center; }
+#talentsp .st.first .gem { margin: 0; } #talentsp .st.last .gem { margin: 0 0 0 auto; }
+#talentsp .st .gem b { transform: rotate(-45deg); font: 700 10px system-ui; opacity: .8; }
+#talentsp .st.done .gem { border-color: var(--cc); background: color-mix(in srgb, var(--cc) 30%, #111a2d); box-shadow: 0 0 12px color-mix(in srgb, var(--cc) 60%, transparent); }
+#talentsp .st.next .gem { border-color: var(--ember); }
+#talentsp .st h4 { margin: 8px 0 1px; font-size: 15px; }
+#talentsp .st.done h4 { color: var(--cc); } #talentsp .st.next h4 { color: var(--ember); }
+#talentsp .st p { margin: 0; font-size: 11.5px; line-height: 1.35; opacity: .72; }
+#talentsp .pgrid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 14px; }
+#talentsp .up { list-style: none; padding: 0; margin: 0; }
+#talentsp .up li { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; border-top: 1px solid rgba(255,255,255,.05); font-size: 12.5px; line-height: 1.35; }
+#talentsp .up li:first-child { border-top: 0; }
+#talentsp .up li > i { flex: none; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font-style: normal; font-size: 12px; border: 1.5px solid var(--line); }
+#talentsp .up li > i.k { border-color: var(--ember); color: var(--ember); transform: rotate(45deg); border-radius: 4px; } #talentsp .up li > i.k > span { transform: rotate(-45deg); }
+#talentsp .up li > i.e { border-color: #a78bfa; color: #c4b5fd; } #talentsp .up li > i.l { border-color: var(--cc); color: var(--cc); } #talentsp .up li > i.b { border-color: #f87171; color: #fca5a5; }
+#talentsp .up li span small { display: block; opacity: .65; font-size: 11.5px; }
+#talentsp .up li em { margin-left: auto; font-style: normal; opacity: .6; white-space: nowrap; padding-left: 8px; }
+#talentsp .up li.go { cursor: pointer; } #talentsp .up li.go:hover { background: rgba(255,255,255,.03); }
+#talentsp .build { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 12px; align-items: center; }
+#talentsp .build svg { width: 170px; height: 150px; }
+#talentsp .build svg text { font: 600 10px system-ui, sans-serif; fill: var(--ink); opacity: .7; }
+#talentsp .bname { font: 600 22px ${SERIF}; color: var(--cc); line-height: 1.1; }
+#talentsp .skl { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+#talentsp .skc { border: 1px solid rgba(255,255,255,.07); border-radius: 10px; padding: 8px 10px; background: rgba(0,0,0,.18); cursor: pointer; text-align: left; color: var(--ink); font: inherit; min-width: 0; }
+#talentsp .skc:hover { border-color: color-mix(in srgb, var(--cc) 60%, transparent); }
+#talentsp .skc .k { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 6px; border: 1px solid var(--line); font: 700 10.5px system-ui; margin-right: 6px; }
+#talentsp .skc b { font: 600 14px ${SERIF}; }
+#talentsp .skc small { display: block; font-size: 11px; opacity: .7; margin-top: 4px; }
+#talentsp .skc .pips { display: flex; gap: 3px; margin-top: 6px; }
+#talentsp .skc .pips i { flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,.08); }
+#talentsp .skc .pips i.on { background: #a78bfa; } #talentsp .skc .pips i.pe { background: var(--ember); }
+#talentsp .skc.locked { opacity: .5; }
+#talentsp .stage { display: inline-block; padding: 1px 7px; border-radius: 999px; font: 700 10px system-ui; letter-spacing: .04em; border: 1px solid var(--line); }
+#talentsp .stage.Evolved { border-color: #a78bfa; color: #c4b5fd; } #talentsp .stage.Awakened { border-color: var(--ember); color: var(--ember); }
+
+/* ---- Talents tab ---- */
+#talentsp .tgrid { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 14px; height: 100%; }
 #talentsp .treewrap { display: flex; flex-direction: column; min-height: 0; }
-#talentsp .bheads { display: grid; grid-template-columns: 5.8% repeat(3, 1fr); }
-#talentsp .bh { padding: 0 10px 6px; border-bottom: 2px solid color-mix(in srgb, var(--bc) 55%, transparent); margin: 0 8px; }
-#talentsp .bh h3 { margin: 0; font-size: 18px; color: var(--bc); display: flex; justify-content: space-between; align-items: baseline; }
-#talentsp .bh h3 span { font: 600 12px system-ui, sans-serif; color: var(--ink); opacity: .75; }
-#talentsp .bh p { margin: 2px 0 0; font-size: 12px; opacity: .65; }
-#talentsp svg.tree { flex: 1; min-height: 0; width: 100%; display: block; }
+#talentsp .bheads { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+#talentsp .bh { display: flex; align-items: baseline; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--bc) 45%, transparent); background: color-mix(in srgb, var(--bc) 8%, transparent); }
+#talentsp .bh b { font: 600 14px ${SERIF}; color: var(--bc); }
+#talentsp .bh span { font-size: 11.5px; opacity: .72; }
+#talentsp .bh.mine { border-color: var(--ember); box-shadow: 0 0 10px rgba(233,185,73,.25); }
+#talentsp .bh.mine em { font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--ember); }
+#talentsp .shapename { margin-left: auto; font: italic 600 13px ${SERIF}; opacity: .7; }
+#talentsp svg.tree { flex: 1; min-height: 0; width: 100%; display: block; margin-top: 4px; }
+#talentsp svg.tree .bd { fill: color-mix(in srgb, var(--cc) 7%, #0f1626); stroke: color-mix(in srgb, var(--cc) 28%, #1e2840); stroke-width: 2; }
+#talentsp svg.tree .bd2 { stroke: color-mix(in srgb, var(--cc) 18%, #1a2338); fill: none; }
+#talentsp svg.tree .bdc { fill: color-mix(in srgb, var(--cc) 45%, transparent); }
 #talentsp .tn { cursor: pointer; }
 #talentsp .tn .core { fill: #111a2d; stroke-width: 2; }
 #talentsp .tn .halo { opacity: 0; }
-#talentsp .tn .glyph { font-size: 18px; text-anchor: middle; dominant-baseline: central; fill: var(--ink); pointer-events: none; }
-#talentsp .tn .rk { font: 700 10.5px system-ui, sans-serif; text-anchor: middle; fill: var(--ink); opacity: .75; pointer-events: none; }
+#talentsp .tn .glyph { font-size: 15px; text-anchor: middle; dominant-baseline: central; fill: var(--ink); pointer-events: none; }
+#talentsp .tn .nm { font: 600 10px system-ui, sans-serif; text-anchor: middle; fill: var(--ink); opacity: .85; pointer-events: none; paint-order: stroke; stroke: #0d1322; stroke-width: 3px; }
+#talentsp .tn .rk { font: 700 9px system-ui, sans-serif; text-anchor: middle; fill: var(--ink); opacity: .7; pointer-events: none; paint-order: stroke; stroke: #0d1322; stroke-width: 3px; }
 #talentsp .tn .arc { fill: none; stroke-width: 3; stroke-linecap: round; }
+#talentsp .tn .plan { fill: var(--ember); } #talentsp .tn .plant { font: 800 10px system-ui; fill: #1a1406; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+#talentsp .tn .sug { fill: none; stroke: #fde68a; stroke-width: 1.6; stroke-dasharray: 3 4; opacity: .85; }
+#talentsp .tn .sugn { font: 800 9px system-ui; fill: #fde68a; text-anchor: middle; pointer-events: none; }
 #talentsp .tn.locked .core { stroke: #2b3550 !important; }
-#talentsp .tn.locked .glyph { opacity: .3; }
-#talentsp .tn.locked .rk { opacity: .35; }
+#talentsp .tn.locked .glyph { opacity: .3; } #talentsp .tn.locked .nm { opacity: .4; } #talentsp .tn.locked .rk { opacity: .3; }
 #talentsp .tn.open .glyph { opacity: .75; }
-#talentsp .tn.avail .halo { opacity: .55; animation: tn-pulse 2.2s ease-in-out infinite; }
-#talentsp .tn.part .halo { opacity: .35; }
-#talentsp .tn.max .halo { opacity: .7; }
+#talentsp .tn.avail .halo { opacity: .5; animation: tn-pulse 2.2s ease-in-out infinite; }
+#talentsp .tn.part .halo { opacity: .3; }
+#talentsp .tn.max .halo { opacity: .65; }
 #talentsp .tn.max .core { stroke: var(--ember) !important; }
 #talentsp .tn.max .rk { fill: var(--ember); opacity: 1; }
+#talentsp .tn.planned .core { stroke: var(--ember) !important; stroke-dasharray: 5 3; }
+#talentsp .tn.subn .core { fill: #1b1708; }
 #talentsp .tn:hover .core { stroke-width: 3; }
 #talentsp .tn.hl .core { stroke: #fff !important; stroke-width: 3; }
 #talentsp .tn.pop .halo { animation: tn-pop .7s ease-out 1; opacity: .9; }
-#talentsp .edge { fill: none; stroke-width: 2; }
-#talentsp .edge.off { stroke: #29334b; stroke-dasharray: 4 5; }
-#talentsp .gate { stroke: rgba(255,255,255,.06); stroke-dasharray: 2 6; }
-#talentsp .tier { font: 600 12px ${SERIF}; fill: var(--ink); opacity: .55; }
-#talentsp .tier.lock { opacity: .35; }
-#talentsp .tier small, #talentsp .tsub { font: 500 10px system-ui, sans-serif; fill: var(--ink); opacity: .5; }
-@keyframes tn-pulse { 50% { opacity: .18; } }
+#talentsp .edge { fill: none; stroke-width: 2.2; stroke-linecap: round; }
+#talentsp .edge.off { stroke: #2a344c; stroke-dasharray: 3 5; }
+#talentsp .edge.pl { stroke: var(--ember); stroke-dasharray: 6 4; stroke-opacity: .8; }
+@keyframes tn-pulse { 50% { opacity: .15; } }
 @keyframes tn-pop { 0% { transform: scale(.6); opacity: 1; } 100% { transform: scale(1.8); opacity: 0; } }
-#talentsp .side { border-left: 1px solid rgba(255,255,255,.06); padding-left: 14px; overflow: auto; }
-#talentsp .big { font: 600 44px/1 ${SERIF}; color: var(--ember); }
+#talentsp .side { border-left: 1px solid rgba(255,255,255,.06); padding-left: 14px; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+#talentsp .big { font: 600 40px/1 ${SERIF}; color: var(--ember); }
 #talentsp .big.zero { color: var(--ink); opacity: .5; }
-#talentsp .side h4 { font: 600 14px ${SERIF}; margin: 16px 0 6px; }
+#talentsp .pbox { border: 1px dashed color-mix(in srgb, var(--ember) 55%, transparent); border-radius: 10px; padding: 10px; background: rgba(233,185,73,.05); }
+#talentsp .pbox ol { margin: 4px 0 8px; padding-left: 18px; font-size: 12px; line-height: 1.5; }
+#talentsp .ncard { border: 1px solid color-mix(in srgb, var(--bc, var(--line)) 50%, transparent); border-radius: 10px; padding: 10px 12px; background: rgba(0,0,0,.2); }
+#talentsp .ncard h4 { margin: 0; font-size: 16px; color: var(--bc); }
+#talentsp .ncard .one { margin: 4px 0 6px; font-size: 13px; line-height: 1.4; }
+#talentsp .ncard .meta { font-size: 11px; opacity: .6; }
+#talentsp .ncard .det { font-size: 12px; opacity: .8; line-height: 1.4; border-top: 1px solid rgba(255,255,255,.07); padding-top: 6px; margin-top: 6px; }
+#talentsp .ncard .why { color: #fca5a5; font-size: 12px; margin-top: 6px; }
+#talentsp .tiers { display: flex; gap: 4px; }
+#talentsp .tiers span { flex: 1; text-align: center; font: 700 10.5px system-ui; padding: 4px 0; border-radius: 6px; border: 1px solid var(--line); opacity: .55; }
+#talentsp .tiers span.on { border-color: var(--cc); opacity: 1; color: var(--cc); }
 #talentsp .bon { list-style: none; padding: 0; margin: 0; }
-#talentsp .bon li { padding: 3px 0 3px 10px; border-left: 2px solid var(--bc, var(--line)); margin-bottom: 4px; font-size: 12px; line-height: 1.35; }
+#talentsp .bon li { padding: 3px 0 3px 10px; border-left: 2px solid var(--line); margin-bottom: 4px; font-size: 12px; line-height: 1.35; }
 #talentsp .bon li.k { border-left-color: var(--ember); }
-#talentsp .btn { width: 100%; margin-top: 10px; padding: 8px 10px; border-radius: 8px; border: 1px solid #6d5bd0; background: rgba(124,58,237,.18); color: var(--ink); font-weight: 700; cursor: pointer; }
-#talentsp .btn:disabled { opacity: .4; cursor: default; border-color: var(--line); background: transparent; }
-#talentsp .btn.warn { border-color: #f59e0b; background: rgba(245,158,11,.18); }
-#talentsp .legend { display: grid; grid-template-columns: auto 1fr; gap: 5px 8px; align-items: center; font-size: 11.5px; opacity: .8; }
-#talentsp .tt { position: absolute; z-index: 3; width: 290px; pointer-events: none; padding: 10px 12px; border-radius: 10px;
+#talentsp details summary { cursor: pointer; font: 600 14px ${SERIF}; }
+#talentsp .tog { display: flex; gap: 8px; align-items: center; font-size: 12.5px; cursor: pointer; }
+#talentsp .tog i { width: 30px; height: 17px; border-radius: 9px; background: #2a344c; position: relative; flex: none; }
+#talentsp .tog i::after { content: ''; position: absolute; left: 2px; top: 2px; width: 13px; height: 13px; border-radius: 50%; background: #9aa6bf; transition: left .15s; }
+#talentsp .tog.on i { background: rgba(233,185,73,.5); } #talentsp .tog.on i::after { left: 15px; background: #fde68a; }
+#talentsp .tt { position: absolute; z-index: 3; width: 270px; pointer-events: none; padding: 9px 11px; border-radius: 10px;
   background: rgba(8,12,24,.97); border: 1px solid color-mix(in srgb, var(--bc) 60%, transparent); box-shadow: 0 10px 30px rgba(0,0,0,.5); font-size: 12.5px; line-height: 1.4; }
-#talentsp .tt h3 { margin: 0; font-size: 17px; color: var(--bc); }
-#talentsp .tt .meta { opacity: .65; font-size: 11.5px; margin: 1px 0 6px; }
-#talentsp .tt .cur { margin: 4px 0; }
-#talentsp .tt .nx { margin: 6px 0 0; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.08); opacity: .85; }
-#talentsp .tt .nx b, #talentsp .tt .cur b { font-size: 11px; opacity: .7; display: block; font-weight: 600; }
-#talentsp .tt .why { color: #fca5a5; margin-top: 6px; }
-#talentsp .tt .how { color: var(--ember); margin-top: 6px; font-size: 11.5px; }
-#talentsp .tt .kd { color: #f5e7c0; }
+#talentsp .tt h3 { margin: 0; font-size: 16px; color: var(--bc); }
+#talentsp .tt .meta { opacity: .65; font-size: 11px; margin: 1px 0 5px; }
+#talentsp .tt .why { color: #fca5a5; margin-top: 5px; }
+#talentsp .tt .how { color: var(--ember); margin-top: 5px; font-size: 11.5px; }
 
-/* ---- progression ---- */
-#talentsp .track { position: relative; display: grid; grid-template-columns: repeat(${MAX_LEVEL}, 1fr); margin: 4px 4px 0; }
-#talentsp .rail { position: absolute; left: 2.5%; right: 2.5%; top: 150px; height: 3px; background: rgba(255,255,255,.08); border-radius: 2px; }
-#talentsp .rail > i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, color-mix(in srgb, var(--cc) 50%, transparent), var(--cc)); border-radius: 2px; box-shadow: 0 0 10px var(--cc); }
-#talentsp .lv { display: flex; flex-direction: column; align-items: center; cursor: pointer; position: relative; }
-#talentsp .marks { height: 132px; display: flex; flex-direction: column-reverse; align-items: center; gap: 4px; padding-bottom: 6px; }
-#talentsp .mk { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; border: 1.5px solid; background: #111a2d; }
-#talentsp .mk.sk { border-color: var(--cc); color: var(--cc); }
-#talentsp .mk.ms { border-color: var(--ember); color: var(--ember); border-radius: 6px; }
-#talentsp .mk.ti { border-color: #a78bfa; color: #c4b5fd; border-radius: 4px; transform: rotate(45deg); }
-#talentsp .mk.ti > span { transform: rotate(-45deg); }
-#talentsp .dot { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 600 12px ${SERIF}; background: #111a2d; border: 2px solid #2b3550; position: relative; z-index: 1; }
-#talentsp .lv.past .dot { border-color: color-mix(in srgb, var(--cc) 70%, transparent); background: color-mix(in srgb, var(--cc) 22%, #111a2d); }
-#talentsp .lv.cur .dot { border-color: #fff; background: var(--cc); color: #0d1424; box-shadow: 0 0 16px var(--cc); transform: scale(1.18); }
-#talentsp .lv.sel .dot { outline: 2px solid var(--ember); outline-offset: 3px; }
-#talentsp .pt { margin-top: 8px; width: 9px; height: 9px; transform: rotate(45deg); border: 1.5px solid var(--ember); }
-#talentsp .lv.past .pt, #talentsp .lv.cur .pt { background: var(--ember); }
-#talentsp .lv:hover .dot { border-color: var(--ember); }
-#talentsp .pgrid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; margin-top: 18px; }
-#talentsp .card { background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.06); border-radius: 12px; padding: 12px 14px; }
-#talentsp .card h3 { margin: 0 0 8px; font-size: 18px; }
-#talentsp .kv { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
-#talentsp .kv div { background: rgba(0,0,0,.25); border-radius: 8px; padding: 6px 8px; }
-#talentsp .kv b { display: block; font: 600 19px ${SERIF}; }
-#talentsp .kv span { font-size: 11px; opacity: .65; }
-#talentsp .un { list-style: none; padding: 0; margin: 0; }
-#talentsp .un li { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; font-size: 12.5px; line-height: 1.35; }
-#talentsp .un li .mk { flex: none; width: 20px; height: 20px; font-size: 10.5px; }
-#talentsp .un li em { font-style: normal; opacity: .6; margin-left: auto; white-space: nowrap; padding-left: 8px; }
-#talentsp svg.growth { width: 100%; height: 190px; display: block; }
-#talentsp svg.growth text { font: 500 10.5px system-ui, sans-serif; fill: var(--ink); opacity: .6; }
-
-/* ---- abilities ---- */
-#talentsp .ab { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; padding: 12px 14px; margin-bottom: 10px; border-radius: 12px; background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.06); }
-#talentsp .ab.locked { opacity: .55; }
-#talentsp .ab .key { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--line); font-size: 11px; font-weight: 700; margin-right: 6px; vertical-align: 2px; }
-#talentsp .ab h3 { display: inline; margin: 0; font-size: 18px; }
-#talentsp .ab .base { opacity: .55; font-size: 12px; margin-left: 6px; }
-#talentsp .ab .d { font-size: 12px; opacity: .78; line-height: 1.4; margin: 6px 0; }
-#talentsp .ab .cdl { font-size: 12px; }
-#talentsp .ab .cdl s { opacity: .5; }
-#talentsp .path { display: flex; align-items: flex-start; margin: 2px 0 8px; }
-#talentsp .step { flex: 1; position: relative; text-align: center; font-size: 11px; line-height: 1.25; opacity: .55; padding: 0 3px; }
-#talentsp .step::before { content: ''; position: absolute; top: 8px; left: -50%; right: 50%; height: 2px; background: #2b3550; }
-#talentsp .step:first-child::before { display: none; }
-#talentsp .step i { display: block; width: 16px; height: 16px; margin: 0 auto 4px; border-radius: 50%; border: 2px solid #2b3550; background: #111a2d; position: relative; }
-#talentsp .step.done { opacity: 1; }
-#talentsp .step.done i { border-color: var(--cc); background: var(--cc); box-shadow: 0 0 8px var(--cc); }
-#talentsp .step.done::before { background: var(--cc); }
-#talentsp .step.evostep i { border-radius: 3px; transform: rotate(45deg) scale(.9); }
-#talentsp .step.now { opacity: 1; }
-#talentsp .step.now i { border-color: var(--ember); }
-#talentsp .mbar { height: 5px; border-radius: 3px; background: rgba(0,0,0,.4); overflow: hidden; margin: 0 0 3px; }
-#talentsp .mbar > i { display: block; height: 100%; background: linear-gradient(90deg, #8b5cf6, #c4b5fd); }
-#talentsp .mprog { display: flex; justify-content: space-between; font-size: 11px; opacity: .65; margin-bottom: 8px; }
+/* ---- Abilities tab ---- */
+#talentsp .agrid { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; height: 100%; }
+#talentsp .alist { display: flex; flex-direction: column; gap: 6px; overflow: auto; }
+#talentsp .ai { display: flex; gap: 10px; align-items: center; text-align: left; padding: 9px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.02); color: var(--ink); font: inherit; cursor: pointer; }
+#talentsp .ai.on { border-color: var(--cc); background: color-mix(in srgb, var(--cc) 10%, transparent); }
+#talentsp .ai.locked { opacity: .5; }
+#talentsp .ai .k { display: inline-grid; place-items: center; min-width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--line); font: 700 11px system-ui; flex: none; }
+#talentsp .ai b { font: 600 14.5px ${SERIF}; display: block; }
+#talentsp .ai small { font-size: 11px; opacity: .65; }
+#talentsp .adet { overflow: auto; padding-right: 4px; }
+#talentsp .adet h3 { margin: 0; font-size: 24px; }
+#talentsp .adet .one { font-size: 14px; margin: 4px 0 10px; line-height: 1.4; }
+#talentsp .ahead { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 14px; align-items: start; }
+#talentsp .diag { width: 190px; height: 130px; border-radius: 10px; background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.06); }
+#talentsp .diag text { font: 600 10px system-ui; fill: var(--ink); opacity: .65; }
+#talentsp .facts { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+#talentsp .facts span { padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); }
+#talentsp .facts s { opacity: .5; }
+#talentsp .strip { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 6px; align-items: stretch; margin: 12px 0; }
+#talentsp .strip > i { align-self: center; opacity: .4; font-style: normal; }
+#talentsp .sc { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: rgba(0,0,0,.2); min-width: 0; }
+#talentsp .sc .plbl { margin-bottom: 2px; }
+#talentsp .sc b { font: 600 14px ${SERIF}; display: block; }
+#talentsp .sc small { display: block; font-size: 11.5px; opacity: .72; line-height: 1.35; margin-top: 2px; }
+#talentsp .sc.on { border-color: var(--cc); } #talentsp .sc.ev.on { border-color: #a78bfa; } #talentsp .sc.aw.on { border-color: var(--ember); box-shadow: 0 0 12px rgba(233,185,73,.2); }
+#talentsp .sc.dim { opacity: .5; }
+#talentsp .mtrack { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 6px 0 2px; }
+#talentsp .mtrack div { text-align: center; font-size: 11px; line-height: 1.25; opacity: .5; }
+#talentsp .mtrack div i { display: block; height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); margin-bottom: 4px; overflow: hidden; }
+#talentsp .mtrack div i > u { display: block; height: 100%; background: linear-gradient(90deg, #8b5cf6, #c4b5fd); }
+#talentsp .mtrack div.done { opacity: 1; } #talentsp .mtrack div.done i { background: #8b5cf6; } #talentsp .mtrack div.now { opacity: 1; }
+#talentsp .mtrack div.ev.done i { background: var(--ember); }
 #talentsp .evos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 #talentsp .evo { text-align: left; border: 1px solid #2b3550; border-radius: 9px; padding: 7px 9px; background: rgba(10,16,34,.6); color: var(--ink); font: inherit; font-size: 12px; cursor: default; }
 #talentsp .evo b { font: 600 14px ${SERIF}; display: block; }
 #talentsp .evo small { display: block; opacity: .75; line-height: 1.3; margin-top: 2px; }
-#talentsp .evo .st { display: block; margin-top: 4px; font-size: 11px; font-weight: 700; color: #c4b5fd; }
+#talentsp .evo .st2 { display: block; margin-top: 4px; font-size: 11px; font-weight: 700; color: #c4b5fd; }
 #talentsp .evo.on { border-color: var(--ember); background: rgba(233,185,73,.1); }
-#talentsp .evo.on .st { color: var(--ember); }
+#talentsp .evo.on .st2 { color: var(--ember); }
 #talentsp .evo.can { cursor: pointer; }
 #talentsp .evo.can:hover { border-color: #c4b5fd; background: rgba(139,92,246,.16); }
 #talentsp .evo.dim { opacity: .5; }
-#talentsp .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+#talentsp .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 #talentsp .chip2 { border: 1px solid color-mix(in srgb, var(--bc) 55%, transparent); color: var(--ink); background: color-mix(in srgb, var(--bc) 8%, transparent); border-radius: 999px; padding: 3px 10px; font-size: 11.5px; cursor: pointer; }
 #talentsp .chip2.off { opacity: .5; border-style: dashed; }
 #talentsp .chip2 b { color: var(--bc); font-weight: 700; }
-#talentsp .sub { font: 600 13px ${SERIF}; margin: 8px 0 2px; opacity: .85; }
+#talentsp .sub { font: 600 13px ${SERIF}; margin: 12px 0 2px; opacity: .85; }
+#talentsp .wst { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; margin-top: 6px; }
 
+#lvlup { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); z-index: 7; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  animation: lv-in .45s ease-out; color: #e8e2d0; text-shadow: 0 2px 8px #000; }
+#lvlup.out { opacity: 0; transition: opacity .6s; }
+@keyframes lv-in { from { opacity: 0; transform: translate(-50%, 12px) scale(.94); } }
+#lvlup .k0 { font: 700 12px system-ui, sans-serif; letter-spacing: .32em; color: #e9b949; }
+#lvlup .n { font: 600 64px/1 ${SERIF}; color: #fde68a; text-shadow: 0 0 24px rgba(233,185,73,.5), 0 2px 8px #000; }
+#lvlup .t { font: 600 19px ${SERIF}; color: var(--cc, #93c5fd); }
+#lvlup ul { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 6px; min-width: 340px; }
+#lvlup li { padding: 7px 12px; border-radius: 10px; background: rgba(13,19,34,.88); border: 1px solid #2a3550; font: 600 13.5px system-ui, sans-serif; text-shadow: none; }
+#lvlup li b { color: #e9b949; margin-right: 6px; } #lvlup li.g { border-color: #8a6d2a; }
+#lvlup .hint { font: 700 13px system-ui, sans-serif; color: #fde68a; margin-top: 4px; }
 #skills-btn { overflow: visible; }
 #skills-btn .tpip { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: #e9b949; color: #1a1406; font: 800 11px/18px system-ui, sans-serif; text-align: center; box-shadow: 0 0 10px rgba(233,185,73,.7); animation: tn-pip 1.6s ease-in-out infinite; }
 @keyframes tn-pip { 50% { box-shadow: 0 0 2px rgba(233,185,73,.3); } }
 .num.talent { color: #e9b949; font-size: 15px; font-weight: 800; text-shadow: 0 0 8px #b45309, 0 1px 2px #000; }
 @media (prefers-reduced-motion: reduce) { #talentsp .tn.avail .halo, #skills-btn .tpip { animation: none; } #talentsp .tn.pop .halo { animation: none; } }
 @media (max-width: 760px) {
-  #talentsp .tgrid, #talentsp .pgrid, #talentsp .ab { grid-template-columns: 1fr; }
+  #talentsp .tgrid, #talentsp .pgrid, #talentsp .agrid, #talentsp .ahead, #talentsp .build { grid-template-columns: 1fr; }
+  #talentsp .skl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #talentsp .side { border-left: 0; padding-left: 0; }
   #talentsp .tabs { margin-left: 0; } #talentsp .who small, #talentsp .xpb { display: none; }
+  #talentsp .st p { display: none; }
 }
 `;
 
@@ -195,18 +264,25 @@ export function initTalents(ctx) {
   const { state, players, fx, sfx, send, floatNum, mastery, guide, isTouch, $ } = ctx;
   const style = document.createElement('style'); style.textContent = CSS; document.head.appendChild(style);
   const panel = document.createElement('div'); panel.id = 'talentsp'; panel.className = 'hidden'; panel.dataset.nav = 'skilltree'; // (controller focus navigation)
-  panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Skill Tree');
+  panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Path');
   $('bag').parentNode.append(panel);
 
-  const S = { r: {}, pts: 0, m: null, tab: 'talents', sel: null, hover: null, flash: null, flashT: 0, confirmT: 0, near: false, key: '' };
+  let sugOn = true; try { sugOn = localStorage.getItem('fb_tsug') !== '0'; } catch {}
+  const S = { r: {}, pts: 0, m: null, tab: 'path', sel: null, hover: null, flash: null, flashT: 0, confirmT: 0, near: false, key: '', plan: [], sug: sugOn, ab: 1 };
   const cls = () => state.cls;
-  // Your subclass (the Academy's Specialise, docs/briefs/subclasses.md): its two nodes show in its branch; another's never do.
-  const sub = () => state.academy?.spec?.sub || null;
+  const spec = () => state.academy?.spec || null;
+  // Your subclass (the Academy's Specialise, docs/briefs/subclasses.md): its nodes show in its branch; another's never do.
+  const sub = () => spec()?.sub || null;
   const shown = nd => !nd.sub || nd.sub === sub();
   const tree = () => TREES[cls()];
   const free = () => Math.max(0, S.pts - spentOf(S.r));
+  const left = () => Math.max(0, free() - S.plan.length); // after the plan
+  const eff = () => (S.plan.length && planAlloc(cls(), S.r, state.lvl, S.plan, sub()).alloc) || S.r; // the tree as planned
   const totals = () => talentTotals(cls(), S.r);
   const isOpen = () => !panel.classList.contains('hidden');
+  const ini = () => !!state.academy?.ini;
+  const subBranch = () => SUBCLASSES[sub()]?.branch || null;
+  const title = () => (ini() ? 'Initiate' : subName(sub()) || CLASSES[cls()]?.name || '');
 
   // ---------- client-side effects ----------
   const speedMult = () => 1 + (totals().stat.speed || 0) / 100; // the server allows the extra speed
@@ -220,21 +296,29 @@ export function initTalents(ctx) {
 
   // ---------- messages ----------
   function onMessage(msg) {
-    if (msg.type === 'mastery') { S.m = msg.m; if (isOpen() && S.tab === 'abilities') render(); return false; } // mastery.js handles it too
+    if (msg.type === 'mastery') { S.m = msg.m; if (isOpen() && S.tab !== 'talents') render(); return false; } // mastery.js handles it too
     if (msg.type !== 'talents') return false;
     S.r = msg.r || {}; S.pts = msg.pts | 0; S.locked = !!msg.locked; // locked: an Initiate (the tree opens at graduation, points bank up) or a class trial
     clearTimeout(S.waitT);
+    if (S.sent) { S.plan = []; S.sent = false; } // the confirmed plan came back as the tree
+    else S.plan = keepValid(S.plan);
     badge();
     if (free() > 0 && !S.locked) firstTip();
     if (isOpen()) render();
     return true;
+  }
+  // The longest prefix-free subset of a plan that still works, in order (after a refund, a level, a change of class).
+  function keepValid(ids) {
+    const out = [];
+    for (const id of ids) if (!planAlloc(cls(), S.r, state.lvl, [...out, id], sub()).error) out.push(id);
+    return out;
   }
   function firstTip() {
     if (!guide || guide.seen?.has('talent')) return;
     guide.seen.add('talent');
     try { localStorage.setItem('fb_tips', JSON.stringify([...guide.seen])); } catch {}
     const el = guide.tipEl; if (!el) return;
-    el.textContent = `You earned a talent point! ${tapping() ? 'Tap Skills' : `Press ${keyName('skillTree')}`} to open your Skill Tree.`;
+    el.textContent = `You earned a talent point! ${tapping() ? 'Tap Path' : `Press ${keyName('skillTree')}`} to open your Path.`;
     el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
     clearTimeout(firstTip.t); firstTip.t = setTimeout(() => el.classList.remove('show'), 7000);
   }
@@ -285,9 +369,14 @@ export function initTalents(ctx) {
   }
 
   // ---------- open / close ----------
+  const evolvable = () => CLASSES[cls()]?.skills.findIndex((s, i) => i && S.m?.[s.id] && !S.m[s.id].br && masteryLevel(S.m[s.id].pts) >= MASTERY.evolveAt && state.lvl >= s.lvl);
   function toggle(open = !isOpen(), tab) {
     if (tab) S.tab = tab;
-    else if (open && S.m && CLASSES[cls()]?.skills.slice(1).some(s => S.m[s.id] && !S.m[s.id].br && masteryLevel(S.m[s.id].pts) >= MASTERY.evolveAt && state.lvl >= s.lvl)) S.tab = 'abilities'; // an evolution waits
+    else if (open) {
+      const ev = evolvable();
+      if (ev > 0) { S.tab = 'abilities'; S.ab = ev; } // an evolution waits
+      else if (free() > 0 && !S.locked) S.tab = 'talents'; // points wait
+    }
     panel.classList.toggle('hidden', !open);
     document.body.classList.toggle('tree-open', open);
     if (open) { S.sel = null; render(); sfx.play('ui'); }
@@ -299,204 +388,297 @@ export function initTalents(ctx) {
   function render() {
     if (!isOpen() || !state.cls) return;
     S.hover = null; // the tooltip is rebuilt; the next mouse move shows it again
-    const c = CLASSES[cls()], col = hex(c.color);
+    const c = CLASSES[cls()], col = hex(c.color), shape = shapeOf(cls());
     panel.style.setProperty('--cc', col);
     S.near = !!mastery.near();
     const n = free(), xpPct = state.lvl >= MAX_LEVEL ? 100 : Math.min(100, (100 * (state.xp || 0)) / (state.next || 1));
+    const me = state.roster?.get?.(state.myId)?.name || '';
+    const ac = state.academy, wpn = WEAPONS[ac?.path?.weapon]?.name;
+    const role = ini() ? `Initiate · ${esc(wpn || 'Sword')}` : sub() ? `<b>${esc(subName(sub()))}</b> · ${esc(c.name)}` : spec()?.sig ? `<b>Specialised</b> · ${esc(c.name)}` : `<b>${esc(c.name)}</b>`;
+    const dots = { talents: n && !S.locked, abilities: evolvable() > 0 };
+    const pill = S.locked ? `${n} point${n === 1 ? '' : 's'} banked` : S.plan.length ? `${S.plan.length} planned · ${left()} left` : n ? `${n} talent point${n > 1 ? 's' : ''} to spend` : `${spentOf(S.r)} / ${S.pts} points spent`;
     panel.innerHTML = `<div class="hd">
-        <div class="emb" aria-hidden="true">${esc(c.name[0])}</div>
-        <div class="who"><h3>Skill Tree</h3><small>Level ${state.lvl} ${esc(c.name)}, ${esc(c.role.toLowerCase())}</small><div class="xpb" title="${state.lvl >= MAX_LEVEL ? 'Max level' : `${state.xp} / ${state.next} XP`}"><i style="width:${xpPct}%"></i></div></div>
-        <nav class="tabs" role="tablist">${[['progression', 'Progression'], ['talents', 'Talents'], ['abilities', 'Abilities']].map(([k, t]) => `<button role="tab" aria-selected="${S.tab === k}" class="${S.tab === k ? 'on' : ''}" data-tab="${k}">${t}</button>`).join('')}</nav>
-        <span class="pts ${n && !S.locked ? 'has' : ''}">${S.locked ? `${n} point${n === 1 ? '' : 's'} banked: the tree opens when you graduate at the Academy` : n ? `${n} talent point${n > 1 ? 's' : ''} to spend` : `${spentOf(S.r)} / ${S.pts} points spent`}</span>
+        <div class="emb" aria-hidden="true" title="${esc(shape.name)}"><svg viewBox="0 0 24 24"><path d="${shape.sigil}"/></svg></div>
+        <div class="who"><h3>${esc(me || 'Your Path')}</h3><small>${role} · Level ${state.lvl}</small><div class="xpb" title="${state.lvl >= MAX_LEVEL ? 'Max level' : `${state.xp} / ${state.next} XP`}"><i style="width:${xpPct}%"></i></div></div>
+        <nav class="tabs" role="tablist">${[['path', 'Path'], ['abilities', 'Abilities'], ['talents', 'Talents']].map(([k, t]) => `<button role="tab" aria-selected="${S.tab === k}" class="${S.tab === k ? 'on' : ''}" data-tab="${k}">${t}${dots[k] ? '<i></i>' : ''}</button>`).join('')}</nav>
+        <span class="pts ${(n && !S.locked) || S.plan.length ? 'has' : ''}">${pill}</span>
         <button class="x" data-a="close" title="Close (Esc)">✕</button>
-      </div><div class="body"><div class="pane">${S.tab === 'progression' ? progression() : S.tab === 'abilities' ? abilities() : talents()}</div><div class="tt" hidden></div></div>`;
+      </div><div class="body"><div class="pane">${S.tab === 'path' ? pathTab() : S.tab === 'abilities' ? abilities() : talents()}</div><div class="tt" hidden></div></div>`;
   }
 
-  // ----- Talents pane -----
-  const W = 960, GUT = 56, COLW = (W - GUT) / 3, DX = 80, Y0 = 46, DY = 110;
-  const pos = (bi, nd) => [GUT + COLW * bi + COLW / 2 + nd.x * DX, Y0 + nd.tier * DY];
-  function nodeState(nd) {
-    const r = S.r[nd.id] | 0;
-    if (r >= nd.max) return 'max';
-    const why = spendBlock(cls(), S.r, state.lvl, nd.id, sub());
-    if (!why) return r ? 'part avail' : 'avail';
-    if (r) return 'part';
-    const gated = spentAbove(S.r, cls(), nd.tier) < TALENTS.tiers[nd.tier] || (nd.req?.length && !nd.req.some(q => S.r[q] > 0));
+  // ===================================================== Path tab =====================================================
+  function levelInfo(L) { // what a level brings
+    const c = CLASSES[cls()], out = [];
+    for (const [i, s] of c.skills.entries()) if (s.lvl === L && L > 1) out.push({ k: 'l', g: String(i), t: `${s.name} unlocks`, d: s.desc });
+    for (let k = 1; k < TALENTS.tiers.length; k++) if (levelForPoint(TALENTS.tiers[k] + 1) === L) out.push({ k: 'l', g: String(k + 1), t: `Talent tier ${k + 1} can open${k === TALENTS.tiers.length - 1 ? ': keystones' : ''}` });
+    for (const m of MILESTONES) if (m.lvl === L) out.push({ k: /boss/i.test(m.text) ? 'b' : 'l', g: /boss/i.test(m.text) ? '☠' : '★', t: m.text });
+    return out;
+  }
+  function stations() {
+    const c = CLASSES[cls()], L = state.lvl, sp = spec(), sn = subName(sub()) || (sp?.sig ? 'Specialised' : '');
+    const wpn = WEAPONS[state.academy?.path?.weapon]?.name || 'weapon';
+    const graduated = !ini();
+    return [
+      { lvl: 1, name: 'Initiate', done: true, text: graduated ? 'Your first weapon and its basic skills.' : `Your ${wpn.toLowerCase()}: basic attacks and two skills.` },
+      { lvl: 5, name: graduated ? c.name : 'Class', done: graduated, text: graduated ? `Graduated: the full ${c.name} kit and its talent tree.` : 'Pass a class trial at the Academy: a full kit and a talent tree.' },
+      { lvl: SPEC.lvl, name: sn || 'Subclass', done: !!sp?.sig, text: sp?.sig ? `${sp.sig.name}, your signature skill, and two talents in your tree.` : 'Specialise at the Academy: a signature skill and two talents.' },
+      { lvl: 22, name: sn ? `${sn} II` : 'Subclass II', done: !!sp?.sig && L >= 22, text: 'Two more talents for your subclass.' },
+      { lvl: MAX_LEVEL, name: 'Crown', done: !!sp?.sig && L >= MAX_LEVEL, text: 'Your subclass\'s crowning talent.' },
+    ];
+  }
+  function pathTab() {
+    const L = state.lvl, st = stations(), x = l => ((l - 1) / (MAX_LEVEL - 1)) * 100;
+    const frac = L >= MAX_LEVEL ? 0 : Math.min(1, (state.xp || 0) / (state.next || 1));
+    const nextI = st.findIndex(s => !s.done);
+    const journey = `<div class="plbl">Your journey</div><div class="journey"><div class="rail"><i style="width:${x(L + frac)}%"></i></div>
+      ${st.map((s, i) => `<div class="st ${s.done ? 'done' : ''} ${i === nextI ? 'next' : ''} ${i === st.length - 1 ? 'last' : i === 0 ? 'first' : ''}" style="left:${x(s.lvl)}%"><div class="gem"><b>${s.lvl}</b></div><h4>${esc(s.name)}</h4><p>${esc(s.text)}</p></div>`).join('')}
+      <div class="you" style="left:${x(Math.min(MAX_LEVEL, L + frac))}%"><span>Lv ${L}</span></div></div>`;
+    return `${journey}<div class="pgrid"><div class="card"><h3>Coming up</h3>${comingUp()}</div><div class="card"><h3>Your build</h3>${buildCard()}</div></div>
+      <div class="skl">${skillCards()}</div>`;
+  }
+  function comingUp() {
+    const L = state.lvl, items = [], c = CLASSES[cls()];
+    const n = left();
+    if (!S.locked && n > 0) items.push({ k: 'k', g: n, t: `${n} talent point${n > 1 ? 's' : ''} to spend`, d: 'Plan them on the Talents tab, then confirm.', go: 'talents' });
+    if (!S.locked && tree()) { // the nearest keystone
+      const a = eff(), ks = nodesOf(cls()).filter(nd => nd.keystone && shown(nd) && !(a[nd.id] > 0));
+      const open = ks.find(nd => !spendBlock(cls(), a, MAX_LEVEL, nd.id, sub())); // its tier and line are met (points aside)
+      if (open) items.push({ k: 'k', g: '◆', t: `Keystone in reach: ${open.name}`, d: open.desc, go: open.id });
+      else if (ks.length) {
+        const need = TALENTS.tiers[TALENTS.tiers.length - 1] - spentAbove(a, cls(), TALENTS.tiers.length - 1);
+        if (need > 0) items.push({ k: 'k', g: '◆', t: `${need} more point${need > 1 ? 's' : ''} open your keystones`, d: ks.map(k => k.name).join(' · '), go: 'talents' });
+      }
+    }
+    if (S.m) for (const [i, s] of c.skills.entries()) { // a skill near its evolution
+      if (!i || state.lvl < s.lvl) continue;
+      const e = S.m[s.id]; if (!e) continue;
+      const l = masteryLevel(e.pts);
+      if (l >= MASTERY.evolveAt && !e.br) items.push({ k: 'e', g: '✦', t: `${s.name} can evolve now`, d: 'Pick one of two forms on the Abilities tab.', go: `ab${i}` });
+      else if (l === MASTERY.evolveAt - 1 && masteryProgress(e.pts)[1] >= 0.4 * masteryProgress(e.pts)[2]) { const [, into, span] = masteryProgress(e.pts); items.push({ k: 'e', g: '✦', t: `${s.name}: ${Math.floor((100 * into) / (span || 1))}% to its evolution`, d: 'Mastery rises as you use it well.', go: `ab${i}` }); }
+    }
+    if (L < MAX_LEVEL) {
+      const nx = levelInfo(L + 1);
+      items.push({ k: 'l', g: L + 1, t: `Level ${L + 1}: +1 talent point${nx.length ? `. ${nx.map(i => i.t).join('. ')}` : ''}`, d: `${Math.max(0, (state.next || 0) - (state.xp || 0))} XP to go.` });
+    }
+    const boss = MILESTONES.find(m => m.lvl > L && /boss/i.test(m.text));
+    if (boss) items.push({ k: 'b', g: '☠', t: boss.text, w: `level ${boss.lvl}` });
+    const st = stations().find(s => !s.done);
+    if (st) items.push({ k: 'l', g: '◇', t: `${st.name}: ${st.text}`, w: `level ${st.lvl}` });
+    return `<ul class="up">${items.slice(0, 6).map(i => `<li class="${i.go ? 'go' : ''}" ${i.go ? `data-go="${esc(i.go)}"` : ''}><i class="${i.k}"><span>${esc(i.g)}</span></i><span>${esc(i.t)}${i.d ? `<small>${esc(i.d)}</small>` : ''}</span>${i.w ? `<em>${esc(i.w)}</em>` : ''}</li>`).join('')}</ul>`;
+  }
+  function radar(shape, size = 150, col = 'var(--cc)') {
+    const cx = size / 2 + 10, cy = size / 2, R = size / 2 - 22, ang = i => -Math.PI / 2 + (i * 2 * Math.PI) / BUILD_TAGS.length;
+    const pt = (i, f) => [cx + Math.cos(ang(i)) * R * f, cy + Math.sin(ang(i)) * R * f];
+    let g = '';
+    for (const f of [0.33, 0.66, 1]) g += `<polygon points="${BUILD_TAGS.map((_, i) => pt(i, f).join(',')).join(' ')}" fill="none" stroke="rgba(255,255,255,.08)"/>`;
+    const poly = BUILD_TAGS.map((t, i) => pt(i, Math.max(0.12, shape[t] || 0)).join(',')).join(' ');
+    g += `<polygon points="${poly}" fill="${col}" fill-opacity=".28" stroke="${col}" stroke-width="2"/>`;
+    g += BUILD_TAGS.map((t, i) => { const [x, y] = pt(i, 1.22); return `<text x="${x}" y="${y + 3}" text-anchor="middle">${TAG_TEXT[t].axis}</text>`; }).join('');
+    return `<svg viewBox="0 0 ${size + 20} ${size}" aria-label="Build shape">${g}</svg>`;
+  }
+  function buildCard() {
+    const a = eff(), tag = buildTag(cls(), a), shape = buildShape(cls(), a);
+    if (S.locked) return `<p class="note">Your build takes shape when your talent tree opens at graduation. Your points are banked until then.</p>`;
+    return `<div class="build">${radar(shape)}<div><div class="bname">${esc(buildName(tag, title()))}</div>
+      <p class="note" style="margin:6px 0 0">${tag ? esc(TAG_TEXT[tag].line) : 'Spend 3 talent points and your build gets a name.'}</p>
+      ${S.plan.length ? '<p class="note" style="color:var(--ember);opacity:1">Includes your planned points.</p>' : ''}</div></div>`;
+  }
+  function skillRows() { // [slot, def, mastery entry or null]; slot 4: the signature skill
+    const c = CLASSES[cls()], rows = c.skills.map((s, i) => [i, s, i ? (S.m?.[s.id] || { pts: 0, br: null }) : null]);
+    const sg = spec()?.sig;
+    if (sg && !ini()) rows.push([4, { id: sg.id, name: sg.name, desc: sg.desc, cd: sg.cd, lvl: SPEC.lvl, sig: true }, S.m?.sig || null]);
+    return rows;
+  }
+  const stageOf = (slot, s, e) => (!slot || !e ? 'Base' : masteryLevel(e.pts) >= MASTERY.max ? 'Awakened' : activeBranch(e) ? 'Evolved' : 'Base');
+  function skillCards() {
+    return skillRows().map(([slot, s, e]) => {
+      const locked = state.lvl < s.lvl, l = e ? masteryLevel(e.pts) : 0, stg = stageOf(slot, s, e);
+      const nm = e && !s.sig ? skillName(s, e) : s.name;
+      return `<button class="skc ${locked ? 'locked' : ''}" data-go="ab${slot}"><span class="k">${slot === 0 ? (isTouch ? 'Atk' : '⚔') : slot === 4 ? 'G' : slot}</span><b>${esc(short(nm, 18))}</b>
+        <small>${locked ? `Unlocks at level ${s.lvl}` : slot === 0 ? 'Basic attack' : e ? `Mastery ${l} <span class="stage ${stg}">${stg}</span>` : 'Signature skill'}</small>
+        ${e ? `<div class="pips">${[1, 2, 3, 4, 5].map(k => `<i class="${l >= k ? (k === MASTERY.evolveAt ? 'pe' : 'on') : ''}"></i>`).join('')}</div>` : ''}</button>`;
+    }).join('');
+  }
+
+  // =================================================== Talents tab ====================================================
+  function nodeState(nd, a) {
+    const r = a[nd.id] | 0, p = r - (S.r[nd.id] | 0);
+    if (r >= nd.max) return `max${p ? ' planned' : ''}`;
+    const why = spendBlock(cls(), a, state.lvl, nd.id, sub());
+    if (!why || /No talent points/.test(why)) return `${r ? 'part ' : ''}${why || S.locked ? 'open' : 'avail'}${p ? ' planned' : ''}`;
+    if (r) return `part${p ? ' planned' : ''}`;
+    const gated = spentAbove(a, cls(), nd.tier) < TALENTS.tiers[nd.tier] || (nd.req?.length && !nd.req.some(q => a[q] > 0));
     return gated ? 'locked' : 'open';
+  }
+  // The next ranks the suggested path asks for, as { id: order (1..3) }.
+  function suggested(a) {
+    if (!S.sug || S.locked) return {};
+    const want = {}, out = {}; let k = 0;
+    for (const id of suggestOrder(cls(), sub(), subBranch())) {
+      want[id] = (want[id] | 0) + 1;
+      if ((a[id] | 0) < want[id] && !(id in out)) { const nd = nodeDef(id); if (!nd || !shown(nd)) continue; out[id] = ++k; if (k >= 3) break; }
+    }
+    return out;
   }
   function talents() {
     const t = tree(); if (!t) return '<p class="note">No talent tree for this class yet.</p>';
-    const H = Y0 + 4 * DY + 48;
-    let svg = `<svg class="tree" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMin meet" role="group" aria-label="Talent tree">
-      <defs><filter id="tglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter></defs>`;
-    for (let k = 0; k < TALENTS.tiers.length; k++) { // tier rows and their gates
-      const y = Y0 + k * DY, need = TALENTS.tiers[k], have = spentAbove(S.r, cls(), k), open = have >= need;
-      if (k) svg += `<line class="gate" x1="${GUT - 6}" x2="${W - 8}" y1="${y - DY / 2}" y2="${y - DY / 2}"/>`;
-      svg += `<text class="tier ${open ? '' : 'lock'}" x="6" y="${y - 2}">Tier ${k + 1}</text><text class="tsub" x="6" y="${y + 13}">${k === 0 ? 'open' : open ? 'open' : `${have}/${need} above`}</text>`;
-    }
+    const shape = shapeOf(cls()), a = eff(), sugg = suggested(a), mine = subBranch();
+    let svg = `<svg class="tree" viewBox="0 0 ${VIEW.w} ${VIEW.h}" preserveAspectRatio="xMidYMid meet" role="group" aria-label="Talent tree, drawn as ${esc(shape.name)}">
+      <defs><filter id="tglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter></defs><g class="bdg">${shape.backdrop()}</g>`;
+    const R = nd => (nd.keystone ? KEY_R : NODE_R);
     t.branches.forEach((b, bi) => { // edges first, nodes on top
       for (const nd of b.nodes.filter(shown)) for (const q of nd.req || []) {
-        const pq = b.nodes.find(x => x.id === q); if (!pq) continue;
-        const [x1, y1] = pos(bi, pq), [x2, y2] = pos(bi, nd), on = S.r[q] > 0, lit = on && S.r[nd.id] > 0;
-        const d = `M${x1},${y1 + 28} C${x1},${(y1 + y2) / 2} ${x2},${(y1 + y2) / 2} ${x2},${y2 - (nd.keystone ? 34 : 28)}`;
-        svg += on ? `<path class="edge" d="${d}" stroke="${b.color}" stroke-opacity="${lit ? 0.95 : 0.4}"${lit ? ` style="filter:drop-shadow(0 0 4px ${b.color})"` : ''}/>` : `<path class="edge off" d="${d}"/>`;
+        const pq = b.nodes.find(x => x.id === q); if (!pq || !shown(pq)) continue;
+        const [x1, y1] = shape.pos(bi, pq), [x2, y2] = shape.pos(bi, nd), len = Math.hypot(x2 - x1, y2 - y1) || 1;
+        const ux = (x2 - x1) / len, uy = (y2 - y1) / len, r1 = R(pq) + 4, r2 = R(nd) + 6;
+        const d = `M${(x1 + ux * r1).toFixed(1)},${(y1 + uy * r1).toFixed(1)} L${(x2 - ux * r2).toFixed(1)},${(y2 - uy * r2).toFixed(1)}`;
+        const on = S.r[q] > 0, lit = on && S.r[nd.id] > 0, pl = !lit && a[q] > 0 && a[nd.id] > 0;
+        svg += pl ? `<path class="edge pl" d="${d}"/>` : on ? `<path class="edge" d="${d}" stroke="${b.color}" stroke-opacity="${lit ? 0.95 : 0.45}"${lit ? ` style="filter:drop-shadow(0 0 4px ${b.color})"` : ''}/>` : `<path class="edge off" d="${d}"/>`;
       }
     });
     const now = performance.now();
     t.branches.forEach((b, bi) => {
       for (const nd of b.nodes.filter(shown)) {
-        const [x, y] = pos(bi, nd), r = S.r[nd.id] | 0, st = nodeState(nd);
+        const [x, y] = shape.pos(bi, nd), r = a[nd.id] | 0, p = r - (S.r[nd.id] | 0), st = nodeState(nd, a), Rr = R(nd);
         const pop = S.flash === nd.id && now - S.flashT < 900 ? ' pop' : '', hl = S.sel === nd.id ? ' hl' : '';
-        const R = nd.keystone ? 30 : 24, frac = r / nd.max, circ = 2 * Math.PI * (R + 5);
-        const shape = nd.keystone
-          ? `<rect class="core" x="${-R * 0.78}" y="${-R * 0.78}" width="${R * 1.56}" height="${R * 1.56}" rx="5" transform="rotate(45)" stroke="${b.color}"/><rect x="${-R * 0.98}" y="${-R * 0.98}" width="${R * 1.96}" height="${R * 1.96}" rx="7" transform="rotate(45)" fill="none" stroke="${b.color}" stroke-opacity=".35"/>`
-          : `<circle class="core" r="${R}" stroke="${b.color}"/>${r ? `<circle class="arc" r="${R + 5}" stroke="${b.color}" stroke-dasharray="${circ * frac} ${circ}" transform="rotate(-90)"/>` : ''}`;
-        svg += `<g class="tn ${st}${pop}${hl}" data-id="${nd.id}" transform="translate(${x},${y})" tabindex="0" role="button" aria-label="${esc(nd.name)}, rank ${r} of ${nd.max}">
-          <circle class="halo" r="${R + 8}" fill="${b.color}" filter="url(#tglow)"/>${shape}
-          <text class="glyph" y="1"${nd.keystone ? ' style="font-size:22px"' : ''}>${esc(nd.icon || '•')}</text>
-          <text class="rk" y="${R + 17}">${r}/${nd.max}</text></g>`;
+        const frac = r / nd.max, circ = 2 * Math.PI * (Rr + 4);
+        const core = nd.keystone
+          ? `<rect class="core" x="${-Rr * 0.78}" y="${-Rr * 0.78}" width="${Rr * 1.56}" height="${Rr * 1.56}" rx="4" transform="rotate(45)" stroke="${b.color}"/><rect x="${-Rr}" y="${-Rr}" width="${Rr * 2}" height="${Rr * 2}" rx="6" transform="rotate(45)" fill="none" stroke="${b.color}" stroke-opacity=".35"/>`
+          : `<circle class="core" r="${Rr}" stroke="${nd.sub ? '#e9b949' : b.color}"/>${r ? `<circle class="arc" r="${Rr + 4}" stroke="${p && p === r ? '#e9b949' : b.color}" stroke-dasharray="${circ * frac} ${circ}" transform="rotate(-90)"/>` : ''}`;
+        const sg = sugg[nd.id] ? `<circle class="sug" r="${Rr + 9}"/><text class="sugn" x="${-Rr - 6}" y="${-Rr + 2}">${sugg[nd.id]}</text>` : '';
+        const plan = p > 0 ? `<circle class="plan" cx="${Rr * 0.8}" cy="${-Rr * 0.8}" r="9"/><text class="plant" x="${Rr * 0.8}" y="${-Rr * 0.8}">+${p}</text>` : '';
+        svg += `<g class="tn ${st}${pop}${hl}${nd.sub ? ' subn' : ''}" data-id="${nd.id}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})" tabindex="0" role="button" aria-label="${esc(nd.name)}, rank ${r} of ${nd.max}${p ? `, ${p} planned` : ''}">
+          <circle class="halo" r="${Rr + 8}" fill="${nd.sub ? '#e9b949' : b.color}" filter="url(#tglow)"/>${sg}${core}
+          <text class="glyph" y="1"${nd.keystone ? ' style="font-size:17px"' : ''}>${esc(nd.icon || '•')}</text>
+          <text class="nm" y="${Rr + 12}">${esc(shortName(nd.name))}</text><text class="rk" x="${-Rr * 0.95}" y="${Rr * 0.95}">${r}/${nd.max}</text>${plan}</g>`;
       }
     });
     svg += '</svg>';
-    const heads = `<div class="bheads"><div></div>${t.branches.map(b => `<div class="bh" style="--bc:${b.color}"><h3>${esc(b.name)}<span>${branchSpent(S.r, cls(), b.id)} pts</span></h3><p>${esc(b.theme)}</p></div>`).join('')}</div>`;
-    return `<div class="tgrid"><div class="treewrap">${heads}${svg}</div>${side()}</div>`;
+    const heads = `<div class="bheads">${t.branches.map(b => `<div class="bh ${b.id === mine ? 'mine' : ''}" style="--bc:${b.color}" title="${esc(b.theme)}"><b>${esc(b.name)}</b><span>${branchSpent(a, cls(), b.id)} pts</span>${b.id === mine ? `<em>${esc(subName(sub()))}</em>` : ''}</div>`).join('')}
+      <span class="shapename" title="${esc(shape.blurb)}">${esc(shape.name)}</span></div>`;
+    return `<div class="tgrid"><div class="treewrap">${heads}${svg}</div>${side(a)}</div>`;
   }
-  function side() {
-    const n = free(), T = totals(), spent = spentOf(S.r);
-    const next = state.lvl < MAX_LEVEL ? `The next point comes at level ${state.lvl + 1}.` : 'All 19 points earned.';
+  function nodeCard(id, a) {
+    const nd = nodeDef(id); if (!nd) return '';
+    const b = tree().branches.find(x => x.id === nd.branch), r = a[id] | 0, p = r - (S.r[id] | 0);
+    const lines = nodeLines(cls(), nd, Math.max(1, Math.min(nd.max, r + (r < nd.max ? 1 : 0))));
+    const one = nd.desc || lines[0] || '';
+    const why = r >= nd.max ? null : spendBlock(cls(), a, state.lvl, id, sub());
+    return `<div class="ncard" style="--bc:${b.color}"><h4>${esc(nd.name)}</h4><div class="meta">${nd.keystone ? 'Keystone' : `Rank ${r} of ${nd.max}${p ? ` (${p} planned)` : ''}`} · ${esc(b.name)} · tier ${nd.tier + 1}${nd.sub ? ` · ${esc(subName(nd.sub))}` : ''}${nd.coop ? ' · co-op' : ''}</div>
+      <div class="one">${esc(one)}</div>
+      ${lines.filter(l => l !== one).length ? `<div class="det">${r && r < nd.max ? '<b>Next rank: </b>' : ''}${lines.filter(l => l !== one).map(esc).join('<br>')}</div>` : ''}
+      ${why && !S.locked ? `<div class="why">${esc(why)}</div>` : ''}</div>`;
+  }
+  function side(a) {
+    const T = totals(), spent = spentOf(S.r), confirm = performance.now() - S.confirmT < 4000;
     const lines = [];
     for (const [k, v] of Object.entries(T.stat)) if (v && STAT_TEXT[k]) lines.push(`<li>${esc(STAT_TEXT[k](v))}</li>`);
     for (const [sk, m] of Object.entries(T.sk)) for (const kk of ['dmg', 'fin', 'cd', 'radius', 'dur']) if (m[kk]) lines.push(`<li>${esc(effectText(cls(), { sk, [kk]: m[kk] }))}</li>`);
-    for (const [a, v] of Object.entries(T.aura)) lines.push(`<li>${esc(effectText(cls(), { aura: a, v }))}</li>`);
+    for (const [au, v] of Object.entries(T.aura)) lines.push(`<li>${esc(effectText(cls(), { aura: au, v }))}</li>`);
     for (const nd of nodesOf(cls())) if (S.r[nd.id] && nd.fx.some(e => e.key)) lines.push(`<li class="k"><b>${esc(nd.name)}</b>: ${esc(nd.desc)}</li>`);
-    const confirm = performance.now() - S.confirmT < 4000;
-    return `<aside class="side">
-      <div class="big ${n ? '' : 'zero'}">${n}</div><div class="note">point${n === 1 ? '' : 's'} to spend. ${spent} of ${S.pts} spent. ${next}</div>
+    const tiers = TALENTS.tiers.map((need, k) => `<span class="${spentAbove(a, cls(), k) >= need ? 'on' : ''}" title="Tier ${k + 1}: ${need} points in the tiers above">${k === TALENTS.tiers.length - 1 ? '◆' : `T${k + 1}`}</span>`).join('');
+    let top;
+    if (S.locked) top = `<div class="pbox"><b>${free()} point${free() === 1 ? '' : 's'} banked</b><div class="note">Your talent tree opens when you graduate at the Academy. Look around: this is what your class can grow into.</div></div>`;
+    else if (S.plan.length) {
+      const counts = {}; for (const id of S.plan) counts[id] = (counts[id] | 0) + 1;
+      top = `<div class="pbox"><div class="plbl" style="color:var(--ember);opacity:1">Your plan</div><ol>${Object.entries(counts).map(([id, k]) => `<li>${esc(nodeDef(id)?.name)}${k > 1 ? ` ×${k}` : ''}</li>`).join('')}</ol>
+        <div class="row2"><button class="btn gold" data-a="confirm">Confirm ${S.plan.length}</button><button class="btn ghost" data-a="undo">Undo</button></div>
+        <div class="note" style="margin-top:6px">${left()} point${left() === 1 ? '' : 's'} left. ${isTouch ? 'Tap' : 'Right-click'} a planned node to take a rank back.</div></div>`;
+    } else top = `<div><div class="big ${free() ? '' : 'zero'}">${free()}</div><div class="note">point${free() === 1 ? '' : 's'} to spend. ${spent} of ${S.pts} spent.${free() ? ` ${isTouch ? 'Tap' : 'Click'} nodes to plan, then confirm.` : state.lvl < MAX_LEVEL ? ` The next comes at level ${state.lvl + 1}.` : ''}</div></div>`;
+    const sel = S.sel || S.hover;
+    return `<aside class="side">${top}
+      ${sel ? nodeCard(sel, a) : '<div class="note">Point at a node to read it. A short line first, then the numbers.</div>'}
+      <div><div class="plbl">Tiers open</div><div class="tiers">${tiers}</div></div>
+      <label class="tog ${S.sug ? 'on' : ''}" data-a="sug"><i></i>Suggested path${subBranch() ? `: ${esc(subName(sub()))} first` : ''}</label>
+      <details ${lines.length && lines.length < 6 ? 'open' : ''}><summary>Your bonuses (${lines.length})</summary>${lines.length ? `<ul class="bon">${lines.join('')}</ul>` : '<div class="note">Nothing learned yet.</div>'}</details>
       <button class="btn ${confirm ? 'warn' : ''}" data-a="respec" ${S.near && spent ? '' : 'disabled'}>${confirm ? 'Click again to refund every point' : 'Respec: refund all points'}</button>
-      <div class="note ${S.near ? 'shrine-on' : ''}" style="margin-top:6px">${S.near ? 'You are at a Skill Shrine: respec and right-click refunds are free here.' : 'Learning works anywhere. Refunds are free at a Skill Shrine in town (by the Hall of Clearers, or in Mirelight Camp).'}</div>
-      <h4>Your bonuses</h4>${lines.length ? `<ul class="bon">${lines.join('')}</ul>` : '<div class="note">Nothing learned yet. Click a glowing node in tier 1 to start.</div>'}
-      <h4>Reading the tree</h4>
-      <div class="legend">${legendDot('#9fb4d8', 'glow')}Can learn now${legendDot('#9fb4d8', 'arc')}Learned, more ranks to go${legendDot('#e9b949', 'max')}Max rank${legendDot('#2b3550', '')}Locked by its tier or a line above</div>
-      <p class="note" style="margin-top:8px">Each tier opens after ${TALENTS.tiers.slice(1).join(', ')} points in the tiers above. A line means the node needs a point in a node it hangs from. The diamond at the bottom of each branch is its keystone.</p>
+      <div class="note ${S.near ? 'shrine-on' : ''}">${S.near ? 'You are at a Skill Shrine: respec and refunds are free here.' : 'Refunds are free at a Skill Shrine in town.'}</div>
     </aside>`;
   }
 
-  function legendDot(c, k) {
-    return `<svg width="22" height="22" viewBox="-11 -11 22 22" aria-hidden="true">${k === 'glow' ? `<circle r="10" fill="${c}" opacity=".45" filter="url(#tglow2)"/>` : ''}<circle r="7" fill="#111a2d" stroke="${c}" stroke-width="2"/>${k === 'arc' ? `<circle r="9.5" fill="none" stroke="${c}" stroke-width="2" stroke-dasharray="20 60" transform="rotate(-90)"/>` : ''}${k === 'max' ? `<circle r="9.5" fill="none" stroke="${c}" stroke-width="2"/>` : ''}<defs><filter id="tglow2"><feGaussianBlur stdDeviation="2"/></filter></defs></svg>`;
-  }
-
-  // ----- tooltip -----
+  // ----- tooltip (short; the side card has the details) -----
   const tip = () => panel.querySelector('.tt');
-  function hideTip() { const t = tip(); if (t) t.hidden = true; S.hover = null; }
+  function hideTip() { const t = tip(); if (t) t.hidden = true; if (S.hover) { S.hover = null; refreshSide(); } }
   function showTip(id, ev) {
     const nd = nodeDef(id), t = tip(); if (!nd || !t) return;
-    const b = tree().branches.find(x => x.id === nd.branch), r = S.r[id] | 0;
-    const why = r >= nd.max ? null : spendBlock(cls(), S.r, state.lvl, id, sub());
-    const cur = r ? nodeLines(cls(), nd, r) : null, nxt = r < nd.max ? nodeLines(cls(), nd, r + 1) : null;
-    const refund = r && S.near ? refundBlock(cls(), S.r, id, sub()) : 'x';
+    const a = eff(), b = tree().branches.find(x => x.id === nd.branch), r = a[id] | 0, p = r - (S.r[id] | 0);
+    const why = r >= nd.max ? null : spendBlock(cls(), a, state.lvl, id, sub());
+    const one = nd.desc || nodeLines(cls(), nd, Math.max(1, Math.min(nd.max, r + 1)))[0] || '';
     t.style.setProperty('--bc', b.color);
-    t.innerHTML = `<h3>${esc(nd.name)}</h3><div class="meta">${nd.keystone ? 'Keystone' : `Rank ${r} of ${nd.max}`}, ${esc(b.name)} tier ${nd.tier + 1}${nd.sub ? ', specialisation' : ''}${nd.coop ? ', co-op' : ''}</div>
-      ${cur ? `<div class="cur"><b>Now</b>${cur.map(l => `<div class="${nd.desc && l === nd.desc ? 'kd' : ''}">${esc(l)}</div>`).join('')}</div>` : ''}
-      ${nxt ? `<div class="${cur ? 'nx' : 'cur'}"><b>${r ? 'Next rank' : 'Rank 1'}</b>${nxt.map(l => `<div class="${nd.desc && l === nd.desc ? 'kd' : ''}">${esc(l)}</div>`).join('')}</div>` : ''}
-      ${why && r < nd.max ? `<div class="why">${esc(why)}</div>` : ''}
-      ${!why && r < nd.max ? `<div class="how">${isTouch ? 'Tap' : 'Click'} to learn.</div>` : ''}
-      ${r && !refund ? `<div class="how">Right-click to refund a rank.</div>` : ''}`;
+    t.innerHTML = `<h3>${esc(nd.name)}</h3><div class="meta">${nd.keystone ? 'Keystone' : `Rank ${r} of ${nd.max}`}${p ? `, ${p} planned` : ''}</div><div>${esc(one)}</div>
+      ${why && !S.locked ? `<div class="why">${esc(why)}</div>` : ''}
+      ${!why && !S.locked && r < nd.max ? `<div class="how">${isTouch ? 'Tap' : 'Click'} to plan a rank.</div>` : ''}
+      ${p ? `<div class="how">Right-click to take a planned rank back.</div>` : ''}`;
     t.hidden = false; S.hover = id;
-    place(ev);
+    place(ev); refreshSide();
+  }
+  function refreshSide() { // only the node card changes on hover
+    if (S.tab !== 'talents' || S.sel) return;
+    const el = panel.querySelector('.side'); if (!el) return;
+    const a = eff(), card = el.querySelector('.ncard, .side > .note');
+    if (!card) return;
+    const html = S.hover ? nodeCard(S.hover, a) : '<div class="note">Point at a node to read it. A short line first, then the numbers.</div>';
+    const tmp = document.createElement('div'); tmp.innerHTML = html; card.replaceWith(tmp.firstElementChild);
   }
   function place(ev) {
     const t = tip(); if (!t || t.hidden) return;
     const box = panel.querySelector('.body').getBoundingClientRect();
     let x = ev.clientX - box.left + 18, y = ev.clientY - box.top + 14;
-    if (x + 300 > box.width) x = ev.clientX - box.left - 308;
-    const h = t.offsetHeight || 150;
+    if (x + 280 > box.width) x = ev.clientX - box.left - 288;
+    const h = t.offsetHeight || 120;
     if (y + h > box.height) y = Math.max(4, box.height - h - 6);
     t.style.left = `${x}px`; t.style.top = `${y}px`;
   }
 
-  // ----- Progression pane -----
-  function levelInfo(L) {
-    const c = CLASSES[cls()], out = [];
-    for (const [i, s] of c.skills.entries()) if (s.lvl === L) out.push({ k: 'sk', g: i === 0 ? '⚔' : String(i), t: `${s.name} unlocked${i === 0 ? ' (basic attack)' : ` (skill ${i})`}`, d: s.desc });
-    for (let k = 1; k < TALENTS.tiers.length; k++) if (levelForPoint(TALENTS.tiers[k] + 1) === L) out.push({ k: 'ti', g: String(k + 1), t: `Talent tier ${k + 1} can open${k === TALENTS.tiers.length - 1 ? ': keystones' : ''}`, d: `Your ${TALENTS.tiers[k] + 1}th point can go into tier ${k + 1} once ${TALENTS.tiers[k]} points sit in the tiers above.` });
-    for (const m of MILESTONES) if (m.lvl === L) out.push({ k: 'ms', g: '★', t: m.text });
-    return out;
-  }
-  function progression() {
-    const L = state.lvl, frac = L >= MAX_LEVEL ? 0 : Math.min(1, (state.xp || 0) / (state.next || 1));
-    const railPct = Math.min(100, ((L - 1 + frac) / (MAX_LEVEL - 1)) * 100);
-    let cols = '';
-    for (let l = 1; l <= MAX_LEVEL; l++) {
-      const info = levelInfo(l), cl = l < L ? 'past' : l === L ? 'cur' : '';
-      cols += `<div class="lv ${cl} ${S.sel === l ? 'sel' : ''}" data-lv="${l}" data-nav="lv${l}" title="Level ${l}">
-        <div class="marks">${info.slice(0, 4).map(i => `<span class="mk ${i.k}" title="${esc(i.t)}"><span>${esc(i.g)}</span></span>`).join('')}</div>
-        <div class="dot">${l}</div>${l >= TALENTS.firstLevel ? `<div class="pt" title="+1 talent point"></div>` : '<div style="height:17px"></div>'}</div>`;
-    }
-    const track = `<div class="track"><div class="rail" style="top:${132 + 13}px"><i style="width:${railPct}%"></i></div>${cols}</div>`;
-    const sel = S.sel || L, st = statsFor(cls(), sel), info = levelInfo(sel);
-    const tiersOpen = TALENTS.tiers.filter(n => pointsAt(sel) > n).length;
-    const detail = `<div class="card"><h3>Level ${sel}${sel === L ? ', where you are' : sel < L ? ', behind you' : ''}</h3>
-      <div class="kv"><div><b>${st.maxHp}</b><span>base health</span></div><div><b>${st.atk.toFixed(1)}</b><span>base attack</span></div>
-      <div><b>${pointsAt(sel)}</b><span>talent points</span></div><div><b>${tiersOpen}</b><span>tiers reachable</span></div></div>
-      ${info.length ? `<ul class="un">${info.map(i => `<li><span class="mk ${i.k}"><span>${esc(i.g)}</span></span><span>${esc(i.t)}${i.d ? `<br><span class="note">${esc(i.d)}</span>` : ''}</span></li>`).join('')}</ul>` : `<p class="note">${sel >= TALENTS.firstLevel ? 'One more talent point and a little more health and attack.' : 'Your journey starts here.'}</p>`}
-      <p class="note" style="margin-top:8px">Gear adds to these numbers (see the bag). Skills also grow on their own: mastery rises by using them well, at any level (Abilities).</p></div>`;
-    const upcoming = [];
-    for (let l = L + 1; l <= MAX_LEVEL && upcoming.length < 6; l++) for (const i of levelInfo(l)) if (upcoming.length < 6) upcoming.push({ ...i, l });
-    const next = `<div class="card"><h3>Coming up</h3>${upcoming.length ? `<ul class="un">${upcoming.map(i => `<li><span class="mk ${i.k}"><span>${esc(i.g)}</span></span><span>${esc(i.t)}</span><em>level ${i.l}</em></li>`).join('')}</ul>` : '<p class="note">You have reached the top of the track.</p>'}
-      ${growth()}</div>`;
-    return `${track}<div class="pgrid">${detail}${next}</div>`;
-  }
-  function growth() { // base health and attack per level, with the talent points as steps
-    const Wd = 520, Hd = 170, P = 26, xs = l => P + ((l - 1) / (MAX_LEVEL - 1)) * (Wd - P * 2);
-    const hp = l => statsFor(cls(), l).maxHp, atk = l => statsFor(cls(), l).atk;
-    const hpMax = hp(MAX_LEVEL);
-    const ys = (v, mx) => Hd - 24 - (v / mx) * (Hd - 44);
-    let ph = '', bars = '';
-    for (let l = 1; l <= MAX_LEVEL; l++) {
-      ph += `${l === 1 ? 'M' : 'L'}${xs(l).toFixed(1)},${ys(hp(l), hpMax).toFixed(1)}`;
-      const n = pointsAt(l), bh = (n / pointsAt(MAX_LEVEL)) * 34;
-      bars += `<rect x="${xs(l) - 4}" y="${Hd - 24 - bh}" width="8" height="${bh}" rx="2" fill="#e9b949" opacity="${l <= state.lvl ? 0.45 : 0.15}"/>`;
-    }
-    const cx = xs(state.lvl), col = hex(CLASSES[cls()].color);
-    return `<svg class="growth" viewBox="0 0 ${Wd} ${Hd}" aria-label="Health and attack by level">${bars}
-      <path d="${ph}" fill="none" stroke="${col}" stroke-width="2.5"/>
-      <line x1="${cx}" x2="${cx}" y1="22" y2="${Hd - 22}" stroke="#fff" stroke-opacity=".3"/>
-      <circle cx="${cx}" cy="${ys(hp(state.lvl), hpMax)}" r="4.5" fill="${col}" stroke="#fff" stroke-width="1.5"/>
-      <text x="${Math.min(cx + 8, Wd - 150)}" y="${ys(hp(state.lvl), hpMax) - 10}" style="opacity:.95">${hp(state.lvl)} health, ${atk(state.lvl).toFixed(1)} attack</text>
-      <text x="${P}" y="${Hd - 6}">Lv 1</text><text x="${Wd - P - 26}" y="${Hd - 6}">Lv ${MAX_LEVEL}</text>
-      <text x="${P}" y="12" style="fill:${col};opacity:1">base health ${hp(1)} to ${hpMax}</text><text x="${P + 170}" y="12" style="fill:#e9b949;opacity:.9">talent points 0 to ${pointsAt(MAX_LEVEL)}</text></svg>`;
-  }
-
-  // ----- Abilities pane -----
+  // ================================================== Abilities tab ===================================================
   function abilities() {
-    const c = CLASSES[cls()], T = totals(), haste = (state.inv?.stats?.haste || 0) / 100;
-    let h = `<p class="note" style="margin:0 0 10px">Every ability grows three ways: it unlocks at a level, its mastery rises as you use it well (evolving at Mastery ${MASTERY.evolveAt} into one of two branches), and talents sharpen it. ${S.near ? '<span class="shrine-on">You are at a Skill Shrine: changing an evolution is free here.</span>' : 'Your first evolution pick works anywhere; changing it needs a Skill Shrine.'}</p>`;
-    c.skills.forEach((s, slot) => {
-      const key = slot === 0 ? 'basic' : s.id, e = slot ? (S.m?.[s.id] || { pts: 0, br: null }) : null, locked = state.lvl < s.lvl;
-      const nm = slot ? skillName(s, e) : s.name, l = slot ? masteryLevel(e.pts) : 0;
-      const baseCd = slot ? masteryCd(s, e) : s.cd, m = T.sk[key];
-      const cdNow = baseCd * (m?.cd ? Math.max(0.4, 1 + m.cd / 100) : 1) * (slot ? 1 - haste : 1);
-      h += `<div class="ab ${locked ? 'locked' : ''}"><div>
-          <span class="key">${slot === 0 ? (isTouch ? 'Atk' : 'Click') : slot}</span><h3>${esc(nm)}</h3>${nm !== s.name ? `<span class="base">${esc(s.name)}</span>` : ''}
-          <p class="d">${esc(slot ? skillDesc(s, e) : s.desc)}</p>
-          <div class="cdl">Cooldown ${Math.abs(cdNow - s.cd) > 0.01 ? `<s>${s.cd.toFixed(2)} s</s> ` : ''}<b>${cdNow.toFixed(2)} s</b></div>
-          <div class="note">${locked ? `Unlocks at level ${s.lvl}.` : slot ? `Mastery ${l}${l >= MASTERY.max ? ', mastered' : ''}.` : 'Basic attack: no mastery, shaped by talents.'}</div></div><div>`;
-      if (slot) {
-        const [ml, into, span] = masteryProgress(e.pts), br = activeBranch(e);
-        const steps = [[0, `Level ${s.lvl}`, 'Unlocked', state.lvl >= s.lvl], [2, 'Mastery 2', '-10% cooldown', l >= 2], [3, 'Mastery 3', br ? BRANCHES[s.id][br].name : 'Evolves', l >= 3], [4, 'Mastery 4', '+10% effect', l >= 4], [5, 'Mastery 5', 'Mastered', l >= 5]];
-        h += `<div class="path">${steps.map(([n, a, b, done]) => `<div class="step ${done ? 'done' : ''} ${n === 3 ? 'evostep' : ''} ${!done && (n === ml + 1 || (n === 0 && locked)) ? 'now' : ''}"><i></i>${esc(a)}<br><span style="opacity:.75">${esc(b)}</span></div>`).join('')}</div>
-          <div class="mbar"><i style="width:${span ? Math.min(100, (100 * into) / span) : 100}%"></i></div>
-          <div class="mprog"><span>${span ? `${Math.floor(into)} / ${span} to Mastery ${ml + 1}` : 'Mastered'}</span><span>${Math.floor(e.pts)} mastery points</span></div>`;
-        if (BRANCHES[s.id]) h += `<div class="evos">${['A', 'B'].map(k => evoCard(s, e, k, locked ? 0 : l)).join('')}</div>`;
-      }
-      const nodes = nodesForSkill(cls(), key).filter(shown);
-      h += `<div class="sub">Talents that change it</div><div class="chips">${nodes.length ? nodes.map(nd => {
-        const b = tree().branches.find(x => x.id === nd.branch), r = S.r[nd.id] | 0;
-        return `<button class="chip2 ${r ? '' : 'off'}" style="--bc:${b.color}" data-goto="${nd.id}" title="${esc(nodeLines(cls(), nd, Math.max(1, r)).join(' / '))}"><b>${esc(nd.name)}</b> ${r}/${nd.max}</button>`;
-      }).join('') : '<span class="note">None in this tree.</span>'}</div></div></div>`;
-    });
+    const rows = skillRows(), col = hex(CLASSES[cls()].color);
+    if (!rows.some(r => r[0] === S.ab)) S.ab = 1;
+    const list = rows.map(([slot, s, e]) => {
+      const locked = state.lvl < s.lvl, stg = stageOf(slot, s, e), nm = e && !s.sig ? skillName(s, e) : s.name;
+      const ready = e && !e.br && masteryLevel(e.pts) >= MASTERY.evolveAt && !s.sig && !locked;
+      return `<button class="ai ${S.ab === slot ? 'on' : ''} ${locked ? 'locked' : ''}" data-ab="${slot}"><span class="k">${slot === 0 ? (isTouch ? 'Atk' : '⚔') : slot === 4 ? 'G' : slot}</span><span><b>${esc(nm)}</b><small>${locked ? `Level ${s.lvl}` : slot === 0 ? 'Basic attack' : slot === 4 ? 'Signature skill' : `Mastery ${masteryLevel(e.pts)} · ${stg}`}${ready ? ' · <span style="color:var(--ember)">can evolve</span>' : ''}</small></span></button>`;
+    }).join('');
+    const row = rows.find(r => r[0] === S.ab);
+    return `<div class="agrid"><div class="alist">${list}<p class="note" style="margin-top:6px">Every ability grows three ways: mastery from using it well, an evolution at Mastery ${MASTERY.evolveAt}, and talents.</p></div>
+      <div class="adet">${detail(row, col)}</div></div>`;
+  }
+  function detail([slot, s, e], col) {
+    const T = totals(), haste = (state.inv?.stats?.haste || 0) / 100, locked = state.lvl < s.lvl;
+    const key = slot === 0 ? 'basic' : slot === 4 ? 'sig' : s.id;
+    const nm = e && !s.sig ? skillName(s, e) : s.name, desc = e && !s.sig ? skillDesc(s, e) : s.desc;
+    const baseCd = e && !s.sig ? masteryCd(s, e) : s.cd, m = T.sk[key];
+    const cdNow = baseCd * (m?.cd ? Math.max(0.4, 1 + m.cd / 100) : 1) * (slot ? 1 - haste : 1);
+    const one = desc.split(/(?<=[.:])\s/)[0];
+    let h = `<div class="ahead"><div><div class="plbl">${slot === 0 ? 'Basic attack' : slot === 4 ? `Signature skill · ${esc(subName(sub()) || 'Specialised')}` : `Skill ${slot}`}</div>
+        <h3>${esc(nm)}</h3>${nm !== s.name ? `<div class="note">${esc(s.name)}, evolved</div>` : ''}<div class="one">${esc(one)}</div>
+        ${desc !== one ? `<p class="note" style="margin:0 0 8px">${esc(desc.slice(one.length).trim())}</p>` : ''}
+        <div class="facts"><span>Cooldown ${Math.abs(cdNow - s.cd) > 0.01 ? `<s>${s.cd.toFixed(2)} s</s> ` : ''}<b>${cdNow.toFixed(2)} s</b></span>${locked ? `<span>Unlocks at level ${s.lvl}</span>` : ''}${e ? `<span>Mastery ${masteryLevel(e.pts)}</span>` : ''}</div></div>
+        ${diagram(s.id, col)}</div>`;
+    if (e && BRANCHES[s.id]) {
+      const l = locked ? 0 : masteryLevel(e.pts), [ml, into, span] = masteryProgress(e.pts), br = activeBranch(e);
+      const steps = [[1, 'Mastery 1', 'Learned'], [2, 'Mastery 2', '-10% cooldown'], [3, 'Mastery 3', br ? BRANCHES[s.id][br].name : 'Evolves'], [4, 'Mastery 4', '+10% effect'], [5, 'Mastery 5', 'Awakens']];
+      h += `<div class="sub">Mastery</div><div class="mtrack">${steps.map(([n, a, b]) => `<div class="${l >= n ? 'done' : ''} ${n === ml + 1 ? 'now' : ''} ${n === MASTERY.evolveAt ? 'ev' : ''}"><i>${n === ml + 1 && span ? `<u style="width:${Math.min(100, (100 * into) / span)}%"></u>` : ''}</i>${a}<br><span style="opacity:.75">${esc(b)}</span></div>`).join('')}</div>
+        <div class="note">${span ? `${Math.floor(into)} / ${span} to Mastery ${ml + 1}. Land hits, finish fights and avoid damage to raise it.` : 'Fully mastered.'}</div>`;
+      const evolved = !!br, awake = l >= MASTERY.max;
+      h += `<div class="strip"><div class="sc on"><div class="plbl">Base</div><b>${esc(s.name)}</b><small>${esc(s.desc.split(/(?<=\.)\s/)[0])}</small></div><i>→</i>
+        <div class="sc ev ${evolved ? 'on' : 'dim'}"><div class="plbl">Evolved · M${MASTERY.evolveAt}</div><b>${evolved ? esc(BRANCHES[s.id][br].name) : 'One of two forms'}</b><small>${evolved ? esc(BRANCHES[s.id][br].desc) : `Choose at Mastery ${MASTERY.evolveAt}, below.`}</small></div><i>→</i>
+        <div class="sc aw ${awake ? 'on' : 'dim'}"><div class="plbl">Awakened · M${MASTERY.max}</div><b>${awake ? 'Awakened' : 'Awakening'}</b><small>${esc(awakenText(s, e, br))}</small></div></div>
+        <div class="evos">${['A', 'B'].map(k => evoCard(s, e, k, l)).join('')}</div>`;
+    } else if (slot === 0) {
+      const ids = CLASS_STYLES[cls()] || [];
+      if (ids.length) h += `<div class="sub">Weapon styles</div><div class="note">Your basic attack follows the weapon you hold. Each style changes its rhythm.</div><div class="wst">${ids.map(id => `<div class="sc"><b>${esc(STYLES[id].name)}${STYLES[id].def ? ' <span class="stage">starter</span>' : ''}</b><small>${esc(STYLES[id].desc)}</small>${STYLES[id].passive ? `<small style="color:#fde68a">${esc(STYLES[id].passive)}</small>` : ''}</div>`).join('')}</div>`;
+    } else if (slot === 4) h += sigDetail(s, e);
+    const nodes = nodesForSkill(cls(), key).filter(shown);
+    h += `<div class="sub">Talents that change it</div><div class="chips">${nodes.length ? nodes.map(nd => {
+      const b = tree().branches.find(x => x.id === nd.branch), r = S.r[nd.id] | 0;
+      return `<button class="chip2 ${r ? '' : 'off'}" style="--bc:${b.color}" data-goto="${nd.id}" title="${esc(nodeLines(cls(), nd, Math.max(1, r)).join(' / '))}"><b>${esc(nd.name)}</b> ${r}/${nd.max}</button>`;
+    }).join('') : '<span class="note">None in this tree.</span>'}</div>`;
     return h;
   }
+  // Hooks for later phases (signature mastery, awakenings) live here so the tab draws the same either way.
+  const awakenText = () => `At Mastery ${MASTERY.max} your evolved form gains one more rule.`;
+  const sigDetail = () => `<p class="note" style="margin-top:10px">Your signature skill sits on ${keyName('skill4')}. It comes from your specialisation at the Academy.</p>`;
   function evoCard(s, e, k, l) {
     const b = BRANCHES[s.id][k], cur = l >= MASTERY.evolveAt ? e.br : null, on = cur === k;
     let st, can = false;
@@ -505,7 +687,7 @@ export function initTalents(ctx) {
     else if (!e.br) { st = 'Choose this evolution'; can = true; }
     else if (S.near) { st = 'Switch to this (free here)'; can = true; }
     else st = 'Switch at a Skill Shrine';
-    return `<button class="evo ${on ? 'on' : ''} ${can ? 'can' : ''} ${l < MASTERY.evolveAt ? 'dim' : ''}" ${can ? `data-sk="${s.id}" data-br="${k}"` : 'disabled'}><b>${k}: ${esc(b.name)}${b.coop ? ' <span style="font:600 10px system-ui;color:#67e8f9">co-op</span>' : ''}</b><small>${esc(b.desc)}</small><span class="st">${st}</span></button>`;
+    return `<button class="evo ${on ? 'on' : ''} ${can ? 'can' : ''} ${l < MASTERY.evolveAt ? 'dim' : ''}" ${can ? `data-sk="${s.id}" data-br="${k}"` : 'disabled'}><b>${k}: ${esc(b.name)}${b.coop ? ' <span style="font:600 10px system-ui;color:#67e8f9">co-op</span>' : ''}</b><small>${esc(b.desc)}</small><span class="st2">${st}</span></button>`;
   }
 
   // ---------- input ----------
@@ -515,34 +697,56 @@ export function initTalents(ctx) {
     const a = t.closest('[data-a]')?.dataset.a;
     if (a === 'close') return toggle(false);
     if (a === 'respec') {
-      if (performance.now() - S.confirmT < 4000) { S.confirmT = 0; send({ type: 'talent', op: 'reset' }); }
+      if (performance.now() - S.confirmT < 4000) { S.confirmT = 0; S.plan = []; send({ type: 'talent', op: 'reset' }); }
       else { S.confirmT = performance.now(); render(); }
       return;
     }
-    const nd = t.closest('.tn'); if (nd) { spend(nd.dataset.id); return; }
-    const lv = t.closest('[data-lv]'); if (lv) { S.sel = +lv.dataset.lv; render(); return; }
-    const go = t.closest('[data-goto]'); if (go) { S.tab = 'talents'; S.sel = go.dataset.goto; render(); return; }
+    if (a === 'confirm') return confirmPlan();
+    if (a === 'undo') { S.plan = []; sfx.play('ui'); render(); return; }
+    if (a === 'sug') { ev.preventDefault(); S.sug = !S.sug; try { localStorage.setItem('fb_tsug', S.sug ? '1' : '0'); } catch {} render(); return; }
+    const nd = t.closest('.tn'); if (nd) { S.sel = nd.dataset.id; plan(nd.dataset.id); return; }
+    const ab = t.closest('[data-ab]'); if (ab) { S.ab = +ab.dataset.ab; render(); return; }
+    const go = t.closest('[data-go]')?.dataset.go;
+    if (go) { if (go.startsWith('ab')) { S.tab = 'abilities'; S.ab = +go.slice(2); } else { S.tab = 'talents'; S.sel = nodeDef(go) ? go : null; } render(); return; }
+    const gt = t.closest('[data-goto]'); if (gt) { S.tab = 'talents'; S.sel = gt.dataset.goto; render(); return; }
     const evo = t.closest('.evo.can'); if (evo) { send({ type: 'evolve', sk: evo.dataset.sk, br: evo.dataset.br }); sfx.play('ui'); }
   });
-  function spend(id) {
-    if (S.locked) { sfx.play('ui'); return flash('Your talent tree opens when you graduate at the Academy. Your points are banked.'); }
-    const why = spendBlock(cls(), S.r, state.lvl, id, sub());
-    if (why) { sfx.play('ui'); return flash(why); } // say why (tier gate, missing line, no points, max rank)
-    if (!send({ type: 'talent', op: 'spend', id })) return flash('Not connected to the server.');
+  function plan(id) {
+    if (S.locked) { sfx.play('ui'); render(); return flash('Your talent tree opens when you graduate at the Academy. Your points are banked.'); }
+    const res = planAlloc(cls(), S.r, state.lvl, [...S.plan, id], sub());
+    if (res.error) { sfx.play('ui'); render(); return flash(res.error.replace(/^[^:]+: /, '')); } // say why (tier gate, missing line, no points, max rank)
+    S.plan.push(id); S.flash = id; S.flashT = performance.now(); sfx.play('ui');
+    render();
+  }
+  function unplan(id) {
+    const i = S.plan.lastIndexOf(id); if (i < 0) return false;
+    S.plan.splice(i, 1); S.plan = keepValid(S.plan); sfx.play('ui'); render();
+    return true;
+  }
+  function confirmPlan() {
+    if (!S.plan.length) return;
+    if (state.ws?.readyState !== 1) return flash('Not connected to the server.');
+    send({ type: 'talent', op: 'spendMany', ids: S.plan }); // (send returns nothing useful once connected)
+    S.sent = true;
     clearTimeout(S.waitT);
-    S.waitT = setTimeout(() => flash('No answer from the server. If this keeps happening, reload the page.'), 2500);
+    S.waitT = setTimeout(() => { S.sent = false; flash('No answer from the server. If this keeps happening, reload the page.'); }, 2500);
   }
   // A short message over the bottom of the window (blocked clicks, server replies).
   function flash(text) {
     let el = document.getElementById('tflash');
     if (!el) { el = document.createElement('div'); el.id = 'tflash'; document.body.appendChild(el); }
     el.textContent = text; el.classList.remove('off'); void el.offsetWidth; el.classList.add('on');
-    clearTimeout(S.flashT); S.flashT = setTimeout(() => el.classList.replace('on', 'off'), 2600);
+    clearTimeout(flash.t); flash.t = setTimeout(() => el.classList.replace('on', 'off'), 2600);
   }
-  panel.addEventListener('keydown', ev => { const nd = ev.target.closest?.('.tn'); if (nd && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); spend(nd.dataset.id); } });
+  panel.addEventListener('keydown', ev => {
+    const nd = ev.target.closest?.('.tn');
+    if (nd && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); S.sel = nd.dataset.id; plan(nd.dataset.id); }
+    else if (nd && (ev.key === 'Backspace' || ev.key === 'Delete')) { ev.preventDefault(); unplan(nd.dataset.id); }
+  });
   panel.addEventListener('contextmenu', ev => {
     ev.preventDefault();
     const nd = ev.target.closest('.tn'); if (!nd) return;
+    if (unplan(nd.dataset.id)) return; // a planned rank goes back first
     if (!S.near) return;
     if (!refundBlock(cls(), S.r, nd.dataset.id, sub())) send({ type: 'talent', op: 'refund', id: nd.dataset.id });
   });
@@ -554,6 +758,33 @@ export function initTalents(ctx) {
   panel.addEventListener('mouseleave', hideTip);
   panel.addEventListener('focusin', ev => { const nd = ev.target.closest?.('.tn'); if (nd) { const r = nd.getBoundingClientRect(); showTip(nd.dataset.id, { clientX: r.right, clientY: r.top }); } });
 
+  // ---------- the level-up moment ----------
+  // What a new level brought: points, tier openings, skills, subclass stations, health and attack. Out of combat it shows
+  // as a card for 4 s; in a fight the caller shows one line (returns false).
+  function levelUp(lvl) {
+    const c = CLASSES[cls()]; if (!c) return false;
+    const gains = [];
+    if (pointsAt(lvl) > pointsAt(lvl - 1)) gains.push({ h: `<b>+${pointsAt(lvl) - pointsAt(lvl - 1)}</b>talent point${S.locked ? ' (banked until you graduate)' : ''}` });
+    for (const i of levelInfo(lvl)) gains.push({ h: esc(i.t), g: i.k !== 'b' });
+    const sn = subName(sub());
+    if (sn && lvl === 22) gains.push({ h: `<b>+2</b>${esc(sn)} talents grew on your tree`, g: true });
+    if (sn && lvl === MAX_LEVEL) gains.push({ h: `<b>◆</b>Your ${esc(sn)} crown grew on your tree`, g: true });
+    const a = statsFor(cls(), lvl - 1), b = statsFor(cls(), lvl);
+    gains.push({ h: `<b>↑</b>Health ${a.maxHp} → ${b.maxHp} · attack ${a.atk.toFixed(1)} → ${b.atk.toFixed(1)}` });
+    if (performance.now() - state.lastCombat < 4000) return false;
+    let el = document.getElementById('lvlup');
+    if (!el) { el = document.createElement('div'); el.id = 'lvlup'; $('bag').parentNode.append(el); }
+    el.style.setProperty('--cc', hex(c.color));
+    el.className = '';
+    el.innerHTML = `<div class="k0">LEVEL UP</div><div class="n">${lvl}</div><div class="t">${esc(title())}${sn && lvl >= 22 ? (lvl >= MAX_LEVEL ? ' · Crowned' : ' II') : ''}</div>
+      <ul>${gains.slice(0, 5).map(g => `<li class="${g.g ? 'g' : ''}">${g.h}</li>`).join('')}</ul>
+      ${!S.locked && free() ? `<div class="hint">${tapping() ? 'Tap Path to spend it' : `${keyName('skillTree')}: open your Path to spend it`}</div>` : ''}`;
+    clearTimeout(levelUp.t); clearTimeout(levelUp.t2);
+    levelUp.t = setTimeout(() => el.classList.add('out'), 4000);
+    levelUp.t2 = setTimeout(() => el.remove(), 4700);
+    return true;
+  }
+
   // ---------- per frame ----------
   let t0 = 0;
   function frame(now) {
@@ -564,5 +795,5 @@ export function initTalents(ctx) {
     if (key !== S.key) { S.key = key; badge(); if (isOpen() && !S.hover) render(); }
   }
 
-  return { onMessage, event, toggle, isOpen, frame, speedMult, render, free };
+  return { onMessage, event, toggle, isOpen, frame, speedMult, render, free, levelUp, plan: () => [...S.plan] };
 }

@@ -13,6 +13,7 @@ import {
 import { YARD, LECTERN, nearLectern } from '/shared/academyyard.js';
 import { SPEC, SUBCLASSES, subName, branchName } from '/shared/subclasses.js'; // specialisation (docs/briefs/subclasses.md)
 import { keyHtml, tapping } from '/keyname.js';
+import { buildName } from '/shared/talents.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const mat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...o });
@@ -194,7 +195,7 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
   const spec = () => A()?.spec || null; // specialisation (server/subclasses.js specMsg)
   const label = () => (ini() ? `Initiate · ${WEAPONS[A().path?.weapon]?.name || ''}` : subName(spec()?.sub) || CLASSES[state.cls]?.name || '');
   // Roster rows: "Initiate · Sword", else the subclass (or class) with its rank from Adept up.
-  const rosterLabel = r => (r?.ini ? `Initiate · ${WEAPONS[r.ini]?.name || ''}` : `${r?.rk ? `${rankName(r.rk)} ` : ''}${subName(r?.sub) || CLASSES[r?.cls]?.name || ''}`);
+  const rosterLabel = r => (r?.ini ? `Initiate · ${WEAPONS[r.ini]?.name || ''}` : `${r?.rk ? `${rankName(r.rk)} ` : ''}${buildName(r?.bt, subName(r?.sub) || CLASSES[r?.cls]?.name || '')}`); // "Swift Duelist": the build's leading tag (docs/briefs/path.md)
   const plateTag = r => {
     if (r?.ini) return ' <small class="ttl" style="color:#fde68a">Initiate</small>';
     const t = [r?.rk ? rankName(r.rk) : '', subName(r?.sub)].filter(Boolean).join(' ');

@@ -42,7 +42,7 @@ export const ACTIONS = [
   { id: 'item2', label: 'Tonic', group: 'Items', type: 'button' },
   { id: 'item3', label: 'Draught', group: 'Items', type: 'button' },
   { id: 'bag', label: 'Bag', group: 'Menus', type: 'button' },
-  { id: 'skillTree', label: 'Skill Tree', group: 'Menus', type: 'button' },
+  { id: 'skillTree', label: 'Path', group: 'Menus', type: 'button' },
   { id: 'players', label: 'Players', group: 'Menus', type: 'button' },
   { id: 'botWheel', label: 'Bot orders wheel', group: 'Menus', type: 'hold' },
   { id: 'menu', label: 'Game Menu', group: 'Menus', type: 'button', fixed: true },

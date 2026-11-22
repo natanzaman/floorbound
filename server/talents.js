@@ -1,7 +1,7 @@
 // Talent trees, mixed into Game by installTalents(Game) at the end of game.js. Data and rules: shared/talents.js.
 //
 // State: p.talents = { nodeId: rank } (saved in characters.talents), p.tal = its summed effects (talentTotals).
-// Messages: { type: 'talent', op: 'spend' | 'refund' | 'reset', id } in; { type: 'talents', r, pts } out (index.js).
+// Messages: { type: 'talent', op: 'spend' | 'refund' | 'reset', id } or { op: 'spendMany', ids } (a confirmed plan) in; { type: 'talents', r, pts } out (index.js).
 // Spending works anywhere; refunds and a full respec are free but only at a Skill Shrine in town (atShrine, server/mastery.js).
 //
 // Where the effects apply (all server-side):
@@ -14,7 +14,7 @@
 //    Unbreakable), breakMob (Rallying Bash shields), killMob (Executioner), giveXp (talent point notices).
 import { CLASSES, DODGE, PERFECT, GUARD } from '../shared/data.js';
 import { SONG } from '../shared/classes/bard.js';
-import { TALENTS, KEYS, newTalents, talentTotals, pointsAt, spentOf, spendBlock, refundBlock, nodeDef, skKey } from '../shared/talents.js';
+import { TALENTS, KEYS, newTalents, talentTotals, pointsAt, spentOf, spendBlock, refundBlock, nodeDef, skKey, planAlloc, buildTag } from '../shared/talents.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r2 = v => Math.round(v * 100) / 100;
@@ -35,6 +35,7 @@ export const TalentMethods = {
     this.recompute(p); // keeps the health fraction
     p.talentsDirty = true; p.dirty = true;
     this.invChanged(p); // the bag shows the totals
+    const bt = buildTag(p.cls, p.talents); if (bt !== p.bt) { p.bt = bt; this.rosterDirty = true; } // the Players list names builds
   },
 
   // { type: 'talent', op, id }
@@ -48,6 +49,16 @@ export const TalentMethods = {
       this.events.push({ t: 'talent', to: p.id, id: p.id, n: id, r: p.talents[id], op, k: n.keystone ? 1 : 0, x: r2(p.x), z: r2(p.z) });
       if (n.keystone) this.sys(`Keystone learned: ${n.name}!`, p.id);
       this.track(p, 'talent', { id, r: p.talents[id] });
+    } else if (op === 'spendMany') { // the Path window's plan, confirmed: all or nothing (docs/briefs/path.md)
+      const ids = Array.isArray(msg.ids) ? msg.ids.slice(0, 40).map(String) : [];
+      if (!ids.length) return;
+      const res = planAlloc(p.cls, p.talents, p.lvl, ids, this.subOfP?.(p));
+      if (res.error) return this.sys(res.error, p.id);
+      p.talents = res.alloc;
+      const ks = [...new Set(ids)].map(nodeDef).filter(nd => nd?.keystone);
+      for (const id of new Set(ids)) this.events.push({ t: 'talent', to: p.id, id: p.id, n: id, r: p.talents[id], op: 'spend', k: nodeDef(id)?.keystone ? 1 : 0, x: r2(p.x), z: r2(p.z) });
+      for (const nd of ks) this.sys(`Keystone learned: ${nd.name}!`, p.id);
+      this.track(p, 'talent', { ids });
     } else if (op === 'refund' || op === 'reset') {
       if (!this.atShrine(p)) return this.sys('Talent refunds are free at a Skill Shrine in town.', p.id);
       if (op === 'refund') {

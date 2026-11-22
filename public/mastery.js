@@ -7,6 +7,7 @@ import {
   MASTERY, BRANCHES, SHRINES, nearShrine, masteryLevel, masteryProgress, activeBranch, branchDef, skillName, skillDesc, masteryCd,
 } from '/shared/mastery.js';
 import { keyHtml, tapping } from '/keyname.js'; // prompts name the player's key on the active device
+import { skillDiagram } from '/skillshapes.js';
 
 const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -44,11 +45,23 @@ const CSS = `
 .evo-card:disabled { cursor: default; }
 .evo-card.dim { opacity: .45; }
 .evo-card.pick:hover { border-color: #c4b5fd; background: rgba(139,92,246,.18); }
-#evo-prompt { position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%); width: min(460px, 94vw); padding: 10px 12px; z-index: 5;
-  border-color: rgba(196,181,253,.6); box-shadow: 0 0 24px rgba(139,92,246,.35); }
-#evo-prompt .h { font-weight: 800; letter-spacing: .1em; color: #c4b5fd; font-size: 13px; display: flex; justify-content: space-between; }
-#evo-prompt .h button { background: transparent; border: 0; color: inherit; opacity: .7; }
-.touch #evo-prompt { bottom: auto; top: 70px; }
+/* the evolution moment (docs/briefs/path.md): centred, out of combat only; keys 1 and 2 pick */
+#evo-prompt { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -54%); width: min(640px, 94vw); padding: 18px 20px 14px; z-index: 6;
+  background: radial-gradient(120% 80% at 50% 0%, rgba(139,92,246,.22), transparent 60%), #0d1322; border: 1px solid rgba(196,181,253,.55); border-radius: 16px;
+  box-shadow: 0 0 40px rgba(139,92,246,.35), 0 30px 80px rgba(0,0,0,.6); animation: evo-in .35s ease-out; }
+@keyframes evo-in { from { opacity: 0; transform: translate(-50%, -48%) scale(.96); } }
+#evo-prompt .k0 { text-align: center; font: 700 11px system-ui, sans-serif; letter-spacing: .3em; color: #c4b5fd; }
+#evo-prompt h2 { text-align: center; margin: 4px 0 2px; font: 600 28px "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif; color: #f5f0ff; }
+#evo-prompt .sub { text-align: center; font-size: 12.5px; opacity: .75; margin-bottom: 12px; }
+#evo-prompt .evo-cards { gap: 12px; }
+#evo-prompt .evo-card { padding: 10px 12px 12px; position: relative; }
+#evo-prompt .evo-card svg { display: block; width: 100%; height: 96px; margin-bottom: 6px; border-radius: 8px; background: rgba(0,0,0,.25); }
+#evo-prompt .evo-card svg text { font: 600 10px system-ui; fill: #e8e2d0; opacity: .6; }
+#evo-prompt .evo-card b { font-size: 16px; }
+#evo-prompt .evo-card .key { position: absolute; top: 8px; left: 8px; min-width: 22px; height: 22px; border-radius: 6px; border: 1px solid #c4b5fd; color: #c4b5fd; display: grid; place-items: center; font: 800 11px system-ui; background: #0d1322; }
+#evo-prompt .ft { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 12px; opacity: .8; }
+#evo-prompt .ft button { background: transparent; border: 1px solid rgba(196,181,253,.35); color: inherit; border-radius: 8px; padding: 5px 12px; cursor: pointer; }
+.touch #evo-prompt { top: 46%; }
 .sk .mpip { position: absolute; top: 3px; right: 5px; font-size: 9px; font-weight: 800; color: #c4b5fd; letter-spacing: .04em; }
 .sk .mpip.evo { color: #fde68a; }
 .sk .mpip.ready { color: #0b1020; background: #fde68a; border-radius: 4px; padding: 0 3px; animation: ms-pulse 1s ease-in-out infinite; }
@@ -130,7 +143,9 @@ export function initMastery(ctx) {
   }
   // Skills that reached Mastery 3 (and are unlocked) but have no branch yet.
   const pending = () => skills().slice(1).filter(s => entry(s.id) && lvlOf(s.id) >= MASTERY.evolveAt && !entry(s.id).br && state.lvl >= s.lvl).map(s => s.id);
-  function checkPrompt() { const p = pending().filter(id => !M.snoozed.has(id)); if (!M.promptSk && p.length && !isOpen()) showPrompt(p[0]); }
+  // The evolution moment shows only out of combat (4 s after the last hit) and with no window open.
+  const calm = () => performance.now() - state.lastCombat > 4000 && !document.body.classList.contains('tree-open');
+  function checkPrompt() { const p = pending().filter(id => !M.snoozed.has(id)); if (!M.promptSk && p.length && !isOpen() && calm()) showPrompt(p[0]); }
   // The skill bar asks for these.
   const skillAt = slot => skills()[slot];
   const name = slot => { const s = skillAt(slot); return slot > 0 ? skillName(s, entry(s.id)) : s.name; };
@@ -152,7 +167,7 @@ export function initMastery(ctx) {
     panel.classList.toggle('hidden', !open);
     if (open) { render(); hidePrompt(); sfx.play('ui'); }
   }
-  function cards(s, e, l, atShrine) {
+  function cards(s, e, l, atShrine, col = null) { // col: the evolution moment's big cards (a diagram and a key each)
     const cur = activeBranch(e) || (l >= MASTERY.evolveAt ? e.br : null);
     return `<div class="evo-cards">${['A', 'B'].map(br => {
       const b = BRANCHES[s.id][br], on = cur === br;
@@ -162,7 +177,7 @@ export function initMastery(ctx) {
       else if (!e.br) { st = 'Choose'; can = true; }
       else if (atShrine) { st = 'Switch to this (free)'; can = true; }
       else st = 'Switch at a Skill Shrine';
-      return `<button class="evo-card ${on ? 'on' : ''} ${can ? 'pick' : ''} ${l < MASTERY.evolveAt ? 'dim' : ''}" data-sk="${s.id}" data-br="${br}" ${can ? '' : 'disabled'}>${b.coop ? '<span class="tag">CO-OP</span>' : ''}<b>${br} · ${esc(b.name)}</b><small>${esc(b.desc)}</small><span class="st">${st}</span></button>`;
+      return `<button class="evo-card ${on ? 'on' : ''} ${can ? 'pick' : ''} ${l < MASTERY.evolveAt ? 'dim' : ''}" data-sk="${s.id}" data-br="${br}" ${can ? '' : 'disabled'}>${col ? `${skillDiagram(s.id, br === 'A' ? col : '#e9b949', '')}${tapping() ? '' : `<span class="key">${br === 'A' ? 1 : 2}</span>`}` : ''}${b.coop ? '<span class="tag">CO-OP</span>' : ''}<b>${br} · ${esc(b.name)}</b><small>${esc(b.desc)}</small><span class="st">${st}</span></button>`;
     }).join('')}</div>`;
   }
   function render() {
@@ -195,10 +210,22 @@ export function initMastery(ctx) {
   function showPrompt(skId) {
     const s = skills().find(x => x.id === skId); if (!s) return;
     M.promptSk = skId;
-    prompt.innerHTML = `<div class="h"><span>${esc(s.name).toUpperCase()} CAN EVOLVE</span><button data-a="later">Later${tapping() ? '' : ` (${keyHtml('skillTree')} to view)`}</button></div>${cards(s, entry(skId), MASTERY.evolveAt, false)}`;
+    const col = `#${(CLASSES[state.cls]?.color || 0x8b5cf6).toString(16).padStart(6, '0')}`;
+    prompt.innerHTML = `<div class="k0">MASTERY ${MASTERY.evolveAt}</div><h2>${esc(s.name)} can evolve</h2>
+      <div class="sub">Choose one form. You can change it later at a Skill Shrine, for free.</div>${cards(s, entry(skId), MASTERY.evolveAt, false, col)}
+      <div class="ft"><span>${tapping() ? 'Tap a form to choose it.' : 'Press 1 or 2, or click a form.'}</span><button data-a="later">Later${tapping() ? '' : ` (${keyHtml('skillTree')} to read more)`}</button></div>`;
     prompt.classList.remove('hidden');
+    sfx.play('chime');
   }
   function hidePrompt() { M.promptSk = null; prompt.classList.add('hidden'); }
+  addEventListener('keydown', e => { // keys 1 and 2 pick (before the skill keys see them), Esc is Later
+    if (!M.promptSk || e.repeat || document.activeElement?.tagName === 'INPUT') return;
+    const k = e.code === 'Digit1' ? 'A' : e.code === 'Digit2' ? 'B' : e.key === 'Escape' ? 'later' : null;
+    if (!k) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (k === 'later') { M.snoozed.add(M.promptSk); hidePrompt(); return; }
+    send({ type: 'evolve', sk: M.promptSk, br: k }); sfx.play('ui');
+  }, true);
   prompt.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b || b.disabled) return;
     if (b.dataset.a === 'later') { M.snoozed.add(M.promptSk); hidePrompt(); checkPrompt(); return; }
@@ -379,7 +406,9 @@ export function initMastery(ctx) {
     if (now - lblT > 400) {
       lblT = now;
       if (isOpen()) { const n = near(); if (n !== M.wasNear) { M.wasNear = n; render(); } }
-      if (state.lvl !== M.lvl) { M.lvl = state.lvl; checkPrompt(); ctx.rebuildBar(); } // a skill unlocked by levelling may be ready to evolve
+      if (state.lvl !== M.lvl) { M.lvl = state.lvl; ctx.rebuildBar(); } // a skill unlocked by levelling may be ready to evolve
+      if (M.promptSk && !calm()) hidePrompt(); // a fight: the moment waits for the next calm
+      else if (!M.promptSk) checkPrompt();
     }
   }
   // Quake: launched enemies hop into the air (mob flag 128)

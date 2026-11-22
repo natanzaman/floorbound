@@ -370,7 +370,7 @@ const keyLabel = a => input.label(a);
 const controlsText = () => {
   if (isTouch && input.device !== 'pad') return 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion. ☰: the Game Menu.';
   const L = keyLabel, pad = input.device === 'pad';
-  return `${L('move')} move · ${pad ? `${L('look')} to look` : 'mouse to look (click to capture, Esc frees it; Settings for classic)'} · ${L('attack')} attack · ${L('skill1')} ${L('skill2')} ${L('skill3')} skills · ${L('skillTree')} skill tree · ${L('dodge')} dodge · ${L('jump')} jump${state.cls === 'guardian' ? ` · ${L('guard')} guard / parry · ${L('cover')} cover an ally` : ''} · ${L('item1')} ${L('item2')} ${L('item3')} items · ${L('bag')} bag · ${L('interact')} interact · ${L('players')} party · ${L('teamBurst')} Team Burst · ${L('weaponSwap')} swap weapons · ${L('botWheel')} bot orders · ${L('selectAimed')} select · ${L('menu')} menu${pad ? '' : ` · ${L('perfOverlay')} performance`} · Game Menu → Controls to change them`;
+  return `${L('move')} move · ${pad ? `${L('look')} to look` : 'mouse to look (click to capture, Esc frees it; Settings for classic)'} · ${L('attack')} attack · ${L('skill1')} ${L('skill2')} ${L('skill3')} skills · ${L('skillTree')} path · ${L('dodge')} dodge · ${L('jump')} jump${state.cls === 'guardian' ? ` · ${L('guard')} guard / parry · ${L('cover')} cover an ally` : ''} · ${L('item1')} ${L('item2')} ${L('item3')} items · ${L('bag')} bag · ${L('interact')} interact · ${L('players')} party · ${L('teamBurst')} Team Burst · ${L('weaponSwap')} swap weapons · ${L('botWheel')} bot orders · ${L('selectAimed')} select · ${L('menu')} menu${pad ? '' : ` · ${L('perfOverlay')} performance`} · Game Menu → Controls to change them`;
 };
 // Leave the game from the Game Menu: back to character select ('char'; anonymous: the name / class screen), signed out
 // ('logout'), or out of the spectator view ('spectate'). A clean reload with no automatic rejoin; the server saves
@@ -426,7 +426,7 @@ const friends = initNamed({ $, send, state, log: (a, b) => log(a, b), sfx, banne
 // (the Friends tab is added on welcome, only when the server runs the Named: msg.named)
 const guilds = initGuilds({ $, send, state, log: (a, b) => log(a, b), sfx, project: (...a) => project(...a), keyHtml, tapping, tip: id => guide.tip(id), openTab: id => { $('players').classList.remove('hidden'); pbots.select(id); lobby.html = ''; renderPlayers(); } }); // public/guilds.js
 pbots.addTab(guilds); // the Guild tab
-// talent trees + the Skill Tree window (K): progression track, talents, abilities (public/talents.js)
+// talent trees + the Path window (K): your journey, abilities, the class-shaped talent tree (public/talents.js, docs/briefs/path.md)
 const talents = initTalents({ state, players, fx, sfx, send, floatNum, mastery, guide, isTouch, $ });
 const loot = initLoot({ state, send, $, styleTitle: it => styles.title(it), fx, sfx, guide, players, floatNum: (...a) => floatNum(...a) });
 // the Tower Bell (toll, sway, banner) and the engraved Hall stones (public/bell.js)
@@ -821,7 +821,7 @@ function handleEvent(e) {
     case 'lvl': {
       const p = players.get(e.id);
       if (p) fx.ring(p.model.group.position.x, p.model.group.position.z, 3, 0xfde68a, 0.8);
-      if (e.id === me) { banner(`LEVEL UP`, `You are now level ${e.lvl}`); buildSkillBar(e.lvl); sfx.play('levelup'); }
+      if (e.id === me) { if (!talents.levelUp(e.lvl)) banner(`LEVEL UP`, `You are now level ${e.lvl}`); buildSkillBar(e.lvl); sfx.play('levelup'); } // out of combat: the level-up card with what it brought (public/talents.js)
       break;
     }
     case 'die': {
@@ -1545,7 +1545,7 @@ function toggleBag() {
 }
 $('bag-btn').onclick = toggleBag;
 loot.bindTips($('bag')); // item hover cards
-$('skills-btn').onclick = () => talents.toggle(); // Skill Tree window (also K, or F at a Skill Shrine)
+$('skills-btn').onclick = () => talents.toggle(); // the Path window (also K, or F at a Skill Shrine)
 
 const statsText = it => Object.entries(it.st).map(([k, v]) => statLabel(k, v)).join(' · ');
 function mainStat(it) { return it ? (it.st.atk ?? it.st.hp ?? Object.values(it.st).reduce((a, b) => a + b, 0)) : 0; }
