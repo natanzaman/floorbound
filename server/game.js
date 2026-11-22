@@ -1319,7 +1319,7 @@ export class Game {
     }
     if (k === 'quake') return this.quakeRing(m);
     if (k === 'charge') return this.hornCharge(m, pick());
-    if (k === 'sweep') return this.hornSweep(m);
+    if (k === 'sweep') return this.partOff?.(m, 'sweep') ? t : this.hornSweep(m); // (broken horns: no Horn Sweep, server/bossparts.js)
     if (k === 'hounds') {
       let alive = 0; for (const h of this.mobs.values()) if (h.temp && !h.totem && !h.dead) alive++; // (Thorn Totems don't count)
       for (let i = 0; i < W.hounds.n && alive < W.hounds.max; i++, alive++) {

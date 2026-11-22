@@ -115,7 +115,5 @@ export function installBossParts(Game) {
     this.partHit(m, p, hp - Math.max(0, m.hp));
     return out;
   });
-  // A broken part's `off` moves: the Horn Sweep (its own timer and as a combo step) does nothing.
-  wrap('hornSweep', function (orig, m, ...a) { return this.partOff(m, 'sweep') ? this.time : orig.call(this, m, ...a); });
   wrap('update', function (orig, dt) { const out = orig.call(this, dt); this.updateParts(); return out; });
 }

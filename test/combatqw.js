@@ -107,7 +107,8 @@ g.time = 20;
   assert.ok(ev('loot').some(e => e.to === s.id) && ev('loot').some(e => e.to === r.id), 'a bonus loot roll for each fighter');
   assert.ok(Math.abs(w.tm.charge.wind - wind0 * 1.35) < 1e-9, 'the charge winds up slower');
   clear(); w.windupAt = 0;
-  assert.equal(g.hornSweep(w), g.time, 'no Horn Sweep any more'); assert.equal(ev('tele').length, 0);
+  assert.equal(g.wardenMove(w, 'sweep', null, [], () => null), g.time, 'no Horn Sweep any more (a combo step)'); assert.equal(ev('tele').length, 0);
+  w.sweepT = 0; w.stunUntil = 0; w.busyUntil = 0; w.closeAt = -99; g.updateCombat(0.05); assert.equal(ev('tele').length, 0, 'nor from its own timer');
   ok('Warden horns: front arc only, melee x1.5 / ranged x0.5, break -> callout, bonus loot, no Horn Sweep, slower charge');
 
   // the finisher: a Team Burst kill
