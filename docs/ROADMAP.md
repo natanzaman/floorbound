@@ -54,6 +54,17 @@ Done and live:
   behaviour; the Ranger crosshair pick; Aimed mode's lock still turns the camera; Cleave doesn't cover spins, slams or
   chords; no per-player cap on free bots.
 
+## Owner decisions (2026-11-22): classes, the Academy and society (design doc "Floorbound: classes, academy and society")
+- **Framing:** both: the players are trapped in the tower, and the survivors built an Academy in the Town of Beginnings.
+- **Start:** everyone is an Initiate and picks a weapon (sword, spear, bow, staff, wand) for basic attacks and abilities;
+  the Academy trial at level 5 commits you to one of the 7 classes, and the abilities upgrade into it
+  (`docs/briefs/academy.md`). Subclasses at level 15, two per class (`docs/briefs/subclasses.md`; its last part holds a
+  deliberately unadvertised option: keep it out of the UI, guide, README and NEXT).
+- **Society:** guilds first, then towns that grow per floor, citizenship and Steward elections; bots and the Named vote
+  and act as citizens. PvE town raids, no PvP sieges. Life classes (farming, cooking, alchemy, fishing, smithing).
+- **Order, all built and pushed 2026-11-22:** combat quick wins + guilds → Academy → subclasses → life classes →
+  floor towns → Stewards. Every tuning number in these is a first guess waiting on play-tests (see NEXT).
+
 ## Tasks
 **Status 2026-11-20: A–K are done and merged** (specs kept below for reference), except F7 (film work, paused by the owner). What to do next and the owner calls waiting: `docs/NEXT.md`.
 

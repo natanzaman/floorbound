@@ -5,7 +5,7 @@ Start every session by reading `docs/NEXT.md` (what to do next, local setup), th
 
 ## Stack
 - **Server:** Node 20, `ws`, authoritative at 20 Hz (`server/index.js` → `server/game.js`).
-  - Feature modules install themselves onto `Game.prototype`: combat, twists, floor2, floor3, arenas, bossteam, rescue, revive, threat, teamplay, chains (skill chains), mvp, poses, looks, openings (J3 combos, after states, melee openings), mastery, talents, styles, classes-a, classes-b, smith, hall, ground, playerbots, life (life classes: `docs/briefs/life-classes.md`), towns (floor towns, raids, Stewards: `docs/briefs/towns.md`).
+  - Feature modules install themselves onto `Game.prototype`: combat, twists, floor2, floor3, arenas, bossteam, rescue, revive, threat, teamplay, chains (skill chains), mvp, poses, looks, openings (J3 combos, after states, melee openings), mastery, talents, styles, classes-a, classes-b, smith, hall, ground, playerbots, life (life classes: `docs/briefs/life-classes.md`), towns (floor towns, raids, Stewards: `docs/briefs/towns.md`), guilds (`docs/briefs/guilds.md`), academy (Initiates, weapons, class trials: `docs/briefs/academy.md`), subclasses (`docs/briefs/subclasses.md`), bossparts, mobroles, weaponswap, clutch (`docs/briefs/combat-quickwins.md`).
   - Boss timings live in tables (`shared/bosstiming.js`, `shared/pace.js`); `scripts/tuneboss.js` runs bot fights for tuning (README → Tuning bosses).
   - The Named (`shared/named.js`, `server/named.js`): NPC heroes (the Hearthward) and the loner Cairn, a separate bot kind (`e.named`), off with `NAMED_ENABLED=0`. Several may join one party (up to 6); each is unique and can be despawned/respawned.
   - Bots and access levels: bots record a creator and can roam free (not in a party); no per-player cap (`MAX_BOTS` global). `accounts.access_level` 1–5 ("access level", never character level; admins count as 5); per-action minimums and `canControlBot` in `shared/accesslevels.js` (creator → access ≥ 3 → allow list of saved character ids → empty list = anyone). Plan: `docs/briefs/bots-access.md`.
@@ -19,7 +19,7 @@ Start every session by reading `docs/NEXT.md` (what to do next, local setup), th
 - **Shared** (`shared/`): data and tuning, item, talent, style, mastery and twist tables, and the bot code.
   - `shared/bots/`: brain, motor, registry, social, classes, style.
   - `shared/botskill.js`: capability levels 1–5.
-- **Persistence:** Postgres (Neon in production). Characters carry JSONB columns `inv`, `stats`, `mastery`, `talents`, `life`, `town` (plus the server-wide `towns` table). Migrations live in `server/db.js`. Without `DATABASE_URL` the game runs in anonymous mode.
+- **Persistence:** Postgres (Neon in production). Characters carry JSONB columns `inv`, `stats`, `mastery`, `talents`, `life`, `town`, `path` (the Academy and subclass) (plus the `guilds`/`guild_members` tables and the server-wide `towns` table). Migrations live in `server/db.js`. Without `DATABASE_URL` the game runs in anonymous mode.
 - **Deploy:** Render free plan, service `floorbound` (Docker), with auto-deploy on every push to `main`.
   - The owner wants to stay on the free plan.
   - Every push restarts the live server; clients auto-reconnect.
@@ -42,6 +42,6 @@ Start every session by reading `docs/NEXT.md` (what to do next, local setup), th
   - Bot boss runs: `ROLES=guardian,ranger,... BOT_SKILL=5 RUNS=2 PORT=36xx node test/wardenskill.js`. Also accepts `START_STYLE`, `STATS=1`, `LOG_TALENTS=1`.
   - Browser checks: Python Playwright with swiftshader. Start a server with `PORT=xxxx START_LEVEL=10 SPAWN_AT=0,150 node server/index.js`. Headless rendering is slow, so judge by game state, not by frame timing.
   - Use unique ports and kill test servers by PID (use `nohup node … &` with `$!`, not a `cd && …` subshell).
-  - New feature tests: `accesslevels`, `freebots`, `targeting` (+ `targeting.py`), `wellwake` (+ `wellwake.py`), `guilds` (+ `guilds.py`).
+  - New feature tests: `accesslevels`, `freebots`, `targeting` (+ `targeting.py`), `wellwake` (+ `wellwake.py`), `guilds` (+ `guilds.py`), `academy`, `subclasses`, `life`, `towns` (each + `.py`), `combatqw`, `crossfeature`.
 - **Style:** small, focused diffs that respect existing patterns. Data-driven over per-case hardcoding. Keep the in-game guide (`public/guide.js`) and README in step with mechanics.
 - **Talking to the owner:** concise and outcome-first, in plain words. He reads on his phone.
