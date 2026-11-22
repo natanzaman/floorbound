@@ -1559,7 +1559,7 @@ function updateGateBox(force) {
   el.classList.toggle('hidden', !show);
   if (!show) return;
   const gate2 = onFloor2(state.x) || onFloor3(state.x);
-  el.innerHTML = `<b>${onFloor3(state.x) ? 'THE STORM GATE' : gate2 ? 'THE SUNKEN GATE' : 'RAID GATE'}</b><div class="sub">${onFloor3(state.x) ? f3.gateText() : f2.gateText()} · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}${gate2 ? '' : lab.gateLine(1)}</div>`
+  el.innerHTML = `<b>${onFloor3(state.x) ? 'THE STORM GATE' : gate2 ? 'THE SUNKEN GATE' : 'RAID GATE'}</b><div class="sub">${onFloor3(state.x) ? f3.gateText() : f2.gateText()} · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}${lab.gateLine(floorOf(state.x))}</div>`
     + (count > 0 ? `<div class="count">${Math.ceil(count)}</div>` : '')
     + `<button class="${state.meReady ? 'on' : ''}">${state.meReady ? 'Ready ✓' : `Ready${isTouch ? '' : ' (F)'}`}</button>`;
   if (!onFloor3(state.x)) twists.gateBox(el, onFloor2(state.x)); // the twist of the boss behind this gate (the Warden's, or the Sovereign's on Floor 2)
@@ -2207,6 +2207,10 @@ function frame(now) {
       state.x = nx; state.z = nz; state.vel = [mx * state.speed, mz * state.speed]; // (the momentum a jump carries)
       state.face = state.yaw; // keep looking where the camera looks: S walks backwards, A/D strafe (also under camera lock)
     } else { state.speed = 0; state.vel = null; }
+    if (!state.roll && !airborne) { // the causeways' wind and the Matriarch's gale push you (labyrinth.js)
+      const dd = lab.drift(dt, combat.guarding);
+      if (dd) { const nx = state.x + dd[0], nz = state.z + dd[1]; if (walkable(nx, nz, !state.gateOpen)) { state.x = nx; state.z = nz; } }
+    }
     if (attackHeld && !state.roll && !gmenu.isOpen() && !wellWake.active) useSkill(0);
     combat.frame(); // guarding: face the enemy, drop the guard on a roll
   }

@@ -6,7 +6,7 @@ export const HALL = { x: -9, z: 3, r: 3.5 };
 // Engraved stones (ROADMAP F6): each shows the names of its floor's latest clear. Floor 2's stands by Mirelight Camp's Skill Shrine.
 export const HALL_STONES = [{ floor: 1, ...HALL }, { floor: 2, x: 593.5, z: 7.5 }, { floor: 3, x: 1206.5, z: 7.5 }]; // Floor 3: Windbreak Camp
 
-export const STAT_KEYS = ['kills', 'boarKills', 'wolfKills', 'switches', 'deaths', 'wardenKills', 'lastAttacks', 'floorClearsFirst', 'flawlessWarden', 'maxLvl', 'floor2', 'sovereignKills', 'floor3', 'colossusKills', 'duels', 'duelWins', 'lab1Keys'];
+export const STAT_KEYS = ['kills', 'boarKills', 'wolfKills', 'switches', 'deaths', 'wardenKills', 'lastAttacks', 'floorClearsFirst', 'flawlessWarden', 'maxLvl', 'floor2', 'sovereignKills', 'floor3', 'colossusKills', 'duels', 'duelWins', 'lab1Keys', 'lab2Keys', 'lab3Keys'];
 
 export function newStats(raw) {
   const s = {};

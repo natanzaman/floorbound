@@ -135,6 +135,24 @@ A stair in the field, just short of the Chamber Gate, leads down into a three-la
 
 Dying in the Undercrypt brings you back at the last threshold you crossed. Each layer rolls walls, traps, mobs and loot from separate seeds (`shared/labyrinth.js`).
 
+## The Weeping Thicket (Floor 2's labyrinth)
+
+A root hollow by the Mire's boardwalk, just short of the Sunken Gate, leads into a drowned forest maze. The **Tide Key** from **the Mother of Mire** opens the Sunken Gate (same rules as the Horn Key: one keyholder at the gate opens it for the party, and Sovereign killers count).
+
+- **The tide** turns on a clock shown over your head: low tide opens mud paths, high tide lifts root bridges and rafts, so the short way changes. A way never shuts on you; you're nudged clear.
+- **The Reedmarch:** lurkers, snaring roots, wading water. **The Drowned Wood:** thick mist, **Moss Hags** that wake to noise (wading, lanterns, fighting; blow a **reed whistle** to draw them off), two **sluice wheels** that open the root gate, and the **wisps**: one drifts steadily toward the way on, the other flickers and leads to a dead end where lurkers wait.
+- **The Heartwillow:** the Mother of Mire dives (hard to hurt) while ripples mark where she'll burst up; step out, then hit her while she lies **stranded**. At half health she calls lurkers.
+
+## The Windrift Causeways (Floor 3's labyrinth)
+
+A cloud landing by the Gale Spires' road leads onto floating isles joined by narrow bridges; the gaps are drops. The **Storm Key** from **the Gale Matriarch** opens the Storm Gate.
+
+- **Swinging spans** move between two gaps on a clock, and **the wind** turns every half minute (shown over your head): it pushes you along bridges and a little on the isles; guarding braces you.
+- **The Kite Steps:** harpies and gust vents. **The Turning Isles:** **Kite Riders** that wake to noise (ring a **storm chime** to draw them off), two **wind shrines** that drop the wind wall, and **the squall**: lightning marked on the stone near everyone; step off the glow.
+- **The Eye-Spire:** the Gale Matriarch marks a lane through someone and dives along it, then **perches** (easy to hurt). Her **gale** drags everyone toward the rim, which stings. At half health she calls harpies.
+
+Scenery and enemy models for both: `public/labthicket.js`, `public/labcauseway.js`.
+
 ## Boss team mechanics
 
 With **two or more fighters alive** in the boss room, the Horned Warden and the Drowned Sovereign mix team mechanics into their rotation (one every ~26 s in phase 1, ~22 s in phase 2, ~18 s in phase 3; the first ~15 s in). Solo fights never see them. Rolling and jumping don't dodge them: it's about where you stand.

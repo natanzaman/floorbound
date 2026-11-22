@@ -644,7 +644,7 @@ export const F3Methods = {
     for (const id of g.ready) if (!waiting.some(p => p.id === id)) g.ready.delete(id);
     if (!g.open) {
       if (!g.ready.size) g.firstReadyAt = 0; else if (!g.firstReadyAt) g.firstReadyAt = t;
-      const allReady = waiting.length > 0 && (g.ready.size === waiting.length || (g.firstReadyAt && t - g.firstReadyAt >= GATE3.force));
+      const allReady = waiting.length > 0 && (g.ready.size === waiting.length || (g.firstReadyAt && t - g.firstReadyAt >= GATE3.force)) && this.labGateOk(3, waiting); // the Storm Lock (server/labyrinth.js)
       if (allReady && !g.countAt) { g.countAt = t + GATE3.count; this.events.push({ t: 'gate3', s: 'count', d: GATE3.count }); }
       else if (!allReady && g.countAt) { g.countAt = 0; this.events.push({ t: 'gate3', s: 'cancel' }); }
       if (g.countAt && t >= g.countAt) {
@@ -826,7 +826,7 @@ export function installFloor3Moves(Game) {
   P.handle = function (p, msg) {
     if (msg?.type === 'test' && process.env.TEST_HOOKS && p) {
       if (Array.isArray(msg.tp)) { const [x, z] = msg.tp.map(Number); if (walkable(x, z)) this.teleport(p, x, z); return; }
-      if (msg.unlock === 3) { p.stats.floor2 = 1; p.stats.floor3 = 1; p.dirty = true; this.invChanged(p); return; } // { unlock: 3 }: Floors 2 and 3 open (journey runs)
+      if (msg.unlock === 3) { p.stats.floor2 = 1; p.stats.floor3 = 1; p.stats.lab1Keys ||= 1; p.stats.lab2Keys ||= 1; p.stats.lab3Keys ||= 1; p.dirty = true; this.invChanged(p); return; } // { unlock: 3 }: Floors 2 and 3 open (journey runs)
       if (msg.f3move && this.colossus) { if (!this.colossus.engaged && inArena3(p.x, p.z)) this.engageColossus(this.colossus); this.forceBossMove(this.colossus, msg.f3move, p.id); return; }
     }
     return handle.call(this, p, msg);

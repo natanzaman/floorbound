@@ -281,5 +281,90 @@ const at = (p, x, z) => g.teleport(p, x, z);
   ok('review fixes: out from under the bars, no hopping them, stair down behind them, knockback and bites stop at walls, chests per character');
 }
 
+// ---------- Floors 2 and 3: the Weeping Thicket and the Windrift Causeways ----------
+const { shiftPhase, windAt, onBridge, stripEdge, edgeShut, gatedEdges, edgeSide, KEEPERS } = LB;
+const [REED, WOOD, HEART] = LABS[2].layers, [KITE, ISLE, SPIRE] = LABS[3].layers;
+{
+  // the tide and the spans: both phases keep every layer connected, and a shifting way opens and shuts with the clock
+  for (const L of [REED, WOOD, KITE, ISLE]) {
+    assert.ok(L.shiftEdges.size >= 2, `${L.id}: shifting ways`);
+    const N = L.cols * L.rows;
+    for (const ph of [0, 1]) for (let c = 1; c < N; c++) assert.ok(L.nextBy[ph][c * N] >= 0, `${L.id} phase ${ph}: cell ${c} reaches cell 0`);
+    const [e, set] = [...L.shiftEdges][0], [i, j, d] = e.split(','), C = L.cell;
+    const mx = d === 'E' ? L.x0 + (+i + 1) * C : L.x0 + (+i + 0.5) * C, mz = d === 'E' ? L.z0 + (+j + 0.5) * C : L.z0 + (+j + 1) * C;
+    labRun.now = set * L.shift.every + 1; assert.equal(shiftPhase(L), set); assert.equal(walkable(mx, mz), true, `${L.id}: open in its phase`);
+    labRun.now = (1 - set) * L.shift.every + 1; assert.equal(walkable(mx, mz), false, `${L.id}: shut in the other`);
+  }
+  labRun.now = g.time;
+  // bridges: narrow; off the side is a drop
+  const [bi, bj, bd] = [...ISLE.open].find(e => !ISLE.inHallCell(...e.split(',').map(Number))).split(','), C = ISLE.cell;
+  const bx = bd === 'E' ? ISLE.x0 + (+bi + 1) * C : ISLE.x0 + (+bi + 0.5) * C, bz = bd === 'E' ? ISLE.z0 + (+bj + 0.5) * C : ISLE.z0 + (+bj + 1) * C;
+  assert.equal(walkable(bx, bz), true, 'on the bridge'); assert.ok(onBridge(ISLE, bx, bz));
+  assert.equal(walkable(bd === 'E' ? bx : bx + ISLE.bridge + 0.4, bd === 'E' ? bz + ISLE.bridge + 0.4 : bz), false, 'off its side: a drop');
+  assert.ok(windAt(ISLE, 0) && !windAt(WOOD, 0), 'wind only on the causeways');
+  // mobs and keepers
+  const by = id => [...g.mobs.values()].filter(m => !m.dead && labAt(m.x, m.z)?.id === id);
+  assert.ok(by('drownedwood').some(m => m.type === 'mosshag') && by('turningisles').some(m => m.type === 'kiterider'), 'the hearers');
+  assert.ok(g.labs.heartwillow.keeper?.type === 'motherofmire' && g.labs.eyespire.keeper?.type === 'galematriarch', 'the keepers');
+  // stairs: in from Floor 2's field, out before the Sunken Gate
+  const inn = stairsOf(LABS[2])[0]; at(a, inn.x, inn.z); g.handle(a, { type: 'lab', a: 'stair' });
+  assert.equal(labAt(a.x, a.z), REED, 'into the Reedmarch');
+  const out = stairsOf(LABS[3]).find(s => s.kind === 'out'); at(a, out.x, out.z); g.handle(a, { type: 'lab', a: 'stair' });
+  assert.ok(!labAt(a.x, a.z) && Math.hypot(a.x - LABS[3].exitTo.x, a.z - LABS[3].exitTo.z) < 3, 'out before the Storm Gate');
+  ok('Floors 2 and 3: tide and spans keep the maze whole and open on their clocks; narrow bridges; wind; hearers and keepers; stairs');
+}
+{
+  // a shifting way that shuts on you pushes you out of it
+  const L = REED, [e, set] = [...L.shiftEdges][0], [i, j, d] = e.split(','), C = L.cell;
+  const lx = L.x0 + (+i + 1) * C, cz = L.z0 + (+j + 0.5) * C, cx = L.x0 + (+i + 0.5) * C, lz = L.z0 + (+j + 1) * C;
+  g.time = Math.ceil(g.time / L.shift.every / 2) * L.shift.every * 2 + (1 - set) * L.shift.every + 1; // (the other phase)
+  at(a, d === 'E' ? lx - 0.2 : cx, d === 'E' ? cz : lz - 0.2); g.update(0.05);
+  assert.ok(walkable(a.x, a.z) && edgeSide(L, e, a.x, a.z) !== 0, 'out of the shut way');
+  // the wisps: a true one and a false one; walking into the false one's dead end brings up lurkers
+  const S = g.labs.drownedwood; at(a, ...startPoint(WOOD)); a.testWard = true; tick(0.2);
+  S.breatheAt = g.time; g.events = []; tick(0.1);
+  const w = evs('lab', 'wisps')[0]; assert.ok(w && w.sets[0].w.length === 2, 'two wisps');
+  const lie = S.ambush[0]; assert.ok(lie, 'an ambush waits');
+  const before = [...g.mobs.values()].filter(m => m.labTemp === 'drownedwood').length;
+  at(a, ...WOOD.center(lie.c)); tick(0.1);
+  assert.ok([...g.mobs.values()].filter(m => m.labTemp === 'drownedwood').length > before && evs('lab', 'ambush').length === 1, 'lurkers rise at the false light');
+  // the squall: strikes marked, then they land
+  const Q = g.labs.turningisles; at(a, ...startPoint(ISLE)); tick(0.2);
+  Q.breatheAt = g.time; g.events = []; tick(0.1);
+  const st = evs('lab', 'strike'); assert.ok(st.length >= ISLE.breathe.rise, 'strikes marked');
+  a.testWard = false; a.hp = a.maxHp; at(a, st[0].x, st[0].z); tick(ISLE.breathe.strike.wind + 0.2);
+  assert.ok(a.hp < a.maxHp, 'standing in the glow hurts');
+  for (const m of [...g.mobs.values()]) if (m.labTemp) { m.threat.clear(); m.labTtl = 0; } tick(0.1);
+  ok('the shifting ways push you clear; the wisps (a false one hides lurkers); the squall');
+}
+{
+  // the Mother of Mire: under (hard to hurt), bursts up at the ripples, stranded (easy to hurt)
+  const k = g.labs.heartwillow.keeper, [hx, hz] = hallCenter(HEART), D = KEEPERS.motherofmire.dive;
+  at(a, hx, hz - 5); a.hp = a.maxHp; a.testWard = false; g.events = [];
+  k.x = hx; k.z = hz; k.threat.set(a.id, 10); k.kp = null; k.labEngaged = false;
+  tick(D.first + 0.1);
+  const dv = evs('lab', 'dive')[0]; assert.ok(dv, 'she dives');
+  let hp = k.hp; g.damageMob(k, a, 100); assert.ok(hp - k.hp < 40, 'hard to hurt under the water');
+  a.testWard = true; tick(D.wind + 0.1);
+  assert.ok(evs('lab', 'erupt').length === 1, 'bursts up');
+  hp = k.hp; g.damageMob(k, a, 100); assert.ok(hp - k.hp > 120, 'stranded: easy to hurt');
+  // the Gale Matriarch: a lane, a perch, the gale
+  const q = g.labs.eyespire.keeper, [sx, sz] = hallCenter(SPIRE), A = KEEPERS.galematriarch;
+  at(a, sx, sz - 6); g.events = [];
+  q.x = sx; q.z = sz; q.threat.set(a.id, 10); q.kp = null; q.labEngaged = false;
+  tick(A.lane.first + 0.1); assert.ok(evs('lab', 'lane').length === 1, 'marks a lane');
+  tick(A.lane.wind + 0.1); assert.ok(evs('lab', 'perch').length === 1, 'dives and perches');
+  hp = q.hp; g.damageMob(q, a, 100); assert.ok(hp - q.hp > 130, 'perched: easy to hurt');
+  tick(A.gale.first); assert.ok(evs('lab', 'gale').length >= 1, 'the gale');
+  // the Tide Lock and the Storm Lock; the keys
+  a.stats.lab2Keys = 0; a.stats.sovereignKills = 0;
+  assert.equal(g.labGateOk(2, [a]), false, 'no Tide Key: locked');
+  k.contributors.add(a.id); k.hp = 1; g.killMob(k, a);
+  assert.equal(a.stats.lab2Keys, 1, 'the Tide Key'); assert.equal(g.labGateOk(2, [a]), true);
+  a.stats.lab3Keys = 0; a.stats.colossusKills = 0; assert.equal(g.labGateOk(3, [a]), false, 'no Storm Key: locked');
+  a.testWard = false;
+  ok('the Mother of Mire (dive, burst, stranded) and the Gale Matriarch (lane, perch, gale); the Tide and Storm Locks and keys');
+}
+
 console.log(`labyrinth: ${n} checks passed`);
 process.exit(0);

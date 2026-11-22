@@ -546,7 +546,7 @@ export const F2Methods = {
     for (const id of g.ready) if (!waiting.some(p => p.id === id)) g.ready.delete(id);
     if (!g.open) {
       if (!g.ready.size) g.firstReadyAt = 0; else if (!g.firstReadyAt) g.firstReadyAt = t;
-      const allReady = waiting.length > 0 && (g.ready.size === waiting.length || (g.firstReadyAt && t - g.firstReadyAt >= GATE2.force));
+      const allReady = waiting.length > 0 && (g.ready.size === waiting.length || (g.firstReadyAt && t - g.firstReadyAt >= GATE2.force)) && this.labGateOk(2, waiting); // the Tide Lock (server/labyrinth.js)
       if (allReady && !g.countAt) { g.countAt = t + GATE2.count; this.events.push({ t: 'gate2', s: 'count', d: GATE2.count }); }
       else if (!allReady && g.countAt) { g.countAt = 0; this.events.push({ t: 'gate2', s: 'cancel' }); }
       if (g.countAt && t >= g.countAt) {
