@@ -9,6 +9,7 @@ import { controlsStore } from '/input.js';
 import { setPalette, setTelegraphCues } from '/palette.js';
 import { ACCESS_DEFAULTS, RANGES, normalizeAccess } from '/access.js'; // the accessibility options (Settings → Accessibility)
 import { LOOKS, setLook } from '/fxlook.js'; // effects styles
+import { ART, CHARS, ENVS } from '/artlook.js'; // character and world styles (fixed at load)
 import { keyHtml } from '/keyname.js'; // prompts name the player's key on the active device
 
 const LOCAL_DEFAULTS = { camera: 'mouse', bubbles: true, quality: 'auto', perf: false, ping: true };
@@ -69,6 +70,9 @@ export function initSettingsPanel({ el, settings, save, Q, PRESETS, perf, applyQ
     <h4>Graphics</h4>
     ${['auto', 'low', 'medium', 'high'].map(q => `<label class="opt"><input type="radio" name="gq" value="${q}" ${settings.quality === q ? 'checked' : ''}> ${QLABEL[q]}${q === 'auto' && settings.quality === 'auto' ? ` <small>now: ${Q.level}${!Q.shadows && PRESETS[Q.level]?.shadows ? ', shadows off' : ''}</small>` : ''}</label>`).join('')}
     <label class="opt">Effects style <select data-a="look">${Object.entries(LOOKS).map(([v, l]) => `<option value="${v}" ${(settings.look || 'classic') === v ? 'selected' : ''}>${l.name}</option>`).join('')}</select> <small>trails, sparks, glow and colour (Medium and High)</small></label>
+    <label class="opt">Character style <select data-a="artChar">${Object.entries(CHARS).map(([v, l]) => `<option value="${v}" ${(settings.artChar || 'classic') === v ? 'selected' : ''}>${l.name}</option>`).join('')}</select> <small>shading, outline and proportions</small></label>
+    <label class="opt">World style <select data-a="artEnv">${Object.entries(ENVS).map(([v, l]) => `<option value="${v}" ${(settings.artEnv || 'classic') === v ? 'selected' : ''}>${l.name}</option>`).join('')}</select> <small>Floor 1's sky, trees and light</small></label>
+    <small id="art-reload" ${(settings.artChar || 'classic') === ART.charId && (settings.artEnv || 'classic') === ART.envId ? 'hidden' : ''}>Character and world styles apply after you reload the page.</small>
     <small class="note">Lower settings draw fewer pixels, effects and shadows. Smoothing edges (High) changes after a reload.</small>
     <label class="opt"><input type="checkbox" data-a="perf" ${settings.perf ? 'checked' : ''}> Performance overlay <small>F3 · frame rate, ping, snapshots</small></label>
     <label class="opt"><input type="checkbox" data-a="ping" ${settings.ping !== false ? 'checked' : ''}> Show ping in the corner</label>`;
@@ -87,6 +91,7 @@ export function initSettingsPanel({ el, settings, save, Q, PRESETS, perf, applyQ
     if (t.dataset.a === 'bub') { settings.bubbles = t.checked; if (!t.checked) bubbles.clear(); }
     if (t.name === 'gq') { settings.quality = t.value; perf.setMode(t.value); if (t.value !== 'auto') applyQuality(t.value); }
     if (t.dataset.a === 'look') { settings.look = t.value; setLook(t.value); }
+    if (t.dataset.a === 'artChar' || t.dataset.a === 'artEnv') { settings[t.dataset.a] = t.value; el.querySelector('#art-reload').hidden = (settings.artChar || 'classic') === ART.charId && (settings.artEnv || 'classic') === ART.envId; }
     if (t.dataset.a === 'perf') settings.perf = t.checked;
     if (t.dataset.a === 'ping') settings.ping = t.checked;
     save();

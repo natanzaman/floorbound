@@ -13,17 +13,19 @@ import { makeLabMob } from '/labyrinth.js'; // labyrinth enemies
 import { makePropModel } from '/rescue.js'; // rescue trap objects (J1)
 import { fxCount, segs } from '/quality.js'; // effect density and circle detail (graphics quality)
 import { SparkPool } from '/sparks.js'; // pooled hit sparks and impact flashes
+import { ART, envMaterial, charMaterial, outlineRig, bonesOf, applyProportions, heightFactor, leafGeometry, buildScenery } from '/artlook.js'; // art styles
 import { col, patterned } from '/palette.js'; // telegraph colours + the colour-blind dashed edge (Settings → Accessibility)
 
-const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
+const mat = (color, opts = {}) => envMaterial(color, opts); // (the world style: public/artlook.js)
 
 export function createWorld(scene) {
-  scene.background = new THREE.Color(0x9cc9ee);
-  scene.fog = new THREE.Fog(0x9cc9ee, 70, 230);
+  const A = ART.env.atmos; // Floor 1's sky and light in the world style
+  scene.background = new THREE.Color(A.sky);
+  scene.fog = new THREE.Fog(A.sky, A.near, A.far);
 
   const occluders = []; // things the camera should not clip behind
-  scene.add(new THREE.HemisphereLight(0xdbeaff, 0x3b5d2a, 1.1));
-  const sun = new THREE.DirectionalLight(0xfff1d6, 1.9);
+  scene.add(new THREE.HemisphereLight(A.hemiSky, A.hemiGround, A.hemi));
+  const sun = new THREE.DirectionalLight(A.sun, A.sunI);
   sun.position.set(30, 60, -20);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
@@ -35,7 +37,7 @@ export function createWorld(scene) {
   const root = new THREE.Group(); root.name = 'floor1'; scene.add(root);
 
   // Ground
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 700, 1, 1), mat(0x5f9a45));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 700, 1, 1), mat(ART.env.ground));
   ground.rotation.x = -Math.PI / 2; ground.position.z = 80; ground.receiveShadow = true;
   root.add(ground);
 
@@ -96,7 +98,7 @@ export function createWorld(scene) {
   }
   const allTrees = [...trees, ...border];
   const trunkGeo = new THREE.CylinderGeometry(0.25, 0.35, 2, 6);
-  const leafGeo = new THREE.ConeGeometry(1.6, 3.6, 7);
+  const leafGeo = leafGeometry(), [leafH, leafS, leafL] = ART.env.leaf;
   const trunks = new THREE.InstancedMesh(trunkGeo, mat(0x6b4a2b), allTrees.length);
   const leaves = new THREE.InstancedMesh(leafGeo, mat(0x2f6b34), allTrees.length);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
@@ -105,11 +107,14 @@ export function createWorld(scene) {
     const sc = t.s || 1;
     m4.compose(p.set(t.x, sc, t.z), q, s.set(sc, sc, sc)); trunks.setMatrixAt(i, m4);
     m4.compose(p.set(t.x, sc * 3.6, t.z), q, s.set(sc, sc, sc)); leaves.setMatrixAt(i, m4);
-    leaves.setColorAt(i, leafColor.setHSL(0.3 + r() * 0.06, 0.45, 0.25 + r() * 0.1));
+    leaves.setColorAt(i, leafColor.setHSL(leafH + r() * 0.06, leafS, leafL + r() * 0.1));
   });
   trunks.castShadow = leaves.castShadow = true;
   root.add(trunks, leaves);
   const treeFader = new TreeFader(scene, allTrees, trunks, leaves);
+  // sky dome, clouds, grass tufts, flowers (the world style; nothing for Classic)
+  const r2 = rng(4242), open = (x, z) => Math.hypot(x, z) > WORLD.town.r + 0.5 && !(Math.abs(x) < 5 && z > 20 && z < 152) && z < 150 && !allTrees.some(t => Math.abs(t.x - x) < 0.7 && Math.abs(t.z - z) < 0.7);
+  root.add(buildScenery({ sunPos: sun.position, rand: r2, clear: open }).group);
   const rockMesh = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), mat(0x8a8d91), rocks.length);
   rocks.forEach((o, i) => {
     m4.compose(p.set(o.x, o.r * 0.5, o.z), q.setFromEuler(new THREE.Euler(r(), r(), r())), s.set(o.r * 1.1, o.r * 0.8, o.r * 1.1));
@@ -414,13 +419,14 @@ function buildRig(kind) {
     if (!o.isMesh) return;
     o.castShadow = true;
     o.frustumCulled = false; // skinned bounds don't follow animation
-    o.material = o.material.clone();
+    o.material = charMaterial(o.material.clone());
     if (def.tint) o.material.color.setHex(def.tint);
     mats.push(o.material);
   });
   if (def.decorate) mats.push(...def.decorate(root, ASSETS)); // added after tinting, so it keeps its own colours
+  outlineRig(root, ASSETS.baseHeight); // (the character style's outline, if it has one)
   const g = new THREE.Group();
-  root.scale.setScalar(def.height / ASSETS.baseHeight);
+  root.scale.setScalar(def.height / ASSETS.baseHeight / Math.sqrt(heightFactor())); // (longer legs: half the gain goes to height)
   g.add(root);
   return { g, root, mats, height: def.height };
 }
@@ -428,7 +434,7 @@ function buildRig(kind) {
 class Animator {
   constructor(root, idle) {
     this.mixer = new THREE.AnimationMixer(root);
-    this.head = root.getObjectByName('head');
+    this.head = root.getObjectByName('head'); this.bones = bonesOf(root);
     this.actions = {};
     for (const c of ASSETS.clips) this.actions[c.name] = this.mixer.clipAction(c);
     this.idle = idle;
@@ -547,7 +553,8 @@ class Animator {
       const r = this.rec = Math.max(0, (this.rec || 0) - dt * 5);
       if (pre > 0 || hit > 0 || r > 0) this.pz.apply(A?.pre, pre, A?.hit && POSES[A.hit], hit, -0.3 * r * r);
     }
-    if (this.head) this.head.scale.setScalar(HEAD_SCALE); // applied after the animation pose
+    if (this.head) this.head.scale.setScalar(ART.char.head); // applied after the animation pose
+    applyProportions(this.bones);
   }
 }
 

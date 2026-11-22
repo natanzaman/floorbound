@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { OBSTACLES } from '/shared/data.js';
 import { F2, GATE2, WAYPOINTS, STAIRWAY, SOVEREIGN } from '/shared/floor2.js';
 import { ATMOS3 } from '/floor3world.js';
+import { ART } from '/artlook.js';
 import { Q } from '/quality.js'; // graphics quality (effect density)
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
@@ -199,6 +200,7 @@ export function createFloor2(scene, { sun, occluders = [] } = {}) {
   motes.frustumCulled = false;
 
   // atmosphere switching (Floor 1 <-> Floor 2), eased so a warp fades the mist in
+  Object.assign(ATMOS[0], ART.env.atmos); // Floor 1 in the world style (public/artlook.js)
   const hemi = scene.children.find(o => o.isHemisphereLight);
   // cur.k: how far into Floor 2's look, cur.k3: into Floor 3's (Floor 1 is the rest); a warp eases from one to the next
   const cur = { k: 0, k3: 0 }, c1 = new THREE.Color(), c2 = new THREE.Color(), c3 = new THREE.Color();
