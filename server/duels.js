@@ -55,7 +55,8 @@ export const DuelMethods = {
     return [p, ...list.filter(o => o !== p)];
   },
   // Why c can't duel t right now ('' = they can).
-  duelBlock(c, t, team) {
+  duelHealthy(p, rule) { return p.hp > this.duelFloor(p, DUEL_RULES[rule]); },
+  duelBlock(c, t, team, rule = null) {
     if (!c || !t) return 'They are not here any more.';
     if (c === t) return 'You can\'t duel yourself.';
     if (this.duelOf(c)) return 'You are already in a duel.';
@@ -65,6 +66,8 @@ export const DuelMethods = {
     if (c.trap || t.trap) return 'Not while someone is trapped.';
     if (floorOf(c.x) !== floorOf(t.x) || dist(c, t) > DUEL.askRange) return `Get closer to ${t.name} (within ${DUEL.askRange} m) to duel.`;
     if (inBossRoom(c) || inBossRoom(t)) return 'No duels in a boss room.';
+    if (rule && !this.duelHealthy(c, rule)) return `You need more than ${DUEL_RULES[rule].floor ? 'half' : '1'} health for ${DUEL_RULES[rule].name}.`;
+    if (rule && !this.duelHealthy(t, rule)) return `${t.name} needs more than ${DUEL_RULES[rule].floor ? 'half' : '1'} health for ${DUEL_RULES[rule].name}.`;
     if (team && c.party && c.party === t.party) return `You and ${t.name} are in the same party: a team duel needs two parties (or duel solo).`;
     return '';
   },
@@ -73,8 +76,11 @@ export const DuelMethods = {
     const t = id ? this.players.get(id | 0) : this.findByName(name);
     if (!t) { this.sys(name ? `Nobody called "${String(name).slice(0, 16)}" is here.` : 'Challenge whom? /duel <name>', p.id); return false; }
     rule = DUEL_RULES[rule] ? rule : DUEL_DEFAULT; team = !!team;
-    const why = this.duelBlock(p, t, team);
+    const why = this.duelBlock(p, t, team, rule);
     if (why) { this.sys(why, p.id); return false; }
+    if (this.time - (p.duelAskT || -99) < DUEL.askGap) { this.sys('Wait a moment before challenging again.', p.id); return false; }
+    if (team && t.bot && this.partyOf(t)?.members.some(id => { const o = this.players.get(id); return o && !o.bot; })) { this.sys(`${t.name} won't answer for a party with players in it: challenge one of them.`, p.id); return false; }
+    p.duelAskT = this.time;
     t.duelAsk = { from: p.id, rule, team, at: this.time };
     const R = DUEL_RULES[rule], kind = team ? 'team duel' : 'duel';
     this.events.push({ t: 'duelask', to: t.id, from: p.id, name: p.name, rule, team: team ? 1 : 0 });
@@ -91,7 +97,7 @@ export const DuelMethods = {
     if (!ask || this.time - ask.at > DUEL.askFor) { if (t) { t.duelAsk = null; this.sys('No duel challenge to accept.', t.id); } return false; }
     t.duelAsk = null;
     const c = this.players.get(ask.from);
-    const why = this.duelBlock(c, t, ask.team);
+    const why = this.duelBlock(c, t, ask.team, ask.rule);
     if (why) { this.sys(c ? `The duel with ${c.name} can't start right now.` : why, t.id); if (c) this.sys(`The duel with ${t.name} can't start: ${why}`, c.id); return false; }
     return this.duelStart(c, t, ask.rule, ask.team);
   },
@@ -138,7 +144,7 @@ export const DuelMethods = {
     for (const [side, list] of sides.entries()) {
       list.forEach((o, k) => {
         o.duelAsk = null;
-        d.f.set(o.id, { id: o.id, side, mob: 0, out: false, why: '', by: 0, hp0: o.hp, outT: 0, name: o.name });
+        d.f.set(o.id, { id: o.id, side, mob: 0, out: false, why: '', by: 0, hp0: o.hp, lost: 0, outT: 0, name: o.name });
         o.duel = d.id;
         // too far from the centre (team duels gather everyone): line up on your side, facing the other
         if (dist(o, d) > r - 3) {
@@ -173,12 +179,12 @@ export const DuelMethods = {
     this.mobs.delete(f.mob);
     f.mob = 0;
   },
-  // Can the player acting right now (this._duelAtk, set around useSkill) target this stand-in? Outside a skill press
-  // (projectiles in flight, traps): yes, and duelHit sorts it out.
-  duelTargetable(m) {
-    const a = this._duelAtk, v = this.players.get(m.duelOf);
-    if (!v) return false;
-    return !a || !!this.duelPair(a, v);
+  // Can this attacker target the stand-in? who: the owner a projectile / trap / zone loop passes, else the player
+  // acting right now (this._duelAtk: set around useSkill and carried into what it schedules). Nobody known: no (so a
+  // stand-in never eats a bystander's arrow, or its own owner's).
+  duelTargetable(m, who) {
+    const a = who || this._duelAtk, v = this.players.get(m.duelOf);
+    return !!(a && v && this.duelPair(a, v));
   },
 
   // ---------- hits ----------
@@ -194,6 +200,7 @@ export const DuelMethods = {
     this.damagePlayer(v, amount, { src: 'duel', duel: p });
     const lost = hp0 - v.hp;
     if (lost <= 0) return;
+    fv.lost += lost;
     this.events.push({ t: 'hit', id: m.id, a: lost, c: crit ? 1 : 0, by: p.id, sw: 0, h: opts.heavy ? 1 : 0, du: 1 });
     if (R.first || v.hp <= this.duelFloor(v, R)) this.duelOut(d, fv, 'rule', p);
   },
@@ -215,6 +222,7 @@ export const DuelMethods = {
         const p = this.players.get(f.id);
         if (!p || p.duel !== d.id) { this.duelOut(d, f, 'left'); continue; }
         if (p.dead || p.downed) { this.duelOut(d, f, 'fell'); continue; }
+        if (d.state === 'live' && p.hp <= this.duelFloor(p, DUEL_RULES[d.rule])) { this.duelOut(d, f, 'rule'); continue; } // (a monster's hit took them there)
         if (floorOf(p.x) !== d.floor) { this.duelOut(d, f, 'fled'); continue; }
         if (dist(p, d) > d.r) {
           if (!f.outT) { f.outT = t; this.events.push({ t: 'duel', s: 'ring', id: d.id, pid: p.id, d: DUEL.grace }); this.sys(`Back inside the ring or you forfeit (${DUEL.grace} s)!`, p.id); }
@@ -249,7 +257,7 @@ export const DuelMethods = {
       const p = this.players.get(f.id);
       if (!p || p.duel !== d.id) continue;
       p.duel = null;
-      if (!p.dead) p.hp = Math.max(1, Math.min(p.maxHp, Math.max(p.hp, f.hp0))); // the health you came in with
+      if (!p.dead && !p.downed) p.hp = Math.max(1, Math.min(p.maxHp, p.hp + f.lost)); // the health the duel took, back (not what monsters took)
       this.bumpStat?.(p, 'duels');
       if (won === f.side) this.bumpStat?.(p, 'duelWins');
     }
@@ -290,10 +298,18 @@ export function installDuels(Game) {
     if (!opts?.duel || !p) return orig.call(this, p, base, opts);
     const d = this.duelOf(p), was = p.protectFrac;
     if (d) p.protectFrac = Math.max(was || 0, DUEL_RULES[d.rule].floor || 1e-9);
-    try { return orig.call(this, p, base, opts); } finally { p.protectFrac = was; }
+    const prev = this._duelDmg;
+    this._duelDmg = true;
+    try { return orig.call(this, p, base, opts); } finally { p.protectFrac = was; this._duelDmg = prev; }
   });
   wrap('attackerOf', function (orig, p, src, mob) { return src === 'duel' ? null : orig.call(this, p, src, mob); }); // (a perfect dodge or parry against a duelist breaks no monster's posture)
-  wrap('targetable', function (orig, m) { return m?.def?.duel ? !!m && !m.dead && this.duelTargetable(m) : orig.call(this, m); });
+  wrap('spiritSave', function (orig, p) { return this._duelDmg ? false : orig.call(this, p); }); // (Guardian Spirit: the duel's floor already stops deaths)
+  wrap('targetable', function (orig, m, who) { return m?.def?.duel ? !m.dead && this.duelTargetable(m, who) : orig.call(this, m); });
+  wrap('schedule', function (orig, delay, fn) { // a skill's delayed hits keep their attacker (Burst, twin strikes, mastery sub-hits)
+    const a = this._duelAtk;
+    if (!a) return orig.call(this, delay, fn);
+    return orig.call(this, delay, () => { const prev = this._duelAtk; this._duelAtk = a; try { return fn(); } finally { this._duelAtk = prev; } });
+  });
   wrap('useSkill', function (orig, p, ...a) {
     const prev = this._duelAtk;
     this._duelAtk = p;

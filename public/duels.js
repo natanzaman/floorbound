@@ -85,7 +85,7 @@ export function initDuels({ state, players, scene, send, sfx, callout, banner, t
     ask = e;
     const R = DUEL_RULES[e.rule] || DUEL_RULES[DUEL_DEFAULT];
     inc.innerHTML = `<h3>${e.team ? 'TEAM DUEL' : 'DUEL'}</h3><div><b>${esc(e.name)}</b> challenges you${e.team ? ' (your whole party against theirs)' : ''}</div>
-      <div class="di-desc">${esc(R.name)}: ${esc(R.desc)}</div><div class="di-btns"><button class="di-yes">Accept</button><button class="di-no">Decline</button></div>`;
+      <div class="di-desc">${esc(R.name)}: ${esc(R.desc)}</div><div class="di-btns"><button class="di-yes">Accept</button><button class="di-no">Decline</button></div><div class="di-desc" style="margin:8px 0 0">or chat /duel accept (Esc frees the mouse)</div>`;
     inc.classList.remove('hidden');
     clearTimeout(incT); incT = setTimeout(() => inc.classList.add('hidden'), DUEL.askFor * 1000);
     sfx?.play('cue');
@@ -101,7 +101,8 @@ export function initDuels({ state, players, scene, send, sfx, callout, banner, t
   function snap(rows) {
     duels = readDuels(rows);
     foes = foeMobs(duels, state.myId);
-    mine = duels.find(d => d.fighters.some(f => f.id === state.myId)) || null;
+    const withMe = duels.filter(d => d.fighters.some(f => f.id === state.myId));
+    mine = withMe.find(d => d.state < 2) || withMe[0] || null; // (a new duel over the last one's lingering result)
     foePlayers = new Set();
     if (mine && mine.state < 2) { const me = mine.fighters.find(f => f.id === state.myId); for (const f of mine.fighters) if (f.side !== me.side) foePlayers.add(f.id); }
     // rings: every duel on my floor

@@ -16,6 +16,7 @@ export const DUEL_DEFAULT = 'half';
 export const DUEL = {
   askRange: 30,       // m: how near you must be to challenge someone (same floor)
   askFor: 30,         // s: a challenge waits this long for an answer
+  askGap: 4,          // s: between two challenges from one player
   botAnswer: [1, 2.5],// s: a bot or one of the Named answers after this long
   count: 3,           // s: the countdown (no hits count until FIGHT)
   time: { solo: 120, team: 180 }, // s: then the duel ends on the clock (see decideOnTime)

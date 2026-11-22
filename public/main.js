@@ -949,7 +949,7 @@ input.onLabels(() => labelBar()); // (device, pad kind, picture or bindings chan
 const LEGACY_KEYS = { e: 'revive', q: 'turnLeft', j: 'attack', r: 'guard', v: 'botWheel' };
 const keys = { has: k => (LEGACY_KEYS[k] ? input.held(LEGACY_KEYS[k]) : input.key(k.length === 1 ? `Key${k.toUpperCase()}` : k)), clear: () => input.reset() };
 const panels = createPanels(); // Esc closes the first group; all of them free the cursor while open
-for (const id of ['players', 'bag', 'hall', 'warp', 'smith', 'settings', 'skillsp', 'duel-pick', 'duel-in']) panels.register(id, { esc: true });
+for (const id of ['players', 'bag', 'hall', 'warp', 'smith', 'settings', 'skillsp', 'duel-pick']) panels.register(id, { esc: true });
 for (const id of ['talentsp', 'botwheel', 'botmenu', 'gamemenu']) panels.register(id); // (they close themselves on Esc)
 const stick = { active: false, id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
 let attackHeld = false;

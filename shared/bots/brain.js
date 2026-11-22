@@ -545,6 +545,7 @@ function duelFoe(b) { return nearest(b.mobs, m => (b.foes.has(m.id) ? d2(m.x, m.
 // Countdown (or the moment before the stand-ins show): stay well inside the ring, face the nearest opponent.
 function duelWait(b) {
   const d = b.duel;
+  if (d?.state === 1 && duelFoe(b) && d2(b.x, b.z, d.x, d.z) > d.r - 3) { moveToward(b, d.x, d.z, 1); b.goal = 'Duelling: back into the ring'; return true; }
   if (!d || (d.state === 1 && duelFoe(b))) return false;
   if (d2(b.x, b.z, d.x, d.z) > d.r * 0.6) moveToward(b, d.x, d.z, 1);
   const me = d.fighters.find(f => f.id === b.id), foe = b.players.filter(p => d.fighters.some(f => f.id === p.id && f.side !== me?.side && !f.out))

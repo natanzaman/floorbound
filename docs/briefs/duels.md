@@ -50,6 +50,21 @@ Should work against other players, bots and the Named. Hard mode is pushed off f
 - **Chat:** `/duel <name> [first|half|last] [team]`, `/duel accept`, `/duel decline`, `/duel cancel`, `/yield`,
   `/duel help`. Never shown as chat.
 
+## Review fixes (independent review, same day)
+- Stand-ins fail closed: only a known attacker's live opponents can target one. Skill presses set the attacker, and
+  their scheduled hits keep it; arrows, sonic bolts, traps, Consecrate and Minefield pass their owner
+  (`targetable(m, owner)`). Before: a Ranger's arrow hit their own stand-in first, Burst hit yourself, bystanders'
+  arrows stopped on duellists.
+- You need more than the rule's floor to start; a monster hit that takes a fighter to the floor puts them out.
+- Only the health duel hits took comes back at the end (no free heal by starting a duel and yielding); a downed
+  fighter gets nothing back.
+- Guardian Spirit doesn't fire on duel hits; no fast town regeneration at all mid-duel.
+- Challenges: one every 4 s per player; the challenge card no longer frees the mouse (Esc does, or /duel accept); a
+  bot won't accept a team duel for a party with players in it.
+- Bots step back into the ring when a chase takes them near its edge.
+- Still open (low): shields and damage buffs from bystanders still help a duellist; a parry against a duel hit works
+  from any angle.
+
 ## Not in this version
 - Knockback, stuns, roots and pulls don't move or stop a player (damage only).
 - No duel ranking or ladder; no betting; no spectator seats beyond watching nearby.

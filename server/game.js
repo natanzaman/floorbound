@@ -953,7 +953,7 @@ export class Game {
       }
       const town = inTown(p.x, p.z);
       if (p.hp < p.maxHp && ((town && !p.duel) || t - p.lastHurt > 6)) { // (no fast town regeneration mid-duel: server/duels.js)
-        p.regenAcc = (p.regenAcc || 0) + p.maxHp * (town ? 0.1 : 0.02) * dt;
+        p.regenAcc = (p.regenAcc || 0) + p.maxHp * (town && !p.duel ? 0.1 : 0.02) * dt;
         if (p.regenAcc >= 1) { const a = Math.floor(p.regenAcc); p.regenAcc -= a; p.hp = Math.min(p.maxHp, p.hp + a); }
       }
       if (p.invite && t - p.invite.at > 30) p.invite = null;

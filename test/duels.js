@@ -19,7 +19,7 @@ const add = (g, name, cls = 'swordsman', x = 0, z = 60, lvl = 10) => {
 const run = (g, secs) => { for (let i = 0; i < Math.round(secs * 20); i++) g.update(0.05); };
 const sysTo = (g, p) => g.events.filter(e => e.t === 'sys' && e.to === p.id).map(e => e.text);
 const proxyOf = (g, p) => [...g.mobs.values()].find(m => m.def.duel && m.duelOf === p.id);
-const start = (g, a, b, rule = 'half', team = false) => { g.duelAsk(a, { id: b.id, rule, team }); return g.duelAccept(b); };
+const start = (g, a, b, rule = 'half', team = false) => { a.duelAskT = -99; g.duelAsk(a, { id: b.id, rule, team }); return g.duelAccept(b); };
 const clearMobs = g => { for (const m of [...g.mobs.values()]) if (!m.def.duel) g.mobs.delete(m.id); g.boss = null; };
 
 // ---------- data ----------
@@ -157,6 +157,37 @@ for (const rule of ['first', 'last']) {
   const live = readDuels(JSON.parse(g.snapshot()).du);
   ok(foeMobs(live, bot.id).has(proxyOf(g, a)?.id) && !foeMobs(live, bot.id).has(proxyOf(g, bot)?.id), 'foeMobs: the bot sees only its opponent\'s stand-in');
   ok(rows.length === 1 && foeMobs(rows, a.id).size === 0, 'no foes during the countdown');
+}
+
+// ---------- review fixes: arrows, delayed hits, low health, monster damage, no free heal ----------
+{
+  const g = fresh(); clearMobs(g);
+  const r = add(g, 'Ran', 'ranger', 0, 60), b = add(g, 'Bo', 'guardian', 0, 66), c = add(g, 'Cy', 'ranger', 6, 60);
+  const d = start(g, r, b, 'last');
+  run(g, DUEL.count + 0.1);
+  const hp0 = b.hp;
+  for (let i = 0; i < 6; i++) { r.cds[0] = 0; g.useSkill(r, 0, Math.atan2(b.x - r.x, b.z - r.z)); run(g, 0.6); }
+  ok(b.hp < hp0, `a Ranger's arrows reach the opponent, not their own stand-in (${hp0} → ${b.hp})`);
+  // a bystander Ranger's arrow through a duellist doesn't stop on the stand-in
+  g._duelAtk = null;
+  ok(!g.targetable(proxyOf(g, b)) && !g.targetable(proxyOf(g, b), c) && g.targetable(proxyOf(g, b), r), 'nobody known, or a bystander: no stand-in; the opponent: yes');
+  // a delayed hit keeps its attacker
+  let hit = false; g._duelAtk = r; g.schedule(0.1, () => { hit = g.targetable(proxyOf(g, b)) && !g.targetable(proxyOf(g, r)); }); g._duelAtk = null; run(g, 0.2);
+  ok(hit, 'a scheduled hit keeps the attacker: the opponent, never yourself');
+  void d;
+}
+{
+  const g = fresh(); clearMobs(g);
+  const a = add(g, 'Ann', 'swordsman', 0, 60), b = add(g, 'Bo', 'swordsman', 0, 63);
+  b.hp = Math.round(b.maxHp * 0.4);
+  ok(!g.duelAsk(a, { id: b.id, rule: 'half' }) && sysTo(g, a).some(t => /half health/.test(t)), 'no Half Health duel with someone already at half');
+  b.hp = b.maxHp;
+  const d = start(g, a, b, 'half');
+  run(g, DUEL.count + 0.1);
+  b.hp = Math.round(b.maxHp * 0.45); // (a monster's doing)
+  run(g, 0.1);
+  ok(d.state === 'done' && d.won === 0, 'pushed under the floor by a monster: out');
+  ok(b.hp === Math.round(b.maxHp * 0.45), 'and no free heal: only duel damage comes back');
 }
 
 // ---------- the clock ----------
