@@ -1,97 +1,177 @@
-// Labyrinths (docs/briefs/labyrinths.md): the server side. Stairs in and out, spike plates, the floor's event (Floor 1:
-// the crypt breathes), the mini-boss and its key, the key lock on the boss gate, and steering mobs through the maze.
-// Data and geometry: shared/labyrinth.js. Client: public/labyrinth.js.
-import { walkable, resolveCollision, inGateZone } from '../shared/data.js';
-import { LABS, LAB_FLOORS, KEEPER, labAt, labSteer, cellCenter, hallCenter, startPoint, endPoint, inHall, trapState, onTrap, hasLabKey } from '../shared/labyrinth.js';
+// Labyrinths (docs/briefs/labyrinths.md): the server side. Stairs between the field, the layers and the boss gate
+// (thresholds: you come back to the last one you crossed if you die inside), spike plates, wading, torches, chests, the
+// levers and the portcullis, noise and the lure, the floor's event with rising pressure, the mini-boss and its key, the
+// key lock on the boss gate, and steering mobs through the maze. Data and geometry: shared/labyrinth.js. Client:
+// public/labyrinth.js.
+import { walkable, resolveCollision, inGateZone, PLAYER_SPEED, DODGE } from '../shared/data.js';
+import { LABS, LAB_FLOORS, LAYERS, KEEPER, NOISE, LURE, labAt, labSteer, hallCenter, startPoint, endPoint, inHall, inWater, trapState, onTrap, hasLabKey, stairsOf, leverWindow, labRun, portOpen } from '../shared/labyrinth.js';
 
 const r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
 const rr = ([a, b]) => a + Math.random() * (b - a);
 // Testing aid: SPAWN_AT drops a tester past the content, so the key lock waives itself; LAB_GATE=0 turns it off.
 const lockOn = () => process.env.LAB_GATE !== '0' && !process.env.SPAWN_AT;
+const REACH = 2.6; // m: chests, levers, torches
 
 export const LabMethods = {
   initLabs() {
-    this.labs = {};
-    for (const f of LAB_FLOORS) {
-      const L = LABS[f], S = this.labs[f] = { breatheAt: 0, gutterUntil: 0, keeper: null, inside: 0 };
+    this.labs = {}; // per layer id: { since, breatheAt, gutterUntil, lever: [t, t], lit: Map(k -> until) }
+    this.lures = [];
+    for (const L of LAYERS) {
+      const S = this.labs[L.id] = { since: 0, breatheAt: 0, gutterUntil: 0, lever: [-99, -99], lit: new Map(), keeper: null };
       for (const [type, c] of L.mobCells) {
-        const [cx, cz] = cellCenter(L, c);
+        const [cx, cz] = L.center(c);
         const m = this.addMob(type, cx + (Math.random() - 0.5) * 4, cz + (Math.random() - 0.5) * 4);
-        m.labF = f;
+        m.labF = L.floor;
       }
-      const [hx, hz] = hallCenter(L);
-      S.keeper = this.addMob(L.keeper, hx, hz + 3);
-      S.keeper.labF = f;
+      if (L.keeper) { const [hx, hz] = hallCenter(L); S.keeper = this.addMob(L.keeper, hx, hz + 4); S.keeper.labF = L.floor; }
     }
   },
 
-  // ---------- stairs ----------
-  // a: 'in' (the stair in the field, down to the start), 'out' (back up from the start), 'up' (the stair at the end, out
-  // to the boss gate)
-  labStair(p, a) {
+  // ---------- interaction: { type: 'lab', a: 'stair' | 'chest' | 'lever' | 'torch' | 'lure', face } ----------
+  labAct(p, a, face) {
     if (p.dead) return;
+    if (a === 'stair') return this.labStair(p);
+    if (a === 'lure') return this.labLure(p, face);
+    const L = labAt(p.x, p.z); if (!L) return;
+    const S = this.labs[L.id], t = this.time;
+    const nearest = list => list?.filter(o => Math.hypot(p.x - o.x, p.z - o.z) < REACH + 0.5).sort((a, b) => Math.hypot(p.x - a.x, p.z - a.z) - Math.hypot(p.x - b.x, p.z - b.z))[0];
+    if (a === 'chest') {
+      const c = nearest(L.chestList); if (!c) return;
+      const k = `${L.id}:${c.k}`, got = (p.labLoot ||= {});
+      if ((got[k] || -1e9) > t) return this.sys('You already emptied this chest. It fills again in a while.', p.id);
+      got[k] = t + L.loot.cd;
+      this.dropLoot(p, { type: c.deep ? 'cryptchestdeep' : 'cryptchest', def: {} });
+      if (c.deep || Math.random() < 0.5) { p.labLures = Math.min(LURE.max, (p.labLures || 0) + 1); this.sys('A bone rattle: throw it to lure a Tomb Warden away.', p.id); }
+      this.events.push({ t: 'lab', s: 'chest', to: p.id, l: L.id, k: c.k, lu: p.labLures || 0 });
+      this.track(p, 'lab_chest', { l: L.id, deep: c.deep ? 1 : 0 });
+    } else if (a === 'lever') {
+      const lv = nearest(L.leverList); if (!lv || portOpen(L, t)) return;
+      S.lever[lv.k] = t;
+      const people = [...this.players.values()].filter(q => !q.dead && !q.bot && labAt(q.x, q.z) === L).length;
+      const win = leverWindow(L, people), other = S.lever[1 - lv.k];
+      this.events.push({ t: 'lab', s: 'lever', l: L.id, k: lv.k, d: r1(win) });
+      if (t - other <= win) {
+        labRun.portUp[L.id] = t + L.levers.open; S.lever = [-99, -99];
+        this.events.push({ t: 'lab', s: 'port', l: L.id, d: L.levers.open });
+        this.sys(`The portcullis grinds up. ${L.lab.layers[L.li + 1]?.name || 'The way on'} lies beyond.`);
+        this.labNoise(L, ...endPoint(L), NOISE.torch);
+      } else this.sys(`A lever clanks down. Pull the other within ${Math.round(win)} s.`, p.id);
+    } else if (a === 'torch') {
+      const tc = nearest(L.torchList); if (!tc || (S.lit.get(tc.k) || 0) > t) return;
+      S.lit.set(tc.k, t + L.torches.lit);
+      this.events.push({ t: 'lab', s: 'torch', l: L.id, k: tc.k });
+      this.labNoise(L, tc.x, tc.z, NOISE.torch);
+    }
+  },
+
+  labStair(p) {
     for (const f of LAB_FLOORS) {
-      const L = LABS[f], [sx, sz] = startPoint(L), [ex, ez] = endPoint(L);
-      const near = (x, z, r) => Math.hypot(p.x - x, p.z - z) < r + 0.5; // (a little extra reach for lag)
-      let to = null;
-      if (a === 'in' && near(L.entry.x, L.entry.z, L.entry.use)) to = [sx, sz - 1.5];
-      else if (a === 'out' && near(sx, sz, L.use)) to = [L.back.x, L.back.z];
-      else if (a === 'up' && near(ex, ez, L.use)) to = [L.exitTo.x, L.exitTo.z];
-      if (!to) continue;
-      const [x, z] = resolveCollision(to[0] + (Math.random() - 0.5) * 2, to[1] + (Math.random() - 0.5) * 2);
+      const lab = LABS[f];
+      const st = stairsOf(lab).find(s => Math.hypot(p.x - s.x, p.z - s.z) < s.r + 0.5);
+      if (!st) continue;
+      if (st.L && st.kind !== 'up' && st.kind !== 'in' && !portOpen(st.L, this.time) && st.L.portEdge) return; // (behind a closed portcullis)
+      let to;
+      if (st.kind === 'in' || st.kind === 'down') { const [x, z] = startPoint(st.to); to = [x, z + 1.5]; p.labCk = { f, li: st.to.li }; }
+      else if (st.kind === 'up') { if (st.to) { const [x, z] = endPoint(st.to); to = [x, z - 1.5]; p.labCk = { f, li: st.to.li }; } else { to = [lab.entry.x, lab.entry.z - 4.5]; p.labCk = null; } }
+      else { to = [lab.exitTo.x, lab.exitTo.z]; p.labCk = null; }
+      const [x, z] = resolveCollision(to[0] + (Math.random() - 0.5) * 2, to[1] + (Math.random() - 0.5) * 1.2);
       this.gate.ready.delete(p.id);
-      this.events.push({ t: 'labtp', id: p.id, f, a, x0: r2(p.x), z0: r2(p.z) });
+      if (st.kind === 'in') p.labLures = Math.max(p.labLures || 0, LURE.start);
+      this.events.push({ t: 'labtp', id: p.id, f, k: st.kind, l: st.to?.id || '', x0: r2(p.x), z0: r2(p.z), lu: p.labLures || 0 });
       this.teleport(p, walkable(x, z) ? x : to[0], walkable(x, z) ? z : to[1]);
-      if (a === 'in') {
-        this.sys(hasLabKey(p.stats, f) ? `You descend into ${L.name}.` : `You descend into ${L.name}. Somewhere below, the Gravekeeper keeps the ${L.keyName}.`, p.id);
-        this.track(p, 'lab_in', { f });
-      } else this.track(p, 'lab_out', { f, a });
+      if (st.kind === 'in') {
+        this.sys(hasLabKey(p.stats, f) ? `You descend into ${lab.name}.` : `You descend into ${lab.name}. Somewhere below, the Gravekeeper keeps the ${lab.keyName}.`, p.id);
+      }
+      this.track(p, 'lab_stair', { f, k: st.kind, l: st.to?.id || '' });
       return;
     }
+  },
+
+  // ---------- noise: wakes the Tomb Wardens that hear it, and sends them to it ----------
+  labNoise(L, x, z, r) {
+    const t = this.time;
+    for (const m of this.mobs.values()) {
+      if (m.dead || !m.def.hears || labAt(m.x, m.z) !== L || Math.hypot(m.x - x, m.z - z) > r) continue;
+      if (!m.labAwake || m.labAwake < t) this.events.push({ t: 'lab', s: 'wake', id: m.id });
+      m.labAwake = t + NOISE.awake; m.labGo = [x, z];
+    }
+  },
+
+  labLure(p, face) {
+    const L = labAt(p.x, p.z);
+    if (!L || !(p.labLures > 0)) return;
+    const a = typeof face === 'number' && isFinite(face) ? face : p.face;
+    let x = p.x, z = p.z;
+    for (let d = 0.5; d <= LURE.throw; d += 0.5) { const nx = p.x + Math.sin(a) * d, nz = p.z + Math.cos(a) * d; if (!walkable(nx, nz) || labAt(nx, nz) !== L) break; x = nx; z = nz; }
+    p.labLures--;
+    this.lures.push({ x, z, L, until: this.time + LURE.secs, next: 0 });
+    this.events.push({ t: 'lab', s: 'lure', x: r2(x), z: r2(z), x0: r2(p.x), z0: r2(p.z), d: LURE.secs, by: p.id, lu: p.labLures });
   },
 
   // ---------- per tick ----------
   updateLabs(dt) {
     const t = this.time;
-    for (const f of LAB_FLOORS) {
-      const L = LABS[f], S = this.labs[f];
-      const inside = [...this.players.values()].filter(p => !p.dead && labAt(p.x, p.z) === L);
-      const humans = inside.filter(p => !p.bot);
-      // spike plates: up = hit once per cycle (a jump or a roll gets you through, like a Quake Ring)
+    labRun.now = t;
+    const byLayer = new Map();
+    for (const p of this.players.values()) { if (p.dead) continue; const L = labAt(p.x, p.z); if (L) { if (!byLayer.has(L)) byLayer.set(L, []); byLayer.get(L).push(p); } }
+    for (const L of LAYERS) {
+      const S = this.labs[L.id], inside = byLayer.get(L) || [], humans = inside.filter(p => !p.bot);
       for (const p of inside) {
+        // spike plates: up = hit once per cycle (a jump or a roll gets you through, like a Quake Ring)
         for (const tr of L.trapList) {
           if (!onTrap(tr, p.x, p.z) || trapState(L, tr, t) !== 2) continue;
           const cyc = Math.floor((t + tr.off) / L.traps.cycle), hits = p.labHits ||= {};
-          if (hits[tr.k] === cyc) continue;
-          hits[tr.k] = cyc;
+          if (hits[`${L.id}${tr.k}`] === cyc) continue;
+          hits[`${L.id}${tr.k}`] = cyc;
           this.damagePlayer(p, p.maxHp * L.traps.dmg, { ground: true, src: 'spike trap' });
         }
+        // noise from moving: sprinting, wading
+        const moved = Math.hypot(p.x - (p.labPx ?? p.x), p.z - (p.labPz ?? p.z)) / Math.max(dt, 1e-3);
+        p.labPx = p.x; p.labPz = p.z;
+        if (t >= (p.labNoiseT || 0) && moved > 0.5 && moved < DODGE.dist / DODGE.time * 0.9 && t > p.rollUntil + 0.2) { // (not a teleport or a roll)
+          const kind = inWater(L, p.x, p.z) && L.water.loud ? 'wade' : moved > PLAYER_SPEED * 1.12 ? 'sprint' : null;
+          if (kind) { p.labNoiseT = t + 1.2; this.labNoise(L, p.x, p.z, NOISE[kind]); }
+        }
       }
-      // the crypt breathes: torches gutter and the dead rise near whoever is down here
-      if (!humans.length) S.breatheAt = 0;
-      else if (!S.breatheAt) S.breatheAt = t + rr(L.breathe.first);
-      else if (t >= S.breatheAt) {
-        const B = L.breathe;
-        S.breatheAt = t + rr(B.every); S.gutterUntil = t + B.secs;
-        this.events.push({ t: 'lab', s: 'breathe', f, d: B.secs });
-        let alive = [...this.mobs.values()].filter(m => m.labTemp === f && !m.dead).length;
-        for (const p of humans) for (let i = 0; i < B.rise && alive < B.cap; i++) {
-          const spot = this.labSpot(p.x, p.z, 4, 8);
-          if (!spot || inHall(L, ...spot)) continue;
-          this.labRise(f, B.type, spot[0], spot[1], t + B.ttl); alive++;
+      // a fight is loud
+      if (inside.length && t >= (S.fightT || 0)) {
+        S.fightT = t + 2;
+        for (const m of this.mobs.values()) if (!m.dead && m.threat.size && labAt(m.x, m.z) === L) this.labNoise(L, m.x, m.z, NOISE.fight);
+      }
+      // the floor's event, with rising pressure: the longer people stay in the layer, the sooner and harder it comes
+      const B = L.breathe;
+      if (!humans.length) { S.since = 0; S.breatheAt = 0; }
+      else if (B) {
+        if (!S.since) { S.since = t; S.breatheAt = t + rr(B.first); }
+        if (t >= S.breatheAt) {
+          const press = this.labPressure(L);
+          S.breatheAt = t + rr(B.every) * (1 - (1 - B.press) * press); S.gutterUntil = t + B.secs;
+          this.events.push({ t: 'lab', s: 'breathe', l: L.id, d: B.secs, p: r2(press) });
+          let alive = [...this.mobs.values()].filter(m => m.labTemp === L.id && !m.dead).length;
+          const rise = B.rise + (press >= 1 ? 1 : 0);
+          for (const p of humans) for (let i = 0; i < rise && alive < B.cap; i++) {
+            const spot = this.labSpot(p.x, p.z, 4, 8);
+            if (spot) { this.labRise(L, B.type, spot[0], spot[1], t + B.ttl); alive++; }
+          }
         }
       }
       for (const m of [...this.mobs.values()]) { // the risen crumble when their time is up
-        if (m.labTemp !== f || m.dead || t < m.labTtl || m.threat.size) continue;
+        if (m.labTemp !== L.id || m.dead || t < m.labTtl || m.threat.size) continue;
         this.events.push({ t: 'die', id: m.id, x: r2(m.x), z: r2(m.z), b: 0 });
         this.mobs.delete(m.id);
       }
-      this.updateKeeper(L, S, t);
-      this.updateTolls(t);
+      for (const [k, until] of S.lit) if (until <= t) S.lit.delete(k);
+      if (S.keeper) this.updateKeeper(L, S, t);
     }
+    // lures rattle: noise every second while they last
+    for (const u of this.lures) if (t >= u.next) { u.next = t + 1; this.labNoise(u.L, u.x, u.z, NOISE.lure); }
+    this.lures = this.lures.filter(u => u.until > t);
+    this.updateTolls(t);
   },
 
-  labSpot(x, z, d0, d1) { // a free floor spot d0..d1 m from (x, z), in the same labyrinth
+  labPressure(L) { const S = this.labs[L.id]; return L.breathe && S.since ? Math.min(1, (this.time - S.since) / L.breathe.pressAfter) : 0; },
+
+  labSpot(x, z, d0, d1) { // a free floor spot d0..d1 m from (x, z), in the same layer
     const L = labAt(x, z);
     for (let i = 0; i < 16; i++) {
       const a = Math.random() * Math.PI * 2, d = d0 + Math.random() * (d1 - d0);
@@ -101,11 +181,26 @@ export const LabMethods = {
     return null;
   },
 
-  labRise(f, type, x, z, ttl) {
+  labRise(L, type, x, z, ttl) {
     const m = this.addMob(type, x, z);
-    m.labF = f; m.labTemp = f; m.labTtl = ttl;
-    this.events.push({ t: 'lab', s: 'rise', f, x: r2(x), z: r2(z) });
+    m.labF = L.floor; m.labTemp = L.id; m.labTtl = ttl;
+    this.events.push({ t: 'lab', s: 'rise', x: r2(x), z: r2(z) });
     return m;
+  },
+
+  // ---------- the Tomb Warden: asleep until it hears something; then it goes to the sound and fights what it finds ----------
+  labHearer(m) {
+    const t = this.time;
+    if (m.threat.size) { m.labAwake = Math.max(m.labAwake || 0, t + 3); return false; } // hit, or fighting: the normal AI
+    if (!m.labAwake || t >= m.labAwake) { // asleep (or going back to its niche)
+      m.labGo = null;
+      if (Math.hypot(m.x - m.sx, m.z - m.sz) > 1) this.moveMob(m, m.sx, m.sz, m.def.speed * 0.6, 0.05, 0.5); else m.moving = false;
+      return true;
+    }
+    for (const p of this.players.values()) if (this.validTarget(m, p) && Math.hypot(p.x - m.x, p.z - m.z) < 7) { m.threat.set(p.id, 1); return false; }
+    if (m.labGo) { this.moveMob(m, m.labGo[0], m.labGo[1], m.def.speed, 0.05, 1.2); if (Math.hypot(m.x - m.labGo[0], m.z - m.labGo[1]) < 1.6) m.labGo = null; }
+    else m.moving = false;
+    return true;
   },
 
   // ---------- the mini-boss ----------
@@ -121,9 +216,9 @@ export const LabMethods = {
     if (!m.labEngaged) { m.labEngaged = true; m.tollT = t + K.toll.first; m.labCalled = false; }
     if (!m.labCalled && m.hp <= m.maxHp * K.call.at) { // calls up the dead, once
       m.labCalled = true;
-      this.events.push({ t: 'lab', s: 'call', f: L.floor, id: m.id });
+      this.events.push({ t: 'lab', s: 'call', l: L.id, id: m.id });
       this.sys('The Gravekeeper rings for the dead. They answer.');
-      for (let i = 0; i < K.call.n; i++) { const s = this.labSpot(m.x, m.z, 4, 9); if (s) this.labRise(L.floor, K.call.type, s[0], s[1], t + 40); }
+      for (let i = 0; i < K.call.n; i++) { const s = this.labSpot(m.x, m.z, 4, 9); if (s) this.labRise(L, K.call.type, s[0], s[1], t + 40); }
     }
     if (t >= m.tollT && !m.windupAt && t >= (m.stunUntil || 0)) { // the Grave Bell: a ring of force (jump it or roll through)
       const T = K.toll;
@@ -152,22 +247,21 @@ export const LabMethods = {
     this.tolls = this.tolls.filter(q => q.r < q.max && !q.m.dead);
   },
 
-  // The Gravekeeper's key: everyone who fought it, or stands in the Ossuary when it falls.
+  // The Gravekeeper's key: everyone who fought it, or stands in its hall when it falls.
   labKeeperKilled(m) {
-    const f = m.labF, L = LABS[f], S = this.labs[f];
+    const L = labAt(m.x, m.z) || LAYERS.find(l => this.labs[l.id].keeper === m), lab = L.lab, f = L.floor;
     m.deadUntil = this.time + (m.def.respawn || 75);
-    for (const x of [...this.mobs.values()]) if (x.labTemp === f && !x.dead && inHall(L, x.x, x.z)) { this.events.push({ t: 'die', id: x.id, x: r2(x.x), z: r2(x.z), b: 0 }); this.mobs.delete(x.id); }
+    for (const x of [...this.mobs.values()]) if (x.labTemp === L.id && !x.dead) { this.events.push({ t: 'die', id: x.id, x: r2(x.x), z: r2(x.z), b: 0 }); this.mobs.delete(x.id); }
     const got = [];
     for (const p of this.players.values()) {
-      if (!m.contributors.has(p.id) && !(labAt(p.x, p.z) === L && inHall(L, p.x, p.z) && !p.dead)) continue;
+      if (!m.contributors.has(p.id) && !(labAt(p.x, p.z) === L && !p.dead)) continue;
       const first = !hasLabKey(p.stats, f);
-      p.stats[L.key] = (p.stats[L.key] || 0) + 1; p.dirty = true; this.invChanged(p);
+      p.stats[lab.key] = (p.stats[lab.key] || 0) + 1; p.dirty = true; this.invChanged(p);
       this.events.push({ t: 'labkey', id: p.id, f, first: first ? 1 : 0 });
       this.track(p, 'lab_key', { f, first });
       if (first && !p.bot) got.push(p.name);
     }
-    this.sys(got.length ? `The Gravekeeper falls. ${got.join(', ')} found the ${L.keyName}: the way to the ${f === 1 ? 'Horned Warden' : 'boss'} is open.` : 'The Gravekeeper falls.');
-    S.gutterUntil = 0;
+    this.sys(got.length ? `The Gravekeeper falls. ${got.join(', ')} found the ${lab.keyName}: the way to the Horned Warden is open.` : 'The Gravekeeper falls.');
   },
 
   // The boss gate's key lock: one character at the gate holding this floor's key opens it for everyone (a party of
@@ -178,9 +272,10 @@ export const LabMethods = {
     return !humans.length || humans.some(p => hasLabKey(p.stats, f));
   },
 
+  // [server time, [[layer id, portcullis up until, lit torch ids, guttering s left, pressure]]]
   labSnap() {
-    const S = this.labs?.[1];
-    return [r1(this.time), S && this.time < S.gutterUntil ? r1(S.gutterUntil - this.time) : 0];
+    const t = this.time;
+    return [r1(t), LAYERS.map(L => { const S = this.labs[L.id]; return [L.id, r1(labRun.portUp[L.id] || 0), [...S.lit.keys()], t < S.gutterUntil ? r1(S.gutterUntil - t) : 0, r2(this.labPressure(L))]; })];
   },
 };
 
@@ -190,12 +285,20 @@ export function installLabyrinth(Game) {
 
   const handle = P.handle;
   P.handle = function (p, msg) {
-    if (msg?.type === 'lab' && p) return this.labStair(p, String(msg.a));
+    if (msg?.type === 'lab' && p) return this.labAct(p, String(msg.a), msg.face);
     // Testing aid (TEST_HOOKS=1 only): { type: 'test', labkey: f } gives the sender floor f's key; labkey: -f takes it.
     if (msg?.type === 'test' && process.env.TEST_HOOKS && p && msg.labkey) {
-      const f = Math.abs(msg.labkey | 0), L = LABS[f]; if (!L) return;
-      p.stats[L.key] = msg.labkey > 0 ? 1 : 0; if (msg.labkey < 0) p.stats.wardenKills = 0;
+      const f = Math.abs(msg.labkey | 0), lab = LABS[f]; if (!lab) return;
+      p.stats[lab.key] = msg.labkey > 0 ? 1 : 0; if (msg.labkey < 0) p.stats.wardenKills = 0;
       this.invChanged(p); return;
+    }
+    // { type: 'test', labgo: layer id | 'out' }: straight to that layer's threshold (or out before the gate), as a stair would.
+    if (msg?.type === 'test' && process.env.TEST_HOOKS && p && typeof msg.labgo === 'string') {
+      const lab = LABS[1], L = lab.layers.find(l => l.id === msg.labgo);
+      const [x, z] = L ? startPoint(L) : [lab.exitTo.x, lab.exitTo.z];
+      p.labCk = L ? { f: 1, li: L.li } : null;
+      this.events.push({ t: 'labtp', id: p.id, f: 1, k: L ? 'down' : 'out', l: L?.id || '', x0: r2(p.x), z0: r2(p.z), lu: p.labLures || 0 });
+      this.teleport(p, x, L ? z + 1.5 : z); return;
     }
     return handle.call(this, p, msg);
   };
@@ -204,15 +307,15 @@ export function installLabyrinth(Game) {
   const toggleReady = P.toggleReady;
   P.toggleReady = function (p) {
     if (p.x <= 300 && !this.gate.open && !this.gate.ready.has(p.id) && !this.labGateOk(1, [...this.players.values()].filter(q => q === p || (!q.dead && inGateZone(q.x, q.z))))) {
-      const L = LABS[1];
-      this.sys(`The Chamber Gate is sealed with the Horn Lock. Find the ${L.keyName} in ${L.name}: the crypt stair is in the woods just west of the road.`, p.id);
+      const lab = LABS[1];
+      this.sys(`The Chamber Gate is sealed with the Horn Lock. Find the ${lab.keyName} in ${lab.name}: the crypt stair is in the woods just west of the road.`, p.id);
       this.events.push({ t: 'lab', s: 'locked', f: 1, to: p.id });
       return;
     }
     return toggleReady.call(this, p);
   };
 
-  // Mobs in a labyrinth go round its walls (next cell's centre on the way) and only chase people in the same one.
+  // Mobs in a labyrinth go round its walls (next cell's centre on the way) and only chase people in the same layer.
   const moveMob = P.moveMob;
   P.moveMob = function (m, tx, tz, speed, dt, stopAt) {
     if (m.labF) {
@@ -223,8 +326,21 @@ export function installLabyrinth(Game) {
   };
   const validTarget = P.validTarget;
   P.validTarget = function (m, p) {
-    if (m.labF && p && labAt(p.x, p.z) !== LABS[m.labF]) return false;
+    if (m.labF && p && labAt(p.x, p.z) !== labAt(m.x, m.z)) return false;
     return validTarget.call(this, m, p);
+  };
+  const updateMob = P.updateMob;
+  P.updateMob = function (m, dt) {
+    if (m.def.hears && !m.dead && this.labHearer(m)) return;
+    return updateMob.call(this, m, dt);
+  };
+
+  // Dying inside: back at the last threshold you crossed.
+  const respawnPoint = P.respawnPoint;
+  P.respawnPoint = function (p) {
+    const L = labAt(p.x, p.z), ck = p.labCk;
+    if (L && ck && ck.f === L.floor) { const to = LABS[ck.f].layers[ck.li]; if (to) { const [x, z] = startPoint(to); return [x, z + 1.5]; } }
+    return respawnPoint.call(this, p);
   };
 
   const killMob = P.killMob;
@@ -232,8 +348,7 @@ export function installLabyrinth(Game) {
     const r = killMob.call(this, m, killer);
     if (!m.dead) return r; // (held for a Last Attack elsewhere)
     if (m.labTemp) this.mobs.delete(m.id);
-    else if (m.labF && m.type === LABS[m.labF].keeper) this.labKeeperKilled(m);
+    else if (m.labF && m.def.elite && m.type === LAYERS.find(L => L.floor === m.labF && L.keeper)?.keeper) this.labKeeperKilled(m);
     return r;
   };
 }
-

@@ -134,7 +134,7 @@ const f3 = initFloor3Client({
   log: (a, b) => log(a, b), shake: a => shake(a), project: (x, y, z) => project(x, y, z), hallOpen: () => !$('hall').classList.contains('hidden'),
 });
 // Labyrinths (labyrinth.js): the Undercrypt's look, stairs, spike plates, the crypt's darkness, the key.
-const lab = initLabClient({ scene, occluders, sun, floor1, fx, sfx, state, players, send: o => send(o), banner: (a, b) => banner(a, b),
+const lab = initLabClient({ scene, occluders, sun, floor1, fx, sfx, state, players, mobs, send: o => send(o), banner: (a, b) => banner(a, b),
   callout: (a, b, c) => callout(a, b, c), log: (a, b) => log(a, b), project: (x, y, z) => project(x, y, z), tip: id => guide.tip(id) });
 // Boss arenas with areas (arenas.js): the fall, the lower area's look and rules (sludge, fire, pillars) for prediction.
 const arenas = initArenas({ scene, fx, sfx, state, mobs, players, camera, views: { colossus: f3.world.arena }, tip: id => guide.tip(id),
@@ -1733,7 +1733,7 @@ function updateHud(now) {
     }
     if (btn.dataset.slot === 'guard') { btn.classList.toggle('on', combat.guarding); continue; }
     if (btn.dataset.slot === 'cover') { threat.coverCd(btn); continue; }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? 'Enter' : state.meReady ? 'Unready' : 'Ready'); continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : state.meReady ? 'Unready' : 'Ready'); continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : { cd: mastery.cd(slot) }; // mastery/branch cooldowns
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
@@ -2087,7 +2087,7 @@ let hitStop = 0;
 let sentLock = 0; // the locked mob last reported to the server (`target`)
 const projFx = new Map(); // thorn id -> effect
 let visLag = 0; // ms the drawn characters lag the snapshot clock (slow motion / hit-stop), eased back to 0 afterwards
-const camDir = new THREE.Vector3(), camFrom = new THREE.Vector3();
+const camLow = new THREE.Vector3(), camDir = new THREE.Vector3(), camFrom = new THREE.Vector3();
 function frame(now) {
   requestAnimationFrame(frame);
   const t0 = performance.now(), gap = now - last;
@@ -2170,7 +2170,7 @@ function frame(now) {
       let dx = 0, dz = 0;
       if (mag > 0.08) { const fy = state.yaw; dx = Math.sin(fy) * iz - Math.cos(fy) * ix; dz = Math.cos(fy) * iz + Math.sin(fy) * ix; const l = Math.hypot(dx, dz); dx /= l; dz /= l; }
       const sprint = performance.now() - state.lastCombat > SPRINT_AFTER * 1000 && !combat.guarding;
-      airStep(state.air, dx, dz, (sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult() * arenas.speedMult(), dt);
+      airStep(state.air, dx, dz, (sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult() * arenas.speedMult() * lab.speedMult(), dt);
       let [nx, nz] = resolveCollision(state.x + state.air.x * dt, state.z + state.air.z * dt);
       const gc = !state.gateOpen;
       if (!walkable(nx, nz, gc)) { if (walkable(nx, state.z, gc)) nz = state.z; else if (walkable(state.x, nz, gc)) nx = state.x; else { nx = state.x; nz = state.z; } }
@@ -2182,7 +2182,7 @@ function frame(now) {
       let mx = fwd[0] * iz + right[0] * ix, mz = fwd[1] * iz + right[1] * ix;
       const ml = Math.hypot(mx, mz); mx /= ml; mz /= ml;
       const sprint = performance.now() - state.lastCombat > SPRINT_AFTER * 1000 && !combat.guarding;
-      const want = rescue.moveCap(revive.crawlCap((sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult() * arenas.speedMult(), mag)); // (sludge: arenas.js; trapped: none, rescue.js) // half speed while guarding; talents can add move speed; downed: crawl
+      const want = rescue.moveCap(revive.crawlCap((sprint ? SPRINT_SPEED : PLAYER_SPEED) * mag * combat.speedMult() * talents.speedMult() * arenas.speedMult() * lab.speedMult(), mag)); // (sludge: arenas.js; trapped: none, rescue.js) // half speed while guarding; talents can add move speed; downed: crawl
       state.speed += (want - state.speed) * Math.min(1, dt * (want > state.speed ? 3 : 10));
       if (rescue.rooted()) state.speed = 0;
       const step = state.speed * dt;
@@ -2240,7 +2240,14 @@ function frame(now) {
   const dir = camDir.set(-Math.sin(state.yaw) * Math.cos(cp), Math.sin(cp), -Math.cos(state.yaw) * Math.cos(cp));
   ray.set(camFrom.set(cx, 1.6, cz), dir); ray.far = state.camDist;
   const hit = ray.intersectObjects(occluders, true)[0];
-  const allowed = hit ? Math.max(2, hit.distance - 0.6) : state.camDist;
+  let allowed = hit ? Math.max(2, hit.distance - 0.6) : state.camDist;
+  if (lab.inLab()) { // the crypt's walls are low enough to look over: keep your body in sight too, not just your head
+    const tx = cx + dir.x * allowed, ty = 1.6 + dir.y * allowed, tz = cz + dir.z * allowed;
+    const len = Math.hypot(tx - cx, ty - 0.7, tz - cz);
+    ray.set(camFrom.set(cx, 0.7, cz), camLow.set((tx - cx) / len, (ty - 0.7) / len, (tz - cz) / len)); ray.far = len;
+    const low = ray.intersectObjects(occluders, true)[0];
+    if (low) allowed = Math.max(2, allowed * low.distance / len - 0.6);
+  }
   camCur += (allowed - camCur) * Math.min(1, dt * (allowed < camCur ? 20 : 3));
   const cd = camCur * (slowMo > 0 ? 1 - 0.22 * Math.sin(Math.PI * (1 - slowMo / slowMoLen)) : 1); // killing-blow zoom
   shakeAmt = Math.max(0, shakeAmt - dt);

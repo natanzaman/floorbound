@@ -4,7 +4,7 @@ import { F3, F3_MOB_IDS, F3_MOBS, F3_BITE, F3_RARES, inCamp3, walkable3, areaNam
 import { RESCUE_MOB_IDS, RESCUE_MOBS } from './rescue.js';
 import { TIMED, movesOf } from './bosstiming.js'; // boss timing tables (J3)
 import { AREA_COLLIDERS } from './arenas.js'; // multi-area boss fights (J2): the active area's walls and pillars
-import { LABS, LAB_MOB_IDS, LAB_MOBS, LAB_BITE, labAt, walkLab, inHall } from './labyrinth.js'; // the labyrinths before each boss
+import { LABS, LAB_MOB_IDS, LAB_MOBS, LAB_BITE, labAt, walkLab } from './labyrinth.js'; // the labyrinths before each boss
 import { LANCER } from './classes/lancer.js';
 import { BARD } from './classes/bard.js';
 import { RANGER } from './classes/ranger.js';
@@ -71,7 +71,7 @@ export function walkable(x, z, gateClosed = false) {
 export function areaName(x, z) {
   if (x > F3.split) return areaName3(x, z);
   if (x > F2.split) return areaName2(x, z);
-  const lab = labAt(x, z); if (lab) return inHall(lab, x, z) ? lab.hallName : lab.name;
+  const lab = labAt(x, z); if (lab) return lab.name; // a labyrinth's layer (shared/labyrinth.js)
   if (inTown(x, z)) return 'Town of Beginnings';
   if (inArena(x, z)) return "Warden's Chamber";
   if (z > 148) return 'Chamber Gate';
