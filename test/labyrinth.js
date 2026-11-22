@@ -249,5 +249,37 @@ const at = (p, x, z) => g.teleport(p, x, z);
   ok('the Horn Lock: needs a keyholder at the gate; Warden killers, bot groups and LAB_GATE=0 pass');
 }
 
+// the review's fixes: the portcullis, knockback, walls between bites, chests across a reconnect
+{
+  const [i, j, d] = GAL.portEdge.split(','), C = GAL.cell;
+  const lx = GAL.x0 + (+i + 1) * C, cz = GAL.z0 + (+j + 0.5) * C; // (an E edge: the bars' line is x = lx)
+  assert.equal(d, 'E');
+  labRun.portUp.galleries = 0;
+  at(a, lx - 0.7, cz); g.update(0.05); // the bars drop on you in the gateway
+  assert.ok(walkable(a.x, a.z) && a.x < lx, 'pushed out of the bars, on your side');
+  const x0 = a.x; g.onInput(a, { seq: a.posSeq, x: lx + 0.8, z: cz }); assert.equal(a.x, x0, 'no hopping the shut bars');
+  // the stair down past the portcullis works while it's shut (going back up from the Ossuary doesn't trap you)
+  const dn = stair(GAL, 'down'); at(a, dn.x, dn.z); g.handle(a, { type: 'lab', a: 'stair' });
+  assert.equal(labAt(a.x, a.z), OSS, 'down from behind the shut portcullis');
+  // knockback stops at a wall
+  const [ci, cj] = [...Array(CAT.cols * CAT.rows).keys()].map(c => [c % CAT.cols, (c / CAT.cols) | 0]).find(([ci, cj]) => ci < CAT.cols - 1 && !CAT.open.has(`${ci},${cj},E`));
+  const m = [...g.mobs.values()].find(m => m.type === 'ghoul' && !m.dead);
+  const wx = CAT.x0 + (ci + 1) * CAT.cell, wz = CAT.z0 + (cj + 0.5) * CAT.cell;
+  m.x = wx - 1.6; m.z = wz; at(b, wx - 3, wz);
+  g.knockback(m, b, 2.5);
+  assert.ok(m.x < wx - 0.9 && cellOf(CAT, m.x, m.z) === cellOf(CAT, wx - 1.6, wz), 'knockback stops at the wall');
+  // no bite through the wall
+  at(b, wx + 1.4, wz); const hp = b.hp; b.testWard = false;
+  g.damagePlayer(b, 30, { src: 'ghoul bite', mob: m });
+  assert.equal(b.hp, hp, 'the wall takes the bite');
+  at(b, m.x - 1.5, wz); g.damagePlayer(b, 30, { src: 'ghoul bite', mob: m }); assert.ok(b.hp < hp, 'in the open it lands');
+  // chests: emptied per character, still emptied after a reconnect
+  const c = CAT.chestList[0]; at(a, c.x, c.z - 1.2); a.charId = 77; g.handle(a, { type: 'lab', a: 'chest' });
+  const a2 = g.addPlayer(null, 'Pell', 'swordsman'); a2.charId = 77; at(a2, c.x, c.z - 1.2); g.events = [];
+  g.handle(a2, { type: 'lab', a: 'chest' });
+  assert.equal(evs('lab', 'chest').length, 0, 'reconnecting does not refill chests');
+  ok('review fixes: out from under the bars, no hopping them, stair down behind them, knockback and bites stop at walls, chests per character');
+}
+
 console.log(`labyrinth: ${n} checks passed`);
 process.exit(0);

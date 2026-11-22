@@ -3,8 +3,8 @@
 // levers and the portcullis, noise and the lure, the floor's event with rising pressure, the mini-boss and its key, the
 // key lock on the boss gate, and steering mobs through the maze. Data and geometry: shared/labyrinth.js. Client:
 // public/labyrinth.js.
-import { walkable, resolveCollision, inGateZone, PLAYER_SPEED, DODGE } from '../shared/data.js';
-import { LABS, LAB_FLOORS, LAYERS, KEEPER, NOISE, LURE, labAt, labSteer, hallCenter, startPoint, endPoint, inHall, inWater, trapState, onTrap, hasLabKey, stairsOf, leverWindow, labRun, portOpen } from '../shared/labyrinth.js';
+import { walkable, resolveCollision, inGateZone, DODGE } from '../shared/data.js';
+import { LABS, LAB_FLOORS, LAYERS, KEEPER, NOISE, LURE, labAt, labSteer, hallCenter, startPoint, endPoint, inHall, inWater, trapState, onTrap, hasLabKey, stairsOf, leverWindow, labRun, portOpen, portSide, portOff, walkLab } from '../shared/labyrinth.js';
 
 const r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
 const rr = ([a, b]) => a + Math.random() * (b - a);
@@ -15,7 +15,7 @@ const REACH = 2.6; // m: chests, levers, torches
 export const LabMethods = {
   initLabs() {
     this.labs = {}; // per layer id: { since, breatheAt, gutterUntil, lever: [t, t], lit: Map(k -> until) }
-    this.lures = [];
+    this.lures = []; this.labLoot = new Map(); // character -> { chest key: refills at (game time) }
     for (const L of LAYERS) {
       const S = this.labs[L.id] = { since: 0, breatheAt: 0, gutterUntil: 0, lever: [-99, -99], lit: new Map(), keeper: null };
       for (const [type, c] of L.mobCells) {
@@ -37,7 +37,9 @@ export const LabMethods = {
     const nearest = list => list?.filter(o => Math.hypot(p.x - o.x, p.z - o.z) < REACH + 0.5).sort((a, b) => Math.hypot(p.x - a.x, p.z - a.z) - Math.hypot(p.x - b.x, p.z - b.z))[0];
     if (a === 'chest') {
       const c = nearest(L.chestList); if (!c) return;
-      const k = `${L.id}:${c.k}`, got = (p.labLoot ||= {});
+      const who = p.charId ?? `anon:${p.name}`; // (per character, not per connection: reconnecting doesn't refill chests)
+      if (!this.labLoot.has(who)) this.labLoot.set(who, {});
+      const k = `${L.id}:${c.k}`, got = this.labLoot.get(who);
       if ((got[k] || -1e9) > t) return this.sys('You already emptied this chest. It fills again in a while.', p.id);
       got[k] = t + L.loot.cd;
       this.dropLoot(p, { type: c.deep ? 'cryptchestdeep' : 'cryptchest', def: {} });
@@ -69,7 +71,6 @@ export const LabMethods = {
       const lab = LABS[f];
       const st = stairsOf(lab).find(s => Math.hypot(p.x - s.x, p.z - s.z) < s.r + 0.5);
       if (!st) continue;
-      if (st.L && st.kind !== 'up' && st.kind !== 'in' && !portOpen(st.L, this.time) && st.L.portEdge) return; // (behind a closed portcullis)
       let to;
       if (st.kind === 'in' || st.kind === 'down') { const [x, z] = startPoint(st.to); to = [x, z + 1.5]; p.labCk = { f, li: st.to.li }; }
       else if (st.kind === 'up') { if (st.to) { const [x, z] = endPoint(st.to); to = [x, z - 1.5]; p.labCk = { f, li: st.to.li }; } else { to = [lab.entry.x, lab.entry.z - 4.5]; p.labCk = null; } }
@@ -112,7 +113,8 @@ export const LabMethods = {
   updateLabs(dt) {
     const t = this.time;
     labRun.now = t;
-    const byLayer = new Map();
+    const byLayer = new Map(), risen = [];
+    for (const m of this.mobs.values()) if (m.labTemp && !m.dead) risen.push(m);
     for (const p of this.players.values()) { if (p.dead) continue; const L = labAt(p.x, p.z); if (L) { if (!byLayer.has(L)) byLayer.set(L, []); byLayer.get(L).push(p); } }
     for (const L of LAYERS) {
       const S = this.labs[L.id], inside = byLayer.get(L) || [], humans = inside.filter(p => !p.bot);
@@ -125,12 +127,13 @@ export const LabMethods = {
           hits[`${L.id}${tr.k}`] = cyc;
           this.damagePlayer(p, p.maxHp * L.traps.dmg, { ground: true, src: 'spike trap' });
         }
-        // noise from moving: sprinting, wading
-        const moved = Math.hypot(p.x - (p.labPx ?? p.x), p.z - (p.labPz ?? p.z)) / Math.max(dt, 1e-3);
-        p.labPx = p.x; p.labPz = p.z;
-        if (t >= (p.labNoiseT || 0) && moved > 0.5 && moved < DODGE.dist / DODGE.time * 0.9 && t > p.rollUntil + 0.2) { // (not a teleport or a roll)
-          const kind = inWater(L, p.x, p.z) && L.water.loud ? 'wade' : moved > PLAYER_SPEED * 1.12 ? 'sprint' : null;
-          if (kind) { p.labNoiseT = t + 1.2; this.labNoise(L, p.x, p.z, NOISE[kind]); }
+        // noise from moving: wading through loud water (measured over half a second: per-tick positions are jittery)
+        if (!p.labW || t - p.labW.t >= 0.5) {
+          const w = p.labW, moved = w ? Math.hypot(p.x - w.x, p.z - w.z) / (t - w.t) : 0;
+          p.labW = { t, x: p.x, z: p.z };
+          if (w && t - w.t < 1 && moved > 1 && moved < DODGE.dist / DODGE.time * 0.9 && t >= (p.labNoiseT || 0) && L.water?.loud && inWater(L, p.x, p.z)) { // (not a teleport)
+            p.labNoiseT = t + 1.2; this.labNoise(L, p.x, p.z, NOISE.wade);
+          }
         }
       }
       // a fight is loud
@@ -147,7 +150,7 @@ export const LabMethods = {
           const press = this.labPressure(L);
           S.breatheAt = t + rr(B.every) * (1 - (1 - B.press) * press); S.gutterUntil = t + B.secs;
           this.events.push({ t: 'lab', s: 'breathe', l: L.id, d: B.secs, p: r2(press) });
-          let alive = [...this.mobs.values()].filter(m => m.labTemp === L.id && !m.dead).length;
+          let alive = risen.filter(m => m.labTemp === L.id).length;
           const rise = B.rise + (press >= 1 ? 1 : 0);
           for (const p of humans) for (let i = 0; i < rise && alive < B.cap; i++) {
             const spot = this.labSpot(p.x, p.z, 4, 8);
@@ -155,10 +158,14 @@ export const LabMethods = {
           }
         }
       }
-      for (const m of [...this.mobs.values()]) { // the risen crumble when their time is up
-        if (m.labTemp !== L.id || m.dead || t < m.labTtl || m.threat.size) continue;
+      for (const m of risen) { // the risen crumble when their time is up
+        if (m.labTemp !== L.id || t < m.labTtl || m.threat.size) continue;
         this.events.push({ t: 'die', id: m.id, x: r2(m.x), z: r2(m.z), b: 0 });
         this.mobs.delete(m.id);
+      }
+      if (L.portEdge && !portOpen(L, t)) {
+        for (const p of inside) if (portSide(L, p.x, p.z) === 0 && !walkLab(L, p.x, p.z)) this.labUnbar(L, p, true);
+        for (const m of this.mobs.values()) if (!m.dead && m.labF && portSide(L, m.x, m.z) === 0 && labAt(m.x, m.z) === L && !walkLab(L, m.x, m.z)) this.labUnbar(L, m, false);
       }
       for (const [k, until] of S.lit) if (until <= t) S.lit.delete(k);
       if (S.keeper) this.updateKeeper(L, S, t);
@@ -167,6 +174,12 @@ export const LabMethods = {
     for (const u of this.lures) if (t >= u.next) { u.next = t + 1; this.labNoise(u.L, u.x, u.z, NOISE.lure); }
     this.lures = this.lures.filter(u => u.until > t);
     this.updateTolls(t);
+  },
+
+  labUnbar(L, o, player) { // out from under the bars, to the nearer side
+    const [i, j, d] = L.portEdge.split(','), line = d === 'E' ? L.x0 + (+i + 1) * L.cell : L.z0 + (+j + 1) * L.cell;
+    const s = (d === 'E' ? o.x : o.z) >= line ? 1 : -1, [x, z] = portOff(L, o.x, o.z, s);
+    if (player) this.teleport(o, x, z); else { o.x = x; o.z = z; }
   },
 
   labPressure(L) { const S = this.labs[L.id]; return L.breathe && S.since ? Math.min(1, (this.time - S.since) / L.breathe.pressAfter) : 0; },
@@ -279,6 +292,13 @@ export const LabMethods = {
   },
 };
 
+// Is the straight line between two points in layer L open floor all the way (0.5 m samples)?
+function labClear(L, x0, z0, x1, z1) {
+  const n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.5);
+  for (let k = 1; k < n; k++) if (!walkLab(L, x0 + (x1 - x0) * k / n, z0 + (z1 - z0) * k / n)) return false;
+  return true;
+}
+
 export function installLabyrinth(Game) {
   Object.assign(Game.prototype, LabMethods);
   const P = Game.prototype;
@@ -328,6 +348,38 @@ export function installLabyrinth(Game) {
   P.validTarget = function (m, p) {
     if (m.labF && p && labAt(p.x, p.z) !== labAt(m.x, m.z)) return false;
     return validTarget.call(this, m, p);
+  };
+  // No biting through a wall: a labyrinth mob's hit needs a clear line to you.
+  const damagePlayer = P.damagePlayer;
+  P.damagePlayer = function (p, amount, opts) {
+    const m = opts?.mob, L = m?.labF && labAt(m.x, m.z);
+    if (L && labAt(p.x, p.z) === L && !labClear(L, m.x, m.z, p.x, p.z)) return;
+    return damagePlayer.apply(this, arguments);
+  };
+
+  // Knockback in a labyrinth stops at the first wall on the way (walls are thinner than a big push).
+  const knockback = P.knockback;
+  P.knockback = function (m, p, dist) {
+    const L = labAt(m.x, m.z);
+    if (L) {
+      const dx = m.x - p.x, dz = m.z - p.z, d = Math.hypot(dx, dz) || 1;
+      let free = 0;
+      for (let s = 0.4; s <= dist + 1e-6; s += 0.4) { if (!walkLab(L, m.x + dx / d * s, m.z + dz / d * s)) break; free = s; }
+      if (free < dist) { if (free < 0.4) { if (dist >= 1.5) m.windupAt = 0; return; } dist = free; }
+    }
+    return knockback.call(this, m, p, dist);
+  };
+
+  // Moves can't hop the shut portcullis between two position messages.
+  const onInput = P.onInput;
+  P.onInput = function (p, msg) {
+    const L = labAt(p.x, p.z), x0 = p.x, z0 = p.z;
+    const r = onInput.call(this, p, msg);
+    if (L?.portEdge && !portOpen(L, this.time) && labAt(p.x, p.z) === L) {
+      const a = portSide(L, x0, z0), b = portSide(L, p.x, p.z);
+      if (a && b && a !== b) { p.x = x0; p.z = z0; }
+    }
+    return r;
   };
   const updateMob = P.updateMob;
   P.updateMob = function (m, dt) {

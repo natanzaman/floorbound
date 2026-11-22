@@ -26,7 +26,7 @@ with the mini-boss and the key. Layers live in their own patches of Floor 1's co
 
 - **Breathing** (Depths): every 70–110 s (sooner as pressure builds over 5 min in the layer) the torches gutter for 10 s
   and dead rise near each person (cap 9, gone after 45 s). Pressure resets when the layer empties.
-- **Noise:** sprinting, wading, lighting torches and fighting wake Tomb Wardens in range and send them to the sound.
+- **Noise:** wading, lighting torches and fighting wake Tomb Wardens in range and send them to the sound.
   A **bone rattle** (from chests; you start with one) thrown with interact when nothing else is in reach draws them away.
 - **Levers:** both pulled within the window raises the portcullis for 45 s; alone, the window is the walk between them
   at run speed ×1.25 plus 6 s.

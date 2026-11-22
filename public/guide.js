@@ -23,7 +23,7 @@ export const STEPS = [ // (the Game Menu's Controls & guide lists them too)
 
 const TIPS = {
   lab: 'The Undercrypt: a maze under the field. Red-glowing grates are spike plates: wait for them to sink, or jump or roll across as they rise. The Gravekeeper in the Ossuary at the heart holds the Horn Key, which unlocks the Chamber Gate. Three layers: the Catacombs, the Drowning Galleries (two bone levers raise the portcullis) and the Ossuary. Light wall torches to mark your way; chests hide in dead ends. In the Galleries the crypt breathes: the torches gutter and the dead climb out, sooner the longer you linger.',
-  labnoise: 'Tomb Wardens sleep until they hear you: sprinting, wading, lighting torches and fighting all make noise. Walk, or throw a bone rattle (interact with nothing in reach) to send them elsewhere.',
+  labnoise: 'Tomb Wardens sleep until they hear you: wading through the water, lighting torches and fighting all make noise. Keep to dry stone, or throw a bone rattle (interact with nothing in reach) to send them elsewhere.',
   wedge: 'Red wedge: a bite is coming. Step out of it or roll.',
   aim: 'Something is aiming down that red line. Sidestep it.',
   slam: 'Red circle: a ground slam (the Warden rears up, axe overhead). Roll out, or jump just as it lands: you can steer in the air.',

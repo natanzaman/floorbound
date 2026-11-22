@@ -222,7 +222,7 @@ export function initLabClient(ctx) {
   const torch = new THREE.PointLight(0xffa64d, 3.2, 20, 1.5); torch.visible = false; scene.add(torch);
   const base = { sky: scene.background.clone(), near: scene.fog.near, far: scene.fog.far, hemi: hemi?.intensity ?? 1, sun: ctx.sun?.intensity ?? 1 };
   let k = 0, sOff = null, time = 0, dirty = false, lures = 0;
-  const gutter = {}, opened = new Set(); // guttering s per layer; chests you've opened (this session)
+  const gutter = {}, opened = new Map(); // guttering s per layer; chests you've emptied -> when they fill again (performance.now s)
   const lureFx = [];
 
   // labels: the stairs, and a line for your lures
@@ -240,18 +240,20 @@ export function initLabClient(ctx) {
 
   // what's in reach: a stair, a chest, a lever, an unlit torch (nearest first); else a lure throw while you carry one
   const REACH = 2.6;
+  const isOpen = (l, k) => { const u = opened.get(`${l}:${k}`); return u !== undefined && u > performance.now() / 1000; };
   function near() {
     if (state.dead || !state.joined || state.spectator) return null;
     for (const f of LAB_FLOORS) for (const st of stairsOf(LABS[f])) if (Math.hypot(state.x - st.x, state.z - st.z) < st.r) return { a: 'stair', st, x: st.x, z: st.z };
     const L = labAt(state.x, state.z); if (!L) return null;
     let best = null;
     const consider = (a, o) => { const d = Math.hypot(state.x - o.x, state.z - o.z); if (d < REACH && (!best || d < best.d)) best = { a, o, x: o.x, z: o.z, d }; };
-    for (const c of L.chestList) if (!opened.has(`${L.id}:${c.k}`)) consider('chest', c);
+    let empty = false; // (standing at an emptied chest: no prompt, and no stray rattle throw)
+    for (const c of L.chestList) { if (!isOpen(L.id, c.k)) consider('chest', c); else if (Math.hypot(state.x - c.x, state.z - c.z) < REACH) empty = true; }
     if (!portOpen(L, now())) for (const lv of L.leverList || []) consider('lever', lv);
     const lit = new Set(labRun.lit[L.id] || []);
     for (const tc of L.torchList) if (!lit.has(tc.k)) consider('torch', tc);
     if (best) return best;
-    return lures > 0 ? { a: 'lure' } : null;
+    return lures > 0 && !empty ? { a: 'lure' } : null;
   }
   function interactKind() { const n = near(); return n ? `lab-${n.a}` : null; }
   function interact(kind) {
@@ -284,7 +286,7 @@ export function initLabClient(ctx) {
         else if (e.s === 'rise') fx.sparks?.(e.x, 0.4, e.z, 10, 0x84cc16, 0.25, 3);
         else if (e.s === 'call' && labAt(state.x, state.z)) ctx.callout('THE GRAVE BELL', 'The dead answer. Cut them down!', 2.5);
         else if (e.s === 'locked' && mine) ctx.callout('THE HORN LOCK', `Find the ${LABS[e.f].keyName} in ${LABS[e.f].name} first`, 3);
-        else if (e.s === 'chest') { if (mine) { opened.add(`${e.l}:${e.k}`); lures = e.lu ?? lures; sfx.play('loot'); } }
+        else if (e.s === 'chest') { if (mine) { opened.set(`${e.l}:${e.k}`, performance.now() / 1000 + (LAYERS.find(Q => Q.id === e.l)?.loot.cd ?? 600)); lures = e.lu ?? lures; sfx.play('loot'); } }
         else if (e.s === 'lever') { const v = views.get(e.l)?.levers[e.k]; if (v) v.at = performance.now() / 1000; sfx.play('ui', null, 0.6); if (labAt(state.x, state.z)?.id === e.l) ctx.callout('A LEVER CLANKS', `The other must follow within ${Math.round(e.d)} s`, 2); }
         else if (e.s === 'port') { sfx.play('clear', null, 0.5); if (labAt(state.x, state.z)?.id === e.l) ctx.callout('THE PORTCULLIS RISES', 'The way to the Ossuary is open', 3); }
         else if (e.s === 'torch') sfx.play('ui', null, 0.4);
@@ -358,7 +360,7 @@ export function initLabClient(ctx) {
         for (let a = 0; a < 5; a++) for (let b = 0; b < 5; b++) { m4.compose(p.set(pl.tr.x - pl.tr.half + step * (a + 0.5), pl.y, pl.tr.z - pl.tr.half + step * (b + 0.5)), q.identity(), s.set(1, 1, 1)); V.spikes.setMatrixAt(n++, m4); }
       }
       V.spikes.instanceMatrix.needsUpdate = true;
-      for (const c of V.chests) { const o = opened.has(`${Lv.id}:${c.c.k}`); c.hinge.rotation.x += ((o ? -1.9 : 0) - c.hinge.rotation.x) * Math.min(1, dt * 6); c.shine.visible = !o; if (!o) c.shine.position.y = 0.9 + 0.08 * Math.sin(time * 3 + c.c.k); }
+      for (const c of V.chests) { const o = isOpen(Lv.id, c.c.k); c.hinge.rotation.x += ((o ? -1.9 : 0) - c.hinge.rotation.x) * Math.min(1, dt * 6); c.shine.visible = !o; if (!o) c.shine.position.y = 0.9 + 0.08 * Math.sin(time * 3 + c.c.k); }
       for (const v of V.levers) { const down = wall - v.at < 8 || portOpen(Lv, t); v.arm.rotation.x += ((down ? 0.6 : -0.6) - v.arm.rotation.x) * Math.min(1, dt * 8); v.ring.material.opacity = down ? 0.6 : 0.25 + 0.1 * Math.sin(time * 3); }
       if (V.port) { const want = portOpen(Lv, t) ? Lv.height - 0.3 : 0; V.port.h += (want - V.port.h) * Math.min(1, dt * 1.5); V.port.bars.position.y = V.port.h; }
       for (const st of V.stairs) st.shaft.material.opacity = 0.1 + 0.05 * Math.sin(time * 2);

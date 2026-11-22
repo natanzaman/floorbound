@@ -76,7 +76,7 @@ export const LAYERS = LAB_FLOORS.flatMap(f => LABS[f].layers);
 
 // ---------- enemies (appended to MOBS / MOB_IDS in data.js) ----------
 // lab: the floor whose labyrinth they live in (the leash and the steering stay inside it). hears: a noise-hearing enemy
-// (dormant until a noise reaches it: sprinting, wading, a torch lit, a fight, a lure).
+// (dormant until a noise reaches it: wading, a torch lit, a fight, a lure).
 export const LAB_MOB_IDS = ['ghoul', 'gravekeeper', 'tombwarden'];
 export const LAB_MOBS = {
   ghoul: { name: 'Crypt Ghoul', hp: 150, atk: 13, speed: 5.6, aggro: 13, range: 2.0, atkCd: 1.3, xp: 45, radius: 0.8, level: 9, lab: 1 },
@@ -93,7 +93,7 @@ export const KEEPER = {
 };
 // Noise: how far each sound carries (m), how long a woken Tomb Warden stays up with nobody to fight (s).
 // The lure (a bone rattle): thrown `throw` m ahead, rattles for `secs` s, heard `r` m away. Found in chests.
-export const NOISE = { sprint: 14, wade: 12, torch: 16, fight: 10, lure: 22, awake: 20 };
+export const NOISE = { wade: 12, torch: 16, fight: 10, lure: 22, awake: 20 };
 export const LURE = { throw: 11, secs: 8, start: 1, max: 3 };
 
 // ---------- geometry (built once per layer) ----------
@@ -247,8 +247,23 @@ export function walkLab(L, x, z) {
   if ((west || east) && (south || north)) return false; // the corner posts
   const e = west ? `${i - 1},${j},E` : east ? `${i},${j},E` : south ? `${i},${j - 1},N` : north ? `${i},${j},N` : null;
   if (!e) return true;
-  if (e === L.portEdge && !portOpen(L)) return false;
+  if (e === L.portEdge && !portOpen(L)) return portSide(L, x, z) === 0 ? false : L.open.has(e);
   return L.open.has(e);
+}
+
+// The shut portcullis is a thin line, not the whole 2 m gateway, so nobody standing in the gateway when it drops is
+// frozen there: portSide() says which side of it (x, z) is (-1 / +1), or 0 inside the bars' band (PORT_BAND m each way).
+export const PORT_BAND = 0.45;
+export function portSide(L, x, z) {
+  if (!L.portEdge) return 1;
+  const [i, j, d] = L.portEdge.split(','), C = L.cell;
+  const off = d === 'E' ? x - (L.x0 + (+i + 1) * C) : z - (L.z0 + (+j + 1) * C);
+  return Math.abs(off) < PORT_BAND ? 0 : Math.sign(off);
+}
+// A point just off the portcullis on side s (for pushing people and mobs out of its band when it drops).
+export function portOff(L, x, z, s) {
+  const [i, j, d] = L.portEdge.split(','), C = L.cell, k = PORT_BAND + 0.35;
+  return d === 'E' ? [L.x0 + (+i + 1) * C + s * k, z] : [x, L.z0 + (+j + 1) * C + s * k];
 }
 
 // Steering: heading for (tx, tz) from (x, z) inside layer L, aim for the next cell's centre on the way instead
@@ -277,13 +292,16 @@ export const leverWindow = (L, people, speed = 10) => people <= 1 ? L.leverWalk 
 
 // The stairs of a labyrinth, by kind: 'in' (field -> first layer's start), 'down' (a layer's end -> the next one's
 // start), 'up' (a layer's start -> back: the previous layer's end, or the field), 'out' (the Heart's end -> the boss gate).
+const STAIRS = new Map(); // (fixed per labyrinth: built once)
 export function stairsOf(lab) {
+  if (STAIRS.has(lab)) return STAIRS.get(lab);
   const out = [{ kind: 'in', x: lab.entry.x, z: lab.entry.z, r: lab.entry.use, L: null, to: lab.layers[0] }];
   lab.layers.forEach((L, i) => {
     const [sx, sz] = startPoint(L), [ex, ez] = endPoint(L);
     out.push({ kind: 'up', x: sx, z: sz - L.cell * 0.25, r: lab.use, L, to: lab.layers[i - 1] || null });
     out.push({ kind: L.last ? 'out' : 'down', x: ex, z: ez + L.cell * 0.15, r: lab.use, L, to: lab.layers[i + 1] || null });
   });
+  STAIRS.set(lab, out);
   return out;
 }
 
