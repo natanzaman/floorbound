@@ -16,7 +16,7 @@ Herbs, ore, fish and crops become meals (fight buffs), potions and Smith gear. G
     trip). Too soon or too late: the fish gets away and the pool is not used up.
   - **Depletion is per player** (decision): a spot you emptied refills for you after 2.5-4 min; nobody else's gathering
     (players, bots, the Named) touches yours, so nobody can take your spot. Timers are wall-clock ms, saved.
-- **Garden**: each character has their own 6-tile plot in the town garden (west of the plaza). Instanced per character:
+- **Garden**: each character has their own 6-tile plot in the town garden (north-west of the plaza, at (-12, 15)). Instanced per character:
   everyone sees their own crops on the same tiles. Plant seeds (the merchant sells three kinds; herb patches drop some;
   Moonroot seeds only from Floor 3 and labyrinth herbs), crops grow in real wall-clock time (20 min to 6 h) and keep
   growing while you're offline and across restarts. Harvest when ripe (a seed back sometimes); Clear an unwanted crop.
