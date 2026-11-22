@@ -35,7 +35,7 @@ const alive = p => p && !p.dead && !p.downed;
 // Open our setup on the target for a partner close enough to cash it in. Returns true when it acted.
 export function setupTurn(b, tgt, ctx) {
   const S = BOT_SETUP[b.cls];
-  if (!S || !tgt || ctx.dodge || tgt.def.prop || b.duel) return false;
+  if (!S || !tgt || ctx.dodge || tgt.def.prop || b.duel || !ctx.ready || tgt.staggered) return false; // (the tank holds it first; never on a Broken target: that's a Switch)
   if (b.setFor && b.t > b.setFor.until) b.setFor = null;
   const ids = combosOf(S.k), mates = ctx.party?.mates || [];
   const fits = p => alive(p) && p.id !== b.id && ids.some(id => canPay(p.cls, id))
@@ -62,7 +62,7 @@ export function setupTurn(b, tgt, ctx) {
 // Keep our own chain going: right after a step (a skill press or a basic finisher), press another chain skill.
 export function chainTurn(b, tgt, ctx) {
   const list = BOT_CHAIN[b.cls];
-  if (!list || !tgt || ctx.dodge || tgt.def.prop) return false;
+  if (!list || !tgt || ctx.dodge || tgt.def.prop || b.duel || !ctx.ready || tgt.staggered) return false;
   let last = -1, at = b.finAt ?? -99;
   for (let s = 1; s < 4; s++) { const p = b.pressed?.[s] ?? -99; if (p > at) { at = p; last = s; } }
   if (b.t - at > CHAIN.window * 0.7 || b.t - at < 0.25) return false;

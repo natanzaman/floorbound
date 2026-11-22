@@ -38,9 +38,13 @@ const ok = name => console.log(`  ok ${++n} - ${name}`);
   r = chainStep(c, 'swordsman', 'whirl', 11.9); c = r.c;
   assert.equal(r.link.n, 3); assert.equal(r.link.art.id, 'cyclonecut');
   r = chainStep(c, 'swordsman', 'fin', 12.5); c = r.c;
-  assert.equal(r.link, null, 'a move already in this chain starts a new one'); assert.equal(c.n, 1);
-  r = chainStep(c, 'swordsman', 'burst', 12.5 + CHAIN.window + 0.1); c = r.c;
+  assert.equal(r.link, null, 'a move already in this chain: ignored'); assert.equal(c.n, 3, '... the chain keeps going');
+  assert.ok(chainMult(c, 12.6) > 1 + CHAIN.step * 1.5, '... and its bonus');
+  r = chainStep(c, 'swordsman', 'burst', 12.5); assert.equal(r.link?.n, 4, 'the next new move still links'); c = r.c;
+  r = chainStep(c, 'swordsman', 'rush', 12.5 + CHAIN.window + 0.1); c = r.c;
   assert.equal(r.link, null, 'too late: a new chain'); assert.equal(c.n, 1);
+  assert.ok(chainMult(c, 12.5 + CHAIN.window + 0.2) > 1 + CHAIN.step * 2.5, 'a new chain keeps the old bonus for its full hold');
+  { let d = chainStep(null, 'swordsman', 'fin', 30).c; const q = chainStep(d, 'swordsman', 'rush', 30.05); assert.equal(q.link, null, 'inside minGap: ignored'); assert.equal(q.c.k, 'fin'); }
   // to x4 and done
   c = null;
   for (const [k, t] of [['fin', 20], ['rush', 20.5], ['whirl', 21], ['burst', 21.5]]) c = chainStep(c, 'swordsman', k, t).c;
@@ -64,7 +68,8 @@ const swo = mk('Swo', 'swordsman'), cle = mk('Cle', 'cleric');
 g.time = 100;
 const mob = g.addMob('wolf', X, Z + 1);
 mob.face = angleTo(mob.x, mob.z, X, Z - 2); mob.maxHp = mob.hp = 1e6; mob.posture = 0; mob.def = { ...mob.def, posture: 1e9 };
-const hit = (p, opts) => { flush(); const k = events.length; g.damageMob(mob, p, 100, opts); flush(); return events.slice(k).find(e => e.t === 'hit' && e.by === p.id); };
+const press = (p, sk) => { (p.chPress ||= {})[sk] = g.time; };
+const hit = (p, opts) => { if (opts.sk) press(p, opts.sk); flush(); const k = events.length; g.damageMob(mob, p, 100, opts); flush(); return events.slice(k).find(e => e.t === 'hit' && e.by === p.id); };
 {
   clear();
   const base = hit(swo, { tsk: 'slash', heavy: true }).a; // fin: chain x1
@@ -114,6 +119,15 @@ const hit = (p, opts) => { flush(); const k = events.length; g.damageMob(mob, p,
   assert.ok(e && e.n === 2 && e.k === 'prayer', 'Heal then Smite: Answered Prayer');
   ok('support skills are a step when used (Heal -> Smite: Answered Prayer)');
 }
+{ // a zone ticking on long after its press is no step
+  clear();
+  g.time += 10;
+  hit(swo, { tsk: 'slash', heavy: true });
+  g.time += 0.5;
+  swo.chPress.whirl = g.time - 4; flush(); g.damageMob(mob, swo, 100, { sk: 'whirl' }); // (a late tick: no press refresh)
+  assert.equal(ev('chain').filter(e => e.id === swo.id).length, 0, 'no link from a late tick');
+  ok('a skill\'s hits long after its press (zones, traps) are no step');
+}
 { // a combo's own damage (_tbIn) is never a step
   clear();
   g.time += 5;
@@ -127,7 +141,7 @@ const hit = (p, opts) => { flush(); const k = events.length; g.damageMob(mob, p,
   const sent = [];
   const b = { cls: 'swordsman', skill: 5, t: 50, x: 0, z: 0, face: 0, cds: [0, 0, 0, 0], pressed: [], finAt: 49.6 };
   const tgt = { id: 9, x: 0, z: 2, def: { radius: 0.6 } };
-  const ctx = { dodge: null, useSkill: (bb, slot) => { sent.push(slot); return true; } };
+  const ctx = { dodge: null, ready: true, useSkill: (bb, slot) => { sent.push(slot); return true; } };
   const orig = BOT_CHAIN.chance; BOT_CHAIN.chance = [0, 1, 1, 1, 1, 1];
   try {
     assert.equal(chainTurn(b, tgt, ctx), true); assert.deepEqual(sent, [1], 'after a finisher: Rush');

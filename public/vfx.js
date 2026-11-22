@@ -24,8 +24,10 @@ const CLASS_COL = {
   deuter: { guardian: 0xbcd7ff, berserker: 0xd9a8ff, cleric: 0xffffff },
   trit: { bard: 0xa5f3fc, berserker: 0xff8a3d },
 };
+// Gold (finishers, Breaks, completed chains) sits next to the red-green palette's amber danger colour: pale ice instead.
+const gold = () => (paletteMode() === 'deuter' ? 0xcfeaff : GOLD_);
 export const classColor = cls => CLASS_COL[paletteMode()]?.[cls] ?? CLASS_COL.off[cls] ?? 0xdbeafe;
-const WHITE = 0xffffff, GOLD = 0xffd76a;
+const WHITE = 0xffffff, GOLD_ = 0xffd76a;
 // How far along the hand slot's +Y the weapon reaches (rig units), for the trail's outer edge.
 const REACH = { swordsman: 1.7, guardian: 1.7, cleric: 2.0, ranger: 1.3, berserker: 2.3, lancer: 3.1, bard: 1.4 };
 
@@ -292,14 +294,14 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
   const FX = {
     cut(e, ox, oz, col) { // a crescent through the swing: the Burst Combo's steps alternate, a basic finisher is bigger
       const r = e.r || 3, fin = e.fin || e.c === 'gold', tilt = (e.n % 2 ? -1 : 1) * (fin ? 0.5 : 0.85);
-      blade(ox + Math.sin(e.f) * 0.3, 1.15, oz + Math.cos(e.f) * 0.3, e.f, tilt, r * 0.6, r * (fin ? 1.05 : 0.9), fin ? GOLD : col, { life: fin ? 0.3 : 0.22 });
+      blade(ox + Math.sin(e.f) * 0.3, 1.15, oz + Math.cos(e.f) * 0.3, e.f, tilt, r * 0.6, r * (fin ? 1.05 : 0.9), fin ? gold() : col, { life: fin ? 0.3 : 0.22 });
     },
     finisher(e, ox, oz, col) { // crossed blades, a pillar and a shock where the last blow lands
       const r = e.r || 3.2, x = ox + Math.sin(e.f) * r * 0.55, z = oz + Math.cos(e.f) * r * 0.55;
-      blade(ox, 1.2, oz, e.f, 0.95, r * 0.7, r * 1.25, GOLD, { life: 0.34 });
-      blade(ox, 1.2, oz, e.f, -0.95, r * 0.7, r * 1.25, GOLD, { life: 0.34, delay: 0.04 });
+      blade(ox, 1.2, oz, e.f, 0.95, r * 0.7, r * 1.25, gold(), { life: 0.34 });
+      blade(ox, 1.2, oz, e.f, -0.95, r * 0.7, r * 1.25, gold(), { life: 0.34, delay: 0.04 });
       blade(ox, 1.0, oz, e.f, 0.05, r * 0.8, r * 1.4, WHITE, { life: 0.3, delay: 0.08 });
-      pillar(x, z, 0.9, 6, GOLD, { life: 0.4 });
+      pillar(x, z, 0.9, 6, gold(), { life: 0.4 });
       shock(x, z, r * 0.9, col, { h: 0.9 });
       fx.flash(x, 1.4, z, 3.2, 0xfff3c4, 0.18);
     },
@@ -346,7 +348,7 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
     thrust(e, ox, oz, col) { // spear and rapier basics: only the finishing thrust gets a lance
       if (e.n !== 2) return;
       streak(ox, 1.25, oz, e.f, (e.r || 4) * 1.05, 0.16, col, { life: 0.22 });
-      hoop(ox + Math.sin(e.f) * (e.r || 4), 1.25, oz + Math.cos(e.f) * (e.r || 4), e.f, 0.3, 1.1, GOLD, { life: 0.25, delay: 0.04 });
+      hoop(ox + Math.sin(e.f) * (e.r || 4), 1.25, oz + Math.cos(e.f) * (e.r || 4), e.f, 0.3, 1.1, gold(), { life: 0.25, delay: 0.04 });
     },
     pierce(e, ox, oz, col) { // Piercing Shot: a tracer the whole range, rings where it tears through the air
       const r = e.r || 24, sx = Math.sin(e.f), sz = Math.cos(e.f), w = e.big ? 0.36 : 0.24;
@@ -403,7 +405,7 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
     fx.flash(x, h, z, 2.4 * s, WHITE, 0.14);
     if (kind === 'cross') { blade(x, h, z, rnd(0, 6.3), 0.8, 1.4 * s, 2.7 * s, col); blade(x, h, z, rnd(0, 6.3), -0.8, 1.4 * s, 2.7 * s, WHITE, { delay: 0.05 }); }
     else if (kind === 'quake') { rocks(x, z, 2.6 * s, e.self ? 5 : 8, 1.5 * s); shock(x, z, 3 * s, col, { h: 1.4 * s }); }
-    else if (kind === 'judge') { pillar(x, z, 0.9 * s, 9, 0xfff1b8, { life: 0.5 }); disc(x, 0.15, z, 0.4, 2.6 * s, GOLD, { life: 0.4 }); }
+    else if (kind === 'judge') { pillar(x, z, 0.9 * s, 9, 0xfff1b8, { life: 0.5 }); disc(x, 0.15, z, 0.4, 2.6 * s, gold(), { life: 0.4 }); }
     else if (kind === 'beat') { for (let i = 0; i < 2; i++) disc(x, h * (0.6 + i * 0.7), z, 0.4, (3 - i * 0.6) * s, i ? WHITE : col, { life: 0.45, delay: i * 0.07 }); }
     else if (kind === 'spike') { const f = rnd(0, 6.3); streak(x - Math.sin(f) * 2.4 * s, h, z - Math.cos(f) * 2.4 * s, f, 4.8 * s, 0.18, col, { life: 0.26 }); hoop(x, h, z, f, 0.3, 1.5 * s, WHITE, { life: 0.26 }); }
     else shock(x, z, 2.2 * s, col, { h: 0.9 * s, life: 0.32 });
@@ -420,7 +422,7 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
     const n = Math.max(1, Math.min(9, e.n | 0)), p = players.get(e.id);
     chains.set(e.id, { n, until: performance.now() + (chainHold + 0.5) * 1000 });
     if (e.id === me()) {
-      const name = e.name || arts?.[p?.cls || state.cls]?.[e.k]?.name || '';
+      const name = e.nm || e.name || arts?.[p?.cls || state.cls]?.[e.k]?.name || '';
       chainEl.innerHTML = `<span>CHAIN <b>x${n}</b>${name ? ` · <i>${esc(name)}</i>` : ''}</span>`;
       chainEl.className = `on n${Math.min(4, n)}`;
       if (!calm()) { void chainEl.offsetWidth; chainEl.classList.add('pop'); }
@@ -429,8 +431,8 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
     if (!Q.fx3d || !p || p.culled) return;
     const g = p.model.group.position, col = classColor(p.cls);
     disc(g.x, 0.12, g.z, 0.5, 1.5 + n * 0.3, col, { life: 0.4, a: e.id === me() ? 0.9 : 0.55 }); // a ring at the feet, wider with the chain
-    if (n >= 3) pillar(g.x, g.z, 0.5, 2.2 + n * 0.4, n >= 4 ? GOLD : col, { life: 0.36, a: e.id === me() ? 0.6 : 0.4 });
-    if (e.k || n >= 3) fx.sparks(g.x, 1.2, g.z, 4 + n * 2, n >= 4 ? GOLD : col, 0.2, 5);
+    if (n >= 3) pillar(g.x, g.z, 0.5, 2.2 + n * 0.4, n >= 4 ? gold() : col, { life: 0.36, a: e.id === me() ? 0.6 : 0.4 });
+    if (e.k || n >= 3) fx.sparks(g.x, 1.2, g.z, 4 + n * 2, n >= 4 ? gold() : col, 0.2, 5);
   }
   function chainFrame() {
     const c = chains.get(me()), on = !!c && performance.now() < c.until && !state.dead && !state.spectator;
@@ -477,14 +479,14 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
         return false;
       case 'tburst':
         if (Q.fx3d) burst(e);
-        if (e.ids?.includes(me()) || e.key === (state.party || me())) kick(Math.min(1, 0.6 + 0.1 * (e.n || 1)));
+        if (e.ids?.includes(me())) kick(Math.min(1, 0.6 + 0.1 * (e.n || 1)));
         return false;
       case 'stagger': { // a Break: the guard shatters
         const m = mobs.get(e.id);
         if (!m || !Q.fx3d) return false;
         const g = m.model.group.position, h = Math.min(m.model.height * 0.6, 3.2);
-        fx.flash(g.x, h, g.z, 3.6, 0xffe27a, 0.2);
-        shock(g.x, g.z, m.def.radius + 2.8, GOLD, { h: 1.5, life: 0.42 });
+        fx.flash(g.x, h, g.z, 3.6, gold(), 0.2);
+        shock(g.x, g.z, m.def.radius + 2.8, gold(), { h: 1.5, life: 0.42 });
         fx.spray(g.x, h, g.z, 0, 1, 0, 16, 0xffe9a8, 0.26, 9, 0.9);
         if (e.by === me()) kick(0.5);
         return false;
@@ -498,8 +500,8 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
     if (!Q.fx3d || !(e.h || e.c)) return;
     const g = m.model.group.position, r = m.def.radius * 0.8, y = Math.min(m.model.height * 0.55, m.def.boss ? 3.2 : 2.2);
     const x = g.x - dx * r, z = g.z - dz * r;
-    fx.flash(x, y, z, e.h && e.c ? 2.8 : e.h ? 2.1 : 1.7, e.c ? 0xffe27a : 0xfff0d8, e.h ? 0.15 : 0.11);
-    if (e.h) fx.spray(x, y, z, dx, 0.35, dz, e.c ? 14 : 9, e.c ? 0xffe27a : 0xffd9a0, 0.24, 11, 0.5);
+    fx.flash(x, y, z, e.h && e.c ? 2.8 : e.h ? 2.1 : 1.7, e.c ? gold() : 0xfff0d8, e.h ? 0.15 : 0.11);
+    if (e.h) fx.spray(x, y, z, dx, 0.35, dz, e.c ? 14 : 9, e.c ? gold() : 0xffd9a0, 0.24, 11, 0.5);
     const by = players.get(e.by);
     if (by?.model.anim?.recoil && near(by)) by.model.anim.recoil(e.h ? 1 : 0.5);
     if (e.by === me() && e.h) kick(e.c ? 0.5 : 0.36);

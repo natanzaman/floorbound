@@ -118,3 +118,19 @@ can't hold it. Test: `node test/visuals.mjs`.
 `test/chains.js` (link rules, window, repeat, cap, hold, refund, arts, bots), `test/teamplay.js` extended (self-combos,
 the new setups / payoffs, every pair covered, traits and pair names), bot runs (`test/team.js`, `test/wardenskill.js`)
 reporting combos, chains and bursts per fight; a client frame-cost check before/after on the visuals branch.
+
+## Independent review (Fable, 2026-11-22) and fixes
+- Repeating a move already in the chain reset it (and cut the bonus): now ignored inside the window; a new chain keeps
+  the old bonus for its full hold; moves inside `minGap` are ignored.
+- Zones, traps and mines that tick on (Consecrate, caltrops) counted as steps and could loop named links: a slot skill's
+  hits are its step only within `STEP_LAG` (2.5 s) of its press. Support skills used in a duel are no step.
+- Self-combos gave full combo credit and one per enemy hit: now `comboSelf` (+3 Burst fill, not on the card), at most
+  one per `COMBO.selfGap` (1.5 s); the Guardian's Bash finisher no longer pays its own Stunned (Taunt does).
+- Bot setup / chain turns skipped the class brains' gates: now after the threat ease-off, only once the tank holds the
+  target (`ctx.ready`), never on a Broken target, never in a duel; the Guardian left out of `BOT_CHAIN` (its Slam is the
+  party's Break).
+- Burst traits used the starter's attack and credit: now the first joiner of that class. Blades 0.5× attack a hit
+  (was 1.4× through an extra `BURST.per`).
+- "Set me up" to a bot outside your party said yes and did nothing: it now asks to be invited first.
+- Client: the chain counter reads the server's `nm`; the Team Burst kick only for joiners; finisher / Break gold turns
+  pale ice under the red-green palette (it sat next to the amber danger colour).

@@ -5,8 +5,10 @@ import { CLASSES } from './data.js';
 
 // window: seconds a setup stays open for a payoff by a DIFFERENT player; chain: seconds between two combos on the same
 // target that keep its chain counter going ("Combo x2"); again: seconds before the same combo can land on the same target again;
-// self: a self-combo (your own setup, your own payoff) gives this share of the combo's bonus (damage, posture, root, stun).
-export const COMBO = { window: 2.5, chain: 6, again: 6, self: 0.6 };
+// self: a self-combo (your own setup, your own payoff) gives this share of the combo's bonus (damage, posture, root, stun);
+// selfGap: s between two self-combos by one player (an area hit pays one, not one per enemy). Self-combos count as
+// 'comboSelf' (a smaller Burst fill, not the post-fight card's combos).
+export const COMBO = { window: 2.5, chain: 6, again: 6, self: 0.6, selfGap: 1.5 };
 
 // Hits that count as ranged (any Ranger hit is ranged too).
 export const RANGED = new Set(['smite', 'sonic', 'dissonance']);
@@ -38,7 +40,7 @@ export const COMBOS = {
     tip: 'Skewer: a Lancer launched it (Sky Lance / Sweep). Hit it with a ranged attack within 2.5 s.' },
   execute: { name: 'Execute', on: 'hit', setup: 'stun', mult: 1.1, crit: true, frac: [0.3, 0.05],
     pay: [{ cls: 'berserker', heavy: true }, { cls: 'swordsman', sk: ['burst'] }, { cls: 'lancer', fin: true }, { cls: 'ranger', heavy: true }],
-    self: [{ cls: 'guardian', fin: true }, { cls: 'guardian', sk: ['taunt'] }],
+    self: [{ cls: 'guardian', sk: ['taunt'] }], // (not the Bash finisher: it re-opens Stunned itself)
     tip: 'Execute: a Guardian stunned it (Ground Slam / Bash finisher). A Berserker heavy, Swordsman Burst Combo, Lancer Thrust finisher or Ranger heavy arrow within 2.5 s always crits.' },
   pin: { name: 'Pin', on: 'hit', setup: 'mark', mult: 1.1, root: 1.5, frac: [0.15, 0.03],
     pay: [{ cls: 'lancer', sk: ['lcharge', 'lthrust'] }, { cls: 'swordsman', sk: ['rush'] }, { cls: 'berserker', sk: ['leap'] }],
@@ -75,7 +77,7 @@ export const COMBO_IDS = Object.keys(COMBOS);
 // BREAKs the target (n >= 2; solo: a posture chunk) and gives the team +dmg for buffD s.
 export const BURST = {
   max: 100,
-  fill: { combo: 8, switch: 5, break: 4, parry: 4, revive: 15, save: 8, cover: 4, mechanic: 5, perfect: 2, chain: 0.5, chainDone: 2 },
+  fill: { combo: 8, switch: 5, break: 4, parry: 4, revive: 15, save: 8, cover: 4, mechanic: 5, perfect: 2, chain: 0.5, chainDone: 2, comboSelf: 3 },
   soloFill: 0.5, drain: 4, idle: 6, sync: 3, range: 40,
   power: [0, 0.6, 1, 1.2, 1.35, 1.45, 1.55],
   per: 4, soloFrac: [0.5, 0.18], buff: [0, 0.08, 0.12, 0.14, 0.16, 0.17, 0.18], buffD: 6, buffR: 20, targetR: 14,
@@ -83,11 +85,11 @@ export const BURST = {
 };
 
 // Class traits in the finisher (server/teamplay.js burstTraits): every distinct class among the joiners adds its own.
-//   blades: extra hits (n x per x attack each) · aegis: a shield on the team (fraction of max HP, s) · radiance: heals the
+//   blades: extra hits (each per x attack) · aegis: a shield on the team (fraction of max HP, s) · radiance: heals the
 //   team (fraction of max HP) · volley: damage to other enemies within r of the target (x per x attack) · fury: the
 //   finisher's damage x · impale: root (s; a boss is slowed) · resonance: s off the team's skill cooldowns.
 export const BURST_TRAITS = {
-  swordsman: { k: 'blades', hits: 3, per: 0.35 },
+  swordsman: { k: 'blades', hits: 3, per: 0.5 },
   guardian: { k: 'aegis', shield: 0.15, d: 6 },
   cleric: { k: 'radiance', heal: 0.15 },
   ranger: { k: 'volley', r: 9, per: 1.2 },

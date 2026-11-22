@@ -340,7 +340,9 @@ function command(b, c) {
       b.cmd = null; b.healFocus = null;
       return b.send({ type: 'leave' });
     case 'status': return say(b, 'status', {}, { force: true, text: statusText(b) });
-    case 'setme': return c.by && c.by !== b.id ? ack('setme') : undefined; // (the setup itself: shared/bots/teamplay.js)
+    case 'setme': // (the setup itself: shared/bots/teamplay.js, for a partymate only)
+      if (!c.by || c.by === b.id) return;
+      return c.adm || !b.party ? ack('setme', {}, "Invite me to your party first, then I'll set you up.") : ack('setme');
   }
 }
 
@@ -535,9 +537,8 @@ function act(b, P, M) {
   if (!dodge && overloadTurn(b, tgt)) return; // Floor 3: the Colossus is Overloading: Break it
   if (!dodge && openingTurn(b, tgt, ctx)) return; // a boss opening: melee in, then out before it closes (J3)
   if (comboTurn(b, tgt, ctx)) return; // a partner's combo setup on the target: cash it in
-  if (setupTurn(b, tgt, ctx)) return; // open our setup for a partner who can cash it in (Set me up)
-  if (chainTurn(b, tgt, ctx)) return; // keep our skill chain going
   if (easeOff(b, tgt, ctx)) b.easeT = b.t; // near 90% threat: keep position, hold attacks (skill 4+)
+  else if (setupTurn(b, tgt, ctx) || chainTurn(b, tgt, ctx)) return; // open our setup for a partner (Set me up); keep our skill chain going
   if (!brain.combat || brain.combat(b, tgt, ctx) === false) brainFor('*').combat(b, tgt, ctx);
 }
 

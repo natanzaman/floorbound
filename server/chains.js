@@ -6,9 +6,10 @@
 //  - useSkill: support skills (SUPPORT: no hit by design) are a step when used (their cooldown started).
 //  - update: { t: 'chainEnd', id } once a chain of x2+ lapses.
 // Events: { t: 'chain', id, n, k (art id or ''), nm (art name or ''), s (step: skill id or 'fin'), x, z }.
-// Hits inside a duel go through the duel's stand-ins outside this wrapper, so duels have no chains (PvP stays even).
+// Duels have no chains (PvP stays even): duel hits go through stand-ins outside this wrapper, and nothing in a duel is a step.
+// A slot skill's hits are its step only within STEP_LAG s of the press (p.chPress), so zones and traps ticking on are not.
 import { CLASSES } from '../shared/data.js';
-import { CHAIN, SUPPORT, stepOf, chainStep, chainMult } from '../shared/chains.js';
+import { CHAIN, SUPPORT, STEP_LAG, stepOf, chainStep, chainMult } from '../shared/chains.js';
 
 const r2 = v => Math.round(v * 100) / 100;
 
@@ -21,7 +22,6 @@ const methods = {
     if (!link) return null;
     const art = link.art;
     this.events.push({ t: 'chain', id: p.id, n: link.n, k: art?.id || '', nm: art?.name || '', s: k, x: r2(p.x), z: r2(p.z) });
-    c.endSent = false;
     this.teamStat?.(p, 'chain');
     if (link.n >= 3) for (let s = 1; s < 4; s++) { // the other skills come back sooner
       const id = CLASSES[p.cls]?.skills[s]?.id;
@@ -36,7 +36,7 @@ const methods = {
     const t = this.time;
     for (const p of this.players.values()) {
       const c = p.chain;
-      if (!c || c.n < 2 || c.endSent || t < c.until) continue;
+      if (!c || c.bn < 2 || c.endSent || t < c.until) continue;
       c.endSent = true;
       this.events.push({ t: 'chainEnd', id: p.id });
     }
@@ -50,7 +50,9 @@ export function installChains(Game) {
 
   wrap('damageMob', function (orig, m, p, base, opts = {}) {
     if (!p?.cls || this._tbIn || !this.targetable(m)) return orig.call(this, m, p, base, opts);
-    const t = this.time, k = stepOf(p.cls, opts.sk || opts.tsk || p._tsk, opts.heavy);
+    const t = this.time;
+    let k = this.duelOf?.(p) ? null : stepOf(p.cls, opts.sk || opts.tsk || p._tsk, opts.heavy);
+    if (k && k !== 'fin' && !(t - (p.chPress?.[k] ?? -99) <= STEP_LAG)) k = null; // a zone / trap / mine ticking on later
     const mul = chainMult(p.chain, t);
     const ev0 = this.events.length;
     const out = orig.call(this, m, p, base * mul, opts);
@@ -64,7 +66,10 @@ export function installChains(Game) {
   wrap('useSkill', function (orig, p, slot, face) {
     const sk = CLASSES[p?.cls]?.skills[slot | 0], before = p?.cds?.[slot];
     const out = orig.call(this, p, slot, face);
-    if (sk && SUPPORT.has(sk.id) && p.cds[slot] !== before && !p.dead) this.chainNote(p, sk.id, null);
+    if (sk && p.cds[slot] !== before && !p.dead) { // it was used
+      (p.chPress ||= {})[sk.id] = this.time;
+      if (SUPPORT.has(sk.id) && !this.duelOf?.(p)) this.chainNote(p, sk.id, null);
+    }
     return out;
   });
 

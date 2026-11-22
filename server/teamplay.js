@@ -63,7 +63,7 @@ const methods = {
     m.tbChain = nextChain(m.tbChain, t);
     (m.tbLast ||= {})[id] = t;
     this.events.push({ t: 'combo', id: m.id, k: id, n: m.tbChain.n, by: by.id, from: from?.id || 0, x: r2(m.x), z: r2(m.z), ...extra });
-    this.teamStat(by, 'combo');
+    this.teamStat(by, extra.self ? 'comboSelf' : 'combo');
     if (from && from !== by) this.teamStat(from, 'setup');
   },
   // Payoff effects after the hit (posture chunk, root, a second stun, Discord).
@@ -180,7 +180,7 @@ const methods = {
           this.damageMob(m, o, o.atk * this.dmgMult(o) * BURST.per * pow * fury, { heavy: true, threat: 0.5 });
         }
       } finally { this._tbIn = false; }
-      this.burstTraits(fl.cls, tm, starter, m, key);
+      this.burstTraits(fl.cls, tm, starter, m, key, joiners);
       if (this.targetable(m) && t >= (m.staggerUntil || 0)) {
         this._tbIn = true;
         try {
@@ -197,31 +197,32 @@ const methods = {
     }
   },
   // The finisher's class traits (shared/teamplay.js BURST_TRAITS; fury is applied to the hits above): k = strength.
-  burstTraits(classes, k, starter, m, key) {
+  // Each trait is the first joiner of that class's (their attack, their heal and shield credit).
+  burstTraits(classes, k, starter, m, key, joiners = [starter]) {
     const t = this.time, team = this.teamOf(key).filter(o => !o.dead && !o.downed && dist(o, starter) <= BURST.buffR);
     for (const cls of classes) {
-      const T = BURST_TRAITS[cls];
+      const T = BURST_TRAITS[cls], own = joiners.find(o => o?.cls === cls) || starter;
       if (!T) continue;
       if (T.k === 'blades' && this.targetable(m)) {
         for (let i = 1; i <= T.hits; i++) this.schedule(0.12 * i, () => {
-          if (!this.targetable(m) || !this.players.has(starter.id)) return;
+          if (!this.targetable(m) || !this.players.has(own.id)) return;
           this._tbIn = true;
-          try { this.damageMob(m, starter, starter.atk * this.dmgMult(starter) * BURST.per * T.per * k, { threat: 0.3 }); } finally { this._tbIn = false; }
+          try { this.damageMob(m, own, own.atk * this.dmgMult(own) * T.per * k, { threat: 0.3 }); } finally { this._tbIn = false; }
         });
       } else if (T.k === 'aegis') {
         for (const o of team) {
           const hp = Math.round(o.maxHp * T.shield * k);
-          if (!(o.shield && t < o.shield.until && o.shield.hp > hp)) o.shield = { hp, max: hp, until: t + T.d, by: starter.id, k: 'tburst' };
+          if (!(o.shield && t < o.shield.until && o.shield.hp > hp)) o.shield = { hp, max: hp, until: t + T.d, by: own.id, k: 'tburst' };
           this.events.push({ t: 'buff', id: o.id, k: 'aegis', d: T.d });
         }
       } else if (T.k === 'radiance') {
-        for (const o of team) this.healPlayer(o, o.maxHp * T.heal * k, starter, null);
+        for (const o of team) this.healPlayer(o, o.maxHp * T.heal * k, own, null);
       } else if (T.k === 'volley' && m) {
         this._tbIn = true;
         try {
           for (const o of this.mobs.values()) {
             if (o === m || !this.targetable(o) || Math.hypot(o.x - m.x, o.z - m.z) > T.r + o.def.radius) continue;
-            this.damageMob(o, starter, starter.atk * this.dmgMult(starter) * T.per * k, { threat: 0.3 });
+            this.damageMob(o, own, own.atk * this.dmgMult(own) * T.per * k, { threat: 0.3 });
           }
         } finally { this._tbIn = false; }
       } else if (T.k === 'impale' && this.targetable(m)) {
@@ -270,7 +271,10 @@ export function installTeamplay(Game) {
     }
     const t = this.time, mk = m.markA;
     const h = hitInfo(p.cls, opts.sk || opts.tsk || p._tsk, { heavy: opts.heavy, stun: opts.stun, interrupt: opts.interrupt, ownMark: !!mk && mk.by === p.id && t < mk.until });
-    const pay = payoffFor(m.tbSet, h, p.id, t, m.tbLast), c = pay ? (pay.self ? selfScaled(pay.def) : pay.def) : null;
+    let pay = payoffFor(m.tbSet, h, p.id, t, m.tbLast);
+    if (pay?.self && t - (p.selfComboAt ?? -99) < COMBO.selfGap) pay = null; // one self-combo per swing, not one per enemy
+    if (pay?.self) p.selfComboAt = t;
+    const c = pay ? (pay.self ? selfScaled(pay.def) : pay.def) : null;
     let crit = null;
     if (c?.crit) { crit = p.crit; p.crit = 1; }
     const ev0 = this.events.length;

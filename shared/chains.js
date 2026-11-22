@@ -80,32 +80,37 @@ export function artFor(cls, from, to) {
 }
 export const artName = (cls, id) => CHAIN_ARTS[cls]?.[id]?.name || '';
 
-// Pure chain state machine. c: the player's chain { k, last, n, until, used: [keys], done } or null; a step `k` landing
-// at time t. Returns { c: the new state, link: null | { n, art } } (link: this step linked; `art` a named art or null).
+// Pure chain state machine. c: the player's chain { k, at, last, n, used: [keys], done, bn, until } or null; a step `k`
+// landing at time t. n counts the links of the chain being built; bn / until are the live bonus (kept when a new chain
+// starts, so a bonus always runs its full `hold`). Returns { c: the new state, link: null | { n, art } }.
+//  - the same move again (multi-hit, or pressed again) within the window: it just keeps the step open;
+//  - within the window, a move not yet in this chain: a link; a move already in it (or one inside minGap): ignored;
+//  - otherwise (no chain, lapsed or completed): a new chain starts with this move.
 export function chainStep(c, cls, k, t) {
   if (!k) return { c, link: null };
-  if (c && c.k === k && t - c.last <= CHAIN.window + 1e-9) { // the same move still landing (multi-hit) or pressed again
-    c.last = t;
-    return { c, link: null };
-  }
-  const live = c && !c.done && t - c.last <= CHAIN.window + 1e-9 && t - c.at >= CHAIN.minGap - 1e-9;
-  if (live && !c.used.includes(k)) {
+  const inWin = c && t - c.last <= CHAIN.window + 1e-9;
+  if (inWin && c.k === k) { c.last = t; return { c, link: null }; }
+  if (inWin && !c.done) {
+    if (c.used.includes(k) || t - c.at < CHAIN.minGap - 1e-9) return { c, link: null };
     const n = Math.min(CHAIN.max, c.n + 1), art = artFor(cls, c.k, k);
     c.used.push(k);
-    Object.assign(c, { k, at: t, last: t, n, until: t + CHAIN.hold, done: n >= CHAIN.max });
+    Object.assign(c, { k, at: t, last: t, n, bn: n, until: t + CHAIN.hold, done: n >= CHAIN.max, endSent: false });
     return { c, link: { n, art } };
   }
-  return { c: { k, at: t, last: t, n: 1, until: 0, used: [k], done: false }, link: null };
+  return { c: { k, at: t, last: t, n: 1, used: [k], done: false, bn: c?.bn || 0, until: c?.until || 0, endSent: c ? !!c.endSent : true }, link: null };
 }
 // The damage multiplier a live chain gives at time t.
-export const chainMult = (c, t) => (c && c.n >= 2 && t < c.until ? 1 + CHAIN.step * (c.n - 1) : 1);
+export const chainMult = (c, t) => (c && c.bn >= 2 && t < c.until ? 1 + CHAIN.step * (c.bn - 1) : 1);
+// A slot skill's hits count as its step only this long after it was pressed (zones, traps and mines that tick on later
+// are not steps); basic finishers count whenever they land.
+export const STEP_LAG = 2.5;
 
 // Bots: the skills a class may press to keep its own chain going (slot, max distance to the target's edge), and the
-// chance (by capability 1-5) it does so after a step. Healers and utility skills are left to the class brains.
+// chance (by capability 1-5) it does so after a step. Healers, tanks (the Guardian's Slam is its Break) and utility skills
+// are left to the class brains.
 export const BOT_CHAIN = {
   chance: [0, 0.1, 0.25, 0.45, 0.65, 0.8],
   swordsman: [{ slot: 1, range: 6 }, { slot: 2, range: 3.5 }],
-  guardian: [{ slot: 3, range: 4 }],
   ranger: [{ slot: 1, range: 18 }],
   berserker: [{ slot: 1, range: 3.5 }, { slot: 2, range: 10 }],
   lancer: [{ slot: 1, range: 8 }, { slot: 2, range: 3.5 }],

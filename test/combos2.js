@@ -90,7 +90,15 @@ const hitBy = (p, base, opts) => { flush(); const k = events.length; g.damageMob
   hitBy(lan, 100, { tsk: 'lthrust' });
   const c = ev('combo');
   assert.equal(c.length, 1); assert.equal(c[0].k, 'skewer'); assert.equal(c[0].self, 1); assert.equal(c[0].by, lan.id); assert.equal(c[0].from, lan.id);
-  ok('a solo Lancer pays off its own launch (self Skewer, flagged self)');
+  // an area payoff pays one self-combo, not one per enemy
+  const m1 = mob, m2 = g.addMob('wolf', X + 1, Z + 1); m2.maxHp = m2.hp = 1e6; m2.def = { ...m2.def, posture: 1e9 };
+  g.time += 7; clear();
+  g.damageMob(m1, lan, 50, { sk: 'skylance', heavy: true }); g.damageMob(m2, lan, 50, { sk: 'skylance', heavy: true });
+  g.time += 1;
+  g.damageMob(m1, lan, 50, { tsk: 'lthrust' }); g.damageMob(m2, lan, 50, { tsk: 'lthrust' });
+  assert.equal(ev('combo').filter(e => e.self).length, 1, 'one self-combo per swing');
+  g.mobs.delete(m2.id);
+  ok('a solo Lancer pays off its own launch (self Skewer, flagged self), one per swing');
 }
 { // Swordsman Rush, then a Berserker Cleave: Cross Cut
   const swo = mk('Swo', 'swordsman'), ber = mk('Ber', 'berserker');
@@ -151,7 +159,7 @@ const hitBy = (p, base, opts) => { flush(); const k = events.length; g.damageMob
   const mate = { id: 2, cls: 'ranger', x: 0, z: 10, dead: false };
   const b = { id: 1, cls: 'lancer', skill: 5, t: 10, x: 0, z: 0, face: 0, cds: [0, 0, 0, 0], send: m => sent.push(m) };
   const tgt = { id: 9, x: 0, z: 2, def: { radius: 0.6 } };
-  const ctx = { dodge: null, party: { mates: [mate] }, useSkill: (bb, slot) => { used.push(slot); return true; } };
+  const ctx = { dodge: null, ready: true, party: { mates: [mate] }, useSkill: (bb, slot) => { used.push(slot); return true; } };
   const orig = BOT_TEAM.setup; BOT_TEAM.setup = [0, 1, 1, 1, 1, 1];
   try {
     assert.equal(setupTurn(b, tgt, ctx), true); assert.deepEqual(used, [BOT_SETUP.lancer.slot], 'a Lancer bot Sweeps for its Ranger');
