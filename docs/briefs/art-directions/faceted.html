@@ -1,0 +1,92 @@
+<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:#000;overflow:hidden}</style>
+<script type="importmap">{"imports":{"three":"./three/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+const W = innerWidth, H = innerHeight;
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); r.setSize(W, H); r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
+r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.1; document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.fog = new THREE.Fog(0xf3d9c4, 40, 230);
+const cam = new THREE.PerspectiveCamera(36, W / H, 0.1, 700); cam.position.set(0.4, 1.7, 6.3); cam.lookAt(0, 1.3, 0);
+// gradient sky
+{ const g = new THREE.SphereGeometry(500, 16, 12), c = [], top = new THREE.Color(0x4a6fd0), mid = new THREE.Color(0xf6c9b0), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const t = Math.max(0, Math.min(1, p.getY(i) / 260)); const k = mid.clone().lerp(top, Math.pow(t, 0.7)); c.push(k.r, k.g, k.b); }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3)); scene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false }))); }
+scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x5a6a48, 1.0));
+const sun = new THREE.DirectionalLight(0xffe2bd, 2.8); sun.position.set(-9, 11, 7); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12, far: 60 }); sun.shadow.bias = -0.0005; scene.add(sun);
+let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, flatShading: true, roughness: 0.75, metalness: 0.05, ...o });
+const add = (parent, geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.castShadow = m.receiveShadow = true; parent.add(m); return m; };
+const prism = (rTop, rBot, h, n = 5) => new THREE.CylinderGeometry(rTop, rBot, h, n, 1);
+// a hero from rigid faceted parts: about 5.2 heads tall, 1.75 m
+function hero(x, o) {
+  const g = new THREE.Group(); g.position.set(x, 0, o.z || 0); g.rotation.y = o.yaw || 0; g.scale.set(1.32, 1.04, 1.32); scene.add(g);
+  const A = M(o.main), B = M(o.dark), C = M(o.accent, { emissive: o.accent, emissiveIntensity: 0.45 }), S = M(0xe6ebf2, { metalness: 0.15, roughness: 0.4 });
+  for (const s of [-1, 1]) { // legs: thigh, shin, pointed boot
+    add(g, prism(0.115, 0.085, 0.42, 5), B, s * 0.13, 0.72, 0, 0, 0, s * -0.04);
+    add(g, prism(0.085, 0.06, 0.4, 5), A, s * 0.14, 0.32, 0.01);
+    add(g, new THREE.ConeGeometry(0.085, 0.3, 4), B, s * 0.14, 0.06, 0.09, Math.PI / 2 - 0.1, Math.PI / 4, 0);
+  }
+  add(g, prism(0.2, 0.15, 0.2, 6), B, 0, 0.98, 0);                      // hips
+  add(g, prism(0.27, 0.17, 0.46, 6), A, 0, 1.29, 0);                    // tapered chest
+  add(g, new THREE.OctahedronGeometry(0.09, 0), C, 0, 1.33, 0.2);        // chest gem: the accent
+  for (const s of [-1, 1]) {
+    add(g, new THREE.ConeGeometry(0.14, 0.26, 4), o.pauld ? S : A, s * 0.33, 1.5, 0, 0, Math.PI / 4, s * -1.15); // pointed shoulder
+    add(g, prism(0.07, 0.055, 0.34, 5), B, s * 0.36, 1.25, 0, 0, 0, s * 0.12);
+    add(g, prism(0.06, 0.07, 0.32, 5), A, s * 0.41, 0.94, 0.03, -0.15, 0, s * 0.1);
+  }
+  add(g, prism(0.06, 0.08, 0.1, 5), B, 0, 1.56, 0);                      // neck
+  const head = add(g, new THREE.IcosahedronGeometry(0.2, 0), M(o.head || 0xe9e2d6), 0, 1.75, 0); head.scale.set(0.9, 1.08, 0.95);
+  add(g, new THREE.BoxGeometry(0.2, 0.035, 0.05), C, 0, 1.765, 0.15);     // visor slit
+  o.extra?.(g, { A, B, C, S });
+  return g;
+}
+// blade: long kite-shaped sword, dark-teal half cape
+hero(-1.6, { main: 0x1f5f6b, dark: 0x39496a, accent: 0x5ff0ff, pauld: true, yaw: 0.18, extra(g, m) {
+  add(g, new THREE.ConeGeometry(0.2, 0.36, 4), m.B, 0, 1.93, -0.03, -0.25, Math.PI / 4, 0); // swept crest
+  const cape = add(g, new THREE.ConeGeometry(0.34, 1.1, 3), m.A, -0.05, 0.98, -0.2, 0.16, 0.5, 0); cape.scale.z = 0.35;
+  const sw = new THREE.Group(); sw.position.set(0.47, 0.8, 0.12); sw.rotation.set(0.2, 0, -0.55); g.add(sw);
+  add(sw, new THREE.ConeGeometry(0.06, 1.05, 4), m.S, 0, 0.68, 0).scale.z = 0.3; add(sw, new THREE.BoxGeometry(0.3, 0.04, 0.06), m.C, 0, 0.14, 0); add(sw, prism(0.022, 0.022, 0.2, 4), m.B, 0, 0.03, 0);
+} });
+// mage: tall hood, floating crystal staff, long robe
+hero(0, { main: 0x5b3fa8, dark: 0x4a3a8a, accent: 0xffc24a, z: 0.15, extra(g, m) {
+  add(g, new THREE.ConeGeometry(0.26, 0.62, 5), m.A, 0, 1.98, -0.05, -0.2, 0, 0);
+  add(g, new THREE.ConeGeometry(0.4, 1.0, 6), m.A, 0, 0.5, -0.02);         // robe
+  add(g, prism(0.018, 0.018, 1.9, 4), m.B, -0.55, 0.95, 0.15);
+  const cr = add(g, new THREE.OctahedronGeometry(0.15, 0), m.C, -0.55, 2.08, 0.15); cr.scale.y = 1.6;
+  const l = new THREE.PointLight(0xffc24a, 5, 4); l.position.set(-0.55, 2.05, 0.3); g.add(l);
+  for (let i = 0; i < 3; i++) add(g, new THREE.TetrahedronGeometry(0.05), m.C, -0.55 + Math.cos(i * 2.1) * 0.26, 2.05 + Math.sin(i * 1.3) * 0.12, 0.15 + Math.sin(i * 2.1) * 0.26, i, i, i);
+} });
+// archer: sharp hood with a long tail, angular recurve bow
+hero(1.6, { main: 0x3d7a3a, dark: 0x7a5630, accent: 0xff5a4a, yaw: -0.2, head: 0xd9c4a8, extra(g, m) {
+  add(g, new THREE.ConeGeometry(0.24, 0.5, 4), m.A, 0, 1.92, -0.1, -0.75, Math.PI / 4, 0);
+  const cape = add(g, new THREE.ConeGeometry(0.3, 0.8, 3), m.A, 0.02, 1.1, -0.2, 0.2, 0.5, 0); cape.scale.z = 0.35;
+  const bow = new THREE.Group(); bow.position.set(0.5, 1.0, 0.16); bow.rotation.z = 0.08; g.add(bow);
+  for (const s of [-1, 1]) { add(bow, prism(0.012, 0.03, 0.55, 4), m.B, 0.07, s * 0.26, 0, 0, 0, s * 0.3); add(bow, prism(0.004, 0.012, 0.3, 4), m.B, 0.1, s * 0.63, 0, 0, 0, s * -0.45); }
+  add(bow, prism(0.004, 0.004, 1.5, 3), M(0xffffff), 0.0, 0, 0);
+  add(g, prism(0.07, 0.055, 0.5, 5), m.B, -0.15, 1.3, -0.22, 0, 0, 0.5); for (let i = 0; i < 3; i++) add(g, new THREE.ConeGeometry(0.03, 0.12, 3), m.C, -0.33 - i * 0.03, 1.57 + i * 0.02, -0.22 + (i - 1) * 0.04, 0, 0, 0.5);
+} });
+// faceted ground: a coarse grid, heights jittered, flat shaded, vertex colours
+{ const g = new THREE.PlaneGeometry(320, 320, 44, 44); g.rotateX(-Math.PI / 2); const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i), d = Math.hypot(x, z); const far = Math.max(0, (d - 14) / 60);
+    p.setY(i, (Math.sin(x * 0.07 + 1.3) * Math.cos(z * 0.06) * 7 + Math.sin(x * 0.19) * 2.2 + (rnd() - 0.5) * 1.4) * Math.min(1, far * far * 3) + (d > 12 ? (rnd() - 0.5) * 0.25 : 0)); p.setX(i, x + (d > 10 ? (rnd() - 0.5) * 3 : 0)); p.setZ(i, z + (d > 10 ? (rnd() - 0.5) * 3 : 0)); }
+  const ng = g.toNonIndexed(); const q = ng.attributes.position, col = [], a = new THREE.Color(0x6fae58), b = new THREE.Color(0x4f8f5a), c2 = new THREE.Color(0xd9c07a);
+  for (let i = 0; i < q.count; i += 3) { const y = (q.getY(i) + q.getY(i + 1) + q.getY(i + 2)) / 3; const k = a.clone().lerp(b, rnd()).lerp(c2, Math.max(0, Math.min(0.7, y / 9))); for (let j = 0; j < 3; j++) col.push(k.r, k.g, k.b); }
+  ng.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); ng.computeVertexNormals();
+  const m = new THREE.Mesh(ng, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 })); m.receiveShadow = true; scene.add(m); }
+// pyramid trees, shards of rock, far peaks, angular clouds, the tower
+const leaf = [M(0x2f7a5a), M(0x3f8f5f), M(0x256a55)], trunk = M(0x5a4030), rock = M(0x8f95a6), peak = M(0x9fb0d6), snow = M(0xf4f6ff);
+function tree(x, z, s) { const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s); g.rotation.y = rnd() * 6; scene.add(g);
+  add(g, prism(0.12, 0.18, 1.0, 4), trunk, 0, 0.5, 0); const m = leaf[(rnd() * 3) | 0]; add(g, new THREE.ConeGeometry(1.1, 2.0, 4), m, 0, 1.9, 0); add(g, new THREE.ConeGeometry(0.8, 1.7, 4), m, 0, 2.9, 0, 0, 0.6, 0); add(g, new THREE.ConeGeometry(0.5, 1.3, 4), m, 0, 3.8, 0, 0, 1.1, 0); }
+for (const [x, z, s] of [[-6.5, -4, 1.3], [6.2, -6, 1.5], [9.5, -1, 1.1], [-10, -9, 1.6], [-4, -14, 1.4], [12, -14, 1.7], [-17, -16, 1.5], [3, -20, 1.4], [18, -8, 1.3], [-13, -2, 1.0], [-22, -26, 1.8], [22, -24, 1.8], [8, -30, 1.6], [-8, -32, 1.7]]) tree(x, z, s);
+for (const [x, z, s] of [[3.9, -1.6, 0.5], [-4.2, -1.0, 0.7], [-3.6, -1.5, 0.4], [7, 1.5, 0.6]]) { const m = add(scene, new THREE.DodecahedronGeometry(s, 0), rock, x, s * 0.45, z, rnd(), rnd(), rnd()); m.scale.y = 0.8; }
+for (let i = 0; i < 9; i++) { const a = -1.3 + i * 0.32 + rnd() * 0.1, d = 150 + rnd() * 30, h = 40 + rnd() * 45, x = Math.sin(a) * d, z = -Math.cos(a) * d; if (Math.abs(x - 12) < 22) continue;
+  add(scene, new THREE.ConeGeometry(h * 0.62, h, 5), peak, x, h / 2 - 4, z, 0, rnd() * 3, 0).castShadow = false; add(scene, new THREE.ConeGeometry(h * 0.2, h * 0.32, 5), snow, x, h * 0.84 - 4, z, 0, rnd() * 3, 0); }
+const cloud = new THREE.MeshBasicMaterial({ color: 0xfff1e4, fog: false });
+for (const [x, y, z, s] of [[-40, 38, -120, 9], [30, 48, -140, 11], [70, 34, -110, 8], [-80, 44, -130, 10], [-10, 60, -160, 9]]) for (let i = 0; i < 3; i++) { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(s * (1 - i * 0.22), 0), cloud); m.position.set(x + i * s * 1.1, y - i * 1.5, z); m.scale.set(1.5, 0.45, 1); m.rotation.y = rnd() * 3; scene.add(m); }
+{ const t = new THREE.Group(); t.position.set(13, 0, -150); scene.add(t); const st = M(0xb8a9c9), dk = M(0x8c7fa6); let y = 0;
+  for (let i = 0; i < 6; i++) { const h = 22 - i * 2, r0 = 15 - i * 1.9; add(t, prism(r0 - 1.6, r0, h, 6), i % 2 ? dk : st, 0, y + h / 2, 0, 0, i * 0.52, 0).castShadow = false; add(t, prism(r0 + 0.6, r0 - 0.6, 1.6, 6), dk, 0, y + h, 0, 0, i * 0.52, 0); y += h; }
+  add(t, new THREE.ConeGeometry(5, 22, 6), M(0x5ff0ff, { emissive: 0x5ff0ff, emissiveIntensity: 0.5 }), 0, y + 11, 0); }
+r.render(scene, cam);
+window.__info = { calls: r.info.render.calls, tris: r.info.render.triangles }; window.__done = true;
+</script>

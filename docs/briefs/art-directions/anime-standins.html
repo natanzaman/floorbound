@@ -1,0 +1,60 @@
+<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:#000;overflow:hidden}</style>
+<script type="importmap">{"imports":{"three":"./three/build/three.module.js","three/addons/":"./three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from './three/examples/jsm/loaders/GLTFLoader.js';
+const W = innerWidth, H = innerHeight;
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); r.setSize(W, H); r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
+r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.1; document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.fog = new THREE.Fog(0xf3d9c4, 40, 230);
+const cam = new THREE.PerspectiveCamera(36, W / H, 0.1, 700); cam.position.set(0.3, 1.3, 4.3); cam.lookAt(0.15, 0.85, 0);
+// gradient sky
+{ const g = new THREE.SphereGeometry(500, 16, 12), c = [], top = new THREE.Color(0x4a6fd0), mid = new THREE.Color(0xf6c9b0), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const t = Math.max(0, Math.min(1, p.getY(i) / 260)); const k = mid.clone().lerp(top, Math.pow(t, 0.7)); c.push(k.r, k.g, k.b); }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3)); scene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false }))); }
+scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x5a6a48, 1.0));
+const sun = new THREE.DirectionalLight(0xffe2bd, 2.8); sun.position.set(-9, 11, 7); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12, far: 60 }); sun.shadow.bias = -0.0005; scene.add(sun);
+let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, flatShading: true, roughness: 0.75, metalness: 0.05, ...o });
+const add = (parent, geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.castShadow = m.receiveShadow = true; parent.add(m); return m; };
+const prism = (rTop, rBot, h, n = 5) => new THREE.CylinderGeometry(rTop, rBot, h, n, 1);
+const loader = new GLTFLoader(); const load = u => new Promise((res, rej) => loader.load(u, res, undefined, rej));
+const info = {};
+async function avatar(url, x, yaw, flip) {
+  const g = (await load(url)).scene; let tris = 0, mats = new Set(), names = [];
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => mats.add(m.uuid)); } if (o.isBone) names.push(o.name); });
+  const find = re => { let b = null; g.traverse(o => { if (!b && o.isBone && re.test(o.name)) b = o; }); return b; };
+  for (const [side, s] of [['L', 1], ['R', -1]]) { const up = find(new RegExp(`^J_Bip_${side}_UpperArm$`)), lo = find(new RegExp(`^J_Bip_${side}_LowerArm$`)); if (up) up.rotation.z += s * (flip ? -1 : 1) * 1.25; if (lo) lo.rotation.z += s * (flip ? -1 : 1) * 0.12; }
+  const box = new THREE.Box3().setFromObject(g); g.position.set(x, -box.min.y, 0); g.rotation.y = yaw; scene.add(g);
+  info[url] = { tris, mats: mats.size, h: +(box.max.y - box.min.y).toFixed(2), bones: names.length, sample: names.slice(0, 0) };
+  return g;
+}
+await avatar('c.glb', -1.45, Math.PI + 0.25, false);
+await avatar('a.glb', -0.45, Math.PI + 0.05, false);
+await avatar('b.glb', 0.55, Math.PI - 0.15, false);
+{ const gl = await load('k.glb'), g = gl.scene; g.traverse(o => { if (o.isMesh) o.castShadow = true; if (/^(1H_Crossbow|2H_Crossbow|Throwable|Knife_Offhand)$/.test(o.name)) o.visible = false; }); const clip = gl.animations.find(c => /^Idle$/i.test(c.name)) || gl.animations.find(c => /idle/i.test(c.name)); g.traverse(o => { if (o.isBone && o.name === 'upperarml') o.rotation.z -= 1.2; if (o.isBone && o.name === 'upperarmr') o.rotation.z += 1.2; }); info.clip = clip?.name; if (clip) { const mx = new THREE.AnimationMixer(g); mx.clipAction(clip).play(); mx.update(0.4); g.updateMatrixWorld(true); } const b = new THREE.Box3().setFromObject(g); g.scale.setScalar(1.0 / (b.max.y - b.min.y) * 1.25); g.position.set(1.75, 0, 0.1); g.rotation.y = -0.25; scene.add(g); }
+// faceted ground: a coarse grid, heights jittered, flat shaded, vertex colours
+{ const g = new THREE.PlaneGeometry(320, 320, 44, 44); g.rotateX(-Math.PI / 2); const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i), d = Math.hypot(x, z); const far = Math.max(0, (d - 14) / 60);
+    p.setY(i, (Math.sin(x * 0.07 + 1.3) * Math.cos(z * 0.06) * 7 + Math.sin(x * 0.19) * 2.2 + (rnd() - 0.5) * 1.4) * Math.min(1, far * far * 3) + (d > 12 ? (rnd() - 0.5) * 0.25 : 0)); p.setX(i, x + (d > 10 ? (rnd() - 0.5) * 3 : 0)); p.setZ(i, z + (d > 10 ? (rnd() - 0.5) * 3 : 0)); }
+  const ng = g.toNonIndexed(); const q = ng.attributes.position, col = [], a = new THREE.Color(0x6fae58), b = new THREE.Color(0x4f8f5a), c2 = new THREE.Color(0xd9c07a);
+  for (let i = 0; i < q.count; i += 3) { const y = (q.getY(i) + q.getY(i + 1) + q.getY(i + 2)) / 3; const k = a.clone().lerp(b, rnd()).lerp(c2, Math.max(0, Math.min(0.7, y / 9))); for (let j = 0; j < 3; j++) col.push(k.r, k.g, k.b); }
+  ng.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); ng.computeVertexNormals();
+  const m = new THREE.Mesh(ng, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 })); m.receiveShadow = true; scene.add(m); }
+// pyramid trees, shards of rock, far peaks, angular clouds, the tower
+const leaf = [M(0x2f7a5a), M(0x3f8f5f), M(0x256a55)], trunk = M(0x5a4030), rock = M(0x8f95a6), peak = M(0x9fb0d6), snow = M(0xf4f6ff);
+function tree(x, z, s) { const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s); g.rotation.y = rnd() * 6; scene.add(g);
+  add(g, prism(0.12, 0.18, 1.0, 4), trunk, 0, 0.5, 0); const m = leaf[(rnd() * 3) | 0]; add(g, new THREE.ConeGeometry(1.1, 2.0, 4), m, 0, 1.9, 0); add(g, new THREE.ConeGeometry(0.8, 1.7, 4), m, 0, 2.9, 0, 0, 0.6, 0); add(g, new THREE.ConeGeometry(0.5, 1.3, 4), m, 0, 3.8, 0, 0, 1.1, 0); }
+for (const [x, z, s] of [[-6.5, -4, 1.3], [6.2, -6, 1.5], [9.5, -1, 1.1], [-10, -9, 1.6], [-4, -14, 1.4], [12, -14, 1.7], [-17, -16, 1.5], [3, -20, 1.4], [18, -8, 1.3], [-13, -2, 1.0], [-22, -26, 1.8], [22, -24, 1.8], [8, -30, 1.6], [-8, -32, 1.7]]) tree(x, z, s);
+for (const [x, z, s] of [[3.9, -1.6, 0.5], [-4.2, -1.0, 0.7], [-3.6, -1.5, 0.4], [7, 1.5, 0.6]]) { const m = add(scene, new THREE.DodecahedronGeometry(s, 0), rock, x, s * 0.45, z, rnd(), rnd(), rnd()); m.scale.y = 0.8; }
+for (let i = 0; i < 9; i++) { const a = -1.3 + i * 0.32 + rnd() * 0.1, d = 150 + rnd() * 30, h = 40 + rnd() * 45, x = Math.sin(a) * d, z = -Math.cos(a) * d; if (Math.abs(x - 12) < 22) continue;
+  add(scene, new THREE.ConeGeometry(h * 0.62, h, 5), peak, x, h / 2 - 4, z, 0, rnd() * 3, 0).castShadow = false; add(scene, new THREE.ConeGeometry(h * 0.2, h * 0.32, 5), snow, x, h * 0.84 - 4, z, 0, rnd() * 3, 0); }
+const cloud = new THREE.MeshBasicMaterial({ color: 0xfff1e4, fog: false });
+for (const [x, y, z, s] of [[-40, 38, -120, 9], [30, 48, -140, 11], [70, 34, -110, 8], [-80, 44, -130, 10], [-10, 60, -160, 9]]) for (let i = 0; i < 3; i++) { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(s * (1 - i * 0.22), 0), cloud); m.position.set(x + i * s * 1.1, y - i * 1.5, z); m.scale.set(1.5, 0.45, 1); m.rotation.y = rnd() * 3; scene.add(m); }
+{ const t = new THREE.Group(); t.position.set(13, 0, -150); scene.add(t); const st = M(0xb8a9c9), dk = M(0x8c7fa6); let y = 0;
+  for (let i = 0; i < 6; i++) { const h = 22 - i * 2, r0 = 15 - i * 1.9; add(t, prism(r0 - 1.6, r0, h, 6), i % 2 ? dk : st, 0, y + h / 2, 0, 0, i * 0.52, 0).castShadow = false; add(t, prism(r0 + 0.6, r0 - 0.6, 1.6, 6), dk, 0, y + h, 0, 0, i * 0.52, 0); y += h; }
+  add(t, new THREE.ConeGeometry(5, 22, 6), M(0x5ff0ff, { emissive: 0x5ff0ff, emissiveIntensity: 0.5 }), 0, y + 11, 0); }
+r.render(scene, cam);
+await new Promise(r => setTimeout(r, 1500)); r.render(scene, cam); window.__info = { calls: r.info.render.calls, tris: r.info.render.triangles, info }; window.__done = true;
+</script>

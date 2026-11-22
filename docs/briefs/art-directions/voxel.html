@@ -1,0 +1,98 @@
+<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:#000;overflow:hidden}</style>
+<script type="importmap">{"imports":{"three":"./three/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+const W = innerWidth, H = innerHeight;
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); r.setSize(W, H); r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
+r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.05; document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x7fc4f5); scene.fog = new THREE.Fog(0xa9dcfa, 60, 260);
+const cam = new THREE.PerspectiveCamera(38, W / H, 0.1, 600); cam.position.set(0.6, 2.5, 9.6); cam.lookAt(0, 1.75, 0);
+scene.add(new THREE.HemisphereLight(0xdff1ff, 0x6a8f4a, 1.25));
+const sun = new THREE.DirectionalLight(0xfff2d6, 2.4); sun.position.set(-8, 14, 9); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -14, right: 14, top: 14, bottom: -14, far: 60 }); sun.shadow.bias = -0.0004; scene.add(sun);
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+// every cube in the picture goes into one instanced batch: one draw call for the whole scene
+const cubes = [];
+const V = 0.125; // hero voxel size (m)
+const box = (x, y, z, w, h, d, c, jit = 0) => { const col = new THREE.Color(c); if (jit) col.offsetHSL(0, 0, (rnd() - 0.5) * jit); cubes.push([x, y, z, w, h, d, col]); };
+// a hero part: grid coords in voxels, origin at feet centre; px,pz: world position
+function part(P, x0, y0, z0, w, h, d, c, split = true) {
+  if (!split) return box(P.x + (x0 + w / 2) * V, (y0 + h / 2) * V, P.z + (z0 + d / 2) * V, w * V, h * V, d * V, c);
+  for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) for (let k = 0; k < d; k++) {
+    if (i > 0 && i < w - 1 && j > 0 && j < h - 1 && k > 0 && k < d - 1) continue;
+    box(P.x + (x0 + i + 0.5) * V, (y0 + j + 0.5) * V, P.z + (z0 + k + 0.5) * V, V, V, V, c, 0.05);
+  }
+}
+function hero(px, pz, o) {
+  const P = { x: px, z: pz };
+  // legs (2 x 4 x 2 each), boots
+  for (const s of [-1, 1]) { const x = s < 0 ? -3 : 1; part(P, x, 0, -1, 2, 2, 3, o.boot); part(P, x, 2, -1, 2, 3, 2, o.leg); }
+  // torso 6 x 6 x 3, belt
+  part(P, -3, 5, -1.5, 6, 1, 3, o.belt); part(P, -3, 6, -1.5, 6, 5, 3, o.body);
+  if (o.trim) part(P, -1, 6, 1.5, 2, 5, 0.4, o.trim, false);
+  // arms
+  part(P, -5, 6, -1, 2, 5, 2, o.sleeve); part(P, 3, 6, -1, 2, 5, 2, o.sleeve); part(P, -5, 5, -1, 2, 1, 2, o.skin); part(P, 3, 5, -1, 2, 1, 2, o.skin);
+  // head 8 x 7 x 7
+  part(P, -4, 11, -3.5, 8, 7, 7, o.skin);
+  for (const s of [-1, 1]) { box(P.x + s * 1.75 * V, 14.4 * V, P.z + 3.5 * V, V * 1.1, V * 1.7, V * 0.3, 0x1b1b26); box(P.x + s * 1.75 * V + 0.02, 14.9 * V, P.z + 3.55 * V, V * 0.4, V * 0.5, V * 0.3, 0xffffff); }
+  box(P.x, 12.6 * V, P.z + 3.5 * V, V * 1.6, V * 0.4, V * 0.3, 0x9a4a3a);
+  o.extra?.(P);
+}
+const SK = 0xf2c39a; const glow = [];
+// swordsman: dark teal coat, spiky dark hair, sword
+hero(-2.3, 0, { boot: 0x2b2b35, leg: 0x33374a, belt: 0x8a5a2b, body: 0x1f6f78, trim: 0xd9e6ea, sleeve: 0x1f6f78, skin: SK, extra(P) {
+  part(P, -4, 17, -4, 8, 2, 8, 0x2a2233); part(P, -4.5, 14, -4, 1, 3, 7, 0x2a2233); part(P, 3.5, 14, -4, 1, 3, 7, 0x2a2233); part(P, -4, 12, -4, 8, 5, 1, 0x2a2233);
+  for (const [x, z] of [[-3, 2], [0, 3], [3, 1], [-1, -2], [2, -3]]) part(P, x, 19, z, 1, 1, 1, 0x2a2233);
+  part(P, -4, 16, 3, 3, 1, 1, 0x2a2233); part(P, 2, 16, 3, 2, 1, 1, 0x2a2233);
+  part(P, -3, 1, -2, 6, 5, 1, 0x185860); // coat tail
+  part(P, 5, 5, 0, 1, 1, 3, 0x6b4a2a); part(P, 4, 5, 3, 3, 1, 1, 0xd8b24a); for (let k = 4; k < 15; k++) part(P, 5, 5 + (k - 4) * 0.0, k, 1, 1, 1, k % 5 === 0 ? 0xf4fbff : 0xcfd9e2);
+} });
+// mage: purple robe, pointed hat, glowing staff
+hero(0, 0.2, { boot: 0x4a3526, leg: 0x4b3a7a, belt: 0xd8a23a, body: 0x6a4bb0, trim: 0xe9d38a, sleeve: 0x7a5cc4, skin: SK, extra(P) {
+  part(P, -4, 1, -2, 8, 5, 4, 0x5a3f9a); // robe skirt
+  part(P, -6, 18, -6, 12, 1, 12, 0x4a2f8a); part(P, -4, 19, -4, 8, 2, 8, 0x5a3f9a); part(P, -4, 19, 4, 8, 1, 0.3, 0xe0a030, false); part(P, -3, 21, -3, 6, 2, 6, 0x5a3f9a); part(P, -2, 23, -2, 4, 2, 4, 0x5a3f9a); part(P, -1, 25, -1.5, 2, 2, 2, 0x5a3f9a); part(P, 0, 27, -2, 1, 1, 1, 0x5a3f9a);
+  part(P, -4, 12, -4, 8, 5, 1, 0xc9c2d8); part(P, -4.5, 12, -3, 1, 4, 5, 0xc9c2d8); part(P, 3.5, 12, -3, 1, 4, 5, 0xc9c2d8);
+  for (let j = 0; j < 19; j++) part(P, -6.5, j, 1, 1, 1, 1, 0x7a5230); part(P, -7.5, 19, 0, 3, 3, 3, 0x6ff5e0);
+  const g = new THREE.PointLight(0x6ff5e0, 6, 5); g.position.set(P.x - 6 * V, 20.5 * V, P.z + 1.5 * V); scene.add(g); glow.push([P.x - 6 * V, 20.5 * V, P.z + 1.5 * V]);
+} });
+// archer: green hood, bow
+hero(2.3, 0, { boot: 0x5a3b22, leg: 0x6a4a2c, belt: 0x3a2a1a, body: 0x3f8a3f, trim: 0x2f6a2f, sleeve: 0xd9c9a0, skin: 0xd9a072, extra(P) {
+  part(P, -5, 12, -5, 10, 7, 8, 0x2f6a2f); part(P, -5, 18, -5, 10, 2, 9, 0x2f6a2f); part(P, -5, 12, 3, 2, 7, 1, 0x2f6a2f); part(P, 3, 12, 3, 2, 7, 1, 0x2f6a2f); part(P, -1, 20, -3, 2, 1, 2, 0x2f6a2f);
+  part(P, -4, 16, 3, 8, 1, 1, 0xb5522a); // fringe
+  part(P, -3, 5, -3, 6, 6, 1, 0x2a5e2a); // short cloak
+  const bx = 6; for (let j = 0; j < 15; j++) { const off = Math.round(2.2 * (1 - Math.pow((j - 7) / 7, 2))); part(P, bx + off - 2, 2 + j, 1, 1, 1, 1, 0x8a5a2b); } part(P, bx - 2, 2, 1.4, 0.25, 15, 0.25, 0xeeeeee, false);
+  part(P, -2, 8, -4, 2, 6, 2, 0x7a4a22); for (const x of [-2, -1]) part(P, x, 14, -4 + (x + 2), 1, 2, 1, x === -2 ? 0xe04a3a : 0xf0e0c0); // quiver
+} });
+// ground: 1 m cubes on stepped terraces, slightly varied greens
+const hgt = (x, z) => { const d = Math.hypot(x * 0.8, z + 6); let h = 0; if (z < -9) h += 1; if (z < -20) h += 1; if (z < -34) h += 2; h += Math.round(Math.sin(x * 0.11 + 1) * Math.cos(z * 0.07) * 1.6 * Math.min(1, d / 22)); return Math.max(z > -9 ? 0 : h, 0); };
+for (let x = -70; x <= 70; x++) for (let z = -120; z <= 14; z++) {
+  if (Math.abs(x) > 16 + (14 - z) * 0.62) continue; const h = hgt(x, z);
+  const path = Math.abs(x - Math.sin(z * 0.09) * 2.2 - 0.3) < 1.3 && z < -3;
+  box(x + 0.5, h - 0.5, z + 0.5, 1, 1, 1, path ? 0xc9a96a : ((x + z) & 1 ? 0x63b54a : 0x5aa944), 0.035);
+  const hn = Math.max(hgt(x, z + 1), 0); if (hn < h) for (let j = hn; j < h; j++) box(x + 0.5, j - 0.5 + 0.0, z + 1.0 - 0.02, 1, 1, 0.04, 0x8a6a45);
+  if (!path && rnd() < 0.035 && Math.hypot(x, z) > 4) box(x + 0.5, h + 0.1, z + 0.5, 0.2, 0.2, 0.2, [0xffe066, 0xff8fb0, 0xffffff, 0x9fd0ff][(rnd() * 4) | 0]);
+  if (!path && rnd() < 0.05 && Math.hypot(x, z) > 3) box(x + 0.3, h + 0.15, z + 0.4, 0.14, 0.3, 0.14, 0x4f9a3c);
+}
+function tree(x, z, s = 1) { const h = hgt(Math.floor(x), Math.floor(z)); const t = 3 + ((rnd() * 2) | 0);
+  for (let j = 0; j < t; j++) box(x, h + (j + 0.5) * s, z, s, s, s, 0x7a5230, 0.04);
+  for (let i = -2; i <= 2; i++) for (let j = 0; j <= 3; j++) for (let k = -2; k <= 2; k++) { const rr = j === 3 ? 0 : j === 2 ? 1 : 2; if (Math.abs(i) > rr || Math.abs(k) > rr || (Math.abs(i) === 2 && Math.abs(k) === 2 && rnd() < 0.7)) continue; box(x + i * s, h + (t + j + 0.5) * s, z + k * s, s, s, s, j > 1 ? 0x4fae45 : 0x3f9a3c, 0.06); } }
+for (const [x, z] of [[-9.5, -6.5], [8.5, -9.5], [13.5, -3.5], [-14.5, -13.5], [-6.5, -22.5], [11.5, -24.5], [-20.5, -27.5], [22.5, -19.5], [4.5, -37.5], [-13.5, -40.5], [19.5, -42.5], [-28.5, -44.5], [30.5, -50.5], [-4.5, -55.5], [12.5, -60.5]]) tree(x, z);
+// rocks, a crate, a slime
+for (const [x, z, n] of [[5.5, -3.5, 2], [-5.5, -2.5, 1]]) for (let i = 0; i < n; i++) box(x + i * 0.6, 0.35 + i * 0.3, z, 0.9 - i * 0.2, 0.7, 0.8, 0x9aa0a8, 0.05);
+{ const x = -4.6, z = 1.2; for (let i = 0; i < 5; i++) for (let j = 0; j < 4; j++) for (let k = 0; k < 5; k++) { if ((i === 0 || i === 4) && (k === 0 || k === 4) && j === 3) continue; box(x + i * 0.16, 0.08 + j * 0.16, z + k * 0.16, 0.16, 0.16, 0.16, j === 3 ? 0x8fe0ff : 0x55b8f0, 0.04); } box(x + 0.16, 0.42, z + 0.72, 0.1, 0.14, 0.04, 0x10202a); box(x + 0.48, 0.42, z + 0.72, 0.1, 0.14, 0.04, 0x10202a); }
+// the tower: far away, tall, stepped, with window lights
+{ const tx = 9, tz = -118, bw = 16; for (let lvl = 0; lvl < 15; lvl++) { const w = bw - Math.floor(lvl / 6) * 2.5, y = 2 + lvl * 4; box(tx, y + 2, tz, w, 4, w, lvl % 6 === 5 ? 0x8f97a8 : 0xa9b0bf, 0.03); if (lvl % 6 === 5) box(tx, y + 4.3, tz, w + 2, 0.8, w + 2, 0x7d8596);
+    for (let i = -2; i <= 2; i++) if ((lvl + i) % 3 === 0) box(tx + i * (w / 6), y + 2, tz + w / 2 + 0.05, 1, 1.8, 0.1, 0x3a4660); } }
+// clouds
+for (const [x, y, z, n] of [[-30, 34, -90, 5], [26, 40, -100, 6], [-8, 46, -130, 7], [44, 30, -70, 4], [-50, 28, -60, 4], [10, 26, -60, 3]]) for (let i = 0; i < n; i++) cubes.push([x + i * 4 - (rnd() * 3), y + ((rnd() * 2) | 0) * 2, z + ((rnd() * 2) | 0) * 3, 6, 2.5, 5, new THREE.Color(0xffffff), 'cloud']);
+// build the batch
+const solid = cubes.filter(c => c[7] !== 'cloud'), cl = cubes.filter(c => c[7] === 'cloud');
+const geo = new THREE.BoxGeometry(1, 1, 1), m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
+const im = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0 }), solid.length); im.castShadow = im.receiveShadow = true;
+solid.forEach((c, i) => { im.setMatrixAt(i, m4.compose(new THREE.Vector3(c[0], c[1], c[2]), q, new THREE.Vector3(c[3], c[4], c[5]))); im.setColorAt(i, c[6]); }); scene.add(im);
+const cm = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), cl.length);
+cl.forEach((c, i) => cm.setMatrixAt(i, m4.compose(new THREE.Vector3(c[0], c[1], c[2]), q, new THREE.Vector3(c[3], c[4], c[5])))); scene.add(cm);
+for (const g of glow) { const s = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xb8fff4 })); s.scale.setScalar(0.3); s.position.set(...g); scene.add(s); }
+r.render(scene, cam);
+window.__info = { cubes: solid.length + cl.length, calls: r.info.render.calls, tris: r.info.render.triangles, heroCubes: null }; window.__done = true;
+</script>
