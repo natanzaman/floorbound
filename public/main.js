@@ -1089,8 +1089,7 @@ const settingsUi = initSettingsPanel({ el: $('settings'), settings, save: saveSe
 // Controller menu navigation over the window on top (public/focusnav.js): the MVP card, else the top panel, else
 // character select, else the death card; only windows marked data-nav. B: back (Settings opened from the Game Menu
 // goes back to it); the Game Menu's Controls page backs out to the menu first.
-const nav = createFocusNav({ input, panels, order: ['mvp', '*', 'ginvite', 'login', 'dead'], hooks: { // (ginvite: a guild invite card, public/guilds.js)
-  ginvite: { back: () => guilds.dismissCard() },
+const nav = createFocusNav({ input, panels, order: ['mvp', '*', 'login', 'dead'], hooks: {
   gamemenu: { back: () => { const b = $('gamemenu').querySelector('[data-a=back]'); if (b) b.click(); else gmenu.close(); }, open: () => menuOpen() },
   talentsp: { back: () => talents.toggle(false) },
   mvp: { back: () => mvp.close() },

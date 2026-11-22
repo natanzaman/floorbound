@@ -123,13 +123,13 @@ export function initGuilds({ $, send, state, log, sfx, project, keyHtml, tapping
   }
 
   // ---------- the invite card ----------
-  // A controller layer of its own (public/focusnav.js: data-nav, after the open window in main.js's order): A on a button,
-  // B puts it away (the invite still waits in the Guild tab).
+  // Passive, like the party invite card: it never takes the controller (no data-nav), so a pad player keeps moving and
+  // fighting. They answer in the Guild tab (the Players key, or the Registrar), which the pad drives.
   function card(e) {
     document.getElementById('ginvite')?.remove();
     const el = document.createElement('div');
-    el.className = 'panel gd-invite'; el.id = 'ginvite'; el.dataset.nav = 'ginvite';
-    el.innerHTML = `<div><b>${esc(e.from)}</b> invites you to the guild <b>[${esc(e.tag)}] ${esc(e.name)}</b></div><button data-x="1" data-nav="gi-accept">Accept</button><button data-x="0" data-nav="gi-decline">Decline</button>`;
+    el.className = 'panel gd-invite'; el.id = 'ginvite';
+    el.innerHTML = `<div><b>${esc(e.from)}</b> invites you to the guild <b>[${esc(e.tag)}] ${esc(e.name)}</b></div><button data-x="1">Accept</button><button data-x="0">Decline</button><small class="gd-pad">or later: ${keyHtml('players')} → Guild</small>`;
     el.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; ask(b.dataset.x === '1' ? 'accept' : 'decline', { gid: e.gid }); el.remove(); };
     document.body.appendChild(el);
     setTimeout(() => el.remove(), GUILD.inviteFor * 1000);
@@ -150,7 +150,6 @@ export function initGuilds({ $, send, state, log, sfx, project, keyHtml, tapping
 
   const api = {
     id: 'guild',
-    dismissCard() { document.getElementById('ginvite')?.remove(); },
     label: () => 'Guild',
     root,
     show() { poll(); draw(); tip('guild'); },

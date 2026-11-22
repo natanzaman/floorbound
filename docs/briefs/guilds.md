@@ -65,7 +65,7 @@ Sized for a handful of friends plus the game's many bots and the Named. One guil
 
 ## Files
 `shared/guilds.js` (data, validation, quests, levels, perks), `server/guilds.js` (installGuilds on Game.prototype +
-makeGuildStore), `public/guilds.js` (Guild tab, invite card, registrar label, `/g`), `public/admin-guilds.js` (admin
+makeGuildStore), `public/guilds.js` (Guild tab (pad-driven), a passive invite card that never takes the controller (pad players answer in the Guild tab), registrar label, `/g`), `public/admin-guilds.js` (admin
 card), hooks in `server/index.js` (store, hall tags), `server/admin.js` (routes), `server/accounts.js` (charLock),
 `server/db.js` (tables, `tx`), `shared/accesslevels.js` (`guildInvite`), `public/main.js` (tab, chat, plates, Hall).
 
