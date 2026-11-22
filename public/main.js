@@ -43,6 +43,9 @@ import { createControlSync } from '/controlsync.js'; // fb_controls follows the 
 import { setKeySource, keyText, keyHtml, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 import { initBossTeam } from '/bossteam.js'; // boss team mechanics: STACK, SPREAD, tether (G4)
 import { initOpenings } from '/openings.js'; // boss openings: weak point, OPENING tag (J3)
+import { initBossParts } from '/bossparts.js'; // breakable boss parts: pips under the boss bar, callouts
+import { initMobRoles } from '/mobroles.js'; // role enemies' tags and the Hexer's channel; the weapon swap's sound
+import { initClutch } from '/clutch.js'; // Last Stand, the finisher's slow motion
 import { initRescue } from '/rescue.js'; // rescue traps: vines, Drowning Pillar, storm crystal (J1)
 import { initDuels } from '/duels.js'; // solo and team duels: the challenge picker, the duel bar, rings, results
 import { initTeamplay } from '/teamplay.js'; // combo counters, the Team Burst bar and sync window (G2)
@@ -352,7 +355,7 @@ const keyLabel = a => input.label(a);
 const controlsText = () => {
   if (isTouch && input.device !== 'pad') return 'Left side: move. Right side: drag to look. Buttons: attack, skills, dodge, jump and potion. ☰: the Game Menu.';
   const L = keyLabel, pad = input.device === 'pad';
-  return `${L('move')} move · ${pad ? `${L('look')} to look` : 'mouse to look (click to capture, Esc frees it; Settings for classic)'} · ${L('attack')} attack · ${L('skill1')} ${L('skill2')} ${L('skill3')} skills · ${L('skillTree')} skill tree · ${L('dodge')} dodge · ${L('jump')} jump${state.cls === 'guardian' ? ` · ${L('guard')} guard / parry · ${L('cover')} cover an ally` : ''} · ${L('item1')} ${L('item2')} ${L('item3')} items · ${L('bag')} bag · ${L('interact')} interact · ${L('players')} party · ${L('teamBurst')} Team Burst · ${L('botWheel')} bot orders · ${L('selectAimed')} select · ${L('menu')} menu${pad ? '' : ` · ${L('perfOverlay')} performance`} · Game Menu → Controls to change them`;
+  return `${L('move')} move · ${pad ? `${L('look')} to look` : 'mouse to look (click to capture, Esc frees it; Settings for classic)'} · ${L('attack')} attack · ${L('skill1')} ${L('skill2')} ${L('skill3')} skills · ${L('skillTree')} skill tree · ${L('dodge')} dodge · ${L('jump')} jump${state.cls === 'guardian' ? ` · ${L('guard')} guard / parry · ${L('cover')} cover an ally` : ''} · ${L('item1')} ${L('item2')} ${L('item3')} items · ${L('bag')} bag · ${L('interact')} interact · ${L('players')} party · ${L('teamBurst')} Team Burst · ${L('weaponSwap')} swap weapons · ${L('botWheel')} bot orders · ${L('selectAimed')} select · ${L('menu')} menu${pad ? '' : ` · ${L('perfOverlay')} performance`} · Game Menu → Controls to change them`;
 };
 // Leave the game from the Game Menu: back to character select ('char'; anonymous: the name / class screen), signed out
 // ('logout'), or out of the spectator view ('spectate'). A clean reload with no automatic rejoin; the server saves
@@ -413,6 +416,9 @@ const revive = initRevive({ state, players, send: o => send(o), project: (x, y, 
 // boss team mechanics: the gold STACK circle, SPREAD rings, tether beams, first-time prompts (public/bossteam.js)
 // rescue traps: telegraphs, the pillar's beam, your trapped banner, "Hold E to cut free", markers (public/rescue.js)
 const openings = initOpenings({ state, mobs, guide, callout: (a, b, c) => callout(a, b, c) });
+const bossParts = initBossParts({ state, mobs, fx, sfx, guide, callout: (a, b, c) => callout(a, b, c) });
+const mobRoles = initMobRoles({ state, mobs, fx, sfx, guide, floatNum: (...a) => floatNum(...a) });
+const clutch = initClutch({ state, players, fx, sfx, callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a), slowMotion: (a, b) => slowMotion(a, b) });
 const duels = initDuels({ state, players, scene, send: o => send(o), sfx, callout: (a, b, c) => callout(a, b, c), banner: (a, b) => banner(a, b), tip: id => guide.tip(id) }); // public/duels.js
 const rescue = initRescue({ state, players, mobs, send: o => send(o), project: (x, y, z) => project(x, y, z), layer: $('labels'), guide, sfx, fx, floatNum: (...a) => floatNum(...a), callout: (a, b, c) => callout(a, b, c), isTouch, revive, keyLabel });
 const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a) });
@@ -557,6 +563,7 @@ function onSnapshot({ st, me, w }, arrival) {
   }
   for (const [id, e] of mobs) if (!seenM.has(id) && !e.dying) { removeEntity(e); mobs.delete(id); if (e === boss) boss = null; }
   openings.snap(w.op); // bosses' openings (public/openings.js)
+  bossParts.snap(w.bp); // boss parts (public/bossparts.js)
   looks.snap(w.looks); // who wears a look (after the entities and their weapon styles are in step)
   renderPlayersThrottled();
 }
@@ -586,6 +593,9 @@ function handleEvent(e) {
   if (classesA.event(e)) return; // Ranger / Berserker
   if (styles.event(e)) return; // weapon styles: styled basic attacks
   if (revive.event(e)) return; // downed / revive
+  if (bossParts.event(e)) return; // boss parts broken, the Colossus kneels
+  if (mobRoles.event(e)) return; // plate, shield, the Hexer's channel; weapon swaps
+  if (clutch.event(e)) return; // Last Stand, the finisher
   switch (e.t) {
     case 'tp':
       if (e.id === me) { // the server moved you: the game position jumps, the drawn one slides there (or snaps if far)
@@ -1009,6 +1019,7 @@ input.on('botWheel', e => { // bot command wheel; with Settings → Toggle the b
   else if (!e.down) wheel.keyup(); else if (!e.repeat) wheel.keydown(e.event);
 });
 onPress('teamBurst', e => { if (!e.repeat) teamplay.press(); }); // Team Burst: start it (full bar) or join the sync window
+onPress('weaponSwap', e => { if (!e.repeat && state.joined && !state.spectator) send({ type: 'swap' }); }); // swap to the 2nd weapon (server/weaponswap.js)
 onPress('players', () => $('players-btn').click());
 onPress('bag', () => toggleBag());
 onPress('interact', () => interact());
@@ -1505,6 +1516,7 @@ function renderBag() {
     }).join('')}</div>`;
   } else if (near) h += `<div class="it"><span class="nm"><small>You're at the merchant.</small></span><button data-a="shop">Trade</button></div>`;
   h += `<h4>Equipped</h4>${SLOTS.map(sl => row(inv.eq[sl], sl, inv.eq[sl] ? `<button data-a="unequip" data-s="${sl}">Remove</button>` : '')).join('')}`;
+  h += row(inv.eq.weapon2, '2nd weapon', inv.eq.weapon2 ? `<button data-a="swap" title="Swap (${esc(keyLabel('weaponSwap'))}): only the worn weapon counts">Swap</button><button data-a="unequip" data-s="weapon2">Remove</button>` : ''); // a spare weapon (server/weaponswap.js)
   const st = inv.stats;
   h += `<div class="stats"><span>Damage ${st.atk}</span><span>Health ${st.maxHp}</span><span>Crit ${st.crit}%</span><span>Cooldowns −${st.haste}%</span><span>Switch +${st.sw}%</span><span>Damage taken −${st.dr}%</span></div>`;
   h += loot.setsHtml(inv) + loot.loadoutsHtml(inv); // set progress and loadouts (public/loot.js)
@@ -1515,7 +1527,7 @@ function renderBag() {
     const cmp = it.slot !== 'charm' && cur ? (diff > 0 ? ` <span class="up">▲${diff}</span>` : diff < 0 ? ` <span class="down">▼${-diff}</span>` : '') : !cur ? ' <span class="up">new</span>' : '';
     const usable = !it.cls || it.cls === state.cls;
     if (it.ks) return keepsakeRow(it, it.slot, `<button data-a="equip" data-u="${it.u}">Wear</button>`); // keepsakes: no sell, drop or delete
-    return `<div class="it" data-tu="${it.u}"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${loot.setTag(it)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}${styles.tag(it)}${loot.lines(it)}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}<button data-a="drop" data-u="${it.u}" title="Drop on the ground for anyone to pick up">Drop</button><button class="del" data-a="discard" data-u="${it.u}" title="Delete for good">Delete</button></div>`;
+    return `<div class="it" data-tu="${it.u}"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${loot.setTag(it)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}${styles.tag(it)}${loot.lines(it)}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${usable && it.slot === 'weapon' ? `<button data-a="equip2" data-u="${it.u}" title="Carry it as your 2nd weapon: swap with ${esc(keyLabel('weaponSwap'))}, even mid-fight">2nd</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}<button data-a="drop" data-u="${it.u}" title="Drop on the ground for anyone to pick up">Drop</button><button class="del" data-a="discard" data-u="${it.u}" title="Delete for good">Delete</button></div>`;
   }).join('') : '<div class="it empty"><span class="nm"><small>Nothing yet. Enemies drop gear; the Warden always does.</small></span></div>';
   { // materials, each with Drop / Delete
     const have = inv.mats || {}, ids = MAT_IDS.filter(k => have[k] > 0);
@@ -1546,6 +1558,8 @@ $('bag').addEventListener('click', e => {
   if (a === 'buy') send({ type: 'buy', i: +b.dataset.i });
   if (a === 'sell') send({ type: 'sell', u: +b.dataset.u });
   if (a === 'equip') send({ type: 'equip', u: +b.dataset.u });
+  if (a === 'equip2') send({ type: 'equip2', u: +b.dataset.u }); // the 2nd weapon slot (server/weaponswap.js)
+  if (a === 'swap') send({ type: 'swap' });
   if (a === 'drop') send({ type: 'drop', u: +b.dataset.u });
   if (a === 'dropStack') send({ type: 'dropStack', kind: b.dataset.k, id: b.dataset.id, n: e.shiftKey ? 9999 : 1 });
   if (a === 'discardStack') { // two clicks, like gear
@@ -1733,6 +1747,7 @@ function updateHud(now) {
     combat.bossBar(boss);
     threat.bossBar(boss); // who it's after, my threat meter
     openings.bossBar(boss); // OPENING · EXPOSED · 2 s
+    bossParts.bossBar(boss); // part pips, KNEELING
     setText($('boss-phase'), onF3 ? f3.phaseText() : onF2 ? f2.phaseText() : ['PHASE 1 · CLEAVE & SLAM', 'PHASE 2 · HOUNDS & HORN CHARGE', 'PHASE 3 · ENRAGED · ROCKFALL'][state.phase] || '');
     if (!onF3) twists.bossLine($('boss-phase'), onF2); // the Warden's twist, or the Sovereign's on Floor 2
   }

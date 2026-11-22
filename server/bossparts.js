@@ -82,7 +82,7 @@ const methods = {
       if (!s || m.dead || s.fight !== this.bossFightOf(m)) continue;
       const K = BOSS_PARTS[m.type]?.all?.kneel, t = this.time;
       if (!K) continue;
-      if (s.pend && !m.ov && !(this.arenaHold?.(m)) && t >= (m.stunUntil || 0)) {
+      if (s.pend && !s.knelt && !m.ov && !(this.arenaHold?.(m)) && t >= (m.stunUntil || 0)) {
         s.pend = false; s.knelt = true; s.kneelUntil = t + K.secs;
         m.stunUntil = Math.max(m.stunUntil || 0, s.kneelUntil); m.busyUntil = Math.max(m.busyUntil || 0, s.kneelUntil); m.windupAt = 0;
         this.events.push({ t: 'kneel', id: m.id, d: K.secs });
