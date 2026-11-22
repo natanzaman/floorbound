@@ -57,7 +57,8 @@ Plans: `docs/briefs/bots-access.md`, `docs/briefs/waypoint.md`, `docs/briefs/tar
   and use slot 5 (`shared/bots/subclass.js`); the Named have their own. Admin editor: Subclass select.
 - The owner's hidden path is built as he asked: described only in the brief and the tests, never in the UI, guide,
   README or here by name.
-- Balance (bot runs, 6 bots, skill 5, 3 runs each, before → after): TUNEBOSS_RESULTS.
+- Balance (`scripts/tuneboss.js`, 6 bots at level 18, skill 5, 3 runs each, before → after): Sovereign 153 → 147 s,
+  Colossus 145 → 149 s (both within 5%, all kills); no skill needed tuning. Bots in the field use their signature skills.
 - **Owner calls waiting:** every number is a first guess (the 14 cooldowns and strengths, the fee, 80% for the hidden
   path). Signature skills have no mastery or evolutions, chains don't refund them and the Team Burst doesn't reset them.
 
