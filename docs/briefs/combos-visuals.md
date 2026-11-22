@@ -71,6 +71,49 @@ motion (no shake, no FOV kick) and the colour-blind telegraph palettes (danger c
 7. Rendering for A–E: chain counter near your character ("CHAIN x3 · Rising Edge"), the new combos, bot callouts as
    bubbles, a distinct look per burst trait / pair.
 
+### Visuals: what was built (2026-11-22, `feat/visuals`)
+- **Bloom + tone mapping** (`public/post.js`, `Q.post`): our own lean pipeline, not UnrealBloomPass. The scene is drawn once
+  into an 8-bit target (MSAA there on High), then a bright pass at 1/4 size, three halvings, three tent upsamples and one
+  full-screen pass (scene + bloom, a soft shoulder above 0.8 so highlights roll off instead of clipping, light vignette,
+  dither): 8 extra draw calls. The target is flagged like an XR target so three.js uses the canvas's shader programs:
+  turning bloom on or off (Auto stepping down) compiles nothing. Glow is chosen through the scene's alpha channel
+  (`GLOW_BLEND`): the new effects mark their pixels; besides them only near-white light blooms, so the sky, the ground and
+  the red telegraphs stay crisp.
+- **Hit sparks** (`public/sparks.js`): every spark shares one pooled Points cloud (one draw call in all, nothing allocated
+  per burst; it was a geometry, a material and a draw call per burst). `Effects.flash` / `spray` add an impact star and
+  sparks thrown through the far side on heavy hits, crits, finishers, combos and Breaks.
+- **3D skill effects, trails** (`public/vfx.js`): five instanced batches (shock bands, crescent blades, domes, lances, rock
+  shards) and one mesh for all weapon trails: at most 7 draw calls with everything on screen. Recipes by the fx event's
+  skill (table `SKILL`): Whirl, Ground Slam, Rush, Burst Combo steps and finisher, Cleave, Leap Slam, Sky Lance (the
+  falling lance and the landing), Piercing Shot, Dissonance, Smite, Charge / Comet / Pounce, Sweep / Cyclone, Execute.
+  Trails follow the weapon while a melee clip swings it (class colour; brighter, wider and whiter with the chain).
+- **Skill accents** (`world.js` `ACCENTS`, `Animator.accent` / `recoil`): anticipation, strike pose, lunge / hop and a
+  recoil on heavy hits, layered with the PoseLayer on players within `Q.animNear`.
+- **Camera kick** (`vfx.kick`): FOV punch (up to 3.4°) + a small shake on your heavy hits, your Breaks, chain x3+,
+  combos you are in and your Team Bursts; never for others' hits, off under Reduce motion and during film shots.
+- **Combos 2.0 events:** `chain` / `chainEnd` (the counter by your character, a ring / pillar flourish for everyone,
+  brighter trails), `tcall` (a bubble, not logged), `combo` (a flourish per id incl. crosscut, aftershock, verdict,
+  downbeat; `self: 1` smaller), `tburst` (`cls` → a look per class trait, layered; `nm` as the title).
+  `vfx.event` consumes `chain`, `chainEnd` and `tcall`: at the merge, drop the gameplay branch's own minimal handlers
+  for those three (or its text shows twice).
+- **Colour-blind palettes:** class colours that would sit near the danger colours move away (`CLASS_COL` in vfx.js).
+- **Low:** no bloom, trails, 3D effects, flashes or accents (`post: false, trails: 0, fx3d: false`).
+
+Measured (cloud dev box, headless Chromium on SwiftShader = software rendering, 1280x720, a swordsman + 5 bots):
+| | Before | After |
+|---|---|---|
+| Draw calls, standing at the gate, High / Medium | 364 / 364 | 372 / 372 (+8, +2.2%) |
+| Draw calls, standing at the gate, Low | 174 | 174 |
+| Draw calls, Warden fight, High (mean of 2 runs of 30 s; a fight varies ±15% run to run) | 740 | 724 |
+| Frame time, standing, High / Medium / Low | 236 / 188 / 146 ms | 262 / 212 / 137 ms |
+| Frame time, Warden fight, High | 319 ms | 347 ms |
+| JS per frame, Warden fight, High | 14.4 ms | 14.9 ms |
+| Shader programs | 56 | 73 (all compiled on the loading screen) |
+
+The frame-time rise on Medium / High (+9 to +12%) is the full-screen pass, which a software renderer pays per pixel on
+the CPU; on a GPU it is a fraction of a millisecond. Auto quality still steps down to Low (no pass at all) if a machine
+can't hold it. Test: `node test/visuals.mjs`.
+
 ## Tests
 `test/chains.js` (link rules, window, repeat, cap, hold, refund, arts, bots), `test/teamplay.js` extended (self-combos,
 the new setups / payoffs, every pair covered, traits and pair names), bot runs (`test/team.js`, `test/wardenskill.js`)

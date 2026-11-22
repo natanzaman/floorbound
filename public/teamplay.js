@@ -29,6 +29,8 @@ const CSS = `
 .num.tburst { color: #fff; font-size: 30px; text-shadow: 0 0 14px #67e8f9, 0 2px 4px #000; }
 .combo-lbl.pair { font-size: 22px; color: #fff; text-shadow: 0 0 6px #fff, 0 0 18px var(--tb1), 0 0 28px var(--tb2), 0 2px 3px #000; }
 .num.combopair { color: #fff; font-size: 26px; text-shadow: 0 0 12px #67e8f9, 0 2px 4px #000; }
+.num.combopair.self { font-size: 17px; opacity: .9; }
+.combo-lbl.self { font-size: 13px; opacity: .85; }
 `;
 
 // A colour per team (party): two hues for the bar, the burst and the combo text.
@@ -88,7 +90,8 @@ export function initTeamplay({ state, players, mobs, fx, sfx, floatNum, project,
     let L = labels.get(m.id);
     if (!L) { const el = document.createElement('div'); el.className = 'combo-lbl'; $('labels').appendChild(el); labels.set(m.id, L = { el }); }
     setColors(L.el, players.get(e.by)?.party || e.by);
-    L.el.classList.toggle('pair', !!pair); // the two players who made it: a brighter flash
+    L.el.classList.toggle('pair', !!pair && !e.self); // the two players who made it: a brighter flash
+    L.el.classList.toggle('self', !!e.self); // a self-combo (your own setup paid off by you): smaller (public/vfx.js styles it)
     L.el.innerHTML = `${e.n > 1 ? `Combo <b>×${e.n}</b> · ` : ''}${COMBOS[e.k]?.name || e.k}`;
     L.until = performance.now() + 2600; L.at = performance.now(); L.m = m;
   }
@@ -111,8 +114,8 @@ export function initTeamplay({ state, players, mobs, fx, sfx, floatNum, project,
         fx.sparks?.(e.x, (m?.model.height || 2) * 0.6, e.z, 10, col, 0.22, 7);
         if (m) comboLabel(m, e, ours);
         if (ours && m) { // the pair: a flash on the target, a sound, the name in big letters
-          fx.ring(e.x, e.z, (m.def?.radius || 1) + 2.6, 0xffffff, 0.3);
-          floatNum(m.model.group.position, m.model.height * 0.9, `${(COMBOS[e.k]?.name || e.k).toUpperCase()}!`, 'combopair');
+          if (!e.self) fx.ring(e.x, e.z, (m.def?.radius || 1) + 2.6, 0xffffff, 0.3);
+          floatNum(m.model.group.position, m.model.height * 0.9, `${(COMBOS[e.k]?.name || e.k).toUpperCase()}!`, e.self ? 'combopair self' : 'combopair'); // (self-combos show smaller)
           sfx.play('switch');
           guide.tip('combo');
         }
@@ -129,9 +132,10 @@ export function initTeamplay({ state, players, mobs, fx, sfx, floatNum, project,
         for (let i = 0; i < 3; i++) setTimeout(() => fx.ring(e.x, e.z, 3 + i * 3 + e.n, c.hex, 0.6), i * 90);
         fx.sparks?.(e.x, 2, e.z, 24 + e.n * 6, c.hex, 0.3, 11);
         const m = mobs.get(e.m);
-        if (m) floatNum(m.model.group.position, m.model.height + 0.6, e.n > 1 ? `TEAM BURST ×${e.n}` : 'BURST', 'tburst');
+        const title = e.nm ? String(e.nm).toUpperCase() : e.n > 1 ? 'TEAM BURST' : 'BURST'; // (the burst's own name by its first two classes, when the server sends it)
+        if (m) floatNum(m.model.group.position, m.model.height + 0.6, e.n > 1 ? `${title} ×${e.n}` : title, 'tburst');
         sfx.play(e.n >= 4 ? 'clear' : 'boom');
-        if (ours) { shake?.(0.25 + 0.05 * e.n); callout?.(e.n > 1 ? `TEAM BURST ×${e.n}` : 'BURST', e.n >= 4 ? 'Huge!' : e.n > 1 ? 'Synced!' : 'Solo burst', 1.4); }
+        if (ours) { shake?.(0.25 + 0.05 * e.n); callout?.(e.n > 1 ? `${title} ×${e.n}` : title, e.nm ? (e.n > 1 ? `Team Burst · ${e.n} synced` : 'Burst') : e.n >= 4 ? 'Huge!' : e.n > 1 ? 'Synced!' : 'Solo burst', 1.4); }
         return true;
       }
     }

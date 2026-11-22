@@ -40,7 +40,7 @@ export function saveSettings(settings) {
   controlsStore.set({ access: normalizeAccess({ ...controlsStore.get().access, ...access }) });
 }
 
-const QLABEL = { auto: 'Auto <small>picks a level that keeps the game smooth</small>', low: 'Low <small>fastest: no shadows, fewer effects, shorter view</small>', medium: 'Medium', high: 'High <small>sharpest, with shadows and full effects</small>' };
+const QLABEL = { auto: 'Auto <small>picks a level that keeps the game smooth</small>', low: 'Low <small>fastest: no shadows or glow, fewer effects, shorter view</small>', medium: 'Medium <small>shadows, glow, weapon trails and 3D skill effects</small>', high: 'High <small>sharpest, with shadows, glow and full effects</small>' };
 
 // The Settings panel (#settings). Returns { render, open, toggle }.
 export function initSettingsPanel({ el, settings, save, Q, PRESETS, perf, applyQuality, freeCursor, bubbles, sfx }) {
