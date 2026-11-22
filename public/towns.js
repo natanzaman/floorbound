@@ -51,7 +51,7 @@ export function createTowns({ scene, floor1, send, state, project, log, sfx, $, 
   for (const f of TOWN_FLOORS) {
     root(f).add(boards[f] = boardMesh(f));
     root(f).add(wards[f] = wardMesh(f));
-    if (TOWNS[f].trader) { const s = stallMesh(); s.position.set(TOWNS[f].trader.x, 0, TOWNS[f].trader.z); s.rotation.y = Math.atan2(TOWNS[f].x0 ?? 0, 1); s.visible = false; root(f).add(traders[f] = s); }
+    if (TOWNS[f].trader) { const s = stallMesh(); s.position.set(TOWNS[f].trader.x, 0, TOWNS[f].trader.z); s.visible = false; root(f).add(traders[f] = s); }
     const st = stoneMesh(); st.position.set(TOWNS[f].gate.x, 0, TOWNS[f].gate.z); st.visible = false; root(f).add(stones[f] = st);
   }
   const panel = document.createElement('div'); panel.id = 'town'; panel.className = 'panel hidden'; panel.dataset.nav = 'town'; // (pad-driven: public/focusnav.js)
@@ -132,7 +132,7 @@ export function createTowns({ scene, floor1, send, state, project, log, sfx, $, 
     const E = t.el, M = me(), home = M.home === t.f;
     let h = `<p class="hint">Steward: <b>${t.steward ? esc(t.steward.name) : 'nobody yet'}</b>${t.steward ? ` (${esc(AGENDAS[t.steward.ag]?.name || '')})` : ''}. ${esc(TOWNS[t.f].name)}'s Steward is ${esc(RULE_TEXT[t.rule])}. ${E.tour ? 'The tournament is on now.' : `This election closes in ${fmt(E.left - since())} (${E.voted} vote${E.voted === 1 ? '' : 's'} cast so far).`}${home ? '' : ' Only citizens vote or stand.'}</p>`;
     if (E.tour) h += `<div class="it"><span class="nm"><b>Tournament</b>${E.tour.map((rd, i) => `<small>Round ${i + 1}: ${rd.map(([a, b, w]) => `${esc(a)}${b ? ` vs ${esc(b)}` : ' (bye)'}${w ? ` → <b>${esc(w)}</b>` : ''}`).join(' · ')}</small>`).join('')}</span></div>`;
-    h += E.cands.map(c => `<div class="it ${E.my === c.k ? 'on' : ''}"><span class="slot">${c.kind === 'player' ? 'player' : c.kind === 'named' ? 'Named' : 'citizen'}</span><span class="nm"><b>${esc(c.name)} <em>${esc(AGENDAS[c.ag]?.name || '')}</em>${E.my === c.k ? ' <em class="ok">your vote</em>' : ''}</b><small>"${esc(c.plat)}"</small>${t.rule === 'contrib' ? `<small>Given this cycle: ${c.c}</small>` : ''}</span>${t.rule !== 'duel' || true ? btn('vote', E.my === c.k ? 'Voted' : 'Vote', at && home && !E.tour && E.my !== c.k, `data-k="${esc(c.k)}"`) : ''}</div>`).join('');
+    h += E.cands.map(c => `<div class="it ${E.my === c.k ? 'on' : ''}"><span class="slot">${c.kind === 'player' ? 'player' : c.kind === 'named' ? 'Named' : 'citizen'}</span><span class="nm"><b>${esc(c.name)} <em>${esc(AGENDAS[c.ag]?.name || '')}</em>${E.my === c.k ? ' <em class="ok">your vote</em>' : ''}</b><small>"${esc(c.plat)}"</small>${t.rule === 'contrib' ? `<small>Given this cycle: ${c.c}</small>` : ''}</span>${btn('vote', E.my === c.k ? 'Voted' : 'Vote', at && home && !E.tour && E.my !== c.k, `data-k="${esc(c.k)}"`)}</div>`).join('');
     const mine = E.cands.find(c => c.me);
     if (home && !E.tour) {
       h += `<h4>${mine ? 'Your candidacy' : 'Stand for Steward'}</h4><div class="it"><span class="nm"><small>Agenda:</small><span class="btns row">${AGENDA_IDS.map(a => `<button data-a="ag" data-ag="${a}" class="${ui.stand.ag === a ? 'on' : ''}" title="${esc(AGENDAS[a].line)}">${esc(AGENDAS[a].name)}</button>`).join('')}</span><input id="town-plat" maxlength="${ELECTION.platMax}" placeholder="${esc(AGENDAS[ui.stand.ag].line)}" value="${esc(ui.stand.plat)}"></span><span class="btns">${btn('stand', mine ? 'Update' : 'Stand', at)}${mine ? btn('withdraw', 'Withdraw', at) : ''}</span></div>`;
@@ -198,7 +198,6 @@ export function createTowns({ scene, floor1, send, state, project, log, sfx, $, 
   function frame(dt) {
     const now = performance.now();
     ui.rings = ui.rings.filter(r => { if (now < r.until) { r.m.material.opacity = 0.4 + 0.4 * Math.abs(Math.sin(now / 150)); return true; } scene.remove(r.m); r.m.geometry.dispose(); r.m.material.dispose(); return false; });
-    if (isOpen() && (state.dead || (boardNear(6) !== ui.f && !boardNear()))) { /* the panel stays readable away from the board; actions are disabled */ }
     if (isOpen() && (renderT += dt) > 1) { renderT = 0; render(); }
     // raid HUD
     const R = ui.raid;
@@ -214,6 +213,7 @@ export function createTowns({ scene, floor1, send, state, project, log, sfx, $, 
       const sp = project(B.x, 4.2, B.z);
       if (sp) {
         const near = boardNear() === f;
+        if (near) guide?.tip?.('town');
         const html = `Town Board · ${esc(STAGES[t?.stage ?? 0].name)}${t?.steward ? `<br><small>Steward ${esc(t.steward.name)}</small>` : ''}${near ? `<br><small>${tapping() ? 'tap Town' : `press ${keyHtml('interact')} for the town`}</small>` : ''}`;
         lbl.style.display = ''; lbl.style.left = `${sp[0]}px`; lbl.style.top = `${sp[1]}px`;
         if (lbl.innerHTML !== html) lbl.innerHTML = html;

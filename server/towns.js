@@ -279,10 +279,10 @@ export const TownMethods = {
     if (msg.project !== undefined) {
       const id = String(msg.project), open = openProjects(f, stageOf(T.xp), T.done);
       if (!open.some(pr => pr.id === id) || id === T.cur) return false;
-      if (projectOf(T.cur)) { // what was given moves into the treasury, so nothing is lost
-        T.treasury += T.given.gold; T.given = { gold: 0, mats: {} };
-      }
-      T.cur = id; T.given = { gold: 0, mats: {} };
+      // nothing given is lost: the gold goes to the treasury (which funds projects), the materials stay given (they
+      // count wherever the new project needs them)
+      T.treasury += T.given.gold;
+      T.cur = id; T.given = { gold: 0, mats: { ...T.given.mats } };
       this.townSay(f, `Steward ${p.name} set the next project: the ${projectOf(id).name}.`);
     }
     if (msg.tax !== undefined) T.tax = clampTax(msg.tax);

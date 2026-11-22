@@ -471,6 +471,33 @@ export class NamedTalk {
     } finally { clearTimeout(timer); this.budget.end(null, res, 'named'); }
   }
 
+  // ---------- a town election platform (server/towns.js platformAI): one line, once per Named per election ----------
+  // -> '' at once when the model won't be called (AI off, no key, the day's cap), else a promise of the line or ''.
+  platform(def, townName, agendaLine) {
+    if (!def || !this.provider || !this.active()) return '';
+    if (!this.budget.allow(null, 'named').ok) return '';
+    return this.platformCall(def, townName, agendaLine);
+  }
+  async platformCall(def, townName, agendaLine) {
+    const sh = SHEETS[def.id] || {};
+    const user = `You are standing for Steward of ${townName}, a town of survivors on your floor. In one short sentence (under 90 characters), in your own voice, say why people should vote for you. Your agenda: ${agendaLine}. No names of real people, no links. Put it in "say".`;
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), this.cfg.timeoutMs ?? 8000);
+    timer.unref?.();
+    this.budget.start(null, 'named');
+    let res = { ok: false, kind: 'error' };
+    try {
+      const r = await Promise.race([
+        this.provider.call({ system: systemFor(def), user, schema: TALK_SCHEMA, maxTokens: MAX_OUT, signal: ctl.signal }),
+        new Promise((_, rej) => ctl.signal.addEventListener('abort', () => rej(Object.assign(new Error('timed out'), { kind: 'timeout' })))),
+      ]);
+      res = { ok: true, usage: r.usage, cost: costOf(r.usage, this.price) };
+      return sanitizeTalk(r.intent, { maxSay: 90, secret: sh.secret }).say || '';
+    } catch (e) {
+      res = { ok: false, kind: e?.kind || 'error', retryAfter: e?.retryAfter || 0 };
+      return '';
+    } finally { clearTimeout(timer); this.budget.end(null, res, 'named'); }
+  }
+
   // sentiment -> a small, bounded friendship change (game.addFriendship caps gains: +3 a day, never across a tier)
   nudge(p, def, s, sentiment, text) {
     let base = NUDGE[sentiment] || 0;

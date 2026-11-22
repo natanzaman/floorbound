@@ -20,6 +20,7 @@ import { Director } from './director.js'; // the scene director (filming), serve
 import { installDirectorAdmin } from './director-admin.js';
 import { NamedManager, makeNamedStore, namedOn } from './named.js'; // the Named: the Hearthward and the loner (NAMED_ENABLED=0 turns them off)
 import { installNamedAdmin } from './named-admin.js';
+import { installTownsAdmin } from './towns-admin.js';
 import { NamedQuests, makeQuestStore } from './namedquests.js'; // the Named's requests and invitations (I4)
 import { TICK_RATE, inArena } from '../shared/data.js';
 import { floorOf, inArena2 } from '../shared/floor2.js';
@@ -334,6 +335,7 @@ const aiMinds = installAI({ game, bots, server });
 game.townAI = aiMinds.namedTalk || null; // the Named's election platforms, when the AI mind is on (server/towns.js platformAI)
 installDirectorAdmin({ server, director: game.director }); // /api/admin/director (admin page: Director tab)
 installNamedAdmin({ server, named }); // /api/admin/named (admin page: The Named card)
+installTownsAdmin({ server, game }); // /api/admin/towns (admin page: the Towns card)
 server.on('error', err => { console.error('Server error', err); if (err.code === 'EADDRINUSE' || err.code === 'EACCES') process.exit(1); }); // can't listen: don't linger
 db.migrate()
   .then(() => hall.load())

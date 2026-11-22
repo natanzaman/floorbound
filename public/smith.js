@@ -56,7 +56,7 @@ function buildSmithy(scene, occluders) {
   return { g, coals, anvilPos, forgePos };
 }
 
-export function createSmith({ scene, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }) {
+export function createSmith({ scene, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $, townGold }) {
   const world = buildSmithy(scene, occluders);
   const panel = document.createElement('div'); panel.id = 'smith'; panel.className = 'panel hidden';
   $('bag').parentNode.appendChild(panel);
@@ -85,7 +85,11 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
   }
 
   // ---------- panel ----------
-  const costHtml = cost => {
+  // the town's price on the gold part (tax, a citizen's discount, the market: public/towns.js); the server decides
+  const priced = cost => (cost?.gold && townGold ? { ...cost, gold: townGold(cost.gold) } : cost);
+  const afford = (g, m, cost) => canAfford(g, m, priced(cost));
+  const costHtml = c => {
+    const cost = priced(c);
     if (!cost) return '';
     const have = mats(), g = gold();
     const parts = Object.entries(cost.mats || {}).map(([k, v]) => `<span class="${(have[k] || 0) >= v ? 'ok' : 'no'}" style="--c:${MATS[k].color}">${v} ${MATS[k].name} <i>(${have[k] || 0})</i></span>`);
@@ -114,13 +118,13 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
       const cost = refineCost(it), ok = usable(it);
       let next = '';
       if (cost) { const nx = applyRefine({ ...it, st: { ...it.st }, b: it.b ? { ...it.b } : undefined, lv: (it.lv || 0) + 1 }); next = `<small class="next">→ +${nx.lv}: ${statsText(nx.st)}</small>`; }
-      return `<div class="it">${itemHead(it, eq)}${next}${cost ? costHtml(cost) : '<small class="max">Fully refined</small>'}</span>${cost && ok ? btn('refine', `+${(it.lv || 0) + 1}`, canAfford(gold(), mats(), cost), `data-u="${it.u}"`) : ''}</div>`;
+      return `<div class="it">${itemHead(it, eq)}${next}${cost ? costHtml(cost) : '<small class="max">Fully refined</small>'}</span>${cost && ok ? btn('refine', `+${(it.lv || 0) + 1}`, afford(gold(), mats(), cost), `data-u="${it.u}"`) : ''}</div>`;
     }).join('');
   }
 
   function tabCraft() {
     return '<p class="hint">Named gear with fixed, top-of-range stats. Weapons are forged for your class.</p>' + RECIPES.filter(rc => !rc.style || STYLES[rc.style]?.cls === state.cls).map(rc => { // weapon-style recipes: your class only
-      const cost = { gold: rc.gold, mats: rc.mats }, can = canAfford(gold(), mats(), cost) && state.inv && state.inv.bag.length < 24;
+      const cost = { gold: rc.gold, mats: rc.mats }, can = afford(gold(), mats(), cost) && state.inv && state.inv.bag.length < 24;
       return `<div class="it recipe"><span class="slot">${rc.slot}<br><em class="r${rc.r}">${RARITY[rc.r].name}</em></span><span class="nm"><b class="r${rc.r}">${esc(recipeName(rc, state.cls))}</b><small>${statsText(rc.st)}</small><small class="desc">${esc(rc.desc)}</small>${costHtml(cost)}</span>${btn('craft', 'Forge', can, `data-id="${rc.id}"`)}</div>`;
     }).join('');
   }
@@ -139,8 +143,8 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
     if (!list.length) return '<div class="it empty"><span class="nm"><small>Nothing to reforge. Crafted and Last Attack items are fixed.</small></span></div>';
     return '<p class="hint">Reroll an item\'s stats within its rarity range, or give a charm a different affix. Keeps its refine level.</p>' + list.map(({ it, eq }) => {
       const ok = usable(it), cs = reforgeCost(it, 'stats'), ca = reforgeCost(it, 'affix');
-      const b1 = ok ? btn('reforge', 'Reroll', canAfford(gold(), mats(), cs), `data-u="${it.u}" data-m="stats"`) : '';
-      const b2 = ok && ca ? btn('reforge', 'New affix', canAfford(gold(), mats(), ca), `data-u="${it.u}" data-m="affix"`) : '';
+      const b1 = ok ? btn('reforge', 'Reroll', afford(gold(), mats(), cs), `data-u="${it.u}" data-m="stats"`) : '';
+      const b2 = ok && ca ? btn('reforge', 'New affix', afford(gold(), mats(), ca), `data-u="${it.u}" data-m="affix"`) : '';
       return `<div class="it">${itemHead(it, eq)}<small class="lbl2">Reroll</small>${costHtml(cs)}${ca ? `<small class="lbl2">New affix</small>${costHtml(ca)}` : ''}</span><span class="btns">${b1}${b2}</span></div>`;
     }).join('');
   }
@@ -150,7 +154,7 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
     const list = gear().filter(({ it }) => rerollCost(it));
     if (!list.length) return '<div class="it empty"><span class="nm"><small>No gear with affixes. Uncommon and better drops roll 1–3 bonus stats; Epic set pieces roll 2.</small></span></div>';
     return '<p class="hint">Reroll ONE affix into a different one (the item keeps its other affixes, stats and refine level). Set pieces cost double.</p>' + list.map(({ it, eq }) => {
-      const cost = rerollCost(it), ok = usable(it), can = canAfford(gold(), mats(), cost);
+      const cost = rerollCost(it), ok = usable(it), can = afford(gold(), mats(), cost);
       const rows = it.ax.map((a, i) => `<div class="axrow"><span class="ax-l${isTeamAffix(a) ? ' team' : ''}">${esc(affixText(a, state.cls))}</span>${ok ? btn('reroll', 'Reroll', can, `data-u="${it.u}" data-i="${i}"`) : ''}</div>`).join('');
       return `<div class="it" data-tu="${it.u}"><span class="slot">${eq ? `${eq}<br><em>worn</em>` : it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${setTagHtml(it, state.inv?.eq)}</b><small>${statsText(it.st)}</small>${rows}${costHtml(cost)}</span></div>`;
     }).join('');

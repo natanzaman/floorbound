@@ -20,7 +20,7 @@ export const DAY = 86400e3, HOUR = 3600e3;
 export const TOWNS = {
   1: { floor: 1, name: 'Town of Beginnings', rule: 'vote', board: { x: 5, z: 11 }, ward: { x: 0, z: 31 }, raidFrom: { x: [-18, 18], z: 54 }, gate: { x: 8, z: 132 }, trader: null },
   2: { floor: 2, name: 'Mirelight Camp', rule: 'contrib', board: { x: 607, z: 10 }, ward: { x: 600, z: 23 }, raidFrom: { x: [586, 614], z: 46 }, gate: { x: 608, z: 132 }, trader: { x: 593, z: -9 } },
-  3: { floor: 3, name: 'Windbreak Camp', rule: 'duel', board: { x: 1194, z: 10 }, ward: { x: 1200, z: 23 }, raidFrom: { x: [1186, 1214], z: 46 }, gate: { x: 1208, z: 132 }, trader: { x: 1207, z: -9 } },
+  3: { floor: 3, name: 'Windbreak Camp', rule: 'duel', board: { x: 1194, z: 10 }, ward: { x: 1200, z: 23 }, raidFrom: { x: [1186, 1214], z: 46 }, gate: { x: 1208, z: 126 }, trader: { x: 1207, z: -9 } },
 };
 export const TOWN_FLOORS = [1, 2, 3];
 export const BOARD = { r: 0.8, use: 3.4 };   // the board post's collision radius; how close to stand to use it

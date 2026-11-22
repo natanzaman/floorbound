@@ -47,12 +47,13 @@ export function initFloor2Client(ctx) {
       const sub = open ? w.name : `Help defeat ${w.floor === 3 ? 'the Drowned Sovereign' : 'the Horned Warden'} to open it`;
       return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.07)"><span><b>${FLOOR_NAMES[w.floor]}</b><br><small style="opacity:.7">${sub}</small></span>${btn}</div>`;
     };
-    panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;font-weight:800;letter-spacing:.12em;color:#99f6e4">WAYPOINT<button data-a="close" style="padding:2px 9px;border-radius:6px;border:1px solid rgba(160,200,255,.3);background:transparent">✕</button></div>${WAYPOINTS.map(row).join('')}`;
+    panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;font-weight:800;letter-spacing:.12em;color:#99f6e4">WAYPOINT<button data-a="close" style="padding:2px 9px;border-radius:6px;border:1px solid rgba(160,200,255,.3);background:transparent">✕</button></div>${WAYPOINTS.map(row).join('')}${ctx.warpExtra?.(unlocked) || ''}`; // + each town's gate waystone, once built (public/towns.js)
   }
   panel.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.a === 'close') { panel.classList.add('hidden'); sfx.play('ui'); return; }
     if (b.dataset.f) { ctx.send({ type: 'warp', f: +b.dataset.f }); panel.classList.add('hidden'); sfx.play('ui'); }
+    if (b.dataset.g) { ctx.send({ type: 'town', op: 'gate', f: +b.dataset.g }); panel.classList.add('hidden'); sfx.play('ui'); } // a town's gate waystone (server/towns.js)
   });
 
   // ---------- per-snapshot state ----------

@@ -13,6 +13,7 @@ import { initLooks } from '/looks.js';
 import { TwistClient } from '/twists.js';
 import { Sound } from '/audio.js';
 import { createSmith } from '/smith.js';
+import { createTowns } from '/towns.js'; // floor towns that grow, their Stewards and raids (public/towns.js)
 import { createLife } from '/life.js'; // life classes: gathering spots, garden, cooking, alchemy, the Life panel
 import { createAcademy, weaponCards } from '/academy.js'; // the Academy: Initiates, trials, drills, ranks (docs/briefs/academy.md)
 import { WEAPONS, pathLabel } from '/shared/academy.js';
@@ -141,6 +142,7 @@ const f2 = initFloor2Client({
   scene, sun, occluders, fx, sfx, state, mobs, players, isTouch, calm: () => settings.reduceMotion, tip: id => guide.tip(id), wake: wellWake,
   send: o => send(o), banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a),
   log: (a, b) => log(a, b), shake: a => shake(a), project: (x, y, z) => project(x, y, z), hallOpen: () => !$('hall').classList.contains('hidden'),
+  warpExtra: unlocked => towns.warpRows(unlocked), // the towns' gate waystones (public/towns.js)
 });
 // Floor 3 — The Gale Spires (floor3client.js): world, the Storm Gate, the Stairway from the Sunken Court, the Colossus's mechanics.
 const f3 = initFloor3Client({
@@ -396,8 +398,9 @@ const gmenu = initGameMenu({
 const wheel = initBotWheel({ send, state, players, log, keyLabel, toggleMode: () => !!settings.wheelToggle }); // orders for the bots in your party: hold V (public/botwheel.js)
 const bubbles = initBubbles({ state, players, project, camera, layer: $('labels'), enabled: () => settings.bubbles !== false && !cine.film }); // speech bubbles over heads (public/bubbles.js); the film view uses subtitles
 const ground = initGround({ scene, state, project, $ }); // items lying on the ground (public/ground.js)
-const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $ }); // town Smith (public/smith.js)
+const smith = createSmith({ scene: floor1, occluders, fx, sfx, send, state, project, log, guide, isTouch, makePlayerModel, $, townGold: g => towns.smithGold(g) }); // town Smith (public/smith.js)
 const life = createLife({ scene, floor1, send, state, project, log, sfx, guide, $ }); // life classes (public/life.js)
+const towns = createTowns({ scene, floor1, send, state, project, log, sfx, guide, $, banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c) }); // floor towns, Stewards, raids (public/towns.js)
 const academy = createAcademy({ scene: floor1, occluders, state, send, project, sfx, banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), log: (a, b) => log(a, b), $, tip: id => guide.tip(id) }); // the Academy and its yard (public/academy.js)
 // posture bars, perfect dodge / parry feedback, Guardian guard (R), Horn Sweep telegraph (public/combat.js)
 const combat = initCombat({ state, players, mobs, fx, sfx, guide, send, floatNum, slowMotion, shake: a => shake(a), shakeNear: (...a) => shakeNear(...a), bossShot: (...a) => bossShot(...a), lockedMob: () => lockedMob(), nearestMob: r => nearestMob(r), guardFace: () => guardFace(), callout: (a, b, c) => callout(a, b, c) });
@@ -504,6 +507,7 @@ function onMessage(msg, arrival = performance.now()) {
   if (pbots.onMessage(msg)) return; // player-owned bots (Players panel → Bots tab)
   if (friends.onMessage(msg)) return; // the Named (Players panel → Friends tab)
   if (msg.type === 'inv') { state.inv = msg; state.gold = msg.gold; renderBag(); smith.render(); life.render(); wellWake.inv(); return; }
+  if (msg.type === 'towns') { towns.onMsg(msg); return; } // the towns (public/towns.js)
   if (msg.type === 'life') { life.onMsg(msg); return; } // life classes (public/life.js)
   if (msg.type === 'hall') { state.hallData = msg; renderHall(); bell.hall(msg); return; }
   if (msg.type === 'snap') {
@@ -528,6 +532,7 @@ function onSnapshot({ st, me, w }, arrival) {
     return;
   }
   teamplay.snap(w); // Team Burst gauges and sync windows
+  towns.snap(w); // a raid on this floor (public/towns.js)
   academy.snapMe(me); // a running trial or drill: the HUD, the Ward Post (public/academy.js)
   if (me) {
     state.xp = me.xp; state.next = me.next;
@@ -855,6 +860,7 @@ function handleEvent(e) {
     case 'clear2': if (inArena2(state.x, state.z)) guide.did('boss'); break; // banner/sound in floor2client.js
     case 'clear3': if (inArena3(state.x, state.z)) guide.did('boss'); break; // banner/sound in floor3client.js
     case 'forge': smith.onForge(e); break;
+    case 'traid': case 'townup': case 'townbuilt': case 'steward': towns.onEvent(e); break; // the towns (public/towns.js)
     case 'lifebite': case 'lifelvl': life.onEvent(e); break; // life classes (public/life.js)
     case 'loot': {
       if (e.to !== me) break;
@@ -1004,7 +1010,7 @@ input.onLabels(() => labelBar()); // (device, pad kind, picture or bindings chan
 const LEGACY_KEYS = { e: 'revive', q: 'turnLeft', j: 'attack', r: 'guard', v: 'botWheel' };
 const keys = { has: k => (LEGACY_KEYS[k] ? input.held(LEGACY_KEYS[k]) : input.key(k.length === 1 ? `Key${k.toUpperCase()}` : k)), clear: () => input.reset() };
 const panels = createPanels(); // Esc closes the first group; all of them free the cursor while open
-for (const id of ['players', 'bag', 'hall', 'warp', 'smith', 'life', 'academy', 'settings', 'skillsp', 'duel-pick']) panels.register(id, { esc: true });
+for (const id of ['players', 'bag', 'hall', 'warp', 'smith', 'life', 'town', 'academy', 'settings', 'skillsp', 'duel-pick']) panels.register(id, { esc: true });
 for (const id of ['talentsp', 'botwheel', 'botmenu', 'gamemenu']) panels.register(id); // (they close themselves on Esc)
 const stick = { active: false, id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
 let attackHeld = false;
@@ -1423,13 +1429,14 @@ function useSkill(slot) {
 }
 
 // ---------------- items, merchant, raid gate ----------------
-const nearMerchant = () => !state.dead && Math.hypot(state.x - MERCHANT.x, state.z - MERCHANT.z) < MERCHANT.r + 1;
+const nearMerchant = () => !state.dead && (Math.hypot(state.x - MERCHANT.x, state.z - MERCHANT.z) < MERCHANT.r + 1 || !!towns.traderNear()); // + a camp trader, once built (public/towns.js)
 function interactKind() {
   if (state.dead || !state.joined || state.spectator) return null;
   if (life.interactKind() === 'life-hook') return 'life-hook'; // fishing: the key strikes (public/life.js)
   if (nearMerchant()) return 'shop';
   if (nearHall()) return 'hall';
   if (smith.near()) return 'smith';
+  if (towns.interactKind()) return 'town'; // a town board (public/towns.js)
   if (academy.near()) return 'academy'; // the Academy (public/academy.js)
   if (mastery.near()) return 'shrine'; // Skill Shrine (public/mastery.js)
   if (ground.near()) return 'pickup';
@@ -1446,6 +1453,7 @@ function interact() {
   else if (k === 'academy') academy.toggle();
   else if (k === 'shrine') talents.toggle();
   else if (k === 'pickup') { send({ type: 'pickup', id: ground.near() }); }
+  else if (towns.interact(k)) { /* public/towns.js */ }
   else if (life.interact(k)) { /* public/life.js */ }
   else if (k === 'gate') { send({ type: 'ready' }); sfx.play('ui'); state.meReady = state.meReady ? 0 : 1; updateGateBox(true); }
   else if (!lab.interact(k) && !f3.interact(k)) f2.interact(k);
@@ -1537,10 +1545,10 @@ function renderBag() {
     : `<div class="it empty"><span class="slot">${slotName}</span><span class="nm"><small>Empty</small></span></div>`;
   let h = `<div class="top"><span>Bag <span class="gold">${inv.gold} gold</span></span><button class="x" data-a="close">✕</button></div>`;
   if (shopping) {
-    h += `<div class="shop"><h4>Merchant</h4>${SHOP.map((s, i) => {
-      const name = s.kind === 'cons' ? CONSUMABLES[s.id].name : s.kind === 'mat' ? `${MATS[s.id]?.name || s.id} <small>(you have ${inv.mats?.[s.id] || 0})</small>` : styles.shopName(s, state.cls) || (s.slot === 'weapon' ? 'Uncommon weapon (your class)' : 'Uncommon armour');
-      const desc = s.kind === 'cons' ? CONSUMABLES[s.id].desc : s.kind === 'mat' ? s.desc : s.slot === 'weapon' ? '+7–9% damage' : '+8–12% max health';
-      const price = s.kind === 'cons' ? CONSUMABLES[s.id].price : s.price;
+    h += `<div class="shop"><h4>Merchant</h4>${SHOP.map((s, i) => { if (!towns.shopHas(s)) return ''; // a town's own stock shows at its own merchant (public/towns.js)
+      const name = s.kind === 'cons' ? CONSUMABLES[s.id].name : s.kind === 'mat' ? `${MATS[s.id]?.name || s.id} <small>(you have ${inv.mats?.[s.id] || 0})</small>` : styles.shopName(s, state.cls) || `${s.r === 2 ? 'Rare' : 'Uncommon'} ${s.slot === 'weapon' ? 'weapon (your class)' : 'armour'}${s.town ? ' <small>(town stock)</small>' : ''}`;
+      const desc = s.kind === 'cons' ? CONSUMABLES[s.id].desc : s.kind === 'mat' ? s.desc : s.r === 2 ? (s.slot === 'weapon' ? '+11–15% damage' : '+14–18% max health') : s.slot === 'weapon' ? '+7–9% damage' : '+8–12% max health';
+      const price = towns.price(s.kind === 'cons' ? CONSUMABLES[s.id].price : s.price); // tax, a citizen's discount, the market
       return `<div class="it"><span class="nm"><b>${name}</b><small>${desc}</small></span><button data-a="buy" data-i="${i}" ${inv.gold < price ? 'disabled style="opacity:.4"' : ''}>${price}g</button></div>`;
     }).join('')}</div>`;
   } else if (near) h += `<div class="it"><span class="nm"><small>You're at the merchant.</small></span><button data-a="shop">Trade</button></div>`;
@@ -1802,7 +1810,7 @@ function updateHud(now) {
     }
     if (btn.dataset.slot === 'guard') { btn.classList.toggle('on', combat.guarding); continue; }
     if (btn.dataset.slot === 'cover') { threat.coverCd(btn); continue; }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'academy' ? (academy.inTrial() ? 'Leave' : 'Enter') : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : a?.startsWith('life-') ? life.actLabel(a) : state.meReady ? 'Unready' : 'Ready'); continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'town' ? 'Town' : a === 'academy' ? (academy.inTrial() ? 'Leave' : 'Enter') : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : a?.startsWith('life-') ? life.actLabel(a) : state.meReady ? 'Unready' : 'Ready'); continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : { cd: mastery.cd(slot) }; // mastery/branch cooldowns
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
@@ -2293,6 +2301,7 @@ function frame(now) {
   if (merchantNpc?.anim) merchantNpc.anim.update(vdt);
   smith.frame(vdt);
   life.frame(vdt);
+  towns.frame(vdt); // boards, raid HUD (public/towns.js)
   academy.frame(); // the Academy's label, the trial HUD, the Ward Post
   ground.frame(vdt, isTouch);
   mastery.frame(vdt, now); // Skill Shrines, evolved-skill auras
@@ -2367,4 +2376,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.__fb = { interactKind, life, academy, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent, vfx, post };
+window.__fb = { interactKind, life, towns, academy, wellWake, duels, settings, combat, wheel, controlsUi, motion: () => ({ shakeAmt, slowMo, hitStop }), shake, slowMotion, input, panels, nav, state, players, mobs, looks, banner, sfx, project, floatLog, cine, camera, bubbles, threat, mvp, send: m => send(m), renderer, scene, perf, clock, netStats, Q, applyQuality, fx, handleEvent, vfx, post };

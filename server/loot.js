@@ -144,7 +144,8 @@ export const LootMethods = {
     if (it.cls && it.cls !== p.cls) { this.sys('The Smith only rerolls weapons you can wield.', p.id); return false; }
     const cost = rerollCost(it);
     if (!cost || !it.ax?.[i | 0]) { this.sys(`${it.name} has no affix to reroll.`, p.id); return false; }
-    if (!canAfford(p.gold, this.matsOf(p), cost)) { this.sys(cost.gold > p.gold ? 'Not enough gold.' : 'Not enough materials.', p.id); return false; }
+    const sc = this.smithCost?.(p, cost) ?? cost; // the town's price (server/towns.js)
+    if (!canAfford(p.gold, this.matsOf(p), sc)) { this.sys(sc.gold > p.gold ? 'Not enough gold.' : 'Not enough materials.', p.id); return false; }
     const old = affixText(it.ax[i | 0], p.cls);
     const a = rerollAffix(it, i | 0, p.cls);
     if (!a) { this.sys('Nothing else can roll on that item.', p.id); return false; }
