@@ -1089,7 +1089,8 @@ const settingsUi = initSettingsPanel({ el: $('settings'), settings, save: saveSe
 // Controller menu navigation over the window on top (public/focusnav.js): the MVP card, else the top panel, else
 // character select, else the death card; only windows marked data-nav. B: back (Settings opened from the Game Menu
 // goes back to it); the Game Menu's Controls page backs out to the menu first.
-const nav = createFocusNav({ input, panels, order: ['mvp', '*', 'login', 'dead'], hooks: {
+const nav = createFocusNav({ input, panels, order: ['mvp', '*', 'ginvite', 'login', 'dead'], hooks: { // (ginvite: a guild invite card, public/guilds.js)
+  ginvite: { back: () => guilds.dismissCard() },
   gamemenu: { back: () => { const b = $('gamemenu').querySelector('[data-a=back]'); if (b) b.click(); else gmenu.close(); }, open: () => menuOpen() },
   talentsp: { back: () => talents.toggle(false) },
   mvp: { back: () => mvp.close() },
@@ -1676,6 +1677,7 @@ function sendChat(raw) {
 $('players-btn').onclick = () => { $('players').classList.toggle('hidden'); lobby.html = ''; renderPlayers(); };
 function renderPlayers() {
   if ($('players').classList.contains('hidden')) return;
+  $('players').toggleAttribute('data-nav', pbots.tab === 'guild'); // the Guild tab is pad-driven (the Registrar opens it; public/focusnav.js)
   const nNamed = [...state.roster.values()].filter(r => r.named).length; // the Named have the Friends tab (public/named.js)
   const nBots = [...state.roster.values()].filter(r => r.bot && !r.named).length, nReal = state.roster.size - nBots - nNamed;
   if (pbots.tab !== 'players') return pbots.render($('players'), nReal, nBots); // Bots / Friends tab (public/playerbots.js)

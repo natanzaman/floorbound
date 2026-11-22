@@ -9,7 +9,7 @@ from playwright.sync_api import sync_playwright
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PORT = int(os.environ.get('PORT', '3871'))
 base = f'http://localhost:{PORT}'
-srv = subprocess.Popen(['node', 'server/index.js'], cwd=ROOT, env={**os.environ, 'PORT': str(PORT), 'START_LEVEL': '5', 'SPAWN_AT': '12.2,-8.5',
+srv = subprocess.Popen(['node', 'server/index.js'], cwd=ROOT, env={**os.environ, 'PORT': str(PORT), 'START_LEVEL': '5', 'SPAWN_AT': '6.6,-14.8',
                        'TEST_HOOKS': '1', 'DATABASE_URL': '', 'NAMED_ENABLED': '0'}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 n = 0
 def ok(name):
@@ -63,6 +63,8 @@ try:
         ok('/g chat: the guild sees it, someone outside doesn\'t')
         a.fill('.gd input[data-f="iname"]', 'Cyd'); a.click('.gd button[data-a="invite"]')
         c.wait_for_selector('.gd-invite button[data-x="1"]', timeout=10000)
+        assert S(c, "() => { const e = document.getElementById('ginvite'); return !!e && e.dataset.nav === 'ginvite' && e.querySelectorAll('button[data-nav]').length === 2; }")
+        ok('the invite card is a controller layer of its own (data-nav)')
         c.click('.gd-invite button[data-x="1"]')
         a.wait_for_function("() => [...document.querySelectorAll('#players .gd-m')].some(e => /Cyd/.test(e.textContent))", timeout=10000)
         ok('invite card: Cyd accepts and shows in the member list')
@@ -74,6 +76,10 @@ try:
         S(c, "() => { const i = document.getElementById('chat-input'); i.value = '/g for the guild'; i.focus(); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); }")
         a.wait_for_function("() => /\\[Guild\\] Cyd: for the guild/.test(document.getElementById('log').textContent)", timeout=10000)
         ok('/g chat from a new member reaches the guild')
+        assert S(a, "() => document.getElementById('players').hasAttribute('data-nav') && [...document.querySelectorAll('#players .gd summary')].every(e => e.dataset.nav)")
+        a.click('.gd button[data-a="gpre"][data-n="100"]')
+        assert a.input_value('.gd input[data-f="gold"]') == '100'
+        ok('pad-driven Guild tab: the window is a data-nav root, the sections open from the pad, preset gold amounts')
         a.fill('.gd input[data-f="gold"]', '200'); a.click('.gd button[data-a="deposit"]')
         a.wait_for_function("() => /Bank: 200 gold/.test(document.querySelector('#players .gd').textContent)", timeout=10000)
         ok('deposit from the tab')

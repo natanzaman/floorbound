@@ -80,6 +80,10 @@ export function charLock(charId, fn) {
   return run;
 }
 
+// Called with a character's id after it was deleted (server/index.js: the guild it was in hands on or ends).
+const charGone = new Set();
+export function onCharacterDeleted(fn) { charGone.add(fn); }
+
 export async function loadCharacter(accountId, charId) {
   return charLock(charId | 0, () => loadCharacterNow(accountId, charId));
 }
@@ -91,10 +95,12 @@ async function loadCharacterNow(accountId, charId) {
 // p: an in-game player with charId, lvl, xp, gold, inv, stats (lifetime stats + titles), mastery (skill mastery + evolutions), talents (talent tree),
 // cls and path (the Academy: an Initiate or graduated; null for characters from before it). During a class trial the
 // loaned kit is never saved: p.loan holds the real class, mastery and talents (server/academy.js).
+// The values are taken now, when the save is asked for, not when the lock lets it run: a guild bank move made after
+// this call (server/guilds.js) can't leak into it half-written.
 export async function saveCharacter(p) {
   const real = p.loan || p;
-  await charLock(p.charId, () => q('UPDATE characters SET lvl = $2, xp = $3, gold = $4, inv = $5, stats = $6, mastery = $7, talents = $8, cls = $9, path = $10, life = $11, updated_at = now() WHERE id = $1',
-    [p.charId, Math.min(MAX_LEVEL, p.lvl), p.xp, Math.max(0, p.gold | 0), JSON.stringify(p.inv), JSON.stringify(p.stats || null), JSON.stringify(real.mastery || null), JSON.stringify(real.talents || null), real.cls || p.cls, p.path ? JSON.stringify(p.path) : null, JSON.stringify(lifeRecord(p))])); // life: server/life.js
+  const vals = [p.charId, Math.min(MAX_LEVEL, p.lvl), p.xp, Math.max(0, p.gold | 0), JSON.stringify(p.inv), JSON.stringify(p.stats || null), JSON.stringify(real.mastery || null), JSON.stringify(real.talents || null), real.cls || p.cls, p.path ? JSON.stringify(p.path) : null, JSON.stringify(lifeRecord(p))]; // life: server/life.js
+  await charLock(p.charId, () => q('UPDATE characters SET lvl = $2, xp = $3, gold = $4, inv = $5, stats = $6, mastery = $7, talents = $8, cls = $9, path = $10, life = $11, updated_at = now() WHERE id = $1', vals));
 }
 
 // Controls that follow the account (roadmap K2): the whole fb_controls object, cleaned (unknown ids dropped), with a
@@ -210,7 +216,8 @@ export async function handle(req, res, url) {
     if (del && req.method === 'DELETE') {
       const a = await accountFromToken(bearer(req));
       if (!a) return json(res, 401, { error: 'signed out' }), true;
-      await q('DELETE FROM characters WHERE id = $1 AND account_id = $2', [+del[1], a.id]);
+      const gone = await charLock(+del[1], () => q('DELETE FROM characters WHERE id = $1 AND account_id = $2 RETURNING id', [+del[1], a.id]));
+      if (gone.length) for (const fn of charGone) fn(+del[1]); // (its guild membership: server/guilds.js guildCharGone)
       return json(res, 200, { ok: true }), true;
     }
 

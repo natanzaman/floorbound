@@ -44,17 +44,33 @@ export function makeGuildStore(q, tx, charLock = (id, fn) => fn()) {
     dropMember: key => q('DELETE FROM guild_members WHERE member = $1', [key]),
     deleteGuild: id => q('DELETE FROM guilds WHERE id = $1', [id]),
     // A new guild with its leader, or a bank move: the guild row (and members) with the character's gold and bag, in one
-    // transaction, inside that character's save lock.
-    bank: (g, p, members = []) => {
+    // transaction. Every argument is a snapshot taken at the move (guildSnap), and the caller hands over `after` (the guild
+    // write queue as it stood then): the character's save lock is taken now, at the move, so a character save asked for
+    // later waits for this transaction and one asked for earlier (its own snapshot, from before the move) lands before it.
+    bank: (g, c, members = [], after = Promise.resolve()) => {
       const run = () => tx(async t => {
         await t(UPSERT, row(g));
         for (const m of members) await t(MEMBER, mrow(g.id, m));
-        if (p?.charId) await t('UPDATE characters SET gold = $2, inv = $3, updated_at = now() WHERE id = $1', [p.charId, Math.max(0, p.gold | 0), JSON.stringify(p.inv)]);
+        if (c) await t('UPDATE characters SET gold = $2, inv = $3, updated_at = now() WHERE id = $1', [c.id, c.gold, c.inv]);
       });
-      return p?.charId ? charLock(p.charId, run) : run();
+      return c ? charLock(c.id, () => after.then(run)) : after.then(run);
     },
   };
 }
+
+// What a write needs of a guild, a member or a character, copied at the moment of the change (a write that runs later
+// never sees a change made after it was asked for).
+const clone = v => (v == null ? v : JSON.parse(JSON.stringify(v)));
+export const guildSnap = g => ({ id: g.id, name: g.name, tag: g.tag, xp: g.xp, gold: g.gold, vault: clone(g.vault), vseq: g.vseq, quests: clone(g.quests), plot: clone(g.plot), created: g.created });
+const memberSnap = m => ({ ...m });
+// A stored week of quests keeps only ids the table still has (a dropped quest would break the view). → true if changed.
+const cleanQuests = g => {
+  const L = g.quests?.list;
+  if (!Array.isArray(L) || L.every(s => s && QUEST_BY_ID[s.id])) return false;
+  g.quests.list = L.filter(s => s && QUEST_BY_ID[s.id]).map(s => ({ ...s, got: Number(s.got) || 0, done: !!s.done }));
+  return true;
+};
+const charSnap = p => ({ id: p.charId, gold: Math.max(0, p.gold | 0), inv: JSON.stringify(p.inv) });
 
 export const GuildMethods = {
   guildInit() {
@@ -79,31 +95,41 @@ export const GuildMethods = {
       const m = { key: r.member, name: r.name, cls: r.cls, rank: r.rank | 0, joined: new Date(r.joined_at).getTime(), ...(r.char_id ? { charId: r.char_id } : {}), ...(r.named_id ? { named: r.named_id } : {}) };
       g.members.set(m.key, m); this.guildIdx.set(m.key, g.id);
     }
-    for (const g of [...this.guilds.values()]) { // a leader's character was deleted: hand it on; nobody left: gone
-      if (!g.members.size) { this.guildDelete(g); continue; }
-      if (![...g.members.values()].some(m => m.rank === RANK.leader)) { const m = this.guildHeir(g); if (m) { m.rank = RANK.leader; this.guildWrite(s => s.saveMember(g.id, m)); } }
+    for (const g of [...this.guilds.values()]) { // the runtime rules (guildRemoveMember), for characters deleted meanwhile
+      if (cleanQuests(g)) this.guildSaveNow(g); // (quest ids a newer table dropped)
+      if (![...g.members.values()].some(m => this.guildHuman(m))) { this.guildDelete(g); continue; } // no player left: gone
+      if (![...g.members.values()].some(m => m.rank === RANK.leader)) { // leaderless: a player heir, else gone
+        const m = this.guildHeir(g);
+        if (!m) { this.guildDelete(g); continue; }
+        m.rank = RANK.leader; this.guildSaveMember(g, m);
+      }
     }
   },
-  guildWrite(fn) { // one queue for every guild write (newest state wins: each write reads memory when it runs)
+  guildWrite(fn) { // one queue for every guild write, in the order asked (callers pass snapshots: guildSnap)
     const s = this.guildStore;
     if (!s) return Promise.resolve();
     this.guildQ = this.guildQ.then(() => fn(s)).catch(e => console.error('[guilds] save failed:', e.message));
     return this.guildQ;
   },
+  guildSaveNow(g) { if (g.saveT) { clearTimeout(g.saveT); g.saveT = null; } const x = guildSnap(g); this.guildWrite(s => s.saveGuild(x)); },
+  guildSaveMember(g, m) { if (!m.key.startsWith('s:')) { const x = memberSnap(m); this.guildWrite(s => s.saveMember(g.id, x)); } },
   guildDirty(g) {
     if (!this.guildStore || g.saveT) return;
-    g.saveT = setTimeout(() => { g.saveT = null; if (this.guilds.get(g.id) === g) this.guildWrite(s => s.saveGuild(g)); }, 3000);
+    g.saveT = setTimeout(() => { g.saveT = null; if (this.guilds.get(g.id) === g) this.guildSaveNow(g); }, 3000);
     g.saveT.unref?.();
   },
-  guildBankWrite(g, p, members) {
+  // A bank move (or a founding): the guild, the character's gold and bag (and members) as they are now, in one
+  // transaction. The job enters the guild queue and the character's save lock both at once, here, so neither a debounced
+  // guild save nor a character autosave can commit one side of the move without the other.
+  guildBankWrite(g, p, members = []) {
     if (!this.guildStore) return;
-    if (p) p.dirty = true; // (the character's own save writes it too; the transaction makes the pair atomic)
-    const s = this.guildStore;
-    const go = () => s.bank(g, p?.charId ? p : null, members).catch(e => { console.error('[guilds] bank save failed:', e.message); this.guildDirty(g); });
-    this.guildQ = this.guildQ.then(go);
+    if (g.saveT) { clearTimeout(g.saveT); g.saveT = null; } // (this write carries the whole row)
+    if (p) p.dirty = true; // (the character's own save writes the same values again later)
+    const job = this.guildStore.bank(guildSnap(g), p?.charId && !p.bot ? charSnap(p) : null, members.map(memberSnap), this.guildQ);
+    this.guildQ = Promise.resolve(job).catch(e => { console.error('[guilds] bank save failed:', e.message); if (this.guilds.get(g.id) === g) this.guildDirty(g); });
   },
   async guildFlush() {
-    for (const g of this.guilds?.values() || []) if (g.saveT) { clearTimeout(g.saveT); g.saveT = null; this.guildWrite(s => s.saveGuild(g)); }
+    for (const g of this.guilds?.values() || []) if (g.saveT) this.guildSaveNow(g);
     await this.guildQ;
   },
 
@@ -125,11 +151,12 @@ export const GuildMethods = {
     const msg = JSON.stringify({ type: 'gchat', sys: 1, tag: g.tag, text });
     for (const o of this.guildOnline(g)) if (!o.bot && o.id !== except && o.ws?.readyState === 1) o.ws.send(msg);
   },
-  guildBankBusy(p) { // at most GUILD.bankOps bank moves per 10 s per player (each one is a database transaction)
-    const t = this.time;
-    if (!p.gBank || t - p.gBank.at > 10) p.gBank = { at: t, n: 0 };
-    return ++p.gBank.n > GUILD.bankOps;
+  guildBusy(p, k, max) { // at most `max` of one kind of request per 10 s per player
+    const t = this.time, b = (p.gBusy ||= {});
+    if (!b[k] || t - b[k].at > 10) b[k] = { at: t, n: 0 };
+    return ++b[k].n > max;
   },
+  guildBankBusy(p) { return this.guildBusy(p, 'bank', GUILD.bankOps); }, // (each bank move is a database transaction)
   guildHuman(m) { return !!m.charId || (m.key.startsWith('s:') && !this.players.get(+m.key.slice(2))?.bot); },
   guildHeir(g) { // the next leader: a saved player (or any human without a database), highest rank, then the oldest
     const ok = m => this.guildHuman(m) && m.rank !== RANK.leader;
@@ -138,6 +165,7 @@ export const GuildMethods = {
   guildWeek(g) {
     const w = weekOf(this.guildNow());
     if (g.quests?.week !== w || !Array.isArray(g.quests?.list)) { g.quests = { week: w, list: drawQuests(g.id, w) }; this.guildDirty(g); }
+    else if (cleanQuests(g)) this.guildDirty(g);
     return g.quests;
   },
 
@@ -146,7 +174,7 @@ export const GuildMethods = {
     const key = this.guildKey(p);
     const m = { key, name: p.name, cls: p.cls, rank, joined: this.guildNow(), ...(p.charId && !p.bot ? { charId: p.charId } : {}), ...(p.named ? { named: p.named } : {}) };
     g.members.set(key, m); this.guildIdx.set(key, g.id);
-    if (write && !key.startsWith('s:')) this.guildWrite(s => s.saveMember(g.id, m));
+    if (write) this.guildSaveMember(g, m);
     this.rosterDirty = true;
     return m;
   },
@@ -160,9 +188,17 @@ export const GuildMethods = {
       const h = this.guildHeir(g);
       if (!h) return void this.guildDelete(g, 'The guild has no one to lead it and is no more.');
       h.rank = RANK.leader;
-      if (!h.key.startsWith('s:')) this.guildWrite(s => s.saveMember(g.id, h));
+      this.guildSaveMember(g, h);
       this.guildTell(g, `${h.name} now leads [${g.tag}] ${g.name}.`);
     }
+  },
+  guildCharGone(charId) { // a character was deleted (admin or its owner): out of its guild, as if it had left
+    this.guildInit();
+    const key = `c:${charId | 0}`, g = this.guilds.get(this.guildIdx.get(key));
+    if (!g) return;
+    const m = g.members.get(key);
+    this.guildRemoveMember(g, key);
+    if (this.guilds.get(g.id) === g) this.guildTell(g, `${m?.name || 'A member'} is gone (the character was deleted).`);
   },
   guildDelete(g, why = '') {
     if (why) this.guildTell(g, why);
@@ -295,7 +331,7 @@ export const GuildMethods = {
     if (m === me || m.rank === RANK.leader) fail('Use Transfer to hand on leadership.');
     if (up ? m.rank !== RANK.member : m.rank !== RANK.officer) fail(up ? `${m.name} is already an officer.` : `${m.name} is a member already.`);
     m.rank = up ? RANK.officer : RANK.member;
-    if (!m.key.startsWith('s:')) this.guildWrite(s => s.saveMember(g.id, m));
+    this.guildSaveMember(g, m);
     this.guildTell(g, `${m.name} is now ${up ? 'an Officer' : 'a Member'}.`);
     return '';
   },
@@ -308,7 +344,7 @@ export const GuildMethods = {
     const t = this.guildPlayerOf(m);
     if (m.named || (this.guildStore ? !m.charId : !t || t.bot)) fail('Only a player can lead a guild.');
     m.rank = RANK.leader; me.rank = RANK.officer;
-    for (const x of [m, me]) if (!x.key.startsWith('s:')) this.guildWrite(s => s.saveMember(g.id, x));
+    for (const x of [m, me]) this.guildSaveMember(g, x);
     this.guildTell(g, `${m.name} now leads [${g.tag}] ${g.name}.`);
     this.rosterDirty = true;
     return '';
@@ -383,7 +419,8 @@ export const GuildMethods = {
     if (i < 0) fail('That item is no longer in the vault.');
     if (p.inv.bag.length >= BAG_SIZE) fail('Your bag is full.');
     const [{ it }] = g.vault.splice(i, 1);
-    if (p.inv.bag.some(o => o.u === it.u)) it.u = Math.max(...p.inv.bag.map(o => o.u | 0), it.u | 0) + 1; // (item ids are per bag: keep them apart)
+    const mine = [...p.inv.bag, ...Object.values(p.inv.eq || {})].filter(Boolean); // (item ids are per character: keep them apart)
+    if (mine.some(o => o.u === it.u)) it.u = Math.max(...mine.map(o => o.u | 0), it.u | 0) + 1;
     p.inv.bag.push(it);
     this.invChanged(p);
     this.guildBankWrite(g, p);
@@ -479,7 +516,9 @@ export const GuildMethods = {
       switch (op) {
         case 'view': break;
         case 'create': text = this.guildCreate(p, msg.name, msg.tag); break;
-        case 'invite': text = this.guildInvite(p, { name: msg.name, pid: msg.pid, named: msg.named }); break;
+        case 'invite':
+          if (this.guildBusy(p, 'invite', GUILD.inviteOps)) fail('Easy there: wait a few seconds before inviting more.');
+          text = this.guildInvite(p, { name: msg.name, pid: msg.pid, named: msg.named }); break;
         case 'accept': text = this.guildAccept(p, msg.gid); break;
         case 'decline': text = this.guildDecline(p); break;
         case 'leave': text = this.guildLeave(p); break;
@@ -519,7 +558,7 @@ export function installGuilds(Game) {
   wrap('handle', function (orig, p, msg) {
     this.guildInit();
     if (msg?.type === 'guild') return this.guildHandle(p, msg);
-    if (msg?.type === 'test' && process.env.TEST_HOOKS && msg.guildEv) return void this.guildCredit(p, { kind: String(msg.guildEv.kind), mob: String(msg.guildEv.mob || ''), floor: msg.guildEv.floor | 0, rare: !!msg.guildEv.rare }, Math.min(1000, Math.max(0, +msg.guildEv.n || 1))); // testing aid: { guildEv: { kind, mob, floor, n } } counts toward guild quests
+    if (msg?.type === 'test' && process.env.TEST_HOOKS && msg.guildEv) this.guildCredit(p, { kind: String(msg.guildEv.kind), mob: String(msg.guildEv.mob || ''), floor: msg.guildEv.floor | 0, rare: !!msg.guildEv.rare }, Math.min(1000, Math.max(0, +msg.guildEv.n || 1))); // testing aid: { guildEv: { kind, mob, floor, n } } counts toward guild quests (the message's other test fields still apply)
     if (msg?.type === 'chat') { // "/g text" or ch 'g': guild chat (only the guild's online players get it)
       let text = String(msg.text || '').slice(0, 200).trim();
       const m = text.match(/^\/(g|guild)\s+([\s\S]*)$/i);
@@ -550,12 +589,16 @@ export function installGuilds(Game) {
     return orig.call(this, p, amount);
   });
   // Quest credit: kills (the killer), labyrinth keepers and floor bosses (each guild with a member in the fight, once)
+  // Enemies that are no real fight earn nothing: Academy trial and training enemies, summons and adds (temp), labyrinth
+  // risers, duel stand-ins.
+  const noCredit = m => !!(m?.trial || m?.tough || m?.temp || m?.labTemp || m?.def?.duel);
   wrap('killMob', function (orig, m, killer) {
+    if (noCredit(m)) return orig.call(this, m, killer);
     const fought = m?.def?.boss || (m?.labF && KEEPERS[m.type]) ? [...m.contributors] : null;
     const out = orig.call(this, m, killer);
-    if (!this.guilds?.size || !m.dead || !killer || m.def.duel) return out;
+    if (!this.guilds?.size || !m.dead || !killer) return out;
     this.guildCredit(killer, { kind: 'kill', mob: m.type, floor: floorOf(m.x), rare: !!(m.rare || m.def.rare) });
-    if (fought && !m.temp) {
+    if (fought) {
       const kind = m.def.boss ? 'boss' : 'lab', seen = new Map();
       for (const id of fought) { const o = this.players.get(id), g = o && this.guildOf(o); if (g) seen.set(g, seen.get(g) || !o.bot); }
       for (const [g, human] of seen) this.guildProgress(g, { kind }, human ? 1 : GUILD.botRate);

@@ -313,8 +313,9 @@ async function shutdown(sig) {
       save: async () => {
         if (db.enabled) await Promise.allSettled([...game.players.values()].filter(p => p.charId).map(p => accounts.saveCharacter(p)));
         await track.flush().catch(() => {});
-        await aiMinds.flush(); // AI memories + spend (server/ai/store.js)
-        await named?.flush(); // friendship still waiting to be saved (server/named.js)
+        // (each flush on its own: one that fails doesn't keep the others from saving)
+        await Promise.resolve().then(() => aiMinds.flush()).catch(e => console.error('shutdown: AI flush', e)); // AI memories + spend (server/ai/store.js)
+        await Promise.resolve().then(() => named?.flush()).catch(e => console.error('shutdown: named flush', e)); // friendship still waiting to be saved (server/named.js)
         await game.guildFlush(); // guild progress still waiting to be saved (server/guilds.js)
       },
     });
@@ -326,6 +327,7 @@ async function shutdown(sig) {
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => void shutdown(sig));
 
 admin.init({ game, bots });
+accounts.onCharacterDeleted(id => game.guildCharGone(id)); // a deleted character leaves its guild (server/guilds.js)
 if (process.env.TEST_HOOKS) globalThis.floorbound = { game, bots, playerBots, localHub }; // testing aid: a test that imports this file reaches the live objects (test/localws.js)
 const aiMinds = installAI({ game, bots, server });
 installDirectorAdmin({ server, director: game.director }); // /api/admin/director (admin page: Director tab)

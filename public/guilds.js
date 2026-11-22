@@ -8,6 +8,7 @@ import { RARITY } from '/shared/items.js';
 import { GUILD, RANK, RANKS, can, REGISTRAR, nearRegistrar } from '/shared/guilds.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const GOLD_PRESETS = GUILD.goldPresets;
 const clsName = cls => CLASSES[cls]?.name || cls || '';
 
 export function initGuilds({ $, send, state, log, sfx, project, keyHtml, tapping, openTab, tip = () => {} }) {
@@ -46,6 +47,7 @@ export function initGuilds({ $, send, state, log, sfx, project, keyHtml, tapping
       const v = val('ipick'); if (!v) return;
       return ask('invite', v.startsWith('n:') ? { named: v.slice(2) } : { pid: +v.slice(2) });
     }
+    if (a === 'gpre') { const f = root.querySelector('[data-f="gold"]'); if (f) f.value = b.dataset.n; return; } // (preset amounts: a controller can't type)
     if (a === 'deposit' || a === 'withdraw') { const g = Math.floor(Number(val('gold'))); if (g > 0) ask(a, { gold: g }); return; }
     if (a === 'store') return ask('store', { u: +b.dataset.u });
     if (a === 'take') return ask('take', { v: +b.dataset.v });
@@ -89,7 +91,7 @@ export function initGuilds({ $, send, state, log, sfx, project, keyHtml, tapping
     const bag = (state.inv?.bag || []).filter(it => !it.ks);
     const vault = `<div class="gd-sect"><b>Vault ${G.vault.length}/${G.vaultCap}</b><small>${can(my, 'take') ? 'take items out' : 'officers take items out'}</small></div>
       ${G.vault.length ? G.vault.map(s => itemRow(s.it, can(my, 'take') ? `<button data-a="take" data-v="${s.v}">Take</button>` : '')).join('') : '<div class="gd-empty">Empty.</div>'}
-      <details class="gd-bag"><summary>Store from your bag (${bag.length})</summary>${bag.length ? bag.map(it => itemRow(it, `<button data-a="store" data-u="${it.u}" ${G.vault.length >= G.vaultCap ? 'disabled' : ''}>Store</button>`)).join('') : '<div class="gd-empty">Nothing to store.</div>'}</details>`;
+      <details class="gd-bag"><summary data-nav="gd-bag">Store from your bag (${bag.length})</summary>${bag.length ? bag.map(it => itemRow(it, `<button data-a="store" data-u="${it.u}" ${G.vault.length >= G.vaultCap ? 'disabled' : ''}>Store</button>`)).join('') : '<div class="gd-empty">Nothing to store.</div>'}</details>`;
     const quests = G.quests.map(q => `<div class="gd-q ${q.done ? 'done' : ''}"><div><b>${esc(q.name)}</b><small>${esc(q.desc)}</small></div><div class="gd-bar"><div style="width:${Math.min(100, Math.round((q.got / q.n) * 100))}%"></div></div><small>${q.done ? 'Done' : `${q.got} / ${q.n}`} · +${q.xp} guild XP, +${q.gold} gold to the bank</small></div>`).join('');
     const resets = new Date(G.resets).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
     return `<div class="gd-head"><b class="gd-tag">[${esc(G.tag)}]</b> <b>${esc(G.name)}</b><span class="gd-rank r${my}">${esc(G.rankName)}</span></div>
@@ -97,10 +99,10 @@ export function initGuilds({ $, send, state, log, sfx, project, keyHtml, tapping
       <div class="gd-sect"><b>Members (${G.members.length}/${GUILD.maxMembers})</b><small>chat: /g text</small></div>${members}
       ${invite}
       <div class="gd-sect"><b>Bank: ${G.gold} gold</b><small>you have ${state.gold ?? 0}</small></div>
-      <div class="gd-row"><input data-f="gold" type="number" min="1" step="1" placeholder="Gold" style="width:7em" /><button data-a="deposit" data-go="gold">Deposit</button>${can(my, 'withdraw') ? '<button data-a="withdraw">Withdraw</button>' : ''}</div>
+      <div class="gd-row"><input data-f="gold" type="number" min="1" step="1" placeholder="Gold" style="width:7em" />${GOLD_PRESETS.map(n => `<button class="gd-pre" data-a="gpre" data-n="${n}" title="Set the amount to ${n}">${n}</button>`).join('')}<button data-a="deposit" data-go="gold">Deposit</button>${can(my, 'withdraw') ? '<button data-a="withdraw">Withdraw</button>' : ''}</div>
       ${vault}
       <div class="gd-sect"><b>This week's guild quests</b><small>new ones ${esc(resets)}; bots count a quarter</small></div>${quests}
-      <details class="gd-perks"><summary>Perks</summary>${G.perks.map(k => `<div class="${k.on ? 'on' : ''}">Lv ${k.lvl}: ${esc(k.text)}${k.on ? ' ✓' : ''}</div>`).join('')}</details>
+      <details class="gd-perks"><summary data-nav="gd-perks">Perks</summary>${G.perks.map(k => `<div class="${k.on ? 'on' : ''}">Lv ${k.lvl}: ${esc(k.text)}${k.on ? ' ✓' : ''}</div>`).join('')}</details>
       <div class="gd-btns gd-end">${my === RANK.leader ? `<button class="danger" data-a="disband">${ui.confirm === 'disband:' ? 'Sure?' : 'Disband guild'}</button>` : `<button class="danger" data-a="leave">${ui.confirm === 'leave:' ? 'Sure?' : 'Leave guild'}</button>`}</div>`;
   }
   function draw() {
@@ -121,10 +123,13 @@ export function initGuilds({ $, send, state, log, sfx, project, keyHtml, tapping
   }
 
   // ---------- the invite card ----------
+  // A controller layer of its own (public/focusnav.js: data-nav, after the open window in main.js's order): A on a button,
+  // B puts it away (the invite still waits in the Guild tab).
   function card(e) {
+    document.getElementById('ginvite')?.remove();
     const el = document.createElement('div');
-    el.className = 'panel gd-invite';
-    el.innerHTML = `<div><b>${esc(e.from)}</b> invites you to the guild <b>[${esc(e.tag)}] ${esc(e.name)}</b></div><button data-x="1">Accept</button><button data-x="0">Decline</button>`;
+    el.className = 'panel gd-invite'; el.id = 'ginvite'; el.dataset.nav = 'ginvite';
+    el.innerHTML = `<div><b>${esc(e.from)}</b> invites you to the guild <b>[${esc(e.tag)}] ${esc(e.name)}</b></div><button data-x="1" data-nav="gi-accept">Accept</button><button data-x="0" data-nav="gi-decline">Decline</button>`;
     el.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; ask(b.dataset.x === '1' ? 'accept' : 'decline', { gid: e.gid }); el.remove(); };
     document.body.appendChild(el);
     setTimeout(() => el.remove(), GUILD.inviteFor * 1000);
@@ -145,6 +150,7 @@ export function initGuilds({ $, send, state, log, sfx, project, keyHtml, tapping
 
   const api = {
     id: 'guild',
+    dismissCard() { document.getElementById('ginvite')?.remove(); },
     label: () => 'Guild',
     root,
     show() { poll(); draw(); tip('guild'); },

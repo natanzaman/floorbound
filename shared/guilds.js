@@ -11,10 +11,13 @@ export const GUILD = {
   botAnswer: [1, 2], // s before a bot or one of the Named answers an invite (they accept)
   goldMax: 10_000_000,
   bankOps: 40,       // bank moves (deposit, withdraw, store, take) per player per 10 s
+  inviteOps: 8,      // invites per player per 10 s
+  goldPresets: [10, 100, 1000], // the Guild tab's amount buttons (a controller can't type)
 };
 
-// Registrar: the door of the south-east house of the plaza in the Town of Beginnings (no new art; a label like the Smith's).
-export const REGISTRAR = { x: 12.6, z: -9.5, r: 2.5 };
+// Registrar: the door of the house south-east of the Smith's forge in the Town of Beginnings (no new art; a label like the
+// Smith's), at least 6 m from every other town prompt (Life Hall, Academy, garden, cooking fire, alchemy bench, ...).
+export const REGISTRAR = { x: 6.3, z: -15.7, r: 2.5 };
 export const nearRegistrar = (x, z, pad = 1) => Math.hypot(x - REGISTRAR.x, z - REGISTRAR.z) < REGISTRAR.r + pad;
 
 export const RANKS = [
@@ -83,7 +86,7 @@ export const GUILD_QUESTS = [
   { id: 'gale', kind: 'kill', floor: 3, n: 100, name: 'Over the Spires', desc: 'Defeat 100 monsters on Floor 3', xp: 130, gold: 320 },
   { id: 'rare', kind: 'kill', rare: true, n: 2, name: 'Rare Game', desc: 'Defeat 2 rare named enemies', xp: 90, gold: 220 },
   { id: 'lab', kind: 'lab', n: 2, name: 'Keys of the Deep', desc: 'Clear a labyrinth (defeat its keeper) twice', xp: 120, gold: 300 },
-  { id: 'boss', kind: 'boss', n: 1, name: 'Floor Breakers', desc: 'Beat a floor boss with a guildmate in the fight', xp: 150, gold: 400 },
+  { id: 'boss', kind: 'boss', n: 1, name: 'Floor Breakers', desc: 'Beat a floor boss with a member of the guild in the fight', xp: 150, gold: 400 },
   { id: 'switch', kind: 'switch', n: 25, name: 'Switch!', desc: 'Land 25 Switches in a party with a guildmate', xp: 90, gold: 220 },
 ];
 export const QUEST_BY_ID = Object.fromEntries(GUILD_QUESTS.map(q => [q.id, q]));

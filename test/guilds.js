@@ -21,6 +21,8 @@ import {
 import { makeItem, keepsakeItem } from '../shared/items.js';
 import { walkable } from '../shared/data.js';
 import { SETS } from '../shared/loot.js';
+import { makeGuildStore } from '../server/guilds.js';
+import { charLock } from '../server/accounts.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 3810;
@@ -228,7 +230,7 @@ const sysTo = (g, p) => g.events.filter(e => e.t === 'sys' && e.to === p.id).map
   const w = [];
   const store = { loadAll: async () => ({ guilds: [{ id: 5, name: 'Old Guard', tag: 'OG', xp: 120, gold: 40, vault: [], vseq: 0, quests: null, plot: null, created_at: new Date() }], members: [{ member: 'c:77', guild_id: 5, char_id: 77, named_id: null, rank: 1, name: 'Vet', cls: 'cleric', joined_at: new Date() }] }),
     saveGuild: async x => w.push(['guild', x.id]), saveMember: async (id, m) => w.push(['member', m.key]), dropMember: async k => w.push(['drop', k]), deleteGuild: async id => w.push(['delete', id]),
-    bank: async (x, p, ms = []) => w.push(['bank', x.id, p?.charId || 0, ms.map(m => m.key).join(',')]) };
+    bank: async (x, c, ms = []) => w.push(['bank', x.id, c?.id || 0, ms.map(m => m.key).join(',')]) };
   await g.useGuildStore(store);
   const OG = g.guilds.get(5);
   ok(OG && OG.members.get('c:77').rank === RANK.leader && g.guildSeq === 6, 'loading: a guild whose leader is gone gets one (the Officer); new ids follow the old');
@@ -242,6 +244,99 @@ const sysTo = (g, p) => g.events.filter(e => e.t === 'sys' && e.to === p.id).map
   ok(w.filter(x => x[0] === 'bank' && x[2] === 9).length === 2, 'a deposit is one bank transaction with the character');
   act(g, s, 'invite', { pid: anon.id });
   ok(!anon.ginvite, 'with a database, a guest without a saved character can\'t be invited');
+}
+
+{ // review fixes: a bank move is written from a snapshot taken at the move, in order with the character's own saves
+  const g = fresh();
+  const log = [];
+  let hold; const gate = new Promise(r => { hold = r; });
+  const fakeTx = async fn => { const stmts = []; await fn(async (t, v) => stmts.push([t.split(' ')[0], v])); log.push(['tx', stmts]); };
+  const fakeQ = async (t, v) => { log.push(['q', t.split(' ')[0], v]); return []; };
+  const store = makeGuildStore(fakeQ, fakeTx, charLock);
+  store.loadAll = async () => ({ guilds: [], members: [] });
+  await g.useGuildStore(store);
+  const s = add(g, 'Saver', { charId: 4242 });
+  act(g, s, 'create', { name: 'Snap Guild', tag: 'SNP' }); await g.guildQ;
+  const G = g.guildOf(s);
+  log.length = 0;
+  // a character save asked for before the move (still waiting for its lock), the move, then more changes in memory
+  const before = charLock(4242, async () => { await gate; log.push(['save-before']); });
+  act(g, s, 'deposit', { gold: 100 });
+  const goldAtMove = s.gold, bankAtMove = G.gold;
+  s.gold += 5000; G.gold += 7000; // (changes after the move: a later write's business)
+  const after = charLock(4242, async () => { log.push(['save-after']); });
+  hold(); await before; await after; await g.guildQ;
+  const i0 = log.findIndex(x => x[0] === 'save-before'), i1 = log.findIndex(x => x[0] === 'tx'), i2 = log.findIndex(x => x[0] === 'save-after');
+  ok(i0 >= 0 && i0 < i1 && i1 < i2, `the move's transaction lands after a save asked before it and before one asked after it (${log.map(x => x[0]).join(' → ')})`);
+  const tx = log[i1]?.[1] || [], up = tx.find(x => x[0] === 'UPDATE'), gr = tx.find(x => x[0] === 'INSERT');
+  ok(up && up[1][1] === goldAtMove && gr && gr[1][4] === bankAtMove, `the transaction carries the values of the move (character ${up?.[1][1]} = ${goldAtMove}, bank ${gr?.[1][4]} = ${bankAtMove}), not later ones`);
+  // a debounced guild save copies the row when it is queued
+  log.length = 0; G.xp = 55; g.guildDirty(G); const p1 = g.guildFlush(); G.xp = 99; await p1;
+  const gs = log.find(x => x[0] === 'q' && x[1] === 'INSERT');
+  ok(gs && gs[2][3] === 55, 'a guild save writes the row as it was when queued');
+  // a bank move takes over a pending debounced save (one row write, in order)
+  log.length = 0; g.guildDirty(G); act(g, s, 'deposit', { gold: 1 }); await g.guildQ;
+  ok(!G.saveT && log.filter(x => x[0] === 'tx').length === 1, 'a bank move carries the whole row: no debounced save left behind it');
+}
+{ // review fixes: no guild credit for fights that aren't real
+  const g = fresh(); const a = add(g, 'Ann');
+  act(g, a, 'create', { name: 'Fair Play', tag: 'FP' });
+  const G = g.guildOf(a);
+  G.quests = { week: weekOf(Date.now()), list: [{ id: 'boars', got: 0, done: false }, { id: 'boss', got: 0, done: false }, { id: 'lab', got: 0, done: false }] };
+  const boar = [...g.mobs.values()].find(m => m.type === 'boar');
+  for (const flag of ['trial', 'tough', 'temp', 'labTemp']) {
+    boar[flag] = flag === 'trial' ? a.id : 1; boar.dead = false; boar.hp = boar.maxHp;
+    g.killMob(boar, a); delete boar[flag];
+  }
+  ok(G.quests.list[0].got === 0, 'Academy trial and training enemies, summons and labyrinth risers earn no kill credit');
+  boar.dead = false; boar.hp = boar.maxHp; g.killMob(boar, a);
+  ok(G.quests.list[0].got === 1, '(a real boar still counts)');
+}
+{ // review fixes: a deleted character leaves its guild; loading applies the same rules; unknown quest ids
+  const g = fresh();
+  const store = { loadAll: async () => ({
+    guilds: [
+      { id: 1, name: 'Bots Only', tag: 'BO', xp: 0, gold: 0, vault: [], vseq: 0, quests: null, plot: null, created_at: new Date() },
+      { id: 2, name: 'Old Quests', tag: 'OQ', xp: 0, gold: 0, vault: [], vseq: 0, quests: { week: weekOf(Date.now()), list: [{ id: 'gone-quest', got: 3, done: false }, { id: 'boars', got: 2, done: false }] }, plot: null, created_at: new Date() },
+      { id: 3, name: 'Two Players', tag: 'TP', xp: 0, gold: 0, vault: [], vseq: 0, quests: null, plot: null, created_at: new Date() },
+    ],
+    members: [
+      { member: 'n:kirito', guild_id: 1, char_id: null, named_id: 'kirito', rank: 2, name: 'Kirito', cls: 'swordsman', joined_at: new Date() },
+      { member: 'c:21', guild_id: 2, char_id: 21, named_id: null, rank: 2, name: 'Q', cls: 'cleric', joined_at: new Date() },
+      { member: 'c:31', guild_id: 3, char_id: 31, named_id: null, rank: 2, name: 'Lead', cls: 'cleric', joined_at: new Date(1000) },
+      { member: 'c:32', guild_id: 3, char_id: 32, named_id: null, rank: 0, name: 'Second', cls: 'cleric', joined_at: new Date(2000) },
+      { member: 'n:asuna', guild_id: 3, char_id: null, named_id: 'asuna', rank: 1, name: 'Asuna', cls: 'swordsman', joined_at: new Date(500) },
+    ] }),
+  saveGuild: async () => {}, saveMember: async () => {}, dropMember: async () => {}, deleteGuild: async () => {}, bank: async () => {} };
+  await g.useGuildStore(store);
+  ok(!g.guilds.has(1), 'loading: a guild with only the Named (no player) left is deleted, as at runtime');
+  const q = add(g, 'Q', { charId: 21 });
+  let v;
+  try { v = g.guildView(q); } catch (e) { v = null; }
+  ok(v?.guild?.quests.length === 1 && v.guild.quests[0].id === 'boars' && v.guild.quests[0].got === 2, 'a stored quest id the table no longer has is dropped (no crash in the view)');
+  g.guildCharGone(31);
+  const T = g.guilds.get(3);
+  ok(T && !T.members.has('c:31') && T.members.get('c:32').rank === RANK.leader, 'a deleted leader\'s character: the next player leads (not one of the Named)');
+  g.guildCharGone(32);
+  ok(!g.guilds.has(3) && !g.guildIdx.has('n:asuna'), 'the last player\'s character deleted: the guild is no more');
+}
+{ // review nits: an item taken out never shares an id with worn gear; invites are throttled; the test hook keeps other fields
+  const g = fresh(); const a = add(g, 'Ann');
+  act(g, a, 'create', { name: 'Nit Pickers', tag: 'NP' });
+  const G = g.guildOf(a), worn = { ...makeItem('armor', 0, 'swordsman'), u: 5555 }; a.inv.eq[worn.slot] = worn;
+  if (worn) {
+    G.vault.push({ v: ++G.vseq, it: { ...makeItem('armor', 0, 'swordsman'), u: worn.u }, by: 'x' });
+    act(g, a, 'take', { v: G.vseq });
+    const ids = [...a.inv.bag, ...Object.values(a.inv.eq).filter(Boolean)].map(x => x.u);
+    ok(new Set(ids).size === ids.length, 'an item taken out never shares an id with gear you wear');
+  } else ok(false, 'worn gear');
+  let refused = 0; for (let i = 0; i < GUILD.inviteOps + 3; i++) if (/Easy there/.test(act(g, a, 'invite', { name: 'Nobody' }).error || '')) refused++;
+  ok(refused === 3, `at most ${GUILD.inviteOps} invites per 10 s per player`);
+  const hooks = process.env.TEST_HOOKS; process.env.TEST_HOOKS = '1';
+  const gold0 = a.gold; g.handle(a, { type: 'test', guildEv: { kind: 'switch' }, gold: 7 });
+  if (hooks === undefined) delete process.env.TEST_HOOKS; else process.env.TEST_HOOKS = hooks;
+  ok(a.gold === gold0 + 7, 'the guildEv test hook doesn\'t swallow the message\'s other test fields');
+  ok(/member of the guild in the fight/.test(QUEST_BY_ID.boss.desc), 'the boss quest says what counts (a member of the guild in the fight)');
 }
 
 // ---------- a real server (Postgres) ----------
@@ -357,6 +452,11 @@ if (DB) {
     const inBags = (A.inv.bag.filter(x => x.name === stored.name && JSON.stringify(x.st) === JSON.stringify(stored.st)).length);
     ok(inBags === 0, 'the stored item is in the vault and not back in the bag');
     void gB;
+    // B deletes their character: out of the guild at once (and in the database)
+    ok((await http('DELETE', `/api/characters/${cb.id}`, tokB)).status === 200, 'B deletes their character');
+    r = await A.ask({ op: 'view' });
+    ok(r.view.guild.members.length === 1 && !r.view.guild.members.some(m => m.key === `c:${cb.id}`), 'a deleted character leaves its guild');
+    ok(!(await sql('SELECT 1 FROM guild_members WHERE member = $1', [`c:${cb.id}`])).length, '(and its member row is gone)');
     const dbg = await http('DELETE', `/api/admin/guilds/${G.id}`, tokA);
     ok(dbg.status === 200, 'the admin disbands it');
     await until(async () => !(await sql('SELECT 1 FROM guilds WHERE id = $1', [G.id])).length, 3000, 'deleted');

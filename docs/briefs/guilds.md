@@ -5,8 +5,9 @@ Sized for a handful of friends plus the game's many bots and the Named. One guil
 ## Rules (data and pure rules in `shared/guilds.js`)
 - **Create:** name 3-20 characters (letters, digits, single spaces, `'` and `-`; starts and ends with a letter or digit),
   tag 2-4 letters (stored upper case), both unique ignoring case, fee `GUILD.fee` gold (300). From the Guild tab of the
-  Players window, or the **Guild Registrar** in the Town of Beginnings (the south-east house of the plaza; its door is the
-  station, "press F" like the Smith; it opens the Guild tab). With a database, a human needs a saved character.
+  Players window, or the **Guild Registrar** in the Town of Beginnings (the door of the house south-east of the Smith's forge,
+  `REGISTRAR` (6.3, -15.7), at least 6 m from every other town prompt: Life Hall, Academy, garden, cooking fire, alchemy
+  bench, Smith, Shrine, merchant, Hall; the door is the station, "press F" like the Smith; it opens the Guild tab). With a database, a human needs a saved character.
 - **Ranks:** Leader / Officer / Member. Who may do what: `GUILD_PERMS` (invite, kick a lower rank, withdraw gold, take
   from the vault: Officer+; promote, demote, transfer leadership, disband: Leader; deposit, store in the vault, chat,
   leave: everyone). The Leader can't leave while others remain (transfer first, or disband). Only a human with a saved
@@ -24,11 +25,19 @@ Sized for a handful of friends plus the game's many bots and the Named. One guil
   40; keepsakes stay with you). Everything happens in the single-threaded game loop, so a move is all-or-nothing in
   memory: the item leaves the bag and enters the vault (or the other way) in one step, by vault slot id (`v`), so two
   players taking the same item at once: the first gets it, the second is told it's gone. Persisted in one Postgres
-  transaction (guild row + that character's gold and bag), queued behind the character's own saves
-  (`accounts.charLock`, which loads also wait on) so an older save can never land after it. At most `GUILD.bankOps`
-  (40) bank moves per player per 10 s.
+  transaction (guild row + that character's gold and bag) built from a snapshot taken at the move. The job enters both
+  the guild write queue and the character's save lock (`accounts.charLock`, which loads, admin edits and deletes also
+  go through) at the move itself; a character save and a debounced guild save also copy their values when asked for.
+  So a save asked for before the move writes the state before it and lands first, one asked for after it waits for the
+  transaction: no save can commit one side of a move alone, and a crash can't duplicate gold or items. At most
+  `GUILD.bankOps` (40) bank moves and `GUILD.inviteOps` (8) invites per player per 10 s.
+- **Fair credit:** Academy trial and training enemies, summons and adds (`m.temp`), labyrinth risers (`m.labTemp`) and
+  duel stand-ins count for no guild quest.
+- **Deleted characters** (by their owner or an admin) leave their guild as if they had left: a player heir takes the
+  lead, and a guild with no player left is no more. Loading the guilds applies the same rule (and drops stored quest
+  ids the table no longer has).
 - **Weekly quests:** 3 a week (Monday 00:00 UTC), drawn from `GUILD_QUESTS` with a seed of (guild id, week). Kinds: kill
-  (by mob type, floor, or rares), lab (defeat a labyrinth keeper), boss (a floor boss falls with a member in the fight),
+  (by mob type, floor, or rares), lab (defeat a labyrinth keeper), boss (a floor boss falls with a member of the guild in the fight),
   switch (land a Switch with a guildmate in your party). Members' actions count; a bot's or one of the Named's count
   `GUILD.botRate` (0.25), so bots alone can't farm it quickly. Done: guild XP and gold into the bank.
 - **Guild level 1-10** from guild XP (`GUILD_LEVELS`); perks from `GUILD_PERKS`: vault slots, +XP when grouped with a
