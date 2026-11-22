@@ -12,6 +12,7 @@ const q = (...a) => db.q(...a);
 import { MAX_LEVEL } from '../shared/data.js';
 import { isNamedName } from '../shared/named.js';
 import { lifeRecord } from './life.js';
+import { townRecord } from './towns.js';
 import { WEAPONS, newPath, isWeapon, isClass } from '../shared/academy.js';
 import { cleanControls, CONTROLS_MAX_BYTES } from '../shared/controls.js';
 import { cleanAllow, ALLOW_CREATOR, ALLOW_MAX } from '../shared/accesslevels.js';
@@ -70,7 +71,7 @@ export async function listCharacters(accountId) {
 }
 
 export async function loadCharacter(accountId, charId) {
-  const rows = await q('SELECT id, name, cls, lvl, xp, gold, inv, stats, mastery, talents, life, path FROM characters WHERE id = $1 AND account_id = $2', [charId | 0, accountId]);
+  const rows = await q('SELECT id, name, cls, lvl, xp, gold, inv, stats, mastery, talents, life, path, town FROM characters WHERE id = $1 AND account_id = $2', [charId | 0, accountId]);
   return rows[0] || null;
 }
 
@@ -79,8 +80,8 @@ export async function loadCharacter(accountId, charId) {
 // loaned kit is never saved: p.loan holds the real class, mastery and talents (server/academy.js).
 export async function saveCharacter(p) {
   const real = p.loan || p;
-  await q('UPDATE characters SET lvl = $2, xp = $3, gold = $4, inv = $5, stats = $6, mastery = $7, talents = $8, cls = $9, path = $10, life = $11, updated_at = now() WHERE id = $1',
-    [p.charId, Math.min(MAX_LEVEL, p.lvl), p.xp, Math.max(0, p.gold | 0), JSON.stringify(p.inv), JSON.stringify(p.stats || null), JSON.stringify(real.mastery || null), JSON.stringify(real.talents || null), real.cls || p.cls, p.path ? JSON.stringify(p.path) : null, JSON.stringify(lifeRecord(p))]); // life: server/life.js
+  await q('UPDATE characters SET lvl = $2, xp = $3, gold = $4, inv = $5, stats = $6, mastery = $7, talents = $8, cls = $9, path = $10, life = $11, town = $12, updated_at = now() WHERE id = $1',
+    [p.charId, Math.min(MAX_LEVEL, p.lvl), p.xp, Math.max(0, p.gold | 0), JSON.stringify(p.inv), JSON.stringify(p.stats || null), JSON.stringify(real.mastery || null), JSON.stringify(real.talents || null), real.cls || p.cls, p.path ? JSON.stringify(p.path) : null, JSON.stringify(lifeRecord(p)), JSON.stringify(townRecord(p))]); // life: server/life.js; town: server/towns.js
 }
 
 // Controls that follow the account (roadmap K2): the whole fb_controls object, cleaned (unknown ids dropped), with a

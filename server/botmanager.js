@@ -46,6 +46,7 @@ export class BotManager {
     this.bots = []; // { bid, b (the bot and its brain), group (startTeam handle), behaviour, follow, team, lvl, at }
     this.nextBid = 1; this.nextTeam = 1;
     this.joining = false;
+    game.botMgr = this; // (floor towns call free bots to a raid's ward: server/towns.js raidBots)
     // Keep bots out of play tracking (sessions, ...): they're not players. Their deaths go in as 'bot_death' (stats dashboard).
     const track = game.track;
     // (a Named's death is flagged `named`: server/named.js)

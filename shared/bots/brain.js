@@ -321,6 +321,8 @@ function command(b, c) {
       return ack(c.k);
     }
     case 'stay': b.cmd = { ...base, k: 'stay', x: b.x, z: b.z }; return ack('stay');
+    case 'defend': b.cmd = { ...base, by: 0, k: 'stay', x: +c.x || b.x, z: +c.z || b.z, defend: 1 }; return say(b, 'defend', { who }, { force: true, text: `To the ward of ${c.byName || 'the town'}!` }); // a raid on a town (server/towns.js raidBots)
+    case 'release': if (b.cmd?.defend) b.cmd = null; return;
     case 'tend': if (floorOf(b.x) !== 1) return ack('notFloor1'); b.cmd = { ...base, by: 0, k: 'stay', x: +c.x || b.x, z: +c.z || b.z, tend: 1 }; return ack('stay'); // hold at the garden (life classes: server/playerbots.js)
     case 'attack': {
       const m = b.mobs.find(m => m.id === c.tgt) || b.allMobs?.find(m => m.id === c.tgt && floorOf(m.x) === floorOf(b.x)); // (an order may name a mob out of sight)
@@ -609,6 +611,7 @@ function chooseTarget(b, P, M) {
   if (M.mode === 'attack') return here.find(m => m.id === b.cmd.tgt) || null;
   if (M.mode === 'stay') { // only what comes to us
     const c = b.cmd;
+    if (c.defend) return nearest(here, m => { if (m.def.boss) return null; const d = d2(m.x, m.z, c.x, c.z); return d < 22 ? d2(m.x, m.z, b.x, b.z) : null; }); // a town's raid: anything near the ward
     return nearest(here, m => { const d = d2(m.x, m.z, b.x, b.z); return m.engaged && (d < m.def.radius + 3 || d2(m.x, m.z, c.x, c.z) < 7) ? d : null; });
   }
   if (M.mode === 'lead') {

@@ -27,6 +27,7 @@ import { inArena3 } from '../shared/floor3.js';
 import { clampAccess } from '../shared/accesslevels.js'; // account access levels (permissions, not character levels)
 import { WEAPONS, isWeapon } from '../shared/academy.js'; // Initiates pick a weapon (docs/briefs/academy.md)
 import { carveRanks } from './academy.js';
+import { makeTownStore } from './towns.js'; // floor towns: the towns table
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 3000;
@@ -127,7 +128,7 @@ function onConnection(ws) {
         other.ws.close();
         c = await accounts.loadCharacter(acct.id, msg.character);
       }
-      const p = game.addPlayer(ws, c.name, c.cls, { charId: c.id, accountId: acct.id, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats, mastery: c.mastery, talents: c.talents, life: c.life, path: c.path }); // life: life classes (server/life.js); path: the Academy (server/academy.js)
+      const p = game.addPlayer(ws, c.name, c.cls, { charId: c.id, accountId: acct.id, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats, mastery: c.mastery, talents: c.talents, life: c.life, path: c.path, town: c.town }); // town: home town and bounties (server/towns.js); life: life classes (server/life.js); path: the Academy (server/academy.js)
       admin.isAdmin(acct).then(v => { p.admin = v; }).catch(() => {}); // admins can order any bot (botcmd with a name)
       p.access = clampAccess(acct.access_level); // access level 1-5 (shared/accesslevels.js; admins count as 5)
       return p;
@@ -172,6 +173,7 @@ function onConnection(ws) {
         ws.send(JSON.stringify(game.talentsMsg(player))); player.talentsDirty = false; // talent tree (server/talents.js)
         ws.send(JSON.stringify(game.lifeMsg(player))); player.lifeDirty = false; // life classes (server/life.js)
         ws.send(JSON.stringify(game.pathMsg(player))); player.pathDirty = false; // the Academy path (server/academy.js)
+        ws.send(JSON.stringify(game.townsMsg(player))); player.townsDirty = false; // floor towns (server/towns.js)
         ws.send(JSON.stringify(hall.message())); // the engraved stones
         ws.send(JSON.stringify({ type: 'cine', state: game.cineState() })); // players only use its light (public/cine.js)
         broadcastRoster();
@@ -259,6 +261,7 @@ function tick(dt) {
     if (p.talentsDirty) { p.talentsDirty = false; p.ws.send(JSON.stringify(game.talentsMsg(p))); } // talent tree: points, ranks
     if (p.lifeDirty && !p.bot) { p.lifeDirty = false; p.ws.send(JSON.stringify(game.lifeMsg(p))); } // life classes (server/life.js)
     if (p.pathDirty) { p.pathDirty = false; p.ws.send(JSON.stringify(game.pathMsg(p))); } // the Academy path: class, kit names, medals (server/academy.js)
+    if (p.townsDirty && !p.bot) { p.townsDirty = false; p.ws.send(JSON.stringify(game.townsMsg(p))); } // floor towns: stage, project, election (server/towns.js)
     if (p.masteryDirty && (p.masteryNow || game.time - (p.mSentT || 0) >= 1)) { // skill mastery: at most once a second, at once on a level-up/evolve
       p.masteryDirty = p.masteryNow = false; p.mSentT = game.time;
       p.ws.send(JSON.stringify(game.masteryMsg(p)));
@@ -297,6 +300,7 @@ if (LOCKSTEP) {
       accounts.saveCharacter(p).catch(e => { p.dirty = true; console.error('save failed', e); });
     }
   }, 15000);
+  setInterval(() => { if (db.enabled) game.townsFlush().catch(e => console.error('[towns] flush', e)); }, Number(process.env.TOWN_SAVE_MS) || 10000); // floor towns: every 10 s when changed
 }
 
 // Deploys (Render sends SIGTERM to the old instance): warn everyone, let a boss fight finish (up to 4 min), save, exit.
@@ -314,6 +318,7 @@ async function shutdown(sig) {
         await track.flush().catch(() => {});
         await aiMinds.flush(); // AI memories + spend (server/ai/store.js)
         await named?.flush(); // friendship still waiting to be saved (server/named.js)
+        await game.townsFlush(); // floor towns (server/towns.js)
       },
     });
   } catch (e) { console.error('shutdown', e); }
@@ -326,6 +331,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => void shutdown(sig
 admin.init({ game, bots });
 if (process.env.TEST_HOOKS) globalThis.floorbound = { game, bots, playerBots, localHub }; // testing aid: a test that imports this file reaches the live objects (test/localws.js)
 const aiMinds = installAI({ game, bots, server });
+game.townAI = aiMinds.namedTalk || null; // the Named's election platforms, when the AI mind is on (server/towns.js platformAI)
 installDirectorAdmin({ server, director: game.director }); // /api/admin/director (admin page: Director tab)
 installNamedAdmin({ server, named }); // /api/admin/named (admin page: The Named card)
 server.on('error', err => { console.error('Server error', err); if (err.code === 'EADDRINUSE' || err.code === 'EACCES') process.exit(1); }); // can't listen: don't linger
@@ -333,6 +339,7 @@ db.migrate()
   .then(() => hall.load())
   .then(() => { game.hadFirstClear = hall.hasFirst(); game.hadFirstClear2 = hall.hasFirst(2); game.hadFirstClear3 = hall.hasFirst(3); })
   .then(() => { if (db.enabled) aiMinds.useStore(aiStore(db.q)); }) // (async, never blocks or fails startup)
+  .then(() => (db.enabled ? game.townsLoad(makeTownStore(db.q)) : null)) // floor towns (server/towns.js)
   .then(() => { if (db.enabled && named) { named.quests.useStore(makeQuestStore(db.q)); return named.useStore(makeNamedStore(db.q, { adminIds: (process.env.ADMIN_DISCORD_IDS || '').split(',').map(s => s.trim()).filter(Boolean) })); } })
   .then(() => server.listen(PORT, () => {
     console.log(`Floorbound running on http://localhost:${PORT}${db.enabled ? ' (accounts on' + (accounts.discordOn() ? ', Discord sign-in on' : '') + ')' : ''}`);

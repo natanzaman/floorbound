@@ -53,6 +53,7 @@ import { installBossParts } from './bossparts.js'; // breakable boss parts (docs
 import { installMobRoles } from './mobroles.js'; // enemies that force a role: armoured, shielded, flyer, caster
 import { installWeaponSwap } from './weaponswap.js'; // a second weapon, swapped mid-fight
 import { installClutch } from './clutch.js'; // Last Stand, the finisher's slow motion
+import { installTowns } from './towns.js'; // floor towns that grow, citizens, raids, Stewards and elections (docs/briefs/towns.md)
 import { rollGear } from '../shared/loot.js'; // affixes, boss sets, loadouts, drop tables (H2)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
@@ -426,14 +427,18 @@ export class Game {
   buy(p, i) {
     const s = SHOP[i];
     if (!s || !this.nearMerchant(p)) return;
-    const price = s.kind === 'cons' ? CONSUMABLES[s.id].price : s.price;
+    const block = this.shopBlock?.(p, s); // a town's own stock (server/towns.js)
+    if (block) return this.sys(block, p.id);
+    const base = s.kind === 'cons' ? CONSUMABLES[s.id].price : s.price;
+    const price = this.shopPrice?.(p, s, base) ?? base; // the town's tax, a citizen's discount, the market (server/towns.js)
     if (p.gold < price) return this.sys('Not enough gold.', p.id);
     if (s.kind === 'gear' && p.inv.bag.length >= BAG_SIZE) return this.sys('Your bag is full.', p.id);
     if (s.kind === 'mat' && !this.lifeRoom(p, s.id, 1)) return this.sys('You can\'t carry more of those.', p.id); // seeds (server/life.js)
     p.gold -= price;
     if (s.kind === 'cons') p.inv.cons[s.id] = (p.inv.cons[s.id] || 0) + 1;
     else if (s.kind === 'mat') this.giveMats(p, { [s.id]: 1 });
-    else p.inv.bag.push(rollGear(s.slot, 1, p.cls, Math.random, undefined, s.alt ? altStyle(p.cls) : undefined)); // alt: weapon styles
+    else p.inv.bag.push(rollGear(s.slot, s.r ?? 1, p.cls, Math.random, undefined, s.alt ? altStyle(p.cls) : undefined)); // alt: weapon styles; r: a town's Rare stock
+    this.shopPaid?.(p, s, price, base);
     this.events.push({ t: 'coin', id: p.id });
     this.invChanged(p);
   }
@@ -1455,7 +1460,7 @@ export class Game {
     // players list now holds only who is near: [id, lvl, floor, lfg, dead].
     let pl;
     if (this.time >= (this._plT || 0)) { this._plT = this.time + 1; pl = []; for (const p of this.players.values()) pl.push([p.id, p.lvl, floorOf(p.x), p.lfg || this.partyOf(p)?.open ? 1 : 0, p.dead ? 1 : 0]); }
-    const pre = JSON.stringify({ players: 0, mobs: 0, pl, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.(), op: this.openSnap(), du: this.duelsSnap?.(), lb: this.labSnap(), bp: this.partsSnap() }); // bp: boss parts (server/bossparts.js) // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
+    const pre = JSON.stringify({ players: 0, mobs: 0, pl, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.(), op: this.openSnap(), du: this.duelsSnap?.(), lb: this.labSnap(), bp: this.partsSnap(), tr: this.raidSnap?.() }); // bp: boss parts (server/bossparts.js); tr: town raids (server/towns.js) // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
     const tail = pre.slice('{"players":0,"mobs":0'.length); // (the first two keys, as written above)
     this.snapParts = { players, mobs, tail, show: !!this.director?.running };
     this.events = [];
@@ -1540,6 +1545,7 @@ installNamed(Game); // the Named: humans-first rules, friendship, invites by tie
 installRescue(Game); // rescue traps (server/rescue.js); after the Named: its trap-object and crystal wrappers sit outside everyone's
 installDuels(Game); // duels (server/duels.js): outside the damage, heal and skill wrappers above, so a stand-in's hits skip them
 installAcademy(Game); // the Academy: Initiates, trials, drills, ranks, cohorts (server/academy.js); outside the skill, damage and heal wrappers
+installTowns(Game); // floor towns (server/towns.js): after the Academy, the duels and the life classes it wraps
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last
 if (process.env.TUNE_STATS) installTuneStats(Game); // testing aid (scripts/tuneboss.js): log boss moves used and hits taken; outermost
 

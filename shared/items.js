@@ -59,6 +59,13 @@ export const SHOP = [
   { kind: 'mat', id: 'wheatseed', price: 3, desc: 'Plant it in your garden plot (Farmer).' },
   { kind: 'mat', id: 'carrotseed', price: 6, desc: 'Plant it in your garden plot (Farmer 2).' },
   { kind: 'mat', id: 'sunseed', price: 15, desc: 'Plant it in your garden plot (Farmer 4).' },
+  // a town's own stock (shared/towns.js 'stock' unlock): sold only at that town's merchant or trader once it's built.
+  // Appended only: indices are what `buy` sends.
+  { kind: 'gear', slot: 'weapon', price: 480, r: 2, town: 1 }, { kind: 'gear', slot: 'armor', price: 480, r: 2, town: 1 },
+  { kind: 'mat', id: 'moonseed', price: 40, desc: 'Plant it in your garden plot (Farmer 7).', town: 1 },
+  { kind: 'gear', slot: 'weapon', price: 520, r: 2, town: 2 }, { kind: 'gear', slot: 'armor', price: 520, r: 2, town: 2 },
+  { kind: 'gear', slot: 'weapon', price: 560, r: 2, town: 3 }, { kind: 'gear', slot: 'armor', price: 560, r: 2, town: 3 },
+  { kind: 'mat', id: 'moonseed', price: 36, desc: 'Plant it in your garden plot (Farmer 7).', town: 3 },
 ];
 export const MERCHANT = { x: 9, z: 3, r: 4 };
 

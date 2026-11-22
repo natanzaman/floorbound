@@ -104,4 +104,10 @@ async function setup() {
   // The Academy (docs/briefs/academy.md): an Initiate's weapon or a graduate's record, medals, mastery and talents kept per
   // class, classmates (shared/academy.js cleanPath). NULL: a character from before the Academy, graduated in its class.
   await q(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS path JSONB`);
+  // Floor towns (docs/briefs/towns.md, server/towns.js): one row per town (XP, stage, treasury, projects, and the rest:
+  // tax, message, Steward, raid timer, the election), and each character's home town (characters.town).
+  await q(`CREATE TABLE IF NOT EXISTS towns (
+    floor INT PRIMARY KEY, xp DOUBLE PRECISION NOT NULL DEFAULT 0, stage INT NOT NULL DEFAULT 0, treasury INT NOT NULL DEFAULT 0,
+    projects JSONB, data JSONB, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  await q(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS town JSONB`);
 }
