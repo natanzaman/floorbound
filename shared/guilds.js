@@ -12,8 +12,8 @@ export const GUILD = {
   goldMax: 10_000_000,
 };
 
-// Registrar: the door of the house east of the plaza in the Town of Beginnings (no new art; a label like the Smith's).
-export const REGISTRAR = { x: 14.2, z: 6.3, r: 2.5 };
+// Registrar: the door of the south-east house of the plaza in the Town of Beginnings (no new art; a label like the Smith's).
+export const REGISTRAR = { x: 12.6, z: -9.5, r: 2.5 };
 export const nearRegistrar = (x, z, pad = 1) => Math.hypot(x - REGISTRAR.x, z - REGISTRAR.z) < REGISTRAR.r + pad;
 
 export const RANKS = [

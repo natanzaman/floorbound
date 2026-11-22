@@ -212,6 +212,7 @@ export class Game {
       case 'test': // testing aid (TEST_HOOKS=1 only): { hurt: fraction } sets your health, { xp } gives XP, for the bot tests
         if (process.env.TEST_HOOKS && msg.hurt > 0 && msg.hurt <= 1 && !p.dead) p.hp = Math.max(1, Math.round(p.maxHp * msg.hurt));
         if (process.env.TEST_HOOKS && msg.xp > 0) this.giveXp(p, Math.min(1e6, msg.xp | 0)); // { xp }: level up (bot level sync tests)
+        if (process.env.TEST_HOOKS && msg.gold > 0) { p.gold += Math.min(1e6, msg.gold | 0); this.invChanged(p); } // { gold }: spending money (guild tests)
         if (process.env.TEST_HOOKS && msg.ward != null) p.testWard = !!msg.ward; // { ward: 1 }: nothing hurts you (input tests: a slow headless run never gets bitten down mid-check)
         return;
       case 'invite': return this.invite(p, msg.id);

@@ -5,7 +5,7 @@ Sized for a handful of friends plus the game's many bots and the Named. One guil
 ## Rules (data and pure rules in `shared/guilds.js`)
 - **Create:** name 3-20 characters (letters, digits, single spaces, `'` and `-`; starts and ends with a letter or digit),
   tag 2-4 letters (stored upper case), both unique ignoring case, fee `GUILD.fee` gold (300). From the Guild tab of the
-  Players window, or the **Guild Registrar** in the Town of Beginnings (the house east of the plaza; its door is the
+  Players window, or the **Guild Registrar** in the Town of Beginnings (the south-east house of the plaza; its door is the
   station, "press F" like the Smith; it opens the Guild tab). With a database, a human needs a saved character.
 - **Ranks:** Leader / Officer / Member. Who may do what: `GUILD_PERMS` (invite, kick a lower rank, withdraw gold, take
   from the vault: Officer+; promote, demote, transfer leadership, disband: Leader; deposit, store in the vault, chat,

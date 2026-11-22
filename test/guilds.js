@@ -20,6 +20,7 @@ import {
 } from '../shared/guilds.js';
 import { makeItem, keepsakeItem } from '../shared/items.js';
 import { walkable } from '../shared/data.js';
+import { SETS } from '../shared/loot.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 3810;
@@ -305,7 +306,7 @@ if (DB) {
     // the vault: buy a piece of gear, store it, two officers take it at once
     await until(() => A.inv, 3000, 'inventory');
     const n0 = A.inv.bag.length;
-    A.send({ type: 'buy', i: 3 }); await until(() => A.inv.bag.length > n0, 3000, 'bought gear');
+    A.send({ type: 'test', giveSet: Object.keys(SETS)[0] }); await until(() => A.inv.bag.length > n0, 3000, 'gear in the bag');
     const stored = A.inv.bag.at(-1);
     r = await A.ask({ op: 'store', u: stored.u });
     await until(() => !A.inv.bag.some(x => x.u === stored.u), 2000, 'left the bag');

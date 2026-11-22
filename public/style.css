@@ -708,3 +708,38 @@ body.pad #talentsp .tn.nav-focus .core { stroke: #facc15 !important; stroke-widt
 #controlsui .cu-rb { padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(160,200,255,.3); background: rgba(255,255,255,.05); font-size: 11.5px; }
 #controlsui .cu-rb:disabled { opacity: .35; }
 #controlsui .cu-reset { margin-top: 12px; padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(248,113,113,.4); background: rgba(248,113,113,.08); }
+
+/* Guilds (public/guilds.js): the Guild tab, the invite card, [TAG]s, guild chat */
+.gtag { color: #fcd34d; font-weight: 700; font-size: .9em; }
+#log .guild { color: #fcd34d; }
+.gd-invite { position: absolute; top: 38%; left: 50%; transform: translateX(-50%); padding: 14px 18px; text-align: center; z-index: 30; }
+.gd-invite div { margin-bottom: 10px; }
+.gd-invite button { margin: 0 4px; padding: 8px 16px; border-radius: 6px; border: 1px solid rgba(160,200,255,.35); background: rgba(120,170,255,.15); }
+#players .gd input, #players .gd select { padding: 5px 7px; border-radius: 6px; border: 1px solid rgba(160,200,255,.3); background: rgba(0,0,0,.3); color: inherit; font-size: 12.5px; margin: 2px 4px 2px 0; }
+#players .gd input[data-f="gname"], #players .gd input[data-f="iname"] { width: 14em; }
+#players .gd select { max-width: 17em; }
+#players .gd-head { display: flex; align-items: center; gap: 6px; font-size: 15px; margin: 2px 0 4px; }
+#players .gd-tag { color: #fcd34d; }
+#players .gd-rank { font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 1px 7px; border-radius: 9px; margin-left: 6px; background: rgba(148,163,184,.16); color: #cbd5e1; }
+#players .gd-rank.r1 { background: rgba(96,165,250,.16); color: #93c5fd; }
+#players .gd-rank.r2 { background: rgba(252,211,77,.16); color: #fcd34d; }
+#players .gd-lvl { font-size: 12px; opacity: .85; margin-bottom: 4px; }
+#players .gd-bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,.1); margin: 3px 0; overflow: hidden; }
+#players .gd-bar > div { height: 100%; background: #fcd34d; }
+#players .gd-sect { display: flex; align-items: baseline; gap: 8px; margin: 10px 0 4px; padding-bottom: 3px; border-bottom: 1px solid rgba(160,200,255,.18); }
+#players .gd-sect small, #players .gd-m small, #players .gd-it small, #players .gd-q small { opacity: .65; font-size: 11px; }
+#players .gd-m, #players .gd-it { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 0; font-size: 12.5px; }
+#players .gd-it small { flex: 1; }
+#players .gd-m.off { opacity: .6; }
+#players .gd-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+#players .gd-row { display: flex; align-items: center; flex-wrap: wrap; }
+#players .gd-q { padding: 5px 0; font-size: 12.5px; }
+#players .gd-q > div:first-child { display: flex; flex-direction: column; }
+#players .gd-q.done b { color: #86efac; }
+#players .gd-perks div { font-size: 12px; opacity: .55; }
+#players .gd-perks div.on { opacity: 1; color: #86efac; }
+#players .gd-bag summary, #players .gd-perks summary { cursor: pointer; font-size: 12.5px; margin: 6px 0; }
+#players .gd-card { padding: 8px; border-radius: 8px; border: 1px solid rgba(252,211,77,.35); background: rgba(252,211,77,.08); margin-bottom: 8px; font-size: 12.5px; }
+#players .gd-empty { opacity: .6; font-size: 12px; padding: 4px 0; }
+#players .gd-foot { opacity: .65; font-size: 11.5px; margin-top: 8px; }
+#players .gd-end { margin-top: 12px; }
