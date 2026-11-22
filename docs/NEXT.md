@@ -68,6 +68,21 @@ Plans: `docs/briefs/bots-access.md`, `docs/briefs/waypoint.md`, `docs/briefs/tar
   a switch or graduation instead of selling; 5 s between weapon changes, 4 s between head lines; ids are own-key only;
   admin edits wait until a trial ends; Guardian wolves never fall; the Lancer trial counts tip thrusts only.
 
+## Floor towns and Stewards (2026-11-22, branch `feat/towns`, brief `docs/briefs/towns.md`)
+- Each floor's town (Town of Beginnings, Mirelight Camp, Windbreak Camp) grows Camp → Village → Town → City from play
+  on that floor (bots and the Named at a quarter) plus a slow trickle. A town board (F) per town: join as your home
+  (free, 7 days between moves; 5% off and a vote), give gold and materials to the current project (bounty board, better
+  stock, camp traders, irrigation, gate waystone, guild plot hook, market square), daily bounties, the election.
+- Raids every 2.5-4 real days while a human is on the floor: warning, 3 telegraphed waves at the ward; win = town XP,
+  lose = some XP (never more than a stage, never below Camp). Free bots and the Named hold the ward. Off in director shows.
+- Stewards every 7 days: Floor 1 by vote, Floor 2 by contribution, Floor 3 by a duel tournament. Bot and Named
+  candidates (platforms by the AI mind when on and in budget, else data lines); bots and the Named vote by rules.
+  Steward powers: next project, tax -5%..+10% (to the treasury), a pinned message. Admin page: Towns card.
+  `towns` table + `characters.town`. Tests: `test/towns.js` (DB part restarts a real server), browser shot in
+  `docs/briefs/towns-shots/`.
+- **Owner calls waiting:** every number is a first guess (stage XP, XP per deed, project costs, raid size and
+  interval, tax limits, discounts, vote weights). Guild plots are a hook only (no guilds yet). Raids use existing mobs.
+
 ## Owner calls from the 2026-11-20 batch: decided 2026-11-21 (`feat/tweaks`, brief `docs/briefs/tweaks-2026-11-21.md`)
 - **Several of the Named per party: yes.** Any of the five can join one party, up to the normal 6 (open invites count);
   each is still one of a kind. Despawn / respawn rejoins a party that has other Named in it (room permitting).

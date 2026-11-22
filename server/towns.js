@@ -124,11 +124,12 @@ export const TownMethods = {
   townXp(f, n, who = null) {
     const T = this.town(f);
     if (!T || !(n > 0)) return;
-    const before = stageOf(T.xp);
+    const before = stageOf(T.xp), shown = Math.floor(T.xp);
     T.xp += who?.bot ? n * BOT_RATE : n;
     const after = stageOf(T.xp);
     if (after > before) this.townStageUp(T, after);
-    T.dirty = true; this._townsBumped = true;
+    T.dirty = true;
+    if (Math.floor(T.xp) !== shown) this._townsBumped = true; // (the panels refresh when the shown number moves)
   },
   townStageUp(T, s) {
     const name = TOWNS[T.floor].name;
@@ -385,7 +386,7 @@ export const TownMethods = {
   botVoters(T) {
     const E = T.el, out = [];
     for (const [id, home] of Object.entries(NAMED_HOMES)) {
-      if (home !== T.floor) continue;
+      if (home !== T.floor || !this.named) continue; // (NAMED_ENABLED=0: the Named aren't in this world)
       const key = `n:${id}`, fr = {};
       for (const c of E.cands) if (c.kind === 'player' && c.fr?.[id]) fr[c.key] = c.fr[id];
       out.push({ key, lean: NAMED_LEANS[id], fr, rap: E.rap[key] || {}, min: LONERS[id] || 0 });
@@ -634,7 +635,7 @@ export const TownMethods = {
     const Q = this.named?.quests;
     if (Q && !Q._townHook) { Q._townHook = true; const orig = Q.complete.bind(Q); Q.complete = (p, id) => { const r = orig(p, id); if (p && !p.bot) this.townXp(this.townFloorAt(p.x, p.z), TXP.request, p); return r; }; }
     const homes = { 1: 0, 2: 0, 3: 0 };
-    for (const f of Object.values(NAMED_HOMES)) homes[f]++;
+    if (this.named) for (const f of Object.values(NAMED_HOMES)) homes[f]++;
     const liveBots = { 1: 0, 2: 0, 3: 0 };
     // bots living in town: seen (voters) and counted; party time with candidates (rapport)
     for (const b of this.players.values()) {
@@ -710,7 +711,7 @@ export const TownMethods = {
         steward: T.steward ? { name: T.steward.name, kind: T.steward.kind, ag: T.steward.ag, me: T.steward.key === key ? 1 : 0 } : null,
         cur: pr ? { id: pr.id, name: pr.name, unlock: pr.unlock, cost: pr.cost, need: projectNeed(pr, T.given) } : null,
         done: T.done, open: openProjects(f, s, T.done).map(x => x.id), unl: Object.keys(U), plots: plotSlots(f, s, T.done),
-        cit: { players: T.citizens, bots: T.bots ?? Object.values(NAMED_HOMES).filter(h => h === f).length },
+        cit: { players: T.citizens, bots: T.bots ?? (this.named ? Object.values(NAMED_HOMES).filter(h => h === f).length : 0) },
         raid: { due: Math.max(0, Math.round((T.raidNext - now) / 1000)), on: T.raid ? 1 : 0, last: T.raidLast ? { ago: Math.round((now - T.raidLast.at) / 1000), won: T.raidLast.won ? 1 : 0, xp: Math.round(T.raidLast.xp) } : null },
         el: {
           n: E.n, left: Math.max(0, Math.round((E.closes - now) / 1000)), voted: Object.keys(E.votes).length, my: E.votes[key] || '',

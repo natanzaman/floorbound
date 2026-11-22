@@ -163,7 +163,7 @@ export function createTowns({ scene, floor1, send, state, project, log, sfx, $, 
     h += `<div class="tabs fl">${TOWN_FLOORS.map(f => `<button data-a="fl" data-f="${f}" class="${ui.f === f ? 'on' : ''}">Floor ${f}</button>`).join('')}</div>`;
     h += `<div class="body">${!t ? '<div class="it empty"><span class="nm"><small>…</small></span></div>' : { town: tabTown, vote: tabVote, bounty: tabBounty, steward: tabSteward }[ui.tab](t, at)}</div>`;
     const sc = panel.querySelector('.body')?.scrollTop || 0;
-    if (panel.innerHTML !== h) { panel.innerHTML = h; const body = panel.querySelector('.body'); if (body) body.scrollTop = sc; }
+    if (ui.html !== h) { ui.html = h; panel.innerHTML = h; const body = panel.querySelector('.body'); if (body) body.scrollTop = sc; } // (compare with what was set: innerHTML reads back differently)
   }
   panel.addEventListener('input', e => { if (e.target.id === 'town-plat') ui.stand.plat = e.target.value; });
   panel.addEventListener('click', e => {
@@ -203,7 +203,7 @@ export function createTowns({ scene, floor1, send, state, project, log, sfx, $, 
     const R = ui.raid;
     if (R) {
       const html = R.warn ? `<b>RAID</b> on ${esc(TOWNS[R.f].name)} in ${R.left}s · get to the ward` : `<b>RAID</b> wave ${R.wave}/${R.waves} · ward <span class="${R.ward < 35 ? 'no' : ''}">${R.ward}%</span> · ${R.n} raiders · ${fmt(R.left)}`;
-      if (hud.innerHTML !== html) hud.innerHTML = html;
+      if (hud._h !== html) hud.innerHTML = hud._h = html;
       hud.classList.remove('hidden');
     } else hud.classList.add('hidden');
     if (!state.joined || state.spectator) { lbl.style.display = 'none'; tlbl.style.display = 'none'; return; }
@@ -216,7 +216,7 @@ export function createTowns({ scene, floor1, send, state, project, log, sfx, $, 
         if (near) guide?.tip?.('town');
         const html = `Town Board · ${esc(STAGES[t?.stage ?? 0].name)}${t?.steward ? `<br><small>Steward ${esc(t.steward.name)}</small>` : ''}${near ? `<br><small>${tapping() ? 'tap Town' : `press ${keyHtml('interact')} for the town`}</small>` : ''}`;
         lbl.style.display = ''; lbl.style.left = `${sp[0]}px`; lbl.style.top = `${sp[1]}px`;
-        if (lbl.innerHTML !== html) lbl.innerHTML = html;
+        if (lbl._h !== html) lbl.innerHTML = lbl._h = html;
         shown = true;
       }
     }
@@ -227,7 +227,7 @@ export function createTowns({ scene, floor1, send, state, project, log, sfx, $, 
     if (tr && unl(f, 'trader') && Math.hypot(state.x - tr.x, state.z - tr.z) < 16) tl = { x: tr.x, z: tr.z, y: 3, html: `Trader${traderNear() ? `<br><small>${tapping() ? 'tap Trade' : `press ${keyHtml('interact')} to trade`}</small>` : ''}` };
     if (R && TOWNS[R.f]) tl = { x: TOWNS[R.f].ward.x, z: TOWNS[R.f].ward.z, y: 4.6, html: `The Ward<br><small>${R.ward}%</small>` };
     const sp = tl && project(tl.x, tl.y, tl.z);
-    if (sp) { tlbl.style.display = ''; tlbl.style.left = `${sp[0]}px`; tlbl.style.top = `${sp[1]}px`; if (tlbl.innerHTML !== tl.html) tlbl.innerHTML = tl.html; } else tlbl.style.display = 'none';
+    if (sp) { tlbl.style.display = ''; tlbl.style.left = `${sp[0]}px`; tlbl.style.top = `${sp[1]}px`; if (tlbl._h !== tl.html) tlbl.innerHTML = tlbl._h = tl.html; } else tlbl.style.display = 'none';
   }
 
   return { interactKind, interact, onMsg, onEvent, snap, frame, toggle, render, isOpen, traderNear, shopHas, price, smithGold, warpRows, data: () => ui.data };
