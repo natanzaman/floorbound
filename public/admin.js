@@ -12,6 +12,7 @@ import { TREES, pointsAt, spentOf } from '/shared/talents.js';
 import { AFFIXES, AFFIX_IDS, SETS, affixText, isTeamAffix, setSlots, bestSetFor } from '/shared/loot.js';
 import { LOOKS } from '/shared/looks.js';
 import { WEAPONS, WEAPON_IDS, MEDALS, TRIALS, DRILLS, newPath, rankName, rankOf } from '/shared/academy.js'; // the Academy path
+import { SUBCLASSES, subsOf, subOf } from '/shared/subclasses.js'; // specialisation (docs/briefs/subclasses.md)
 import { ACCESS_MIN, ACCESS_MAX, ACCESS_ADMIN, ACCESS } from '/shared/accesslevels.js'; // account access levels (permissions)
 
 const $ = id => document.getElementById(id);
@@ -459,7 +460,7 @@ function academySummary(c) {
   if (!P) return '<div class="dim">No path: a character from before the Academy (graduated in its class). Its first Academy visit makes one.</div>';
   const med = (m, k, T) => `${esc(T[k]?.name || k)} <b style="color:${['', '#d97706', '#cbd5e1', '#facc15'][m]}">${esc(MEDALS[m] || '')}</b>`;
   const rk = rankOf(P, c.stats);
-  return `<div>${P.stage === 'initiate' ? `<b>Initiate</b> · ${esc(WEAPONS[P.weapon]?.name || P.weapon)}` : `<b>Graduated</b> (${esc(clsName(c.cls))}; weapon ${esc(WEAPONS[P.weapon]?.name || P.weapon)})`} · rank ${esc(rankName(rk))}${c.loan ? ' · <span class="pill on">in a trial</span>' : ''}</div>
+  return `<div>${P.stage === 'initiate' ? `<b>Initiate</b> · ${esc(WEAPONS[P.weapon]?.name || P.weapon)}` : `<b>Graduated</b> (${esc(clsName(c.cls))}; weapon ${esc(WEAPONS[P.weapon]?.name || P.weapon)})`} · rank ${esc(rankName(rk))}${SUBCLASSES[subOf(P, c.cls)] ? ` · <b>${esc(SUBCLASSES[subOf(P, c.cls)].name)}</b>` : ''}${c.loan ? ' · <span class="pill on">in a trial</span>' : ''}</div>
     <div class="dim" style="font-size:12px">Trials: ${Object.entries(P.trials || {}).map(([k, m]) => med(m, k, Object.fromEntries(Object.keys(TRIALS).map(x => [x, { name: clsName(x) }])))).join(', ') || 'none'} · Drills: ${Object.entries(P.drills || {}).map(([k, m]) => med(m, k, DRILLS)).join(', ') || 'none'} · Classmates: ${esc((P.cohort || []).join(', ') || 'none')} · Kept classes: ${esc(Object.keys(P.keep || {}).map(clsName).join(', ') || 'none')}</div>`;
 }
 const itemLine = it => `<span class="nm" style="color:${RARITY[it.r]?.color || '#fff'}">${esc(it.name)}${it.la ? ' ★' : ''}${setTag(it)}${axLines(it)}</span><span class="st">${Object.entries(it.st || {}).map(([k, v]) => statLabel(k, v)).join(', ')}${it.cls ? ` · ${esc(clsName(it.cls))}` : ''}${it.slot === 'weapon' && it.cls ? ` · ${esc(styleLine(it).split(':')[0])}` : ''}</span>`;
@@ -534,6 +535,8 @@ function renderEditor() {
   <section class="card esec" id="e-sec-academy"><h2>Academy path</h2>${academySummary(c)}
     <div class="row" style="margin-top:8px"><label class="f">Weapon<select id="ac-w">${WEAPON_IDS.map(w => `<option value="${w}" ${w === (c.path?.weapon || 'sword') ? 'selected' : ''}>${esc(WEAPONS[w].name)}</option>`).join('')}</select></label>
       <button id="ac-ini" ${c.online ? 'disabled title="Only while offline (the class changes)"' : ''}>Make an Initiate</button><button id="ac-grad">Mark graduated</button><button id="ac-null" title="path = null: a character from before the Academy (graduated in its class)">Clear (legacy)</button></div>
+    <div class="row"><label class="f">Subclass (${esc(clsName(c.cls))})<select id="ac-sub"><option value="">none</option>${subsOf(c.cls).map(id => `<option value="${id}" ${subOf(c.path, c.cls) === id ? 'selected' : ''}>${esc(SUBCLASSES[id].name)}</option>`).join('')}</select></label>
+      <button id="ac-setsub" ${c.path?.stage === 'initiate' ? 'disabled title="Initiates graduate first"' : ''}>Set subclass</button><span class="dim" style="font-size:12px;margin-bottom:12px">Shows from level 15; its two talents and slot 5 come with it.</span></div>
     <div class="dim" style="font-size:12px">An Initiate's class is its weapon's base class. Making an Initiate (or changing the weapon) changes the class, so only offline; medals, drills and graduation can be edited live. Raw editor: Advanced.</div>
   </section>
   <div class="grid" id="e-sec-items">
@@ -655,6 +658,11 @@ function wireEditor() {
   }
   $('ac-ini').onclick = () => patch({ rawPath: { ...(c.path || {}), ...newPath($('ac-w').value), trials: c.path?.trials || {}, drills: c.path?.drills || {}, paid: c.path?.paid || {}, keep: c.path?.keep || {}, cohort: c.path?.cohort || [] } }, 'Now an Initiate.');
   $('ac-grad').onclick = () => patch({ rawPath: { ...(c.path || newPath($('ac-w').value)), stage: 'class', armed: 1 } }, 'Marked graduated.');
+  $('ac-setsub').onclick = () => { // (a legacy character gets a graduated path; '' clears this class's subclass)
+    const P = { ...(c.path || { ...newPath($('ac-w').value), stage: 'class', armed: 1 }) }, subs = { ...(P.subs || {}) }, v = $('ac-sub').value;
+    if (v) subs[c.cls] = v; else delete subs[c.cls];
+    patch({ rawPath: { ...P, subs } }, v ? `Subclass: ${SUBCLASSES[v].name}.` : 'Subclass cleared.');
+  };
   $('ac-null').onclick = () => { if (confirm('Clear the Academy path (a legacy character: graduated, no medals)?')) patch({ rawPath: null }, 'Path cleared.'); };
   $('a-la1').onclick = () => patch({ ops: [{ op: 'addLastAttack', which: 1 }] }, 'Item added.');
   $('a-la2').onclick = () => patch({ ops: [{ op: 'addLastAttack', which: 2 }] }, 'Item added.');
