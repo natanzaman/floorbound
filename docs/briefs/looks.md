@@ -46,15 +46,24 @@ A second, separate pair of choices, shown to the owner next to the effects looks
 and geometry, so they are fixed when the page loads (`?char=<id>&env=<id>`, or Settings → Graphics, then reload).
 `classic` is what main draws for both.
 
-- **Character styles** (`CHARS`: classic, cel, hero, soft, ink) apply to every rigged character: cel shading
-  (`toon` light bands), an outline (the rig drawn again, back faces only, pushed out along its normals: it doubles
-  that character's draw calls), a rim light, colour strength, and proportions (head, legs, arms, body: bones scaled
-  after the animation pose, with the rig rescaled so the character stays about as tall as before).
+- **Character styles** (`CHARS`: classic, cel, hero, soft, ink, and the reshaped lean1, lean2, lean3) apply to every
+  rigged character: cel shading (`toon` light bands), an outline (the rig drawn again, back faces only, pushed out
+  along its normals: it doubles that character's draw calls), a rim light, colour strength, and proportions.
+  Proportions are baked once at load by `shapeAssets` and cost nothing per frame: limb and torso lengths move the next
+  joint out (the clips' position tracks are scaled, on copies, because the loader shares arrays between tracks) and
+  stretch the skin; thickness, hand and foot size are a scale in each bone's bind matrix, so they are not inherited
+  (a thin arm does not thin the weapon it holds). The head is still a bone scale after the pose. `tall` says how much
+  of the added height is kept. The owner found the shading-only styles too alike; lean1-3 are today's shading with
+  only the shape changed, three steps towards anime proportions.
 - **World styles** (`ENVS`: classic, meadow, alpine, dusk) apply to Floor 1 only: a sky dome with a sun glow, clouds,
   tree shape, grass tufts, flowers, ground colour patches (each one instanced batch), smooth or cel shading for the
   scenery, and the light and fog colours. Floors 2 and 3 are not restyled.
 - `scripts/artshots.mjs` shoots a class line-up and scenery views in every style, on the same stepped clock.
 - `test/artlook.js`: the tables are complete and in range, Classic is main's numbers, unknown ids fall back.
+
+Known gaps of the reshaped styles: the legs show a stretched band above the boot, capes and other rigid attachments
+keep their width, feet can slide a little because the stride is longer than the clips were made for, and name tags,
+hit boxes and the camera still assume today's height.
 
 Known gaps, to fix once styles are chosen: a heavy outline shows spikes at hard edges (needs smoothed normals), a
 weapon swapped in after the rig is built has no outline, monsters are not outlined, and none of it has been measured

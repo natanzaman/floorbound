@@ -5,7 +5,8 @@
 // effect: for each look and scene it reseeds Math.random (the same sparks and rocks), plays the scene's events, steps
 // `at` frames and saves <OUT>/<TAG><scene>-<look>.png. With CLIP=<scene> it saves every frame instead
 // (<OUT>/clip-<scene>-<look>/f%03d.png, FRAMES of them) for ffmpeg. Headless software rendering: fine for pictures,
-// useless for frame times. SPAWN_AT=x,z picks the backdrop (Floor 2 and 3 work), TAG prefixes the file names.
+// useless for frame times. SPAWN_AT=x,z picks the backdrop (Floor 2 and 3 work), TAG prefixes the file names,
+// VIEW=<yaw offset>[,<pitch>,<distance>] turns the camera round the character (2.5: from the front), CHAR=<id> and ENV=<id> pick a character and a world style (public/artlook.js).
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -23,6 +24,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Each scene: stage runs in the page (f = window.__fb, s = f.state, me, ev = f.handleEvent, P = my player) at frame 0;
 // `at`: the frame (1/60 s each) the still is taken at; cam: [yaw, pitch]; more: { frame: code } run at later frames.
+const VIEW = (process.env.VIEW || '0').split(',').map(Number); // VIEW=<yaw offset>[,<pitch>,<distance>]: look at the character from another side
 const CAMY = Number(process.env.YAW ?? 3.14); // which way the camera (and the character) faces
 const SWING = n => `P.model.anim.shot(${JSON.stringify(['1H_Melee_Attack_Slice_Diagonal', '1H_Melee_Attack_Slice_Horizontal', '1H_Melee_Attack_Chop'][n])}, ${n === 2 ? 1.6 : 2.0});`;
 const SCENES = {
@@ -71,7 +73,7 @@ try {
     // n frames of game time with nothing drawn (software rendering takes about a second a frame): for the frames no picture is taken of
     S.skip = n => { const r = window.__fb.renderer, draw = r.render; r.render = () => {}; try { for (let k = 0; k < n; k++) run(); } finally { r.render = draw; } };
   });
-  await p.goto(`${base}/?quality=high`);
+  await p.goto(`${base}/?quality=high${process.env.CHAR ? `&char=${process.env.CHAR}` : ''}${process.env.ENV ? `&env=${process.env.ENV}` : ''}`); // (CHAR, ENV: an art style, public/artlook.js)
   await p.waitForFunction(() => window.__fb?.input && !document.getElementById('enter').disabled, null, { timeout: 180000 });
   await p.fill('#name', 'Kirin'); await p.click('.cls[data-id=swordsman]'); await p.click('#enter');
   await p.waitForFunction(() => window.__fb?.state?.joined && window.__fb.state.inv, null, { timeout: 60000 });
@@ -80,11 +82,11 @@ try {
   await sleep(3000);
   await p.evaluate(() => new Promise(r => requestAnimationFrame(() => { window.__step.start(); r(); }))); // (the pending frame is now queued in the stepped clock)
   const go = n => p.evaluate(n => window.__step.go(n), n), skip = n => p.evaluate(n => window.__step.skip(n), n);
-  const run = (code, cam, dist) => p.evaluate(({ code, cam, dist, HIT }) => {
+  const run = (code, cam, dist) => p.evaluate(({ code, cam, dist, HIT, view }) => {
     const f = window.__fb, s = f.state, me = s.myId, ev = e => f.handleEvent(e), P = f.players.get(me);
-    if (cam) { s.yaw = cam[0]; s.face = cam[0]; s.pitch = cam[1]; s.camDist = dist || 9; }
+    if (cam) { s.yaw = cam[0] + view[0]; s.face = cam[0]; s.pitch = view[1] ?? cam[1]; s.camDist = view[2] || dist || 9; }
     new Function('f', 's', 'me', 'ev', 'P', HIT + code)(f, s, me, ev, P);
-  }, { code, cam, dist, HIT });
+  }, { code, cam, dist, HIT, view: VIEW });
   for (const sc of scenes) {
     const S = SCENES[sc], clip = CLIP === sc;
     for (const look of looks) {

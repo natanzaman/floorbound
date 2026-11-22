@@ -13,7 +13,7 @@ import { makeLabMob } from '/labyrinth.js'; // labyrinth enemies
 import { makePropModel } from '/rescue.js'; // rescue trap objects (J1)
 import { fxCount, segs } from '/quality.js'; // effect density and circle detail (graphics quality)
 import { SparkPool } from '/sparks.js'; // pooled hit sparks and impact flashes
-import { ART, envMaterial, charMaterial, outlineRig, bonesOf, applyProportions, heightFactor, leafGeometry, buildScenery } from '/artlook.js'; // art styles
+import { ART, envMaterial, charMaterial, outlineRig, shapeAssets, rigScale, leafGeometry, buildScenery } from '/artlook.js'; // art styles
 import { col, patterned } from '/palette.js'; // telegraph colours + the colour-blind dashed edge (Settings → Accessibility)
 
 const mat = (color, opts = {}) => envMaterial(color, opts); // (the world style: public/artlook.js)
@@ -380,6 +380,7 @@ export async function loadAssets(onProgress) {
   const box = new THREE.Box3().setFromObject(out.rogue.scene);
   ASSETS = { gltf: out, clips: out.knight.animations, baseHeight: box.max.y - box.min.y };
   ASSETS.clips = [...ASSETS.clips, ...(out.ranger?.animations || []).filter(c => !ASSETS.clips.some(k => k.name === c.name))]; // ranged clips (Ranger)
+  shapeAssets(Object.values(out).map(g => g.scene), ASSETS.clips); // (the character style's proportions, public/artlook.js)
   return ASSETS;
 }
 
@@ -426,7 +427,7 @@ function buildRig(kind) {
   if (def.decorate) mats.push(...def.decorate(root, ASSETS)); // added after tinting, so it keeps its own colours
   outlineRig(root, ASSETS.baseHeight); // (the character style's outline, if it has one)
   const g = new THREE.Group();
-  root.scale.setScalar(def.height / ASSETS.baseHeight / Math.sqrt(heightFactor())); // (longer legs: half the gain goes to height)
+  root.scale.setScalar(def.height / ASSETS.baseHeight * rigScale()); // (longer legs: the style says how much of the gain is kept)
   g.add(root);
   return { g, root, mats, height: def.height };
 }
@@ -434,7 +435,7 @@ function buildRig(kind) {
 class Animator {
   constructor(root, idle) {
     this.mixer = new THREE.AnimationMixer(root);
-    this.head = root.getObjectByName('head'); this.bones = bonesOf(root);
+    this.head = root.getObjectByName('head');
     this.actions = {};
     for (const c of ASSETS.clips) this.actions[c.name] = this.mixer.clipAction(c);
     this.idle = idle;
@@ -554,7 +555,6 @@ class Animator {
       if (pre > 0 || hit > 0 || r > 0) this.pz.apply(A?.pre, pre, A?.hit && POSES[A.hit], hit, -0.3 * r * r);
     }
     if (this.head) this.head.scale.setScalar(ART.char.head); // applied after the animation pose
-    applyProportions(this.bones);
   }
 }
 

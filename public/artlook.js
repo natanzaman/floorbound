@@ -3,6 +3,8 @@
 // Pick with ?char=<id>&env=<id>, or Settings → Graphics (applies after a reload). `classic` is what main draws.
 //
 // CHARS (every rigged character: players, bots, the Named, the three bosses):
+//   tall: how much of the height the longer legs and torso add is kept (0 = the rig is scaled back to today's height)
+//   legT / armT: limb thickness · torso: torso length · hands / feet: their size (legs, arms: length; body: width)
 //   toon: 0 = the smooth standard shading; 2-4 = cel shading with that many light bands
 //   outline: a dark line round the silhouette, as a fraction of the character's height (0 = none). It draws every
 //            part of the character a second time (back faces, pushed outward), so it roughly doubles a character's
@@ -19,11 +21,15 @@
 import * as THREE from 'three';
 
 export const CHARS = {
-  classic: { name: 'Classic', note: 'What is live now: smooth shading, big heads.', toon: 0, outline: 0, rim: 0, rimColor: 0xffffff, head: 0.8, legs: 1, arms: 1, body: 1, sat: 1 },
-  cel: { name: 'Storybook Cel', note: 'Cel shading with a dark outline: reads like a cartoon, same chunky bodies.', toon: 3, outline: 0.011, rim: 0, rimColor: 0xffffff, head: 0.8, legs: 1, arms: 1, body: 1, sat: 1.08 },
-  hero: { name: 'Sword Hero', note: 'Taller and slimmer: smaller heads, longer legs, cel shading, a thin outline and a light rim.', toon: 3, outline: 0.007, rim: 0.3, rimColor: 0xcfe8ff, head: 0.64, legs: 1.36, arms: 1.12, body: 0.9, sat: 1.05 },
-  soft: { name: 'Soft Clay', note: 'No outline: smooth shading with a warm rim light, slightly smaller heads.', toon: 0, outline: 0, rim: 0.38, rimColor: 0xffe2b8, head: 0.72, legs: 1.12, arms: 1, body: 1, sat: 1.12 },
-  ink: { name: 'Bold Ink', note: 'Two flat light bands and a heavy outline: the comic-book end of the range.', toon: 2, outline: 0.018, rim: 0, rimColor: 0xffffff, head: 0.76, legs: 1.1, arms: 1, body: 1, sat: 1.2 },
+  classic: { name: 'Classic', note: 'What is live now: smooth shading, big heads.', toon: 0, outline: 0, rim: 0, rimColor: 0xffffff, head: 0.8, legs: 1, arms: 1, body: 1, sat: 1, legT: 1, armT: 1, torso: 1, hands: 1, feet: 1, tall: 0.5 },
+  cel: { name: 'Storybook Cel', note: 'Cel shading with a dark outline: reads like a cartoon, same chunky bodies.', toon: 3, outline: 0.011, rim: 0, rimColor: 0xffffff, head: 0.8, legs: 1, arms: 1, body: 1, sat: 1.08, legT: 1, armT: 1, torso: 1, hands: 1, feet: 1, tall: 0.5 },
+  hero: { name: 'Sword Hero', note: 'Taller and slimmer: smaller heads, longer legs, cel shading, a thin outline and a light rim.', toon: 3, outline: 0.007, rim: 0.3, rimColor: 0xcfe8ff, head: 0.64, legs: 1.36, arms: 1.12, body: 0.9, sat: 1.05, legT: 0.92, armT: 0.92, torso: 1, hands: 0.9, feet: 0.9, tall: 0.5 },
+  soft: { name: 'Soft Clay', note: 'No outline: smooth shading with a warm rim light, slightly smaller heads.', toon: 0, outline: 0, rim: 0.38, rimColor: 0xffe2b8, head: 0.72, legs: 1.12, arms: 1, body: 1, sat: 1.12, legT: 1, armT: 1, torso: 1, hands: 1, feet: 1, tall: 0.5 },
+  ink: { name: 'Bold Ink', note: 'Two flat light bands and a heavy outline: the comic-book end of the range.', toon: 2, outline: 0.018, rim: 0, rimColor: 0xffffff, head: 0.76, legs: 1.1, arms: 1, body: 1, sat: 1.2, legT: 1, armT: 1, torso: 1, hands: 1, feet: 1, tall: 0.5 },
+  // today's models and shading, only reshaped: three steps from chunky towards anime proportions
+  lean1: { name: 'A Bit Taller', note: 'Today\'s characters, slightly longer legs, a slightly smaller head and a slimmer body.', toon: 0, outline: 0, rim: 0, rimColor: 0xffffff, head: 0.7, legs: 1.4, arms: 1.12, body: 0.9, sat: 1, legT: 0.96, armT: 0.94, torso: 1.03, hands: 0.9, feet: 0.92, tall: 1 },
+  lean2: { name: 'Tall and Slim', note: 'Clearly taller: long legs, a small head, slim arms and body, smaller hands and boots.', toon: 0, outline: 0, rim: 0, rimColor: 0xffffff, head: 0.6, legs: 1.9, arms: 1.28, body: 0.82, sat: 1, legT: 0.94, armT: 0.9, torso: 1.08, hands: 0.82, feet: 0.86, tall: 1 },
+  lean3: { name: 'Almost Anime', note: 'As far as these models stretch: very long legs, a small head and a narrow body.', toon: 0, outline: 0, rim: 0, rimColor: 0xffffff, head: 0.52, legs: 2.4, arms: 1.45, body: 0.76, sat: 1, legT: 0.92, armT: 0.86, torso: 1.14, hands: 0.74, feet: 0.8, tall: 1 },
 };
 const CLASSIC_ATMOS = { sky: 0x9cc9ee, near: 70, far: 230, hemiSky: 0xdbeaff, hemiGround: 0x3b5d2a, hemi: 1.1, sun: 0xfff1d6, sunI: 1.9 };
 export const ENVS = {
@@ -113,23 +119,63 @@ export function outlineRig(root, unit) {
   return list.length;
 }
 
-// ---------- proportions: applied after the animation pose, every frame the animator runs ----------
-const LEG = 0.45; // the rig's leg length (its own units): the hips rise by what the legs gain
-export function bonesOf(root) {
-  const C = ART.char;
-  if (C.legs === 1 && C.arms === 1 && C.body === 1) return null;
-  const g = n => root.getObjectByName(n);
-  return { hips: g('hips'), legs: [g('upperlegl'), g('upperlegr')].filter(Boolean), arms: [g('upperarml'), g('upperarmr')].filter(Boolean), chest: g('chest') };
+// ---------- proportions: baked once into the loaded models and clips (no cost per frame) ----------
+// A limb gets longer by moving the next joint out (the clips' position tracks are scaled) and by stretching the skin
+// that follows the bone; it gets thinner by squeezing that skin about the bone. The squeeze goes into the skeleton's
+// bind matrices, so it is not inherited: a thin arm does not thin the weapon in its hand. Bones point along their +Y.
+const LEG = 0.38, TORSO = 0.56, RIG_H = 1.62; // upper leg to ankle, spine to neck, and the rig's height (its own units)
+const plain = C => C.legs === 1 && C.arms === 1 && C.body === 1 && C.legT === 1 && C.armT === 1 && C.torso === 1 && C.hands === 1 && C.feet === 1;
+function skinScale(name, C) { // how the skin of one bone is scaled in the bone's own frame
+  const n = name.replace(/[lr]$/, '');
+  if (n === 'upperleg' || n === 'lowerleg') return [C.legT * C.body, C.legs, C.legT * C.body];
+  if (n === 'upperarm' || n === 'lowerarm') return [C.armT * C.body, C.arms, C.armT * C.body];
+  if (name === 'hips') return [C.body, 1, C.body];
+  if (name === 'spine' || name === 'chest') return [C.body, C.torso, C.body];
+  if (n === 'wrist' || n === 'hand') return [C.hands, C.hands, C.hands];
+  if (n === 'foot' || n === 'toes') return [C.feet, C.feet, C.feet];
+  return null;
 }
-export function applyProportions(b) {
-  if (!b) return;
-  const C = ART.char;
-  for (const l of b.legs) l.scale.multiplyScalar(C.legs);
-  for (const a of b.arms) a.scale.multiplyScalar(C.arms);
-  if (b.hips) { b.hips.position.y += LEG * (C.legs - 1); if (C.body !== 1) { b.hips.scale.x *= C.body; b.hips.scale.z *= C.body; } }
+function jointScale(name, C) { // how a joint's offset from its parent is scaled
+  const n = name.replace(/[lr]$/, '');
+  if (n === 'lowerleg' || n === 'foot') return [C.legs, C.legs, C.legs];
+  if (n === 'lowerarm' || n === 'wrist') return [C.arms, C.arms, C.arms];
+  if (n === 'upperleg') return [C.body, 1, 1];
+  if (n === 'upperarm') return [C.body, C.torso, 1];
+  if (name === 'chest' || name === 'head') return [1, C.torso, 1];
+  if (n === 'hand') return [C.hands, C.hands, C.hands];
+  if (n === 'toes') return [C.feet, C.feet, C.feet];
+  return null;
 }
-/** How much taller the style makes a rig, roughly (longer legs raise the hips; the rig is 1.62 units tall). */
-export const heightFactor = () => 1 + LEG * (ART.char.legs - 1) / 1.62;
+const shaped = new WeakSet();
+/** Bake the character style's proportions into the loaded models (scenes) and their clips. Call once, after loading. */
+export function shapeAssets(scenes, clips) {
+  const C = ART.char;
+  if (plain(C)) return;
+  const S = new THREE.Matrix4(), rise = LEG * (C.legs - 1);
+  for (const scene of scenes) scene.traverse(o => {
+    if (o.isBone && !shaped.has(o)) { // the rest pose too (what shows before a clip plays)
+      shaped.add(o);
+      const j = jointScale(o.name, C); if (j) { o.position.x *= j[0]; o.position.y *= j[1]; o.position.z *= j[2]; }
+      if (o.name === 'hips') o.position.y += rise;
+    }
+    if (!o.isSkinnedMesh || shaped.has(o.skeleton.boneInverses)) return;
+    shaped.add(o.skeleton.boneInverses);
+    o.skeleton.bones.forEach((b, i) => { const k = skinScale(b.name, C); if (k) o.skeleton.boneInverses[i].premultiply(S.makeScale(k[0], k[1], k[2])); });
+  });
+  for (const clip of clips) for (const t of clip.tracks) {
+    if (shaped.has(t) || !t.name.endsWith('.position')) continue;
+    shaped.add(t);
+    const bone = t.name.slice(0, -9), j = jointScale(bone, C);
+    if (!j && bone !== 'hips') continue;
+    const v = t.values = Float32Array.from(t.values); // (a copy: the loader shares one array between tracks)
+    if (j) for (let i = 0; i < v.length; i += 3) { v[i] *= j[0]; v[i + 1] *= j[1]; v[i + 2] *= j[2]; }
+    if (bone === 'hips') for (let i = 1; i < v.length; i += 3) v[i] += rise;
+  }
+}
+/** How much taller the style makes a rig (longer legs raise the hips, a longer torso raises the head). */
+export const heightFactor = () => 1 + (LEG * (ART.char.legs - 1) + TORSO * (ART.char.torso - 1)) / RIG_H;
+/** What to scale a rig by so the style keeps only its `tall` share of that extra height. */
+export const rigScale = () => Math.pow(heightFactor(), ART.char.tall - 1);
 
 // ---------- scenery pieces ----------
 function merge(parts) { // a few indexed geometries into one (positions + normals only)
