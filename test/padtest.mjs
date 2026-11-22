@@ -489,7 +489,36 @@ async function warden(port) {
     const stopAtk = await P.hold('attack');
     const t0 = Date.now(), LIMIT = +(process.env.FIGHT_SECS || 240) * 1000;
     let seenQuakes = 0, nextSkill = 1;
+    const pend = []; // presses waiting for the server's echo
     const jumpAction = (await P.keys('jump'))[0];
+    // Press jump on the pad at page time `at` (now if past: the delay is counted in the page, not across our round trips), held until the game has polled 2 frames with it down (a fixed time could fall between
+    // frames); then the server's echo of the jump (null: none in 3 s). pressAt / echo are page times.
+    const pressJump = async at => {
+      const e0 = await S(() => window.__jumpEcho.length);
+      const r = await S(([at, i]) => new Promise(res => setTimeout(() => {
+        const b = window.__pad.pad.buttons[i], f0 = window.__fb.input.frames, t0 = performance.now(), n0 = window.__sent.length, st = window.__fb.state;
+        const why = { dead: !!st.dead, roll: !!st.roll, cd: Math.round(st.jumpReady - t0), layer: window.__fb.nav.current().layer }; // (what could swallow the press: for the log)
+        b.pressed = true; b.value = 1;
+        const fin = () => { if (window.__fb.input.frames >= f0 + 2 || performance.now() - t0 > 3000) { b.pressed = false; b.value = 0; res({ pressAt: t0, frames: window.__fb.input.frames - f0, ms: Math.round(performance.now() - t0), sent: window.__sent.slice(n0).some(o => o.type === 'jump'), why }); } else requestAnimationFrame(fin); };
+        requestAnimationFrame(fin);
+      }, Math.max(0, at - performance.now()))), [at, BTN[jumpAction]]);
+      r.e0 = e0;
+      return r;
+    };
+    const echoOf = r => (r.sent ? P.p.waitForFunction(n => window.__jumpEcho[n], r.e0, { timeout: 3000 }).then(h => h.jsonValue()).catch(() => null) : null);
+    // Calibrate: the time from a press to the server's echo of it (input polling, a slow frame, the round trip). The ring's
+    // announcement reaches us as late as the echo's downward leg, so pressing `330 + that` ms before the front (as we
+    // receive it) puts the server's take-off 0.33 s before the front: the middle of the 0.08-0.58 s airborne window.
+    const rts = [];
+    for (let i = 0; i < 3; i++) {
+      await P.p.waitForFunction(() => performance.now() > window.__fb.state.jumpReady + 100, null, { timeout: 5000 }).catch(() => {});
+      const r = await pressJump(0), echo = await echoOf(r); // (at 0: now)
+      if (echo != null) rts.push(echo - r.pressAt);
+    }
+    // lead: 330 + the median of the last 3 press-to-echo times (each jump in the fight adds one: a busy fight is slower)
+    const leadNow = () => { const l = rts.slice(-3).sort((a, b) => a - b); return 330 + (l.length ? Math.round(l[l.length >> 1]) : 300); };
+    let lead = leadNow();
+    console.log(`  warden: press-to-echo ${rts.map(Math.round).join(' / ') || 'none seen'} ms: start the jump ${lead} ms before the front`);
     // count "Jumped!" in the page as it is shown: floatLog keeps only the last 150 lines and could evict it
     await S(() => { window.__jumped = 0; const fl = window.__fb.floatLog, push = fl.push.bind(fl); fl.push = (...a) => { for (const f of a) if (/Jumped!/.test(f.text)) window.__jumped++; return push(...a); }; });
     const floatJumped = () => S(() => window.__jumped);
@@ -507,29 +536,33 @@ async function warden(port) {
       const qs = await S(() => window.__quakes.splice(0));
       for (const q of qs) {
         seenQuakes++;
-        const now = await S(() => performance.now());
         const dist = Math.hypot(q.x - s.x, q.z - s.z);
         if (dist > q.max) continue;
         const front = q.at + q.d * 1000 + (dist / q.sp) * 1000;
-        const wait = front - 330 - now - 60; // aim the take-off 0.33 s before the front arrives (the middle of the window), less a poll
-        if (wait < -150) continue;
-        attempts++;
+        // aim the server's take-off 0.33 s before the front arrives (the middle of the window); a little late for this ring:
+        // jump anyway, so its press-to-echo time still sets the lead for the next one (long gone: skip it)
+        if (front - lead < (await S(() => performance.now())) - 1500) continue;
         await P.btn(jumpAction, false);
-        // hold the button until the game has polled at least 2 frames with it down (a fixed time could fall between frames)
-        const r = await S(([ms, i]) => new Promise(res => setTimeout(() => {
-          const b = window.__pad.pad.buttons[i], f0 = window.__fb.input.frames, t0 = performance.now();
-          b.pressed = true; b.value = 1;
-          const fin = () => { if (window.__fb.input.frames >= f0 + 2 || performance.now() - t0 > 3000) { b.pressed = false; b.value = 0; res({ frames: window.__fb.input.frames - f0, ms: Math.round(performance.now() - t0) }); } else requestAnimationFrame(fin); };
-          requestAnimationFrame(fin);
-        }, Math.max(0, ms))), [wait, BTN[jumpAction]]);
-        jumpLog.push(r);
-        console.log(`  warden: jump attempt ${attempts}: held ${r.frames} frames in ${r.ms} ms (${(r.ms / Math.max(1, r.frames)).toFixed(0)} ms/frame)`);
+        const r = await pressJump(front - lead);
+        jumpLog.push(r); pend.push({ r, front });
+        if (r.sent) attempts++; // (a press the game refused, e.g. while encased by a trap, isn't an attempt)
+      }
+      // The server's jump and the ring reach us with the same delay, so their arrival gap is the gap on the server (how far
+      // off the take-off was: logged), and press-to-echo times the next lead (read after the volley: its rings are 0.95 s apart).
+      for (const { r, front } of pend.splice(0)) {
+        const echo = await echoOf(r), off = echo == null ? null : Math.round(echo - front);
+        if (echo != null) { rts.push(echo - r.pressAt); lead = leadNow(); }
+        console.log(`  warden: jump: held ${r.frames} frames in ${r.ms} ms, ${r.sent ? 'sent' : `not sent ${JSON.stringify(r.why)}`}; the server's take-off ${off == null ? 'not seen' : `${off} ms from the front (aim -330)`}, next lead ${lead} ms`);
       }
       if (qs.length) { await P.p.waitForFunction(() => window.__jumped >= 1, null, { timeout: 1500 }).catch(() => {}); jumped = await floatJumped(); } // (the result shows within a moment of the ring: poll, give up after 1.5 s)
       if (jumped >= 1 && Date.now() - t0 > 20000 && attempts >= 1) break;
       // skills when they are ready
       const sk = await S(() => window.__fb.state.ready.map(r => performance.now() > r));
-      for (const k of [1, 2, 3]) if (sk[k]) { await P.tap(`skill${k}`, 1); tapped.add(k); break; }
+      for (const k of [1, 2, 3]) if (sk[k]) { // (counted when the client sent it: an encasing trap or a downed moment refuses the press)
+        const ms = await P.mark(); await P.tap(`skill${k}`, 1);
+        if ((await P.sent(ms, 'skill')).some(o => o.slot === k)) tapped.add(k);
+        break;
+      }
       await frames(2);
     }
     await stopAtk();
@@ -538,6 +571,7 @@ async function warden(port) {
     const hpNow = (await boss()) ? bAfter.hp : 0;
     assert.ok(bAfter.dead || hpNow < hp0, `the pad did damage (${hp0} -> ${hpNow})`);
     const skillMsgs = (await P.sent(mFight, 'skill')).map(o => o.slot);
+    assert.ok(tapped.size >= 1, `a skill tapped on the pad was sent (slots sent: ${[...new Set(skillMsgs)]})`);
     for (const k of tapped) assert.ok(skillMsgs.includes(k), `the pad sent skill ${k} (slots sent: ${[...new Set(skillMsgs)]})`);
     assert.ok(skillMsgs.includes(0), 'and the held attack sent basic attacks (slot 0)');
     assert.ok(seenQuakes >= 1, `the Warden threw a Quake Ring (${seenQuakes} seen)`);
