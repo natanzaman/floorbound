@@ -130,7 +130,7 @@ export const SOVEREIGN = { // its moves' wind-ups and repeats are paced in share
   // Scaled like the Warden (server/floor2.js scaleSovereign): party weight = the sum of each fighter's role weight;
   // health = (hpBase + hpPer * weight^hpExp) * (1 + hpLvl * levels above 18); damage = atk * (1 + atkLvl * levels above 18)
   // * (1 + atkPer * fighters above 3). A filmed director show keeps the old linear scaling (show).
-  phases: [0.66, 0.33], hpBase: 4500, hpPer: 2450, hpExp: 2.05, hpLvl: 0.12, atkLvl: 0.06, atkPer: 0.2,
+  phases: [0.66, 0.33], hpBase: 5400, hpPer: 2940, hpExp: 2.05, hpLvl: 0.12, atkLvl: 0.06, atkPer: 0.2, // x1.2 on 2026-11-22 (were 4500 / 2450) for Combos 2.0
   hpRole: { Tank: 0.6, Healer: 0.5, Support: 0.8, Damage: 1.2 },
   show: { hpBase: 4600, hpPer: 2000, hpExp: 1, hpRole: null, hpLvl: 0, atkLvl: 0, atkPer: 0, atk: 40 },
   // Its moves (sweep, geyser, wave, thralls, pools, deluge, volley), paced and knobbed: shared/bosstiming.js.

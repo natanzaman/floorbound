@@ -247,7 +247,7 @@ export const WARDEN = {
   // Scaled to the fighters in the chamber when it engages (server/game.js scaleWarden). Party weight = the sum of each
   // fighter's role weight (hpRole: a damage dealer counts more than a healer); health = (hpBase + hpPer * weight^hpExp)
   // * (1 + hpLvl * levels above 10); damage = atk * (1 + atkLvl * levels above 10) * (1 + atkPer * fighters above 3).
-  phases: [0.66, 0.33], hpBase: 2400, hpPer: 680, hpExp: 2.05, hpLvl: 0.12, atkLvl: 0.06, atkPer: 0.25,
+  phases: [0.66, 0.33], hpBase: 2880, hpPer: 816, hpExp: 2.05, hpLvl: 0.12, atkLvl: 0.06, atkPer: 0.25, // hpBase / hpPer x1.2 on 2026-11-22 (were 2400 / 680) for Combos 2.0: fights about as long
   hpRole: { Tank: 0.6, Healer: 0.5, Support: 0.8, Damage: 1.2 },
   // A filmed director show (server/director.js) keeps the scaling its episodes were rehearsed against (before the G5
   // balance pass): the scripted fights' pacing and Break cues depend on it.
