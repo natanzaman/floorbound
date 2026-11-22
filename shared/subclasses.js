@@ -141,12 +141,12 @@ export function specBlock(path, cls, lvl, sub, gold) {
 const form = (id, name, desc, n, extra = {}) => ({ id, name, desc, n, sig: 1, ...extra });
 export const SIG_EVOS = {
   flashstep: {
-    A: form('thousandcuts', 'A Thousand Cuts', 'Land and cut five times, faster: more total damage where you arrive.', { cuts: 5, cut: 0.6, gap: 0.12 }),
+    A: form('thousandcuts', 'A Thousand Cuts', 'Land and cut five times, faster and lighter: the same damage spread over more hits.', { cuts: 5, cut: 0.45, gap: 0.12 }),
     B: form('longstep', 'Long Step', 'Blink up to 11 m and stay untouchable longer; two heavy cuts where you land.', { len: 11, iframes: 0.7, cuts: 2, cut: 1.0 }),
   },
   rallycut: {
     A: form('breakingcut', 'Breaking Cut', 'A heavier cut that tears almost half the target\'s posture off (a smaller rally).', { mult: 2.4, frac: [0.45, 0.15], dmg: 0.08 }, { coop: 1 }),
-    B: form('warbanner', 'Warbanner Cut', 'A lighter cut, but the rally reaches 16 m: +18% damage for 8 s.', { mult: 1.6, allyR: 16, dmg: 0.18, d: 8 }, { coop: 1 }),
+    B: form('warbanner', 'Warbanner Cut', 'A lighter cut, but the rally reaches 16 m: +15% damage for 7 s.', { mult: 1.6, allyR: 16, dmg: 0.15, d: 7 }, { coop: 1 }),
   },
   aegisline: {
     A: form('bastion', 'Bastion', 'Hold the line yourself: you take 60% less damage for 6 s (allies within 8 m 25% less).', { r: 8, self: 0.6, ally: 0.25, d: 6 }),
@@ -161,11 +161,11 @@ export const SIG_EVOS = {
     B: form('firstlight', 'First Light', 'A softer, wider light (18% within 18 m) that comes back sooner.', { r: 18, frac: 0.18 }, { cd: 0.8 }),
   },
   judgeray: {
-    A: form('finalverdict', 'Final Verdict', 'A narrow ray that hits much harder and breaks more posture.', { mult: 3.0, width: 1.1, frac: [0.25, 0.1] }),
+    A: form('finalverdict', 'Final Verdict', 'A narrow ray that hits much harder and breaks more posture.', { mult: 2.7, width: 1.1, frac: [0.25, 0.1] }),
     B: form('widejudgement', 'Wide Judgement', 'A 3 m wide beam: lighter, but it catches a whole pack.', { width: 3.0, len: 12, mult: 1.7 }),
   },
   deadeye: {
-    A: form('heartseeker', 'Heartseeker', 'Draw longer (0.8 s) for a devastating shot and a big posture hit.', { draw: 0.8, mult: 4.2, frac: [0.3, 0.12] }),
+    A: form('heartseeker', 'Heartseeker', 'Draw longer (0.8 s) for a devastating shot and a big posture hit.', { draw: 0.8, mult: 3.6, frac: [0.3, 0.12] }),
     B: form('snapshot', 'Snap Shot', 'Barely a draw (0.15 s) and back sooner; a lighter arrow.', { draw: 0.15, mult: 2.4 }, { cd: 0.72 }),
   },
   snarefield: {
@@ -173,15 +173,15 @@ export const SIG_EVOS = {
     B: form('widenet', 'Wide Net', 'A 7 m net: a shorter hold, but the slow lasts 7 s.', { r: 7, stun: 1.4, slowFor: 7 }),
   },
   rampage: {
-    A: form('endlessrampage', 'Endless Rampage', 'Five spins instead of three, a little faster.', { spins: 5, gap: 0.3, mult: 1.0 }),
-    B: form('executionerspin', 'Executioner Spin', 'Two spins; the second lands like an execution.', { spins: 2, mult: 1.2, last: 2.6 }),
+    A: form('endlessrampage', 'Endless Rampage', 'Five lighter spins instead of three, a little faster: longer to keep a crowd hit.', { spins: 5, gap: 0.3, mult: 0.7 }),
+    B: form('executionerspin', 'Executioner Spin', 'Two spins; the second lands like an execution.', { spins: 2, mult: 1.1, last: 2.6 }),
   },
   crimsonpact: {
     A: form('bloodfeast', 'Blood Feast', 'Heal for 60% of the damage (up to 30% of your health); a lighter cleave.', { mult: 1.8, leech: 0.6, cap: 0.3 }),
-    B: form('crimsonedge', 'Crimson Edge', 'A wider, much heavier cleave that heals less.', { r: 5, mult: 2.8, leech: 0.25 }),
+    B: form('crimsonedge', 'Crimson Edge', 'A wider, much heavier cleave that heals less.', { r: 5, mult: 2.5, leech: 0.25 }),
   },
   wyverndive: {
-    A: form('meteordive', 'Meteor Dive', 'Hang in the air longer and land like a meteor: 6 m, heavy damage and posture.', { air: 0.8, r: 6, mult: 3.2, frac: [0.35, 0.12] }, { coop: 1 }),
+    A: form('meteordive', 'Meteor Dive', 'Hang in the air longer and land like a meteor: 6 m, heavy damage and posture.', { air: 0.8, r: 6, mult: 2.8, frac: [0.35, 0.12] }, { coop: 1 }),
     B: form('swiftdive', 'Swift Dive', 'A quick hop that lands lighter but comes back much sooner.', { air: 0.4, mult: 2.0 }, { cd: 0.73 }),
   },
   spearwall: {
@@ -189,7 +189,7 @@ export const SIG_EVOS = {
     B: form('spearhedge', 'Spear Hedge', 'A 6 m hedge of spears: heavier, throws enemies further and stuns longer.', { r: 6, mult: 2.2, knock: 3, stun: 1.6 }),
   },
   encore: {
-    A: form('ovation', 'Standing Ovation', 'The crowd roars: +18% damage for 8 s (3 s back on skills).', { dmg: 0.18, d: 8, cut: 3 }, { coop: 1 }),
+    A: form('ovation', 'Standing Ovation', 'The crowd roars: +14% damage for 7 s (3 s back on skills).', { dmg: 0.14, d: 7, cut: 3 }, { coop: 1 }),
     B: form('dacapo', 'Da Capo', 'From the top: 7 s back on every skill, a small buff, and it comes back sooner.', { cut: 7, dmg: 0.06 }, { cd: 0.85 }),
   },
   sirenwail: {

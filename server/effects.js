@@ -6,6 +6,7 @@
 import { AWAKEN, awakening } from '../shared/mastery.js';
 import { skKey } from '../shared/talents.js';
 
+const FX_OFF = !!process.env.FX_OFF;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r2 = v => Math.round(v * 100) / 100;
 
@@ -23,7 +24,7 @@ export const EffectMethods = {
   },
   // Fire p's rules for an event. ctx: { m (the enemy), t (the player healed) }.
   fxOn(p, on, sk, ctx = {}) {
-    if (!p || p.dead || this._fxDepth || !this.players.has(p.id) || this.duelOf?.(p)) return; // (no rules in a duel)
+    if (!p || p.dead || this._fxDepth || !this.players.has(p.id) || this.duelOf?.(p) || FX_OFF) return; // (no rules in a duel; FX_OFF=1: none at all, a tuning aid)
     const list = this.fxRules(p, on, sk);
     if (!list.length) return;
     const now = this.time, icd = (p.fxIcd ||= {});
@@ -44,7 +45,7 @@ export const EffectMethods = {
         if (!live) return;
         // A lingering effect, not use time (effectLater: no longer cooldown), and not the skill's own hits: the ticks
         // carry no skill (no skill talents, mastery or chain steps), so the skill markers are cleared while queuing them.
-        const per = atk * r.v, ticks = Math.max(1, Math.round(r.d)), tp = this._tp, tsk = p._tsk, sig = this._sigId;
+        const per = atk * r.v * (m.def.boss ? 0.6 : 1), ticks = Math.max(1, Math.round(r.d)), tp = this._tp, tsk = p._tsk, sig = this._sigId;
         this._tp = null; p._tsk = null; this._sigId = null;
         try {
           for (let i = 1; i <= ticks; i++) (this.effectLater || this.schedule).call(this, i, () => {
@@ -58,11 +59,11 @@ export const EffectMethods = {
       case 'slow': if (live) { this.slowMob?.(m, r.v, r.d); ev(); } return;
       case 'stun': if (live) { m.stunUntil = Math.max(m.stunUntil || 0, now + r.d * (m.def.boss ? 0.3 : 1)); ev(); } return;
       case 'posture': if (live) { this.addPosture(m, p, 0, { frac: r.frac }); ev(); } return;
-      case 'mark': if (live) { m.fxMark = { until: now + r.d, v: Math.max(r.v, now < (m.fxMark?.until || 0) ? m.fxMark.v : 0) }; ev({ d: r.d }); } return;
+      case 'mark': if (live) { const v = r.v * (m.def.boss ? 0.5 : 1); m.fxMark = { until: now + r.d, v: Math.max(v, now < (m.fxMark?.until || 0) ? m.fxMark.v : 0) }; ev({ d: r.d }); } return; // (bosses: half)
       case 'burst': {
         if (!live) return;
         const x = m.x, z = m.z;
-        this.hitCircle(p, x, z, r.r, atk * r.mult, { threat: 1 });
+        this.hitCircle(p, x, z, r.r, atk * r.mult * (m.def.boss ? 0.6 : 1), { threat: 1 }); // (centred on a boss: less)
         return ev({ r: r.r });
       }
       case 'pull': {

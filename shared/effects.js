@@ -8,7 +8,7 @@
 //   'crit' 'kill' 'break' 'switch'  your critical hit, a kill, a Break you cause, a Switch you land
 //   'heal'   you heal someone (the amount restored)
 // do (what it does; numbers x attack power where there is damage):
-//   burn   { v: x atk per second, d }      on the target            slow { v: 0-1, d }    stun { d } (bosses 30%)
+//   burn   { v: x atk per second, d }      on the target (burn, burst: 60% on a boss; mark: half)           slow { v: 0-1, d }    stun { d } (bosses 30%)
 //   posture{ frac: [normal, boss] }        mark { v: +taken, d }    burst{ mult, r } around the target
 //   pull   { r, v: metres }  enemies near the target toward it      shield { v: x max hp, r (0: you), d, to: 't' (the one healed) }
 //   heal   { v: x max hp, r (0: you) }      team { v: +damage, r, d } (you and allies)
@@ -21,12 +21,12 @@ const pct = v => `${Math.round(v * 100)}%`;
 const ON_TEXT = { cast: 'When you use it', hit: 'Its hits', crit: 'Your critical hits', kill: 'Each kill', break: 'Each Break you cause', switch: 'Each Switch you land', heal: 'Your heals' };
 const near = r => (r ? `you and allies within ${r} m` : 'you');
 const DO_TEXT = {
-  burn: e => `burn the target for ${pct(e.v)} attack a second for ${e.d} s`,
+  burn: e => `burn the target for ${pct(e.v)} attack a second for ${e.d} s (less on bosses)`,
   slow: e => `slow the target by ${pct(e.v)} for ${e.d} s`,
   stun: e => `stun the target for ${e.d} s`,
   posture: e => `break ${pct(e.frac[0])} more of its posture (${pct(e.frac[1])} on bosses)`,
-  mark: e => `mark the target: it takes ${pct(e.v)} more damage for ${e.d} s`,
-  burst: e => `burst around the target for ${pct(e.mult)} attack (${e.r} m)`,
+  mark: e => `mark the target: it takes ${pct(e.v)} more damage for ${e.d} s (half on bosses)`,
+  burst: e => `burst around the target for ${pct(e.mult)} attack (${e.r} m; less around a boss)`,
   pull: e => `pull enemies within ${e.r} m toward the target`,
   shield: e => `shield ${e.to === 't' ? 'the one healed' : near(e.r)} for ${pct(e.v)} of max health (${e.d} s)`,
   heal: e => `heal ${near(e.r)} for ${pct(e.v)} of max health`,
