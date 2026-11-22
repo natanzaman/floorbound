@@ -109,7 +109,7 @@ export const OBSTACLES = (() => {
   }
   out.push(...floor2Obstacles()); // Floor 2 (see shared/floor2.js)
   out.push(...floor3Obstacles()); // Floor 3 (see shared/floor3.js)
-  const KEEP = new Set(['pillar', 'campfire', 'brazier', 'fountain']); // (landmarks stay; scattered scenery makes room)
+  const KEEP = new Set(['pillar', 'campfire', 'brazier', 'fountain', 'pier', 'column']); // (landmarks stay; scattered scenery makes room)
   for (const lab of Object.values(LABS)) { // each labyrinth's stair in its field: the scenery gives it room
     const E = lab.entry;
     for (let i = out.length - 1; i >= 0; i--) if (!KEEP.has(out[i].kind) && Math.hypot(out[i].x - E.x, out[i].z - E.z) < E.clear + out[i].r) out.splice(i, 1);

@@ -213,7 +213,7 @@ export const LabMethods = {
     const route = (from, to, max) => { const out = [from]; let c = from; for (let k = 0; k < max && c !== to; k++) { c = tbl[c * N + to]; if (c < 0) break; out.push(c); } return out; };
     const sets = [];
     S.ambush ||= [];
-    for (const p of humans.slice(0, 3)) {
+    for (const p of humans) {
       const c = cellOf(L, p.x, p.z);
       const dead = [...Array(N).keys()].filter(d => d !== c && L.nbrs(d).length === 1 && !L.onPath.has(d) && !S.ambush.some(a => a.c === d));
       dead.sort((a, b) => Math.abs(route(c, a, 40).length - 5) - Math.abs(route(c, b, 40).length - 5));
@@ -394,6 +394,8 @@ export const LabMethods = {
   labKeeperKilled(m) {
     const L = labAt(m.x, m.z) || LAYERS.find(l => this.labs[l.id].keeper === m), lab = L.lab, f = L.floor;
     m.deadUntil = this.time + (m.def.respawn || 75);
+    m.labEngaged = false; m.labCalled = false; m.kp = null; m.labHold = 0; m.labTaken = 0; m.labQuiet = 0; // (it comes back fresh)
+    this.events.push({ t: 'lab', s: 'kreset', id: m.id });
     for (const x of [...this.mobs.values()]) if (x.labTemp === L.id && !x.dead) { this.events.push({ t: 'die', id: x.id, x: r2(x.x), z: r2(x.z), b: 0 }); this.mobs.delete(x.id); }
     const got = [];
     for (const p of this.players.values()) {

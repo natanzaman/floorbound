@@ -114,7 +114,7 @@ export const LABS = {
   // squall: lightning strikes marked on the ground near everyone.
   3: {
     floor: 3, id: 'causeways', name: 'The Windrift Causeways', style: 'causeway', keyName: 'Storm Key', key: 'lab3Keys', lureName: 'storm chime',
-    entry: { x: 1183, z: 141, use: 3.0, clear: 5 },
+    entry: { x: 1172, z: 139, use: 3.0, clear: 5 },
     exitTo: { x: 1200, z: 146 },
     use: 3.0,
     layers: [
@@ -446,10 +446,11 @@ export function labSteer(x, z, tx, tz) {
   const hop = (L.nextBy ? L.nextBy[shiftPhase(L)] : L.next)[from * L.cols * L.rows + to];
   if (hop < 0) return [tx, tz];
   const [hx, hz] = L.center(hop);
-  if (L.bridge) { // a narrow bridge: line up with it first (from this side of the gap), then cross
+  { // line up with the way (a bridge, or a corridor between corner posts) from this side first, then go through
+    const half = L.bridge || (L.cell - L.wall) / 2 - 0.6;
     const [cx, cz] = L.center(from), dx = Math.sign(hx - cx), dz = Math.sign(hz - cz);
     const lat = dx ? z - cz : x - cx, along = dx ? (x - cx) * dx : (z - cz) * dz;
-    if (Math.abs(lat) > L.bridge * 0.5 && along < L.cell / 2 - L.h - 0.2) return [cx + dx * (L.cell / 2 - L.h - 0.6), cz + dz * (L.cell / 2 - L.h - 0.6)];
+    if (Math.abs(lat) > half * 0.5 && along < L.cell / 2 - L.h - 0.2) return [cx + dx * (L.cell / 2 - L.h - 0.6), cz + dz * (L.cell / 2 - L.h - 0.6)];
   }
   return [hx, hz];
 }

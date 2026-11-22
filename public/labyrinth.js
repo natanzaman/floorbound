@@ -359,7 +359,7 @@ export function initLabClient(ctx) {
   // the wisps: your true one drifts toward the way on, the false one into a dead end (it flickers; the true one doesn't)
   const wispFx = [];
   function wispsAt(e) {
-    const set = e.sets.find(q => q.id === state.myId) || e.sets[0]; if (!set) return;
+    const set = e.sets.find(q => q.id === state.myId); if (!set) return;
     const L = LAYERS.find(Q => Q.id === e.l);
     set.w.forEach((cells, i) => {
       const pts = cells.map(c => L.center(c));

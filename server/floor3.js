@@ -826,7 +826,7 @@ export function installFloor3Moves(Game) {
   P.handle = function (p, msg) {
     if (msg?.type === 'test' && process.env.TEST_HOOKS && p) {
       if (Array.isArray(msg.tp)) { const [x, z] = msg.tp.map(Number); if (walkable(x, z)) this.teleport(p, x, z); return; }
-      if (msg.unlock === 3) { p.stats.floor2 = 1; p.stats.floor3 = 1; p.dirty = true; this.invChanged(p); return; } // { unlock: 3 }: Floors 2 and 3 open (journey runs)
+      if (msg.unlock === 3) { p.stats.floor2 = 1; p.stats.floor3 = 1; p.stats.lab1Keys ||= 1; p.stats.lab2Keys ||= 1; p.stats.lab3Keys ||= 1; p.dirty = true; this.invChanged(p); return; } // { unlock: 3 }: Floors 2 and 3 open (journey runs)
       if (msg.f3move && this.colossus) { if (!this.colossus.engaged && inArena3(p.x, p.z)) this.engageColossus(this.colossus); this.forceBossMove(this.colossus, msg.f3move, p.id); return; }
     }
     return handle.call(this, p, msg);

@@ -66,8 +66,8 @@ try:
         ok('out before the Sunken Gate')
 
         # ---- Floor 3 ----
-        S("() => __fb.send({ type: 'test', tp: [1183, 138] })")
-        p.wait_for_function("() => Math.abs(__fb.state.x - 1183) < 3", timeout=20000); frames(20)
+        S("() => __fb.send({ type: 'test', tp: [1172, 136] })")
+        p.wait_for_function("() => Math.abs(__fb.state.x - 1172) < 3", timeout=20000); frames(20)
         assert label('Windrift'), 'the cloud landing is labelled'
         ok('the Windrift Causeways: label in the Gale Spires')
         go('kitesteps')
