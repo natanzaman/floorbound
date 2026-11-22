@@ -129,7 +129,7 @@ const state = {
   ws: null, myId: 0, seq: 0, x: 0, z: 0, face: 0, cls: 'swordsman', lvl: 1, hp: 1, maxHp: 1, xp: 0, next: 50,
   dead: false, party: 0, joined: false, yaw: 0, pitch: 0.5, camDist: 11,
   gate: [0, 0, 0, 0], gateOpen: false, gold: 0, inv: null, ccd: {}, ccdReady: {}, meReady: 0, phase: 0, moved: 0, tonic: 0, draught: 0,
-  ready: [0, 0, 0, 0], lastPress: [0, 0, 0, 0], dodgeReady: 0, dodgePress: 0, roll: null, moveDir: null, lastCombat: -1e9, speed: 0, lock: 0, focus: 0, jumpReady: 0, jumpPress: 0, roster: new Map(), area: '', invite: null,
+  ready: [0, 0, 0, 0, 0], lastPress: [0, 0, 0, 0, 0], dodgeReady: 0, dodgePress: 0, roll: null, moveDir: null, lastCombat: -1e9, speed: 0, lock: 0, focus: 0, jumpReady: 0, jumpPress: 0, roster: new Map(), area: '', invite: null,
 };
 const players = new Map(); // id -> entity
 const mobs = new Map();
@@ -514,6 +514,7 @@ function onMessage(msg, arrival = performance.now()) {
   if (msg.type === 'towns') { towns.onMsg(msg); return; } // the towns (public/towns.js)
   if (msg.type === 'life') { life.onMsg(msg); return; } // life classes (public/life.js)
   if (msg.type === 'hall') { state.hallData = msg; renderHall(); bell.hall(msg); return; }
+  if (msg.type === 'snap' && msg.pe) msg.w.events = msg.w.events.concat(msg.pe); // private events: only for me (server Game.priv)
   if (msg.type === 'snap') {
     const busy = msg.w.events.some(e => e.t === 'clear' || e.t === 'lvl');
     for (const e of msg.w.events) { // titles and the Hall of Clearers (kept out of handleEvent)
@@ -930,7 +931,7 @@ const SKILL_ANIM = {
   sanct: [['Spellcast_Long', 1.4]],
 };
 function playSkillAnim(ent, skill, n) {
-  const list = SKILL_ANIM[skill];
+  const list = SKILL_ANIM[skill] || SKILL_ANIM[academy.sigAnim(skill)]; // (a signature skill borrows a base skill's swing)
   if (!ent?.model.anim || !list) return;
   const i = n ?? (ent.combo = (ent.combo || 0) + 1);
   const [name, speed] = list[i % list.length];
@@ -1040,6 +1041,7 @@ onPress('jump', e => { if (!e.repeat) jump(); });
 onPress('skill1', () => useSkill(1));
 onPress('skill2', () => useSkill(2));
 onPress('skill3', () => useSkill(3));
+onPress('skill4', () => useSkill(4)); // slot 5: a subclass's signature skill (public/academy.js sig(), docs/briefs/subclasses.md)
 onPress('dodge', () => dodge());
 onPress('skillTree', e => { if (!e.repeat) talents.toggle(); }); // Skill Tree window (public/talents.js)
 input.onDevice?.(() => combat.guard(false)); // a device switch lets go of every hold: a toggled guard would stay up
@@ -1176,7 +1178,7 @@ stickEl.addEventListener('pointerup', endStick);
 stickEl.addEventListener('pointercancel', endStick);
 
 // skill bar
-const BAR_ACTIONS = { 0: 'attack', 1: 'skill1', 2: 'skill2', 3: 'skill3', dodge: 'dodge', jump: 'jump', guard: 'guard', cover: 'cover', ...Object.fromEntries(CONSUMABLE_IDS.map((id, i) => [id, `item${i + 1}`])) };
+const BAR_ACTIONS = { 0: 'attack', 1: 'skill1', 2: 'skill2', 3: 'skill3', 4: 'skill4', dodge: 'dodge', jump: 'jump', guard: 'guard', cover: 'cover', ...Object.fromEntries(CONSUMABLE_IDS.map((id, i) => [id, `item${i + 1}`])) };
 // The bar's key chips name the bindings on the active device (none under touch play). Only the chips' text changes, so a
 // device switch or a rebind relabels in place instead of rebuilding the bar.
 function labelBar() {
@@ -1185,6 +1187,11 @@ function labelBar() {
     const a = BAR_ACTIONS[b.dataset.slot] || BAR_ACTIONS[b.dataset.item], k = a && b.querySelector('.key');
     if (k) k.textContent = touch ? '' : keyLabel(a).toUpperCase();
   }
+}
+// Slot 5: the signature skill of your specialisation (public/academy.js sig(); nothing before one).
+function sigButton() {
+  const g = academy.sig();
+  return g ? `<button class="sk s4 sig" data-slot="4" title="${esc(g.name)}: ${esc(g.desc)}"><span class="key">${isTouch ? '' : esc(keyLabel('skill4'))}</span>${esc(g.name)}<span class="cd"></span><span class="cdt"></span></button>` : '';
 }
 function buildSkillBar(lvl = state.lvl) {
   const skills = CLASSES[state.cls].skills;
@@ -1195,7 +1202,7 @@ function buildSkillBar(lvl = state.lvl) {
     const acad = academy.locked(i), locked = lvl < s.lvl || acad, nm = (!mastery.evoId(i) && academy.name(i)) || mastery.name(i); // evolved name once a branch is active (public/mastery.js); an Initiate's plain names and locked level-3 skill (public/academy.js)
     return `<button class="sk s${i} ${i === 0 ? 'basic' : ''} ${locked ? 'locked' : ''} ${mastery.evoId(i) ? 'evolved' : ''}" data-slot="${i}" title="${esc(nm)}: ${esc(mastery.desc(i))}${i === 0 ? esc(styles.barNote()) : ''}${acad ? ' (opens when you graduate at the Academy)' : locked ? ` (unlocks at Lv ${s.lvl})` : ''}">
       <span class="key">${i === 0 ? (isTouch ? '' : 'CLICK') : i}</span>${mastery.pip(i)}${esc(nm)}${acad ? '<br><small>Academy</small>' : locked ? `<br><small>Lv ${s.lvl}</small>` : ''}<span class="cd"></span><span class="cdt"></span></button>`;
-  }).join('') + `<button class="sk sd" data-slot="dodge" title="Dodge roll: dash and avoid damage"><span class="key">${isTouch ? '' : 'SHIFT'}</span>Dodge<span class="cd"></span><span class="cdt"></span></button>`
+  }).join('') + sigButton() + `<button class="sk sd" data-slot="dodge" title="Dodge roll: dash and avoid damage"><span class="key">${isTouch ? '' : 'SHIFT'}</span>Dodge<span class="cd"></span><span class="cdt"></span></button>`
     + `<button class="sk sj" data-slot="jump" title="Jump: hop over the boss's ground slams"><span class="key">${isTouch ? '' : 'SPACE'}</span>Jump<span class="cd"></span><span class="cdt"></span></button>`
     + combat.guardButton(state.cls, isTouch)
     + threat.coverButton(state.cls, isTouch)
@@ -1418,17 +1425,17 @@ function engageRange(slot, sk) {
 
 function useSkill(slot) {
   if (state.dead || revive.isDown() || rescue.encased() || !state.joined || arenas.frozen()) return;
-  const sk = CLASSES[state.cls].skills[slot];
+  const sig = slot === 4 ? academy.sig() : null, sk = slot === 4 ? sig && { id: sig.id, lvl: 1, cd: sig.cd } : CLASSES[state.cls].skills[slot]; // slot 4: the signature skill
   const now = performance.now();
   if (!sk || state.lvl < sk.lvl || academy.locked(slot) || now < state.ready[slot] || combat.guarding) return;
-  const mode = tMode(), range = engageRange(slot, sk);
+  const mode = tMode(), range = sig ? sig.aim || 0 : engageRange(slot, sk);
   if (mode === 'aimed') state.face = state.yaw; // no auto-targeting: where you look
   else if (range) {
     const t = autoTarget(range);
     if (t) state.face = angleTo(state.x, state.z, t.x, t.z);
     else if (mode === 'cone' || range > 12) state.face = state.yaw; // nothing to turn to: strike / shoot where you look
   }
-  state.ready[slot] = now + ((slot === 0 && styles.basicCd(mastery.cd(0))) || mastery.cd(slot)) * 1000; // mastery and branch cooldowns, weapon styles (the server corrects it)
+  state.ready[slot] = now + (sig ? sig.cd : (slot === 0 && styles.basicCd(mastery.cd(0))) || mastery.cd(slot)) * 1000; // mastery and branch cooldowns, weapon styles (the server corrects it)
   state.lastPress[slot] = now;
   send({ type: 'skill', slot, face: state.face, look: state.yaw }); // look: the camera's look (Cone mode keeps hits inside its cone)
 }
@@ -1442,6 +1449,7 @@ function interactKind() {
   if (nearHall()) return 'hall';
   if (smith.near()) return 'smith';
   if (towns.interactKind()) return 'town'; // a town board (public/towns.js)
+  if (academy.atLectern()) return 'lectern'; // the lectern behind the Academy (public/academy.js)
   if (academy.near()) return 'academy'; // the Academy (public/academy.js)
   if (guilds.near()) return 'guild'; // the Guild Registrar (public/guilds.js)
   if (mastery.near()) return 'shrine'; // Skill Shrine (public/mastery.js)
@@ -1456,6 +1464,7 @@ function interact() {
   if (k === 'shop') { state.shopOpen = true; $('bag').classList.remove('hidden'); renderBag(); sfx.play('ui'); }
   else if (k === 'hall') { toggleHall(); sfx.play('ui'); }
   else if (k === 'smith') { smith.toggle(); sfx.play('ui'); }
+  else if (k === 'lectern') academy.readLectern();
   else if (k === 'academy') academy.toggle();
   else if (k === 'guild') { guilds.open(); sfx.play('ui'); }
   else if (k === 'shrine') talents.toggle();
@@ -1819,9 +1828,9 @@ function updateHud(now) {
     }
     if (btn.dataset.slot === 'guard') { btn.classList.toggle('on', combat.guarding); continue; }
     if (btn.dataset.slot === 'cover') { threat.coverCd(btn); continue; }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'guild' ? 'Guild' : a === 'town' ? 'Town' : a === 'academy' ? (academy.inTrial() ? 'Leave' : 'Enter') : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : a?.startsWith('life-') ? life.actLabel(a) : state.meReady ? 'Unready' : 'Ready'); continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'guild' ? 'Guild' : a === 'town' ? 'Town' : a === 'academy' ? (academy.inTrial() ? 'Leave' : 'Enter') : a === 'lectern' ? 'Read' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : a?.startsWith('life-') ? life.actLabel(a) : state.meReady ? 'Unready' : 'Ready'); continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
-    const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : { cd: mastery.cd(slot) }; // mastery/branch cooldowns
+    const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : { cd: slot === 4 ? academy.sig()?.cd || 1 : mastery.cd(slot) }; // mastery/branch cooldowns; slot 4: the signature skill
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
     setVar(btn._cd ||= btn.querySelector('.cd'), '--p', `${Math.min(100, (left / sk.cd) * 100).toFixed(1)}%`);
     setText(btn._cdt ||= btn.querySelector('.cdt'), left > 0.3 && slot > 0 && !isDodge && !isJump ? left.toFixed(left < 3 ? 1 : 0) : '');

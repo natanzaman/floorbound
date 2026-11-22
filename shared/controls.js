@@ -26,6 +26,7 @@ export const ACTIONS = [
   { id: 'skill1', label: 'Skill 1', group: 'Combat', type: 'button' },
   { id: 'skill2', label: 'Skill 2', group: 'Combat', type: 'button' },
   { id: 'skill3', label: 'Skill 3', group: 'Combat', type: 'button' },
+  { id: 'skill4', label: 'Signature skill (slot 5, from your specialisation)', group: 'Combat', type: 'button' }, // (docs/briefs/subclasses.md)
   { id: 'dodge', label: 'Dodge', group: 'Combat', type: 'button' },
   { id: 'jump', label: 'Jump', group: 'Combat', type: 'button' },
   { id: 'guard', label: 'Guard / parry (Guardian)', group: 'Combat', type: 'hold' },
@@ -60,7 +61,7 @@ export const DEFAULTS = {
     move: ['KeyW,KeyA,KeyS,KeyD', 'ArrowUp,ArrowLeft,ArrowDown,ArrowRight'],
     look: ['Mouse', null],
     attack: ['Mouse0', 'KeyJ'],
-    skill1: ['Digit1', null], skill2: ['Digit2', null], skill3: ['Digit3', null],
+    skill1: ['Digit1', null], skill2: ['Digit2', null], skill3: ['Digit3', null], skill4: ['KeyG', null],
     dodge: ['ShiftLeft', 'ShiftRight'],
     jump: ['Space', null],
     guard: ['KeyR', null],
@@ -86,7 +87,7 @@ export const DEFAULTS = {
   },
   pad: {
     move: ['LS', null], look: ['RS', null],
-    attack: ['RT', null], dodge: ['RB', null], guard: ['LT', null],
+    attack: ['RT', null], dodge: ['RB', null], guard: ['LT', null], skill4: ['LB+RT', null],
     jump: ['A', null], cover: ['LB+A', null],
     skill1: ['X', null], teamBurst: ['LB+X', null],
     skill2: ['Y', null], botWheel: ['LB+Y', null],

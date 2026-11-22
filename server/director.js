@@ -75,7 +75,7 @@ export class Director {
       const want = String(c.name);
       const name = this.bots.uniqueName(want);
       if (name !== want) this.log(`! The name ${want} is taken: ${c.id} plays as ${name}.`);
-      const view = this.bots.start([c.class], [name], { lvl: c.level || 1, behaviour: 'follow', follow: '', skill: c.skill ?? 5 })[0];
+      const view = this.bots.start([c.class], [name], { lvl: c.level || 1, behaviour: 'follow', follow: '', skill: c.skill ?? 5, join: { actor: 1 } })[0]; // (actor: no subclass, server/botmanager.js)
       const e = this.bots.bots.find(x => x.bid === view.bid);
       e.b.quiet = true; e.b.script = { k: 'idle', goal: `Actor: ${c.id}` }; e.director = true;
       this.actors.set(String(c.id), { id: String(c.id), def: c, name, e, b: e.b, p: null, mode: { k: 'idle' }, dead: false });

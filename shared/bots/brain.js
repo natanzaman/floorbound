@@ -22,7 +22,7 @@ import { beamDodge, overloadTurn } from './floor3.js'; // Floor 3 reflexes: Temp
 import { arenaTurn } from './arenas.js'; // boss arenas' areas (J2): the fall, cover from the beam
 import { applyArenaSnap } from '../arenas.js';
 import { MASTERY, BRANCHES, masteryLevel } from '../mastery.js';
-import { TREES, spendBlock } from '../talents.js';
+import { TREES, spendBlock, nodesOf } from '../talents.js';
 import { perceive, potionAt, setSkill, clampSkill } from '../botskill.js';
 import { DT, d2, useSkill, moveToward, evade, stepRoll, waveDodge, dodgeSpot, perilous, switchOpen, travelToBoss } from './motor.js';
 import { brainFor, roleOf, runHooks } from './registry.js';
@@ -35,6 +35,8 @@ import { mechSpot } from './bossteam.js'; // boss team mechanics: stack, spread,
 import { readRescue, rescueTurn, rescueTarget, propApproach } from './rescue.js'; // rescue traps: free trapped allies (J1)
 import './classes.js'; // built-in class plug-ins (Guardian, Swordsman, Cleric, generic)
 import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
+import { sigTurn } from './subclass.js'; // slot 5 (docs/briefs/subclasses.md)
+import { BOT_SUB } from '../subclasses.js';
 import { comboTurn, burstTurn, setupTurn, chainTurn } from './teamplay.js'; // combo payoffs + Team Burst (G2), setups for partners and skill chains
 import { readOpenings, openingTurn, gustDodge } from './openings.js'; // boss openings, Gale Push (J3)
 import { easeOff } from './threat.js'; // DPS ease off near 90% threat (J4)
@@ -56,7 +58,7 @@ export function createBot({ url, WebSocket: WS = globalThis.WebSocket, cls, name
   const b = {
     cls, name, behaviour, follow: String(follow || ''), floor: floorFor(behaviour) || floor, branch, log, logEvents, quiet,
     id: 0, x: 0, z: 0, seq: 0, face: 0, t: 0, mobs: [], players: [], me: null, dead: false, hp: 1, maxHp: 1, party: 0,
-    tele: [], cds: [0, 0, 0, 0], dodgeCd: 0, roll: null, stag: {}, waves: [], orbs: [], pools: [], life: null, cons: null,
+    tele: [], cds: [0, 0, 0, 0, 0], dodgeCd: 0, roll: null, stag: {}, waves: [], orbs: [], pools: [], life: null, cons: null,
     names: new Map(),      // player id -> roster row { name, cls, bot }
     hits: new Map(),       // mob id -> Map(player id -> { first, last }): who is fighting what
     locks: new Map(),      // player id -> the mob they have locked (client `target` message -> `ptgt` events)
@@ -71,7 +73,7 @@ export function createBot({ url, WebSocket: WS = globalThis.WebSocket, cls, name
   b.setSkill = v => setSkill(b, v);
   b.stop = () => b.ws.close();
   b.ws = new WS(url);
-  b.ws.addEventListener('open', () => b.send({ type: 'join', name, cls, ...join }));
+  b.ws.addEventListener('open', () => b.send({ type: 'join', name, cls, sub: BOT_SUB[cls], ...join })); // sub: its subclass from level 15 (an anonymous join: server/index.js)
   b.ws.addEventListener('close', () => { b.closed = true; b.goal = 'gone'; });
   b.ws.addEventListener('error', () => {}); // (Node's ws throws on an unhandled error event)
   b.ws.addEventListener('message', ev => {
@@ -101,6 +103,8 @@ function onMessage(b, msg) {
 function spendTalent(b, msg) {
   if (msg.locked) return; // an Initiate (or a class trial): the tree opens at graduation
   const r = msg.r || {}, path = TREES[b.cls]?.bot || [], want = {};
+  const sub = b.me?.sub; // a subclass's two nodes first, once there are points for them (shared/talents.js, docs/briefs/subclasses.md)
+  if (sub) for (const n of nodesOf(b.cls)) if (n.sub === sub && (r[n.id] | 0) < n.max && !spendBlock(b.cls, r, (msg.pts | 0) + 1, n.id, sub)) { b.send({ type: 'talent', op: 'spend', id: n.id }); return; }
   for (const id of path) {
     want[id] = (want[id] || 0) + 1;
     if ((r[id] | 0) >= want[id]) continue;
@@ -548,6 +552,7 @@ function act(b, P, M) {
   if (comboTurn(b, tgt, ctx)) return; // a partner's combo setup on the target: cash it in
   if (easeOff(b, tgt, ctx)) b.easeT = b.t; // near 90% threat: keep position, hold attacks (skill 4+)
   else if (setupTurn(b, tgt, ctx) || chainTurn(b, tgt, ctx)) return; // open our setup for a partner (Set me up); keep our skill chain going
+  if (b.easeT !== b.t && sigTurn(b, tgt, ctx)) return; // slot 5: a subclass's signature skill (shared/bots/subclass.js)
   const fight = () => { if (!brain.combat || brain.combat(b, tgt, ctx) === false) brainFor('*').combat(b, tgt, ctx); };
   if (b.easeT !== b.t && roleTurn(b, tgt, ctx, fight)) return; // melee: a boss part's arc, or round a shield (shared/bots/roles.js)
   fight();

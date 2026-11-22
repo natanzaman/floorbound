@@ -200,6 +200,9 @@ export function initTalents(ctx) {
 
   const S = { r: {}, pts: 0, m: null, tab: 'talents', sel: null, hover: null, flash: null, flashT: 0, confirmT: 0, near: false, key: '' };
   const cls = () => state.cls;
+  // Your subclass (the Academy's Specialise, docs/briefs/subclasses.md): its two nodes show in its branch; another's never do.
+  const sub = () => state.academy?.spec?.sub || null;
+  const shown = nd => !nd.sub || nd.sub === sub();
   const tree = () => TREES[cls()];
   const free = () => Math.max(0, S.pts - spentOf(S.r));
   const totals = () => talentTotals(cls(), S.r);
@@ -315,7 +318,7 @@ export function initTalents(ctx) {
   function nodeState(nd) {
     const r = S.r[nd.id] | 0;
     if (r >= nd.max) return 'max';
-    const why = spendBlock(cls(), S.r, state.lvl, nd.id);
+    const why = spendBlock(cls(), S.r, state.lvl, nd.id, sub());
     if (!why) return r ? 'part avail' : 'avail';
     if (r) return 'part';
     const gated = spentAbove(S.r, cls(), nd.tier) < TALENTS.tiers[nd.tier] || (nd.req?.length && !nd.req.some(q => S.r[q] > 0));
@@ -332,7 +335,7 @@ export function initTalents(ctx) {
       svg += `<text class="tier ${open ? '' : 'lock'}" x="6" y="${y - 2}">Tier ${k + 1}</text><text class="tsub" x="6" y="${y + 13}">${k === 0 ? 'open' : open ? 'open' : `${have}/${need} above`}</text>`;
     }
     t.branches.forEach((b, bi) => { // edges first, nodes on top
-      for (const nd of b.nodes) for (const q of nd.req || []) {
+      for (const nd of b.nodes.filter(shown)) for (const q of nd.req || []) {
         const pq = b.nodes.find(x => x.id === q); if (!pq) continue;
         const [x1, y1] = pos(bi, pq), [x2, y2] = pos(bi, nd), on = S.r[q] > 0, lit = on && S.r[nd.id] > 0;
         const d = `M${x1},${y1 + 28} C${x1},${(y1 + y2) / 2} ${x2},${(y1 + y2) / 2} ${x2},${y2 - (nd.keystone ? 34 : 28)}`;
@@ -341,7 +344,7 @@ export function initTalents(ctx) {
     });
     const now = performance.now();
     t.branches.forEach((b, bi) => {
-      for (const nd of b.nodes) {
+      for (const nd of b.nodes.filter(shown)) {
         const [x, y] = pos(bi, nd), r = S.r[nd.id] | 0, st = nodeState(nd);
         const pop = S.flash === nd.id && now - S.flashT < 900 ? ' pop' : '', hl = S.sel === nd.id ? ' hl' : '';
         const R = nd.keystone ? 30 : 24, frac = r / nd.max, circ = 2 * Math.PI * (R + 5);
@@ -388,11 +391,11 @@ export function initTalents(ctx) {
   function showTip(id, ev) {
     const nd = nodeDef(id), t = tip(); if (!nd || !t) return;
     const b = tree().branches.find(x => x.id === nd.branch), r = S.r[id] | 0;
-    const why = r >= nd.max ? null : spendBlock(cls(), S.r, state.lvl, id);
+    const why = r >= nd.max ? null : spendBlock(cls(), S.r, state.lvl, id, sub());
     const cur = r ? nodeLines(cls(), nd, r) : null, nxt = r < nd.max ? nodeLines(cls(), nd, r + 1) : null;
-    const refund = r && S.near ? refundBlock(cls(), S.r, id) : 'x';
+    const refund = r && S.near ? refundBlock(cls(), S.r, id, sub()) : 'x';
     t.style.setProperty('--bc', b.color);
-    t.innerHTML = `<h3>${esc(nd.name)}</h3><div class="meta">${nd.keystone ? 'Keystone' : `Rank ${r} of ${nd.max}`}, ${esc(b.name)} tier ${nd.tier + 1}${nd.coop ? ', co-op' : ''}</div>
+    t.innerHTML = `<h3>${esc(nd.name)}</h3><div class="meta">${nd.keystone ? 'Keystone' : `Rank ${r} of ${nd.max}`}, ${esc(b.name)} tier ${nd.tier + 1}${nd.sub ? ', specialisation' : ''}${nd.coop ? ', co-op' : ''}</div>
       ${cur ? `<div class="cur"><b>Now</b>${cur.map(l => `<div class="${nd.desc && l === nd.desc ? 'kd' : ''}">${esc(l)}</div>`).join('')}</div>` : ''}
       ${nxt ? `<div class="${cur ? 'nx' : 'cur'}"><b>${r ? 'Next rank' : 'Rank 1'}</b>${nxt.map(l => `<div class="${nd.desc && l === nd.desc ? 'kd' : ''}">${esc(l)}</div>`).join('')}</div>` : ''}
       ${why && r < nd.max ? `<div class="why">${esc(why)}</div>` : ''}
@@ -486,7 +489,7 @@ export function initTalents(ctx) {
           <div class="mprog"><span>${span ? `${Math.floor(into)} / ${span} to Mastery ${ml + 1}` : 'Mastered'}</span><span>${Math.floor(e.pts)} mastery points</span></div>`;
         if (BRANCHES[s.id]) h += `<div class="evos">${['A', 'B'].map(k => evoCard(s, e, k, locked ? 0 : l)).join('')}</div>`;
       }
-      const nodes = nodesForSkill(cls(), key);
+      const nodes = nodesForSkill(cls(), key).filter(shown);
       h += `<div class="sub">Talents that change it</div><div class="chips">${nodes.length ? nodes.map(nd => {
         const b = tree().branches.find(x => x.id === nd.branch), r = S.r[nd.id] | 0;
         return `<button class="chip2 ${r ? '' : 'off'}" style="--bc:${b.color}" data-goto="${nd.id}" title="${esc(nodeLines(cls(), nd, Math.max(1, r)).join(' / '))}"><b>${esc(nd.name)}</b> ${r}/${nd.max}</button>`;
@@ -523,7 +526,7 @@ export function initTalents(ctx) {
   });
   function spend(id) {
     if (S.locked) { sfx.play('ui'); return flash('Your talent tree opens when you graduate at the Academy. Your points are banked.'); }
-    const why = spendBlock(cls(), S.r, state.lvl, id);
+    const why = spendBlock(cls(), S.r, state.lvl, id, sub());
     if (why) { sfx.play('ui'); return flash(why); } // say why (tier gate, missing line, no points, max rank)
     if (!send({ type: 'talent', op: 'spend', id })) return flash('Not connected to the server.');
     clearTimeout(S.waitT);
@@ -541,7 +544,7 @@ export function initTalents(ctx) {
     ev.preventDefault();
     const nd = ev.target.closest('.tn'); if (!nd) return;
     if (!S.near) return;
-    if (!refundBlock(cls(), S.r, nd.dataset.id)) send({ type: 'talent', op: 'refund', id: nd.dataset.id });
+    if (!refundBlock(cls(), S.r, nd.dataset.id, sub())) send({ type: 'talent', op: 'refund', id: nd.dataset.id });
   });
   panel.addEventListener('mousemove', ev => {
     const nd = ev.target.closest?.('.tn');

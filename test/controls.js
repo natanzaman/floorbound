@@ -21,7 +21,7 @@ const H = (...k) => new Set(k);
     assert.ok(['button', 'hold', 'axis', 'toggle'].includes(a.type), `${a.id}: type`);
     assert.ok(a.label, `${a.id}: label`);
   }
-  for (const id of ['move', 'look', 'attack', 'skill1', 'skill2', 'skill3', 'dodge', 'jump', 'guard', 'cover', 'teamBurst', 'lockNext', 'selectAimed', 'clearTarget', 'interact', 'revive', 'item1', 'item2', 'item3', 'bag', 'skillTree', 'players', 'botWheel', 'menu', 'chat', 'perfOverlay', 'turnLeft', 'turnRight', 'zoom'])
+  for (const id of ['move', 'look', 'attack', 'skill1', 'skill2', 'skill3', 'skill4', 'dodge', 'jump', 'guard', 'cover', 'teamBurst', 'lockNext', 'selectAimed', 'clearTarget', 'interact', 'revive', 'item1', 'item2', 'item3', 'bag', 'skillTree', 'players', 'botWheel', 'menu', 'chat', 'perfOverlay', 'turnLeft', 'turnRight', 'zoom'])
     assert.ok(ACTION[id], `contract action ${id}`);
   assert.ok(ACTION.menu.fixed && ACTION.revive.context === 'downedAlly');
   for (const id of ['chat', 'perfOverlay', 'turnLeft', 'turnRight', 'zoom']) assert.ok(ACTION[id].kbmOnly, `${id} is keyboard & mouse only`);
@@ -72,7 +72,8 @@ const H = (...k) => new Set(k);
   // the pad's modifier layer
   assert.equal(r(H('X'), 'X', undefined, 'pad'), 'skill1');
   assert.equal(r(H('LB', 'X'), 'X', undefined, 'pad'), 'teamBurst', 'LB+X beats X');
-  assert.equal(r(H('LB', 'RT'), 'RT', undefined, 'pad'), 'attack', 'no LB binding: the plain one still works');
+  assert.equal(r(H('LB', 'RT'), 'RT', undefined, 'pad'), 'skill4', 'LB+RT: the signature skill (slot 5)');
+  assert.equal(r(H('LB', 'RB'), 'RB', undefined, 'pad'), 'dodge', 'no LB binding: the plain one still works');
   assert.equal(r(H('LB'), 'LB', undefined, 'pad'), null, 'LB alone does nothing');
   assert.equal(r(H('Down'), 'Down', undefined, 'pad'), 'interact');
   assert.equal(r(H('Down'), 'Down', H('downedAlly'), 'pad'), 'revive');
@@ -129,7 +130,7 @@ const H = (...k) => new Set(k);
   assert.deepEqual(check(K, 'kbm', 'jump', 0, 'KeyI').conflicts, [{ action: 'bag', slot: 1 }], 'alt slots are conflict-checked');
   assert.deepEqual(check(K, 'kbm', 'jump', 0, 'KeyW').conflicts, [{ action: 'move', slot: 0 }], 'a key inside the WASD axis');
   assert.deepEqual(check(K, 'kbm', 'move', 1, 'KeyI,KeyJ,KeyK,KeyL').conflicts.map(c => c.action).sort(), ['attack', 'bag', 'skillTree'], 'an axis over taken keys');
-  assert.ok(check(K, 'kbm', 'jump', 0, 'KeyG').ok, 'a free key');
+  assert.ok(check(K, 'kbm', 'jump', 0, 'KeyH').ok, 'a free key');
   assert.deepEqual(check(K, 'kbm', 'jump', 0, 'KeyE').conflicts, [{ action: 'turnRight', slot: 0 }], 'E is turn-right (revive overlays it, not jump)');
   assert.ok(check(K, 'kbm', 'revive', 0, 'KeyQ').ok, 'a context action shares keys freely');
   ok('check: reserved and fixed keys, kbm-only, pad slots and LB, axes, chord members, conflicts incl. alt slots and axis keys');
@@ -176,8 +177,8 @@ const H = (...k) => new Set(k);
   assert.equal(loadBindings('kbm', { jump: ['F5', null] }).jump[0], null, 'a reserved key from a save is unbound');
   assert.equal(loadBindings('kbm', { jump: ['Escape', null] }).jump[0], null, 'Esc from a save is unbound');
   // a saved chord whose member has a default single action: the default yields
-  const C = loadBindings('kbm', { teamBurst: ['KeyF+KeyG', null] });
-  assert.equal(C.teamBurst[0], 'KeyF+KeyG'); assert.equal(C.interact[0], null);
+  const C = loadBindings('kbm', { teamBurst: ['KeyF+KeyH', null] });
+  assert.equal(C.teamBurst[0], 'KeyF+KeyH'); assert.equal(C.interact[0], null);
   assert.equal(loadBindings('pad', { skill1: ['A', null] }).jump[0], null, 'pad: Jump yields A to the saved Skill 1');
   ok('loadBindings: saved changes win over defaults on the same key; refused saved bindings unbind');
 

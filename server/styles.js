@@ -144,7 +144,7 @@ export const StyleMethods = {
   styleOnSwitch(p) {
     const cut = this.styleNum(p, 'switchCdr', 0);
     if (!cut) return;
-    for (let i = 1; i < p.cds.length; i++) p.cds[i] = Math.max(this.time, p.cds[i] - cut);
+    for (let i = 1; i < 4; i++) p.cds[i] = Math.max(this.time, p.cds[i] - cut);
     this.events.push({ t: 'fx', k: 'sty', st: p.style, ev: 'cdr', id: p.id, to: p.id, a: cut, x: r2(p.x), z: r2(p.z) });
   },
 

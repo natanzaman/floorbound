@@ -454,6 +454,33 @@ export const KEYS = {
   symphony: { r: 12, shield: 0.08, d: 6, cdr: 2, sk: 'crescendo' },
 };
 
+// ---------- subclass nodes (docs/briefs/subclasses.md) ----------
+// Two per subclass (shared/subclasses.js), in tier 2 of the branch it is built on, in the side columns under that
+// branch's tier-1 nodes. Only that subclass can learn them (`sub`), and they never count toward a tier gate (so a change
+// of subclass, which refunds them, can't shut a tier). { sk: 'sig' } effects aim at the signature skill (slot 5).
+const SIGN = (dmg = true) => (dmg ? [{ sk: 'sig', dmg: 8 }, { sk: 'sig', cd: -6 }] : [{ sk: 'sig', cd: -8 }]);
+const SUB_NODES = [
+  // [class, branch, subclass, left node (x -1), right node (x 1)]
+  ['swordsman', 'tempo', 'duelist', { id: 'sw_du_feint', name: 'Feint', icon: '⤺', max: 3, fx: [{ stat: 'counter', v: 10 }] }, { id: 'sw_du_sig', name: 'Flash Mastery', icon: '⚡', max: 2, fx: SIGN() }],
+  ['swordsman', 'link', 'vanguard', { id: 'sw_va_point', name: 'Point of the Spear', icon: '⇄', max: 3, fx: [{ stat: 'sw', v: 8 }] }, { id: 'sw_va_sig', name: 'Rallying Mastery', icon: '✺', max: 2, fx: SIGN() }],
+  ['guardian', 'bulwark', 'bulwark', { id: 'gu_bk_plate', name: 'Tower Plate', icon: '⛨', max: 3, fx: [{ stat: 'hp', v: 4 }] }, { id: 'gu_bk_sig', name: 'Aegis Mastery', icon: '⛉', max: 2, fx: SIGN(false) }],
+  ['guardian', 'warlord', 'warlord', { id: 'gu_wl_iron', name: 'Iron Will', icon: '▼', max: 3, fx: [{ stat: 'posture', v: 6 }] }, { id: 'gu_wl_sig', name: 'Roar Mastery', icon: '☗', max: 2, fx: SIGN() }],
+  ['cleric', 'mercy', 'lightbringer', { id: 'cl_lb_grace', name: 'Radiance', icon: '✚', max: 3, fx: [{ stat: 'heal', v: 5 }] }, { id: 'cl_lb_sig', name: 'Dawn Mastery', icon: '☀', max: 2, fx: SIGN(false) }],
+  ['cleric', 'judgement', 'inquisitor', { id: 'cl_iq_zeal', name: 'Zealot', icon: '◎', max: 3, fx: [{ stat: 'crit', v: 2 }] }, { id: 'cl_iq_sig', name: 'Ray Mastery', icon: '⚚', max: 2, fx: SIGN() }],
+  ['ranger', 'marksman', 'sharpshooter', { id: 'rg_ss_eye', name: 'Hawk Eye', icon: '◎', max: 3, fx: [{ stat: 'crit', v: 3 }] }, { id: 'rg_ss_sig', name: 'Deadeye Mastery', icon: '➶', max: 2, fx: SIGN() }],
+  ['ranger', 'trapper', 'trapmaster', { id: 'rg_tm_stride', name: 'Light Stride', icon: '➹', max: 3, fx: [{ stat: 'speed', v: 3 }] }, { id: 'rg_tm_sig', name: 'Snare Mastery', icon: '⌗', max: 2, fx: SIGN() }],
+  ['berserker', 'carnage', 'reaver', { id: 'bz_rv_edge', name: 'Reaver\'s Edge', icon: '⚔', max: 3, fx: [{ stat: 'atk', v: 3 }] }, { id: 'bz_rv_sig', name: 'Rampage Mastery', icon: '❂', max: 2, fx: SIGN() }],
+  ['berserker', 'bloodlust', 'bloodknight', { id: 'bz_bk_vigor', name: 'Blood Vigor', icon: '✚', max: 3, fx: [{ stat: 'hp', v: 4 }] }, { id: 'bz_bk_sig', name: 'Pact Mastery', icon: '♥', max: 2, fx: SIGN() }],
+  ['lancer', 'dragoon', 'dragoon', { id: 'ln_dg_talon', name: 'Talon', icon: '▼', max: 3, fx: [{ stat: 'posture', v: 6 }] }, { id: 'ln_dg_sig', name: 'Dive Mastery', icon: '➘', max: 2, fx: SIGN() }],
+  ['lancer', 'phalanx', 'phalanx', { id: 'ln_ph_line', name: 'Hold the Line', icon: '▣', max: 3, fx: [{ stat: 'dr', v: 2 }] }, { id: 'ln_ph_sig', name: 'Wall Mastery', icon: '⛊', max: 2, fx: SIGN() }],
+  ['bard', 'maestro', 'virtuoso', { id: 'bd_vi_flourish', name: 'Flourish', icon: '⧗', max: 3, fx: [{ stat: 'haste', v: 3 }] }, { id: 'bd_vi_sig', name: 'Encore Mastery', icon: '♫', max: 2, fx: SIGN(false) }],
+  ['bard', 'discord', 'siren', { id: 'bd_si_shrill', name: 'Shrill Note', icon: '▼', max: 3, fx: [{ stat: 'posture', v: 6 }] }, { id: 'bd_si_sig', name: 'Wail Mastery', icon: '♪', max: 2, fx: SIGN() }],
+];
+for (const [cls, bid, sub, a, b] of SUB_NODES) {
+  const br = TREES[cls].branches.find(x => x.id === bid), side = x => br.nodes.find(n => n.tier === 1 && n.x === x).id;
+  br.nodes.push({ ...a, tier: 2, x: -1, sub, req: [side(-1)] }, { ...b, tier: 2, x: 1, sub, req: [side(1)] });
+}
+
 // ---------- lookups ----------
 const NODE = new Map(); // id -> { ...node, cls, branch }
 for (const [cls, tree] of Object.entries(TREES)) {
@@ -465,15 +492,20 @@ export const nodesOf = cls => (TREES[cls]?.branches || []).flatMap(b => b.nodes.
 export const spentOf = alloc => Object.values(alloc || {}).reduce((a, r) => a + (r | 0), 0);
 export const branchSpent = (alloc, cls, bid) => (TREES[cls]?.branches.find(b => b.id === bid)?.nodes || []).reduce((a, n) => a + (alloc?.[n.id] | 0), 0);
 // Points spent in the tiers above tier k.
-export const spentAbove = (alloc, cls, tier) => nodesOf(cls).reduce((a, n) => a + (n.tier < tier ? alloc?.[n.id] | 0 : 0), 0);
+// (Subclass nodes never count toward a gate.)
+export const spentAbove = (alloc, cls, tier) => nodesOf(cls).reduce((a, n) => a + (n.tier < tier && !n.sub ? alloc?.[n.id] | 0 : 0), 0);
+// Can this node be learned with this subclass (shared/subclasses.js)? Nodes without `sub` are open to everyone.
+export const subOk = (n, sub) => !n?.sub || n.sub === sub;
 // The skill key used by effects: 'basic' for slot 0, else the skill id.
 export const skKey = (cls, skId) => (CLASSES[cls]?.skills[0]?.id === skId ? 'basic' : skId);
-export const skillLabel = (cls, key) => (key === 'basic' ? CLASSES[cls]?.skills[0]?.name : CLASSES[cls]?.skills.find(s => s.id === key)?.name) || key;
+export const skillLabel = (cls, key) => (key === 'basic' ? CLASSES[cls]?.skills[0]?.name : key === 'sig' ? 'Signature skill' : CLASSES[cls]?.skills.find(s => s.id === key)?.name) || key;
 
 // Why a node can't take another rank right now (null = it can). Checks rank, prerequisites, tier gate and points.
-export function spendBlock(cls, alloc, lvl, id) {
+// sub: the character's subclass for this class (subclass nodes need it).
+export function spendBlock(cls, alloc, lvl, id, sub = null) {
   const n = NODE.get(id);
   if (!n || n.cls !== cls) return 'Not in your tree.';
+  if (!subOk(n, sub)) return 'Opens with that specialisation (the Academy, level 15).';
   const r = alloc?.[id] | 0;
   if (r >= n.max) return 'Already at max rank.';
   if (spentOf(alloc) >= pointsAt(lvl)) return 'No talent points left (1 per level).';
@@ -483,10 +515,11 @@ export function spendBlock(cls, alloc, lvl, id) {
 }
 
 // Is a whole allocation legal (ranks, prerequisites, tier gates, total vs level)? Returns an error string or null.
-export function allocError(cls, alloc, lvl) {
+export function allocError(cls, alloc, lvl, sub = null) {
   for (const [id, r] of Object.entries(alloc || {})) {
     const n = NODE.get(id);
     if (!n || n.cls !== cls) return `${id} is not a ${CLASSES[cls]?.name || cls} talent.`;
+    if (r && !subOk(n, sub)) return `${n.name} needs its specialisation.`;
     if (!Number.isInteger(r) || r < 0 || r > n.max) return `${n.name}: rank must be 0..${n.max}.`;
     if (!r) continue;
     if (spentAbove(alloc, cls, n.tier) < TALENTS.tiers[n.tier]) return `${n.name} needs ${TALENTS.tiers[n.tier]} points in the tiers above it.`;
@@ -497,26 +530,27 @@ export function allocError(cls, alloc, lvl) {
 }
 
 // Can one rank of `id` be taken back without breaking the rest of the tree?
-export function refundBlock(cls, alloc, id) {
+export function refundBlock(cls, alloc, id, sub = null) {
   if (!(alloc?.[id] > 0)) return 'No points in it.';
   const next = { ...alloc, [id]: alloc[id] - 1 };
   if (!next[id]) delete next[id];
-  const err = allocError(cls, next);
+  const err = allocError(cls, next, undefined, sub);
   return err ? `Other talents depend on it (${err})` : null;
 }
 
 // Sanitise a saved record: { nodeId: rank } for this class and level. Anything illegal -> a clean (free) reset.
-export function newTalents(raw, cls, lvl) {
+// sub: the subclass (its nodes are kept; another subclass's are dropped, their points free again).
+export function newTalents(raw, cls, lvl, sub = null) {
   const out = {};
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
     for (const [id, r] of Object.entries(raw)) {
       const n = NODE.get(id);
-      if (!n || n.cls !== cls) continue;
+      if (!n || n.cls !== cls || !subOk(n, sub)) continue;
       const v = Math.max(0, Math.min(n.max, Math.floor(+r) || 0));
       if (v) out[id] = v;
     }
   }
-  return allocError(cls, out, lvl) ? {} : out;
+  return allocError(cls, out, lvl, sub) ? {} : out;
 }
 
 // Sum every effect of an allocation: { stat: {atk: 6, ...}, sk: { basic: {cd, dmg, fin, radius, dur}, rush: {...} }, aura: {...}, keys: {exec: 1} }.

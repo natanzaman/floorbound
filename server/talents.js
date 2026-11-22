@@ -42,7 +42,7 @@ export const TalentMethods = {
     const op = String(msg.op || 'spend'), id = String(msg.id || '');
     const n = nodeDef(id);
     if (op === 'spend') {
-      const why = spendBlock(p.cls, p.talents, p.lvl, id);
+      const why = spendBlock(p.cls, p.talents, p.lvl, id, this.subOfP?.(p));
       if (why) return this.sys(why, p.id);
       p.talents[id] = (p.talents[id] | 0) + 1;
       this.events.push({ t: 'talent', to: p.id, id: p.id, n: id, r: p.talents[id], op, k: n.keystone ? 1 : 0, x: r2(p.x), z: r2(p.z) });
@@ -51,7 +51,7 @@ export const TalentMethods = {
     } else if (op === 'refund' || op === 'reset') {
       if (!this.atShrine(p)) return this.sys('Talent refunds are free at a Skill Shrine in town.', p.id);
       if (op === 'refund') {
-        const why = refundBlock(p.cls, p.talents, id);
+        const why = refundBlock(p.cls, p.talents, id, this.subOfP?.(p));
         if (why) return this.sys(why, p.id);
         if (!--p.talents[id]) delete p.talents[id];
       } else {
@@ -145,7 +145,7 @@ export const TalentMethods = {
   // ---------- after a skill was used (from the useSkill wrapper) ----------
   // ev0 / z0: where this.events / this.zones stood before the skill ran (what it pushed comes after).
   afterSkill(p, sk, slot, ev0, z0) {
-    const t = this.time, T = p.tal, key = slot === 0 ? 'basic' : sk.id, mods = T.sk[key] || {};
+    const t = this.time, T = p.tal, key = slot === 0 ? 'basic' : sk.key || sk.id, mods = T.sk[key] || {};
     const evs = this.events.slice(ev0);
     if (mods.dur) { // buffs, shields, zones last longer
       const k = 1 + mods.dur / 100, ext = u => t + (u - t) * k;
@@ -224,10 +224,10 @@ export function installTalents(Game) {
 
   // The skill being used (p._tsk) is visible to damageMob / hitCircle / hitArc while it runs; afterwards afterSkill.
   wrap('useSkill', function (orig, p, slot, face) {
-    const sk = CLASSES[p.cls]?.skills[slot | 0];
-    if (!sk || !p.tal) return orig.call(this, p, slot, face);
+    const sk = this.skillAt ? this.skillAt(p, slot | 0) : CLASSES[p.cls]?.skills[slot | 0]; // (slot 4: the signature skill, server/subclasses.js)
+    if (!sk || !p.tal || sk.borrow) return orig.call(this, p, slot, face); // (a borrowed skill: its own call in here does this)
     const before = p.cds[slot], ev0 = this.events.length, z0 = this.zones.length;
-    p._tsk = sk.id; this._tp = p; // (_tp: schedule() hands the skill on to its delayed hits)
+    p._tsk = sk.key || sk.id; this._tp = p; // (_tp: schedule() hands the skill on to its delayed hits)
     try {
       orig.call(this, p, slot, face);
       if (p.cds[slot] !== before) { this.afterSkill(p, sk, slot, ev0, z0); this.afterSkillNew(p, sk, slot, ev0); } // it was used (a cooldown started)
@@ -286,7 +286,7 @@ export function installTalents(Game) {
     if (p.dodgeCd === before || !p.tal) return; // no roll
     const t = this.time;
     if (p.tal.stat.dodge) p.dodgeCd = t + DODGE.cd * (1 - Math.min(50, p.tal.stat.dodge) / 100);
-    if (p.tal.keys.flow) for (let i = 1; i < p.cds.length; i++) if (p.cds[i] > t) p.cds[i] = Math.max(t, p.cds[i] - KEYS.flow.roll);
+    if (p.tal.keys.flow) for (let i = 1; i < 4; i++) if (p.cds[i] > t) p.cds[i] = Math.max(t, p.cds[i] - KEYS.flow.roll);
   });
 
   wrap('evadeHit', function (orig, p, src, mob) {
@@ -377,7 +377,7 @@ export const TalentMethodsNew = {
 
   afterSkillNew(p, sk, slot, ev0) {
     if (!['ranger', 'berserker', 'lancer', 'bard'].includes(p.cls)) return;
-    const t = this.time, T = p.tal, key = slot === 0 ? 'basic' : sk.id, mods = T.sk[key] || {};
+    const t = this.time, T = p.tal, key = slot === 0 ? 'basic' : sk.key || sk.id, mods = T.sk[key] || {};
     const evs = this.events.slice(ev0);
     if (mods.dur || mods.radius) {
       const k = 1 + (mods.dur || 0) / 100, kr = 1 + (mods.radius || 0) / 100, ext = u => t + (u - t) * k;

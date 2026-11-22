@@ -19,8 +19,11 @@ import { MAT_IDS } from '../shared/crafting.js';
 import { STAT_KEYS, TITLE_BY_ID, newStats } from '../shared/titles.js';
 import { floorOf } from '../shared/floor2.js';
 import { MASTERY, BRANCHES, newMastery, masteryLevel } from '../shared/mastery.js';
-import { newTalents, allocError, TREES, spendBlock, nodesOf, pointsAt } from '../shared/talents.js';
-import { WEAPONS, cleanPath, isInitiate } from '../shared/academy.js';
+import { newTalents, allocError, TREES, spendBlock, nodesOf, pointsAt, nodeDef } from '../shared/talents.js';
+import { WEAPONS, cleanPath as cleanShared, isInitiate } from '../shared/academy.js';
+import { keepWander } from './wander.js';
+const cleanPath = raw => keepWander(raw, cleanShared(raw)); // (the unlisted pick's fields survive an edit: server/wander.js)
+import { subOf } from '../shared/subclasses.js'; // a subclass keeps its two talent nodes (docs/briefs/subclasses.md)
 import { BEHAVIOURS } from './botmanager.js';
 import { isNamedName } from '../shared/named.js';
 import { ACCESS_MIN, ACCESS_MAX, ACCESS_ADMIN, clampAccess } from '../shared/accesslevels.js';
@@ -85,7 +88,7 @@ function view(r) {
   inv.mats ||= {};
   return {
     id: r.id, name: p ? p.name : r.name, cls: p ? p.cls : r.cls, lvl: src.lvl, xp: src.xp, next: xpToNext(src.lvl), gold: src.gold,
-    inv, stats: { ...(src.stats || {}), ...newStats(src.stats) }, mastery: newMastery(src.mastery, p ? p.cls : r.cls), talents: newTalents(src.talents, p ? p.cls : r.cls, src.lvl), online: !!p,
+    inv, stats: { ...(src.stats || {}), ...newStats(src.stats) }, mastery: newMastery(src.mastery, p ? p.cls : r.cls), talents: newTalents(src.talents, p ? p.cls : r.cls, src.lvl, subOf(p ? p.path : r.path, p ? p.cls : r.cls)), online: !!p,
     path: p ? p.path || null : r.path || null, title: p ? game.classTitle?.(p) || null : null, loan: !!p?.loan,
     area: p ? areaName(p.x, p.z) : null, floor: p ? floorOf(p.x) : null, party: p ? partyNames(p) : [],
     account: { id: r.account_id, label: accountLabel(r), discord: r.discord_name || null, admin: !!r.is_admin },
@@ -186,7 +189,7 @@ function applyEdit(c, body, online) {
   if (talentsIn !== undefined) {
     if (!talentsIn || typeof talentsIn !== 'object' || Array.isArray(talentsIn)) throw new Bad('talents must be an object of { nodeId: rank }.');
     c.talents = Object.fromEntries(Object.entries(talentsIn).filter(([, r]) => r !== 0).map(([k, r]) => [k, Number(r)]));
-    const err = allocError(c.cls, c.talents);
+    const err = allocError(c.cls, c.talents, undefined, subOf(body.rawPath !== undefined ? cleanPath(body.rawPath) : c.path, c.cls));
     if (err) throw new Bad(`talents: ${err}`);
   }
   if (body.name !== undefined) {
@@ -247,8 +250,10 @@ function applyEdit(c, body, online) {
   }
   if (body.preset === 'maxed') maxOut(c);
   for (const op of Array.isArray(body.ops) ? body.ops : []) applyOp(c, op);
-  if (allocError(c.cls, c.talents, c.lvl)) { // more points than the level gives
-    if (talentsIn !== undefined) throw new Bad(`talents: ${allocError(c.cls, c.talents, c.lvl)}`);
+  const sub = subOf(c.path, c.cls); // (the subclass's nodes are legal)
+  if (c.pathEdited) for (const id of Object.keys(c.talents)) if (nodeDef(id)?.sub && nodeDef(id).sub !== sub) delete c.talents[id]; // (another subclass's: points back; they never gate a tier)
+  if (allocError(c.cls, c.talents, c.lvl, sub)) { // more points than the level gives
+    if (talentsIn !== undefined) throw new Bad(`talents: ${allocError(c.cls, c.talents, c.lvl, sub)}`);
     c.talents = {}; // the level went down: refund everything
   }
 }
@@ -368,7 +373,7 @@ async function editLocked(id, body) {
   const c = {
     name: p ? p.name : r.name, cls: p ? p.cls : r.cls, lvl: src.lvl, xp: src.xp, gold: src.gold,
     inv: clone(src.inv && Array.isArray(src.inv.bag) ? src.inv : newInventory()), stats: { ...clone(src.stats || {}), ...newStats(src.stats) },
-    mastery: newMastery(clone(src.mastery), p ? p.cls : r.cls), talents: newTalents(clone(src.talents), p ? p.cls : r.cls, src.lvl),
+    mastery: newMastery(clone(src.mastery), p ? p.cls : r.cls), talents: newTalents(clone(src.talents), p ? p.cls : r.cls, src.lvl, subOf(p ? p.path : r.path, p ? p.cls : r.cls)),
     path: clone((p ? p.path : r.path) || null),
   };
   c.inv.mats ||= {};

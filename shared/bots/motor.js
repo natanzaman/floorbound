@@ -6,13 +6,14 @@ import { FLOOR_X } from '../floor3.js';
 import { labSteer } from '../labyrinth.js'; // the labyrinths' walls (shared/labyrinth.js)
 import { skillReady, pressed, aimNoise, sweepError, quakeError } from '../botskill.js';
 import { brainFor, registerBotHook } from './registry.js';
+import { SPEC, sigOf } from '../subclasses.js'; // slot 5: the subclass's signature skill (me.sub)
 import { botStep, botSpeedAt, botCanRoll, arenaEscape, sidestep } from './arenas.js'; // boss arenas' areas (J2): sludge, fire, cover
 
 export const DT = 0.05; // one snapshot (20 Hz)
 export const d2 = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
 
 export function useSkill(b, slot, face, tid) {
-  const sk = CLASSES[b.cls]?.skills[slot];
+  const sk = slot === SPEC.slot ? sigOf(b.me?.sub) : CLASSES[b.cls]?.skills[slot];
   if (!b.me || !sk || b.cds[slot] > 0 || (b.me.lvl || 1) < (sk.lvl || 1)) return false;
   if (!skillReady(b, slot)) return false; // capability: slower rotations
   if (b.easeT === b.t) return false; // easing off threat this tick (shared/bots/threat.js easeOff)

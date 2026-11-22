@@ -5,6 +5,10 @@
 // The Academy building, west of the square: F within `use` m opens the Academy panel.
 export const ACADEMY = { x: -21, z: -3, r: 3.2, use: 4.6, name: 'The Academy' };
 export const nearAcademy = (x, z, pad = 0) => Math.hypot(x - ACADEMY.x, z - ACADEMY.z) < ACADEMY.use + pad;
+// A dusty lectern against the hall's back wall (no label; server/subclasses.js answers an interact there).
+const BACK = 4.5, AL = Math.hypot(ACADEMY.x, ACADEMY.z);
+export const LECTERN = { x: ACADEMY.x + (ACADEMY.x / AL) * BACK, z: ACADEMY.z + (ACADEMY.z / AL) * BACK, use: 1.4 };
+export const nearLectern = (x, z, pad = 0) => Math.hypot(x - LECTERN.x, z - LECTERN.z) < LECTERN.use + pad;
 
 // The yard: `n` square pens in their own patch of Floor 1's coordinate space (east of the labyrinth layers, west of
 // Floor 2's split at x 300), `gap` m apart so nothing in one pen notices the next. A pen's floor is walkable (shared/data.js
