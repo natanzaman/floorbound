@@ -40,6 +40,7 @@ import { installRescue } from './rescue.js'; // rescue traps: vines, Drowning Pi
 import { installBossTeam } from './bossteam.js'; // boss team mechanics: stack, spread, tether (G4)
 import { installArenas } from './arenas.js'; // multi-area boss fights: the Colossus's fall to the Undercroft (J2)
 import { installTeamplay } from './teamplay.js'; // skill combos + Team Burst + team stats (G2)
+import { installChains } from './chains.js'; // skill chains (docs/briefs/combos-visuals.md A)
 import { installMvp } from './mvp.js'; // post-fight MVP card (G5)
 import { installLoot } from './loot.js';
 import { installLooks } from './looks.js'; // character looks: setLook, w.looks (I2)
@@ -1513,6 +1514,7 @@ installRevive(Game); // downed + revive (server/revive.js); after staging and bo
 installArenas(Game); // multi-area boss fights (server/arenas.js); after revive (pauses bleed-out on landing) and the boss moves ('fall')
 installTalents(Game); // talent trees: methods + wrappers around skills, damage, healing (server/talents.js)
 installTeamplay(Game); // skill combos between players, the Team Burst gauge, teamStat() for the post-fight card (server/teamplay.js); after the talents
+installChains(Game); // skill chains (server/chains.js); after the team play, so a combo's own damage (_tbIn) is never a step
 installMvp(Game); // the post-fight MVP card from the team stats, downs and deaths; in the fight's tracking row (server/mvp.js); after the team play
 installLoot(Game); // loot and builds: drops from shared/loot.js, gear in p.tal, set rules, loadouts (server/loot.js); after the talents and team play
 installLooks(Game); // character looks: setLook(entity, id), listed in snapshots as w.looks (server/looks.js)

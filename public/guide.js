@@ -66,8 +66,10 @@ const TIPS = {
   opening: 'OPENING! After a combo the boss stops: exposed, stunned or planted (a glowing weak point, a tag over it). Melee hits on it deal +25% damage and posture (on top of a flank). Get in, hit hard, and step out before it ends: its next move comes right after.',
   downed: () => `Downed! You have 15 s before you bleed out. Crawl toward your party: a partymate holds ${K('revive')} next to you to revive you.`,
   revive: () => `A partymate is down! Stand next to them and hold ${K('revive')} to revive them (a Cleric's Heal speeds it up). Moving away or a heavy hit breaks it.`,
-  combo: 'COMBO! One player sets up (launch, stun, Mark, Discord, Sanctuary), a partner pays it off within 2.5 s. Combos chain on a target and fill the Team Burst bar.',
-  tbfull: () => `Team Burst ready! ${touch() ? 'Tap the bar' : `Press ${K('teamBurst')}`} to start a 3 s sync window: every partner who joins makes the finisher bigger (solo works too, weaker).`,
+  combo: 'COMBO! One player sets up (Lancer launch, Guardian stun, Ranger Mark, Swordsman Rush, Berserker Leap Slam, Cleric Smite interrupt, Bard Dissonance), a partner pays it off within 2.5 s. Every pair of classes has one. You can pay off your own setup too (a self-combo, weaker). Combos chain on a target and fill the Team Burst bar.',
+  chain: 'SKILL CHAIN! Land a different move within 1.4 s of the last one (a skill, or your basic finisher) and the chain climbs to x4: each link adds damage for a moment, x3 brings your other skills back a second sooner, and named links (like Rising Edge) hit the posture bar. Each move counts once per chain.',
+  setme: 'Set me up (V wheel or /b setme): for 30 s your bots open their combo setups on your target for you, and call them out.',
+  tbfull: () => `Team Burst ready! ${touch() ? 'Tap the bar' : `Press ${K('teamBurst')}`} to start a 3 s sync window: every partner who joins makes the finisher bigger (solo works too, weaker). Each class adds its own touch (blades, a shield, a heal, a volley, fury, a root, cooldowns back) and every pair of classes has its own named finisher.`,
   // Floor 3 — The Gale Spires (public/floor3client.js)
   f3air: 'Gale Harpies aloft take only a third of melee damage: shoot them from range, or hit them hard when they land after a dive (grounded: +25%).',
   f3armor: 'Spire Sentinels are armoured: most damage bounces off until you BREAK them (fill the posture bar). A cracked shell takes full damage for 8 s. Jump or roll its stomp.',

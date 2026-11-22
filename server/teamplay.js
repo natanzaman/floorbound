@@ -17,7 +17,7 @@
 import { inArena } from '../shared/data.js';
 import { inArena2 } from '../shared/floor2.js';
 import { inArena3 } from '../shared/floor3.js';
-import { COMBO, COMBOS, BURST, hitInfo, setupsOf, payoffFor, comboReady, nextChain, burstPower, burstBuff, burstFillScale } from '../shared/teamplay.js';
+import { COMBO, COMBOS, SETUPS, BURST, BURST_TRAITS, hitInfo, setupsOf, payoffFor, selfScaled, comboReady, nextChain, burstPower, burstBuff, burstFillScale, burstFlavor } from '../shared/teamplay.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
@@ -66,7 +66,7 @@ const methods = {
     this.teamStat(by, 'combo');
     if (from && from !== by) this.teamStat(from, 'setup');
   },
-  // Payoff effects after the hit (posture chunk, root).
+  // Payoff effects after the hit (posture chunk, root, a second stun, Discord).
   comboAfter(m, p, c) {
     if (m.dead || !this.mobs.has(m.id)) return;
     const t = this.time;
@@ -74,6 +74,8 @@ const methods = {
       if (m.def.boss) this.slowMob?.(m, 1, c.root); // a boss is slowed (bosses shrug off half), never rooted
       else { m.stunUntil = Math.max(m.stunUntil || 0, t + c.root); m.windupAt = 0; m.rootA = t + c.root; }
     }
+    if (c.stunAdd && !m.def.boss) { m.stunUntil = Math.max(m.stunUntil || 0, t + c.stunAdd); m.windupAt = 0; } // Aftershock (a boss: the posture chunk only)
+    if (c.discord && c.on === 'hit') this.addDiscord?.(m, p, c.discord); // Downbeat
     if (c.frac) this.addPosture(m, p, 0, { frac: c.frac });
   },
   // Sanctified Switch: p Switched standing in a Cleric's Sanctuary (owner not p) or under their Blessing.
@@ -84,6 +86,15 @@ const methods = {
     if (d && t < d.until && d.sk === 'bless' && d.by && d.by !== p.id) return this.players.get(d.by) || null;
     if (s && t < s.until && s.sk === 'bless' && s.by && s.by !== p.id) return this.players.get(s.by) || null;
     return null;
+  },
+
+  // A bot's call-out when it opens a setup for a partner (shared/bots/teamplay.js): a short line in a bubble over it
+  // (not the chat log). Bots only, at most one every 3 s each.
+  teamCall(p, k) {
+    const S = SETUPS[k];
+    if (!p?.bot || !S?.call || p.dead || this.time - (p.tcallAt ?? -9) < 3) return;
+    p.tcallAt = this.time;
+    this.events.push({ t: 'tcall', id: p.id, k, text: S.call, party: p.party || 0, x: r2(p.x), z: r2(p.z) });
   },
 
   // ---------- Team Burst ----------
@@ -157,16 +168,19 @@ const methods = {
     s.sync = 0; s.g = 0; s.ids = []; s.tgt = 0;
     if (!starter || !ids.length) return;
     const n = ids.length, joiners = ids.map(id => this.players.get(id)), m = this.burstTarget(starter, ids, hint), pow = burstPower(n);
-    this.events.push({ t: 'tburst', key, by: starter.id, ids, n, m: m?.id || 0, x: r2(m?.x ?? starter.x), z: r2(m?.z ?? starter.z) });
+    const fl = burstFlavor([starter.cls, ...joiners.map(o => o.cls)]), tm = fl.cls.length > 1 || n > 1 ? BURST.traitMul : 1;
+    this.events.push({ t: 'tburst', key, by: starter.id, ids, n, m: m?.id || 0, x: r2(m?.x ?? starter.x), z: r2(m?.z ?? starter.z), cls: fl.cls, pk: fl.pk, nm: fl.name });
+    const fury = fl.cls.includes('berserker') ? 1 + (BURST_TRAITS.berserker.mult - 1) * tm : 1;
     for (const o of joiners) this.teamStat(o, 'burst');
     if (m) {
       this._tbIn = true;
       try {
         for (const o of joiners) { // each joiner's share: their attack x power (Switch / Mark bonuses apply as usual)
           if (!this.targetable(m)) break;
-          this.damageMob(m, o, o.atk * this.dmgMult(o) * BURST.per * pow, { heavy: true, threat: 0.5 });
+          this.damageMob(m, o, o.atk * this.dmgMult(o) * BURST.per * pow * fury, { heavy: true, threat: 0.5 });
         }
       } finally { this._tbIn = false; }
+      this.burstTraits(fl.cls, tm, starter, m, key);
       if (this.targetable(m) && t >= (m.staggerUntil || 0)) {
         this._tbIn = true;
         try {
@@ -180,6 +194,42 @@ const methods = {
       if (o.dead || o.downed || dist(o, starter) > BURST.buffR) continue;
       this.teamBuff?.(o, v, BURST.buffD);
       this.events.push({ t: 'buff', id: o.id, k: 'tburst', d: BURST.buffD });
+    }
+  },
+  // The finisher's class traits (shared/teamplay.js BURST_TRAITS; fury is applied to the hits above): k = strength.
+  burstTraits(classes, k, starter, m, key) {
+    const t = this.time, team = this.teamOf(key).filter(o => !o.dead && !o.downed && dist(o, starter) <= BURST.buffR);
+    for (const cls of classes) {
+      const T = BURST_TRAITS[cls];
+      if (!T) continue;
+      if (T.k === 'blades' && this.targetable(m)) {
+        for (let i = 1; i <= T.hits; i++) this.schedule(0.12 * i, () => {
+          if (!this.targetable(m) || !this.players.has(starter.id)) return;
+          this._tbIn = true;
+          try { this.damageMob(m, starter, starter.atk * this.dmgMult(starter) * BURST.per * T.per * k, { threat: 0.3 }); } finally { this._tbIn = false; }
+        });
+      } else if (T.k === 'aegis') {
+        for (const o of team) {
+          const hp = Math.round(o.maxHp * T.shield * k);
+          if (!(o.shield && t < o.shield.until && o.shield.hp > hp)) o.shield = { hp, max: hp, until: t + T.d, by: starter.id, k: 'tburst' };
+          this.events.push({ t: 'buff', id: o.id, k: 'aegis', d: T.d });
+        }
+      } else if (T.k === 'radiance') {
+        for (const o of team) this.healPlayer(o, o.maxHp * T.heal * k, starter, null);
+      } else if (T.k === 'volley' && m) {
+        this._tbIn = true;
+        try {
+          for (const o of this.mobs.values()) {
+            if (o === m || !this.targetable(o) || Math.hypot(o.x - m.x, o.z - m.z) > T.r + o.def.radius) continue;
+            this.damageMob(o, starter, starter.atk * this.dmgMult(starter) * T.per * k, { threat: 0.3 });
+          }
+        } finally { this._tbIn = false; }
+      } else if (T.k === 'impale' && this.targetable(m)) {
+        if (m.def.boss) this.slowMob?.(m, 1, T.root * k);
+        else { m.stunUntil = Math.max(m.stunUntil || 0, t + T.root * k); m.windupAt = 0; m.rootA = t + T.root * k; }
+      } else if (T.k === 'resonance') {
+        for (const o of team) for (let s = 1; s < 4; s++) if (o.cds[s] > t) o.cds[s] = Math.max(t, o.cds[s] - T.cd * k);
+      }
     }
   },
   // Per tick: windows that ran out fire with whoever joined; idle teams drain.
@@ -219,8 +269,8 @@ export function installTeamplay(Game) {
       return out;
     }
     const t = this.time, mk = m.markA;
-    const h = hitInfo(p.cls, opts.sk || opts.tsk || p._tsk, { heavy: opts.heavy, stun: opts.stun, ownMark: !!mk && mk.by === p.id && t < mk.until });
-    const pay = payoffFor(m.tbSet, h, p.id, t, m.tbLast), c = pay?.def;
+    const h = hitInfo(p.cls, opts.sk || opts.tsk || p._tsk, { heavy: opts.heavy, stun: opts.stun, interrupt: opts.interrupt, ownMark: !!mk && mk.by === p.id && t < mk.until });
+    const pay = payoffFor(m.tbSet, h, p.id, t, m.tbLast), c = pay ? (pay.self ? selfScaled(pay.def) : pay.def) : null;
     let crit = null;
     if (c?.crit) { crit = p.crit; p.crit = 1; }
     const ev0 = this.events.length;
@@ -231,7 +281,7 @@ export function installTeamplay(Game) {
     this.teamStat(p, 'dmg', hit.a);
     if (pay) {
       delete m.tbSet[c.setup]; // spent
-      this.landCombo(m, p, this.players.get(pay.setup.by), pay.id);
+      this.landCombo(m, p, this.players.get(pay.setup.by), pay.id, pay.self ? { self: 1 } : {});
       this.comboAfter(m, p, c);
     }
     if (hit.sw) {
@@ -296,6 +346,7 @@ export function installTeamplay(Game) {
   wrap('update', function (orig, dt) { const out = orig.call(this, dt); this.updateTeamplay(dt); return out; });
   wrap('handle', function (orig, p, msg) {
     if (msg?.type === 'burst') return this.teamBurst(p, msg.m);
+    if (msg?.type === 'tcall') return this.teamCall(p, msg.k);
     if (msg?.type === 'test' && process.env.TEST_HOOKS && msg.tb > 0 && p) this.tbState(this.teamKey(p)).g = Math.min(BURST.max, +msg.tb); // testing aid: { tb } sets your team's gauge
     return orig.call(this, p, msg);
   });

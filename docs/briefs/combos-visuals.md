@@ -35,7 +35,7 @@ Every class opens one setup and pays off several, so **every pair of classes has
 | Stunned (Guardian) | Ground Slam, Bash finisher | Execute | Berserker heavy, Swordsman Burst Combo, Lancer Thrust finisher, Ranger heavy arrow |
 | Marked (Ranger) | Mark + own heavy arrow | Pin | Lancer Thrust / Charge, Swordsman Rush, Berserker Leap Slam |
 | Staggered (Swordsman) | Rush | Cross Cut | Berserker Cleave / heavy chop, Lancer Thrust / Charge |
-| Grounded (Berserker) | Leap Slam | Aftershock | Guardian Ground Slam / Bash finisher, Swordsman Whirl |
+| Grounded (Berserker) | Leap Slam | Aftershock | Guardian Ground Slam / Bash finisher, Swordsman Whirl, Lancer Sky Lance |
 | Judged (Cleric) | Smite interrupting a wind-up | Verdict | any melee heavy hit (crits) |
 | Off-beat (Bard) | Dissonance | Downbeat | Ranger heavy arrow, Swordsman Rush, Lancer Sky Lance |
 | (Bard Discord 3+) | — | Shatter Chorus | anyone's Break |

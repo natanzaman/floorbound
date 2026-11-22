@@ -12,6 +12,7 @@ export const BOT_COMMANDS = {
   boss: { label: 'Do the boss', icon: '♛' },
   ready: { label: 'Ready up', icon: '✔' },
   potion: { label: 'Use potion', icon: '⚗' },
+  setme: { label: 'Set me up', icon: '✦' },
   status: { label: 'Status', icon: '?' },
   leave: { label: 'Leave party', icon: '⨯', wheel: false },
 };
@@ -30,6 +31,7 @@ export const BOT_ALIASES = {
   boss: ['boss', 'warden', 'sovereign', 'raid'],
   ready: ['ready'],
   potion: ['potion', 'pot', 'drink'],
+  setme: ['setme', 'setup', 'set', 'combo', 'combos'],
   status: ['status', 'report', 'sitrep'],
   leave: ['leave', 'dismiss'],
 };
@@ -82,6 +84,7 @@ export const LINES = {
   stay: ['Holding here.', 'Staying put.', 'Holding position.'],
   come: ['On my way!', 'Coming!', 'Regrouping.'],
   attack: ['On it: {mob}!', 'Attacking {mob}.', 'Focusing {mob}.'],
+  setme: ['Setting you up, {who}!', "I'll open it for you, {who}.", 'Watch for my setups, {who}!'],
   noTarget: ['Lock a target first (Tab), {who}.', "I can't see your target, {who}."],
   farm: ['Off to farm.', 'Farming time.'],
   boss: ['To the Warden!', "Let's do the boss.", 'Heading for the boss.'],

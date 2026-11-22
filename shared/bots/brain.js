@@ -35,7 +35,7 @@ import { mechSpot } from './bossteam.js'; // boss team mechanics: stack, spread,
 import { readRescue, rescueTurn, rescueTarget, propApproach } from './rescue.js'; // rescue traps: free trapped allies (J1)
 import './classes.js'; // built-in class plug-ins (Guardian, Swordsman, Cleric, generic)
 import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
-import { comboTurn, burstTurn } from './teamplay.js'; // combo payoffs + Team Burst (G2)
+import { comboTurn, burstTurn, setupTurn, chainTurn } from './teamplay.js'; // combo payoffs + Team Burst (G2), setups for partners and skill chains
 import { readOpenings, openingTurn, gustDodge } from './openings.js'; // boss openings, Gale Push (J3)
 import { easeOff } from './threat.js'; // DPS ease off near 90% threat (J4)
 import { readDuels, foeMobs } from '../duels.js'; // duels: only my opponents' stand-ins are targets (server/duels.js)
@@ -340,6 +340,7 @@ function command(b, c) {
       b.cmd = null; b.healFocus = null;
       return b.send({ type: 'leave' });
     case 'status': return say(b, 'status', {}, { force: true, text: statusText(b) });
+    case 'setme': return c.by && c.by !== b.id ? ack('setme') : undefined; // (the setup itself: shared/bots/teamplay.js)
   }
 }
 
@@ -534,6 +535,8 @@ function act(b, P, M) {
   if (!dodge && overloadTurn(b, tgt)) return; // Floor 3: the Colossus is Overloading: Break it
   if (!dodge && openingTurn(b, tgt, ctx)) return; // a boss opening: melee in, then out before it closes (J3)
   if (comboTurn(b, tgt, ctx)) return; // a partner's combo setup on the target: cash it in
+  if (setupTurn(b, tgt, ctx)) return; // open our setup for a partner who can cash it in (Set me up)
+  if (chainTurn(b, tgt, ctx)) return; // keep our skill chain going
   if (easeOff(b, tgt, ctx)) b.easeT = b.t; // near 90% threat: keep position, hold attacks (skill 4+)
   if (!brain.combat || brain.combat(b, tgt, ctx) === false) brainFor('*').combat(b, tgt, ctx);
 }
