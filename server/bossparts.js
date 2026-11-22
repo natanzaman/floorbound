@@ -34,12 +34,6 @@ const methods = {
     }
     return m.bp;
   },
-  partBroken(m, id) {
-    const s = m?.bp, P = BOSS_PARTS[m?.type];
-    if (!s || s.fight !== this.bossFightOf(m) || !this.partsOn()) return false;
-    const i = P.parts.findIndex(pt => pt.id === id);
-    return i >= 0 && s.hp[i] <= 0;
-  },
   /** Does a broken part stop this move? */
   partOff(m, move) {
     const s = m?.bp, P = BOSS_PARTS[m?.type];

@@ -51,7 +51,7 @@ const DEG = Math.PI / 180;
   for (const id of ROLE_MOB_IDS) { assert.ok(MOBS[id].name && MOBS[id].look && MOBS[MOBS[id].look], id); assert.ok(lootFor(`mob:${id}`)?.gold[1] > 0, `${id} drops`); }
   assert.ok(MOBS.ironboar.plate && MOBS.bulwark.shell && MOBS.bulwark.shieldBreak && MOBS.harrier.aloft === 0 && MOBS.hexer.caster);
   assert.equal(SWAP.cd, 1);
-  assert.equal(ACTION.weaponSwap?.group, 'Combat'); assert.equal(DEFAULTS.kbm.weaponSwap[0], 'KeyX'); assert.equal(DEFAULTS.pad.weaponSwap[0], 'LB+Left');
+  assert.equal(ACTION.weaponSwap?.group, 'Combat'); assert.equal(DEFAULTS.kbm.weaponSwap[0], 'KeyX'); assert.equal(DEFAULTS.pad.weaponSwap[0], 'LB+Down');
   assert.equal(lastStandReady({ now: 10, clutchAt: 5, fight: null }), true);
   assert.equal(lastStandReady({ now: 16, clutchAt: 5, fight: null }), false, 'more than 10 s after the perfect / parry');
   const f = {};
@@ -61,7 +61,7 @@ const DEG = Math.PI / 180;
   const b = { skill: 5, air: [7] };
   assert.ok(roleScore(b, { id: 7, def: MOBS.harrier }, true) < 0 && roleScore(b, { id: 7, def: MOBS.harrier }, false) > 0, 'flyers: ranged in, melee out while it hovers');
   assert.ok(roleScore(b, { id: 8, def: MOBS.hexer, winding: true }, false) < 0, 'a channelling caster is a priority');
-  ok('role enemies appended, with drops; swap action bound (X / LB+Left); Last Stand rules; bot target scores');
+  ok('role enemies appended, with drops; swap action bound (X / LB+Down); Last Stand rules; bot target scores');
 }
 
 // ---------- a Game, by hand ----------

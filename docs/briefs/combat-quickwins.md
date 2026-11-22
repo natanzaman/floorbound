@@ -42,7 +42,7 @@ Appended to the mob tables (ids only appended: indices are wire format), small c
 ## 3. Two weapons, swap mid-fight (`server/weaponswap.js`, shared `SWAP` in `shared/styles.js`)
 - `inv.eq.weapon2`: a second weapon of your class (old saves simply have none). Only the active weapon gives stats and
   the style. Bag: "Equip as 2nd weapon" on a weapon, the 2nd slot shows under the worn gear (click to take it off).
-- Swap action (`swap`, default X / pad LB+Left, rebindable): `{ type: 'swap' }`. 1 s cooldown, not while downed,
+- Swap action (`swap`, default X / pad LB+Down, rebindable): `{ type: 'swap' }`. 1 s cooldown, not while downed,
   guarding or within 0.35 s of a skill press (mid-skill). Cooldowns carry over. A swap is a chain step (`swap`) so a
   chain can cross styles. Bots: not in v1 (optional in the plan; skipped).
 

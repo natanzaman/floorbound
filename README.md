@@ -45,7 +45,7 @@ The default keys; change any of them in Game Menu → Controls (they follow your
 | Pose | Chat `/kneel`, `/sit`, `/bow`; `/stand`, moving, attacking, a skill, dodging, jumping or guarding stands you up | Chat button |
 | Party | Players button (P) → Find party, or Invite | Players button → Find party / Invite |
 | Revive a downed partymate | Stand next to them and hold E (about 2.5 s) | Press and hold the "Hold here to revive" prompt |
-| Swap weapons | X (pad LB + d-pad left): trade your worn weapon for your 2nd weapon (Bag → 2nd on a weapon of your class). 1 s apart, not mid-skill; cooldowns carry over | — |
+| Swap weapons | X (pad LB + d-pad down): trade your worn weapon for your 2nd weapon (Bag → 2nd on a weapon of your class). 1 s apart, not mid-skill; cooldowns carry over | — |
 | Team Burst | T: when the party bar at the top of the party frames is full, start a 3 s sync window; partners press T to join | Tap the full bar (or the prompt) |
 | Order your party's bots | Hold V (command wheel), or chat `/b stay`, `/b Lyra: heal` (`/b help` lists them) | ⌘ Bot orders under the party frames |
 | Items | 4 potion, 5 tonic, 6 draught; B bag | Potion button; Bag button |
@@ -367,7 +367,7 @@ BRANCH=B node test/team.js                  # every skill evolved into branch B
 
 ## Weapon styles
 
-Every class fights in one of three **weapon styles**, set by the weapon you wear (no weapon, or a weapon without a style, is the class default). **Two weapons:** carry a second weapon of your class in the 2nd weapon slot (Bag → **2nd** on a weapon) and swap with X (pad LB + d-pad left) even mid-fight: 1 s between swaps, never mid-skill, cooldowns carry over, only the worn weapon gives stats and the style, and a swap counts as a step in a skill chain, so a chain can cross styles (`server/weaponswap.js`). A style changes how the basic attack plays, adds one passive and tweaks one skill. You see it on the character (the weapon in their hands, for everyone), in the bag and tooltips (style name, passive, skill tweak), and on the basic-attack button's tooltip.
+Every class fights in one of three **weapon styles**, set by the weapon you wear (no weapon, or a weapon without a style, is the class default). **Two weapons:** carry a second weapon of your class in the 2nd weapon slot (Bag → **2nd** on a weapon) and swap with X (pad LB + d-pad down) even mid-fight: 1 s between swaps, never mid-skill, cooldowns carry over, only the worn weapon gives stats and the style, and a swap counts as a step in a skill chain, so a chain can cross styles (`server/weaponswap.js`). A style changes how the basic attack plays, adds one passive and tweaks one skill. You see it on the character (the weapon in their hands, for everyone), in the bag and tooltips (style name, passive, skill tweak), and on the basic-attack button's tooltip.
 
 | Class | Style | Basic attack | Passive | Skill tweak |
 | --- | --- | --- | --- | --- |

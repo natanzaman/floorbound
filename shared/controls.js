@@ -93,7 +93,7 @@ export const DEFAULTS = {
     skill3: ['B', null], selectAimed: ['LB+B', null],
     lockNext: ['R3', null], clearTarget: ['LB+R3', null],
     item1: ['Up', null], item2: ['Left', null], item3: ['Right', null],
-    skillTree: ['LB+Up', null], players: ['LB+Right', null], weaponSwap: ['LB+Left', null],
+    skillTree: ['LB+Up', null], players: ['LB+Right', null], weaponSwap: ['LB+Down', null],
     interact: ['Down', null], revive: ['Down', null], // (Down: interact; held next to a downed ally: revive)
     bag: ['View', null],
     menu: ['Start', null],

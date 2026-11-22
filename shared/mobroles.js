@@ -13,7 +13,7 @@ export const ROLE_MOBS = {
     look: 'boar', lookScale: 1.25, lookTint: 0x9ca3af },
   bulwark: { name: 'Mire Bulwark', hp: 900, atk: 28, speed: 3.2, aggro: 10, range: 2.6, atkCd: 2.2, xp: 130, radius: 1.3, level: 14, f2: true, ai: 'f2Brute',
     shell: 0.15, shellArc: 1.3, shieldBreak: 6, turn: 1.3, look: 'shieldback', lookScale: 1.15, lookTint: 0x94a3b8 },
-  hexer: { name: 'Mire Hexer', hp: 420, atk: 22, speed: 3.4, aggro: 15, range: 13, atkCd: 3.6, xp: 120, radius: 0.8, level: 14, f2: true, ai: 'f2Hexer', ranged: true, caster: true,
+  hexer: { name: 'Mire Hexer', hp: 420, atk: 22, speed: 3.4, aggro: 15, range: 13, atkCd: 3.6, xp: 120, radius: 0.8, level: 14, f2: true, ai: 'f2Hexer', caster: true,
     look: 'thrall', lookScale: 0.95, lookTint: 0xc084fc },
   harrier: { name: 'Gale Harrier', hp: 640, atk: 32, speed: 6.0, aggro: 16, range: 2.4, atkCd: 1.6, xp: 230, radius: 0.85, level: 23, f3: true, ai: 'f3Harpy', fly: true,
     aloft: 0, swoopHit: true, look: 'harpy', lookScale: 0.9, lookTint: 0x7dd3fc },
@@ -21,7 +21,7 @@ export const ROLE_MOBS = {
 export const ROLE_BITE = { ironboar: [2.8, 0.75], bulwark: [3.2, 0.8] }; // [reach, half-angle]
 
 // Floor 1's field (Floors 2 and 3: F2_SPAWNS / F3_SPAWNS): [type, count, x range, z range]
-export const F1_ROLE_SPAWNS = [['ironboar', 3, [-50, 50], [70, 92]]];
+export const F1_ROLE_SPAWNS = [['ironboar', 3, [36, 58], [56, 90]]]; // (the meadow's east side, clear of the tests' spots near the road)
 
 // The Mire Hexer: keeps its distance, throws a hex circle, and every `every` s channels a heal (`channel` s, a ring
 // telegraph of radius r) that restores `heal` of max health to every other mob within r. Interrupted (stunned, Broken,
