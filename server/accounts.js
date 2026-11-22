@@ -67,15 +67,29 @@ export async function listCharacters(accountId) {
   return q('SELECT id, name, cls, lvl, xp FROM characters WHERE account_id = $1 ORDER BY created_at', [accountId]);
 }
 
+// Each character's writes (saves, guild bank moves: server/guilds.js) and loads run one after another, so an older save
+// never lands after a newer one, and a character opened again reads what the last write left.
+const locks = new Map();
+export function charLock(charId, fn) {
+  const prev = locks.get(charId) || Promise.resolve();
+  const run = prev.then(fn, fn), tail = run.catch(() => {});
+  locks.set(charId, tail);
+  tail.then(() => { if (locks.get(charId) === tail) locks.delete(charId); });
+  return run;
+}
+
 export async function loadCharacter(accountId, charId) {
+  return charLock(charId | 0, () => loadCharacterNow(accountId, charId));
+}
+async function loadCharacterNow(accountId, charId) {
   const rows = await q('SELECT id, name, cls, lvl, xp, gold, inv, stats, mastery, talents FROM characters WHERE id = $1 AND account_id = $2', [charId | 0, accountId]);
   return rows[0] || null;
 }
 
 // p: an in-game player with charId, lvl, xp, gold, inv, stats (lifetime stats + titles), mastery (skill mastery + evolutions), talents (talent tree)
 export async function saveCharacter(p) {
-  await q('UPDATE characters SET lvl = $2, xp = $3, gold = $4, inv = $5, stats = $6, mastery = $7, talents = $8, updated_at = now() WHERE id = $1',
-    [p.charId, Math.min(MAX_LEVEL, p.lvl), p.xp, Math.max(0, p.gold | 0), JSON.stringify(p.inv), JSON.stringify(p.stats || null), JSON.stringify(p.mastery || null), JSON.stringify(p.talents || null)]);
+  await charLock(p.charId, () => q('UPDATE characters SET lvl = $2, xp = $3, gold = $4, inv = $5, stats = $6, mastery = $7, talents = $8, updated_at = now() WHERE id = $1',
+    [p.charId, Math.min(MAX_LEVEL, p.lvl), p.xp, Math.max(0, p.gold | 0), JSON.stringify(p.inv), JSON.stringify(p.stats || null), JSON.stringify(p.mastery || null), JSON.stringify(p.talents || null)]));
 }
 
 // Controls that follow the account (roadmap K2): the whole fb_controls object, cleaned (unknown ids dropped), with a

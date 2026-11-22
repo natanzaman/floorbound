@@ -20,6 +20,16 @@ const pool = enabled ? new pg.Pool({
 pool?.on('error', err => console.error('Postgres pool error:', err.message));
 
 export const q = (text, params) => pool.query(text, params).then(r => r.rows);
+// One transaction: fn(t) gets a query function on a single connection; COMMIT when it resolves, ROLLBACK when it throws.
+export async function tx(fn) {
+  const c = await pool.connect();
+  try {
+    await c.query('BEGIN');
+    const out = await fn((text, params) => c.query(text, params).then(r => r.rows));
+    await c.query('COMMIT');
+    return out;
+  } catch (e) { await c.query('ROLLBACK').catch(() => {}); throw e; } finally { c.release(); }
+}
 
 export async function migrate() {
   if (!enabled) return;
@@ -99,4 +109,18 @@ async function setup() {
   await q(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS access_level SMALLINT NOT NULL DEFAULT 1`);
   // Each Named's allow list (who may control them; empty = anyone allowed by the rule), kept across restarts.
   await q(`ALTER TABLE named_chars ADD COLUMN IF NOT EXISTS allow JSONB`);
+  // Guilds (server/guilds.js, docs/briefs/guilds.md): ids are handed out by the server (all guilds load at start). The
+  // bank's gold, the vault (bag items with a slot id v), this week's quests; plot: a guild hall plot (Phase 5, unused).
+  // Members by key: c:<charId> (players) and n:<namedId> (the Named); bots and anonymous players are never written.
+  await q(`CREATE TABLE IF NOT EXISTS guilds (
+    id INT PRIMARY KEY, name TEXT NOT NULL, tag TEXT NOT NULL, xp INT NOT NULL DEFAULT 0, gold BIGINT NOT NULL DEFAULT 0,
+    vault JSONB NOT NULL DEFAULT '[]'::jsonb, vseq INT NOT NULL DEFAULT 0, quests JSONB, plot JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  await q(`CREATE UNIQUE INDEX IF NOT EXISTS guilds_name_unique ON guilds (lower(name))`);
+  await q(`CREATE UNIQUE INDEX IF NOT EXISTS guilds_tag_unique ON guilds (lower(tag))`);
+  await q(`CREATE TABLE IF NOT EXISTS guild_members (
+    member TEXT PRIMARY KEY, guild_id INT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    char_id INT REFERENCES characters(id) ON DELETE CASCADE, named_id TEXT, rank SMALLINT NOT NULL DEFAULT 0,
+    name TEXT NOT NULL, cls TEXT, joined_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  await q(`CREATE INDEX IF NOT EXISTS guild_members_guild ON guild_members (guild_id)`);
 }

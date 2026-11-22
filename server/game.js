@@ -45,6 +45,7 @@ import { installMvp } from './mvp.js'; // post-fight MVP card (G5)
 import { installLoot } from './loot.js';
 import { installLooks } from './looks.js'; // character looks: setLook, w.looks (I2)
 import { installDuels } from './duels.js'; // solo and team duels: challenges, stand-ins, rules, w.du (docs/briefs/duels.md)
+import { installGuilds } from './guilds.js'; // guilds: ranks, invites, bank + vault, weekly quests, /g chat, tags (docs/briefs/guilds.md)
 import { installTargeting } from './targeting.js'; // targeting modes + cleave (player settings, Controls → Combat)
 import { rollGear } from '../shared/loot.js'; // affixes, boss sets, loadouts, drop tables (H2)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
@@ -83,6 +84,7 @@ export class Game {
     this.initFloor2(); // Floor 2 — The Glimmering Mire (server/floor2.js)
     this.initFloor3(); // Floor 3 — The Gale Spires (server/floor3.js)
     this.initLabs(); // the labyrinths before each boss (server/labyrinth.js)
+    this.guildInit(); // guilds (server/guilds.js): in memory until index.js hands over a store
   }
 
   id() { return this.nextId++; }
@@ -1521,6 +1523,7 @@ installLooks(Game); // character looks: setLook(entity, id), listed in snapshots
 installNamed(Game); // the Named: humans-first rules, friendship, invites by tier (server/named.js); a no-op without a NamedManager
 installRescue(Game); // rescue traps (server/rescue.js); after the Named: its trap-object and crystal wrappers sit outside everyone's
 installDuels(Game); // duels (server/duels.js): outside the damage, heal and skill wrappers above, so a stand-in's hits skip them
+installGuilds(Game); // guilds (server/guilds.js): outside the kill, XP and stat wrappers above (quest credit, the XP perk)
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last
 if (process.env.TUNE_STATS) installTuneStats(Game); // testing aid (scripts/tuneboss.js): log boss moves used and hits taken; outermost
 

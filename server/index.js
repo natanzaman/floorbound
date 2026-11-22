@@ -25,6 +25,7 @@ import { TICK_RATE, inArena } from '../shared/data.js';
 import { floorOf, inArena2 } from '../shared/floor2.js';
 import { inArena3 } from '../shared/floor3.js';
 import { clampAccess } from '../shared/accesslevels.js'; // account access levels (permissions, not character levels)
+import { makeGuildStore } from './guilds.js'; // guilds in Postgres (docs/briefs/guilds.md); in memory without a database
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 3000;
@@ -50,7 +51,7 @@ setInterval(() => { crashes = Math.max(0, crashes - 5); }, 60000).unref();
 
 const game = new Game();
 game.track = track.record;
-game.onClear = rec => { hall.add(rec); broadcastHall(); }; // Hall of Clearers (DB insert + in-memory cache); the engraved stones update live
+game.onClear = rec => { hall.add(game.guildTagClear(rec)); broadcastHall(); }; // Hall of Clearers (DB insert + in-memory cache); the engraved stones update live; clearers carry their guild tag
 const spectators = new Set(); // watch-only clients (?spectate=1)
 // The server's own bots (admin, player-added, the Named) talk to it through in-process sockets (server/localws.js):
 // no JSON or loopback socket per bot per tick. BOT_TRANSPORT=ws puts them back on real WebSockets (benchmarks, tests).
@@ -302,6 +303,7 @@ async function shutdown(sig) {
         await track.flush().catch(() => {});
         await aiMinds.flush(); // AI memories + spend (server/ai/store.js)
         await named?.flush(); // friendship still waiting to be saved (server/named.js)
+        await game.guildFlush(); // guild progress still waiting to be saved (server/guilds.js)
       },
     });
   } catch (e) { console.error('shutdown', e); }
@@ -321,6 +323,7 @@ db.migrate()
   .then(() => hall.load())
   .then(() => { game.hadFirstClear = hall.hasFirst(); game.hadFirstClear2 = hall.hasFirst(2); game.hadFirstClear3 = hall.hasFirst(3); })
   .then(() => { if (db.enabled) aiMinds.useStore(aiStore(db.q)); }) // (async, never blocks or fails startup)
+  .then(() => (db.enabled ? game.useGuildStore(makeGuildStore(db.q, db.tx, accounts.charLock)) : null)) // every guild, loaded once (server/guilds.js)
   .then(() => { if (db.enabled && named) { named.quests.useStore(makeQuestStore(db.q)); return named.useStore(makeNamedStore(db.q, { adminIds: (process.env.ADMIN_DISCORD_IDS || '').split(',').map(s => s.trim()).filter(Boolean) })); } })
   .then(() => server.listen(PORT, () => {
     console.log(`Floorbound running on http://localhost:${PORT}${db.enabled ? ' (accounts on' + (accounts.discordOn() ? ', Discord sign-in on' : '') + ')' : ''}`);

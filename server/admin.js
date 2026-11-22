@@ -8,6 +8,7 @@
 // Talents (characters.talents, { nodeId: rank }, shared/talents.js) too: validated against the tree and the level.
 // Access levels (accounts.access_level, 1-5, shared/accesslevels.js): POST /api/admin/accounts/:id/access { level }; the
 // players list shows each account's level. Bots carry their creator and an allow list (PATCH /api/admin/bots/:bid { allow }).
+// Guilds: GET /api/admin/guilds (with members), DELETE /api/admin/guilds/:id (disband).
 import * as db from './db.js';
 import * as accounts from './accounts.js';
 import { CLASSES, MAX_LEVEL, xpToNext, areaName } from '../shared/data.js';
@@ -460,6 +461,12 @@ export async function handle(req, res, url) {
         if (body?.confirm !== r.name) return json(res, 400, { error: 'Type the character name to confirm.' }), true;
         return json(res, 200, { ok: await deleteCharacter(id) }), true;
       }
+    }
+
+    // Guilds (server/guilds.js): every guild with its members; disband one (its bank and vault go with it)
+    if (path === '/api/admin/guilds' && m === 'GET') return json(res, 200, { guilds: game.guildsAdmin() }), true;
+    if ((mm = path.match(/^\/api\/admin\/guilds\/(\d+)$/)) && m === 'DELETE') {
+      return game.guildDisbandAdmin(+mm[1]) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'No such guild.' }), true;
     }
 
     if (path === '/api/admin/bots' && m === 'GET') {
