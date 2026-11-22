@@ -42,6 +42,6 @@ Start every session by reading `docs/NEXT.md` (what to do next, local setup), th
   - Bot boss runs: `ROLES=guardian,ranger,... BOT_SKILL=5 RUNS=2 PORT=36xx node test/wardenskill.js`. Also accepts `START_STYLE`, `STATS=1`, `LOG_TALENTS=1`.
   - Browser checks: Python Playwright with swiftshader. Start a server with `PORT=xxxx START_LEVEL=10 SPAWN_AT=0,150 node server/index.js`. Headless rendering is slow, so judge by game state, not by frame timing.
   - Use unique ports and kill test servers by PID (use `nohup node … &` with `$!`, not a `cd && …` subshell).
-  - New feature tests: `accesslevels`, `freebots`, `targeting` (+ `targeting.py`), `wellwake` (+ `wellwake.py`).
+  - New feature tests: `accesslevels`, `freebots`, `targeting` (+ `targeting.py`), `wellwake` (+ `wellwake.py`), `guilds` (+ `guilds.py`).
 - **Style:** small, focused diffs that respect existing patterns. Data-driven over per-case hardcoding. Keep the in-game guide (`public/guide.js`) and README in step with mechanics.
 - **Talking to the owner:** concise and outcome-first, in plain words. He reads on his phone.

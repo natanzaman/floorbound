@@ -22,10 +22,11 @@ export const ACTION_MIN = {
   botKick: 1,     // send a bot out of your party (back to roaming)
   botDespawn: 1,  // take one of the Named out of the world
   botRespawn: 1,  // bring one back
+  guildInvite: 1, // invite a bot or one of the Named into your guild (docs/briefs/guilds.md)
 };
 export const ACTION_LABEL = {
   botAdd: 'add bots', botCommand: 'give bots orders', botInvite: 'invite bots', botKick: 'kick bots from a party',
-  botDespawn: 'despawn the Named', botRespawn: 'respawn the Named',
+  botDespawn: 'despawn the Named', botRespawn: 'respawn the Named', guildInvite: 'invite bots to a guild',
 };
 
 export const clampAccess = v => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(ACCESS_MAX, Math.max(ACCESS_MIN, n)) : ACCESS_DEFAULT; };

@@ -42,6 +42,15 @@ Plans: `docs/briefs/bots-access.md`, `docs/briefs/waypoint.md`, `docs/briefs/tar
 - **Owner calls waiting:** the default rule (Half Health was a guess), `DUEL.pvp` 0.25, the 2 / 3 min clock, whether
   knockback and stuns should move players in duels (not in v1), a duel ladder.
 
+## Guilds (2026-11-22, branch `feat/guilds`, plan `docs/briefs/guilds.md`)
+- Found a guild (Players → Guild or the Guild Registrar in town, 300 gold), ranks Leader / Officer / Member, invites
+  (players get a card; bots and the Named accept by themselves), `/g` chat, `[TAG]` on nameplates, the Players list and
+  the Hall, a shared bank and a 20-slot vault (atomic with your bag, one transaction), 3 weekly guild quests (bots count
+  a quarter), guild levels 1-10 with perks, admin list + disband. Tables `guilds`, `guild_members`.
+- **Owner calls waiting:** the fee (300), the quest list and rewards, the perks, whether the Registrar should be the only
+  place to found one, whether bots may hold Officer rank (they can now; they do nothing with it).
+- Not built: the guild hall plot (`guilds.plot`, Phase 5 floor towns).
+
 ## Life classes (2026-11-22, branch `feat/life`, plan `docs/briefs/life-classes.md`)
 - Life skills 1-10 beside the combat class: Herbalist, Miner, Fisher, Farmer, Cook, Alchemist, plus Smith (levels from
   Smith actions). Learn free at the Life Hall in town. Gathering spots on Floors 1-3 (+6 rare ones in the labyrinths),

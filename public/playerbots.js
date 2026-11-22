@@ -232,6 +232,7 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender, re
       };
     },
     addTab(t) { if (!extra.includes(t)) extra.push(t); },
+    select(id) { if (id === 'players' || id === 'bots' || extra.some(t => t.id === id)) { ui.tab = id; ui.sig = ''; } }, // open on a tab (the Guild Registrar)
     setTab(t, on) { // add or take away an added tab (the Friends tab follows the server's switch)
       if (on) return this.addTab(t);
       const i = extra.indexOf(t);
