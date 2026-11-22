@@ -29,6 +29,7 @@ import { installPacing } from './pacing.js';
 import { installNamed } from './named.js';
 import { installTracking } from './trackgame.js';
 import { installBell } from './bell.js';
+import { installLabyrinth } from './labyrinth.js'; // the labyrinths before each boss
 import { installStaging } from './staging.js';
 import { installCine } from './cine.js'; // cinematic camera state for filming (F4)
 import { installPoses } from './poses.js';
@@ -75,6 +76,7 @@ export class Game {
     this.newTwist(); // Warden twist for the first fight
     this.initFloor2(); // Floor 2 — The Glimmering Mire (server/floor2.js)
     this.initFloor3(); // Floor 3 — The Gale Spires (server/floor3.js)
+    this.initLabs(); // the labyrinths before each boss (server/labyrinth.js)
   }
 
   id() { return this.nextId++; }
@@ -268,7 +270,7 @@ export class Game {
     if (!g.open) {
       // Everyone at the gate ready, OR someone has been ready for a while (so an idle player can't block the raid)
       if (!g.ready.size) g.firstReadyAt = 0; else if (!g.firstReadyAt) g.firstReadyAt = t;
-      const allReady = waiting.length > 0 && (g.ready.size === waiting.length || (g.firstReadyAt && t - g.firstReadyAt >= GATE.force));
+      const allReady = waiting.length > 0 && (g.ready.size === waiting.length || (g.firstReadyAt && t - g.firstReadyAt >= GATE.force)) && this.labGateOk(1, waiting); // the Horn Lock (server/labyrinth.js)
       if (allReady && !g.countAt) {
         g.countAt = t + GATE.count;
         this.events.push({ t: 'gate', s: 'count', d: GATE.count });
@@ -977,6 +979,7 @@ export class Game {
     this.updateGround();
     this.updateFloor2(dt);
     this.updateFloor3(dt);
+    this.updateLabs(dt); // labyrinths: spike plates, the floor's event, the mini-boss (server/labyrinth.js)
     this.updateRare();
     if (t >= this.lfgT) { this.lfgT = t + 1; this.matchParties(); }
 
@@ -1429,7 +1432,7 @@ export class Game {
     // (snapFor); spectators, the director's film view and the server's own bots get every floor (this string).
     const parts = [[], [], [], []];
     for (let i = 0; i < mobs.length; i++) parts[fl[i]].push(JSON.stringify(mobs[i]));
-    const pre = JSON.stringify({ players, mobs: 0, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.(), op: this.openSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
+    const pre = JSON.stringify({ players, mobs: 0, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.(), op: this.openSnap(), lb: this.labSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
     const at = pre.indexOf('"mobs":0') + 7; // (the first "mobs" key: the players array before it holds only numbers)
     const head = pre.slice(0, at), tail = pre.slice(at + 1);
     this.snapParts = { head, tail, floors: parts.map(a => a.join(',')), byFloor: [] };
@@ -1473,6 +1476,7 @@ installClassesB(Game); // Lancer, Bard skills + their hooks (server/classes-b.js
 Object.assign(Game.prototype, ClassesAMethods); // Ranger and Berserker (server/classes-a.js)
 installStyles(Game); // weapon styles (server/styles.js)
 installBell(Game); // the Tower Bell: ringBell, bellAuto (server/bell.js)
+installLabyrinth(Game); // labyrinths: stairs, traps, the Gravekeeper, the boss gate's key lock (server/labyrinth.js)
 installCine(Game); // cine(op, data), cineState(): filming camera, titles, fades, light (server/cine.js)
 installPoses(Game); // kneel / sit / bow: setPose, /kneel chat, cleared by moving or acting (server/poses.js)
 installTracking(Game); // play-tracking hooks: boss fight rows, death / quit context (server/trackgame.js)

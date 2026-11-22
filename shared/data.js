@@ -4,6 +4,7 @@ import { F3, F3_MOB_IDS, F3_MOBS, F3_BITE, F3_RARES, inCamp3, walkable3, areaNam
 import { RESCUE_MOB_IDS, RESCUE_MOBS } from './rescue.js';
 import { TIMED, movesOf } from './bosstiming.js'; // boss timing tables (J3)
 import { AREA_COLLIDERS } from './arenas.js'; // multi-area boss fights (J2): the active area's walls and pillars
+import { LABS, LAB_MOB_IDS, LAB_MOBS, LAB_BITE, labAt, walkLab, inHall } from './labyrinth.js'; // the labyrinths before each boss
 import { LANCER } from './classes/lancer.js';
 import { BARD } from './classes/bard.js';
 import { RANGER } from './classes/ranger.js';
@@ -57,6 +58,7 @@ const gateBlocks = (x, z) => Math.abs(x) < GATE.half && z > GATE.band[0] && z < 
 export const crossesGate = (x0, z0, x1, z1) => (z0 < GATE.z) !== (z1 < GATE.z) && Math.abs((x0 + x1) / 2) < GATE.half + 1;
 
 export function walkable(x, z, gateClosed = false) {
+  const lab = labAt(x, z); if (lab) return walkLab(lab, x, z); // a labyrinth (shared/labyrinth.js)
   if (x > F3.split) return walkable3(x, z, gateClosed); // Floor 3 (shared/floor3.js): gateClosed means its Storm Gate
   if (x > F2.split) return walkable2(x, z, gateClosed); // Floor 2: gateClosed means Floor 2's gate there
   if (gateClosed && gateBlocks(x, z)) return false;
@@ -69,6 +71,7 @@ export function walkable(x, z, gateClosed = false) {
 export function areaName(x, z) {
   if (x > F3.split) return areaName3(x, z);
   if (x > F2.split) return areaName2(x, z);
+  const lab = labAt(x, z); if (lab) return inHall(lab, x, z) ? lab.hallName : lab.name;
   if (inTown(x, z)) return 'Town of Beginnings';
   if (inArena(x, z)) return "Warden's Chamber";
   if (z > 148) return 'Chamber Gate';
@@ -103,6 +106,8 @@ export const OBSTACLES = (() => {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
     out.push({ kind: 'pillar', x: WORLD.arena.x + Math.cos(a) * 21, z: WORLD.arena.z + Math.sin(a) * 21, r: 1.6 });
   }
+  const E = LABS[1].entry; // the Undercrypt's stair: the woods give it room
+  for (let i = out.length - 1; i >= 0; i--) if ((out[i].kind === 'tree' || out[i].kind === 'rock') && Math.hypot(out[i].x - E.x, out[i].z - E.z) < E.clear) out.splice(i, 1);
   out.push(...floor2Obstacles()); // Floor 2 (see shared/floor2.js)
   out.push(...floor3Obstacles()); // Floor 3 (see shared/floor3.js)
   return out;
@@ -195,12 +200,15 @@ Object.assign(MOBS, F3_MOBS);
 // Trap objects (shared/rescue.js, J1): `prop` mobs, appended after Floor 3's.
 MOB_IDS.push(...RESCUE_MOB_IDS);
 Object.assign(MOBS, RESCUE_MOBS);
+// Labyrinth enemies (shared/labyrinth.js), appended after the trap objects.
+MOB_IDS.push(...LAB_MOB_IDS);
+Object.assign(MOBS, LAB_MOBS);
 
 export const xpToNext = lvl => 50 * lvl;
 
 // Melee bites hit a wedge in front of the attacker (shown as a red wedge during the wind-up).
 export const BITE = { boar: [2.6, 0.7], wolf: [2.8, 0.6], alpha: [3.4, 0.85], hound: [2.8, 0.6], oldtusk: [3.6, 0.8], ghostfang: [3.4, 0.85] }; // [reach, half-angle]
-Object.assign(BITE, F2_BITE, F3_BITE);
+Object.assign(BITE, F2_BITE, F3_BITE, LAB_BITE);
 export const PACK = { auraRange: 12, auraAtk: 0.25, howlEvery: 12, howlRange: 16, frenzy: 6 };
 // The Warden's three phases: 100-66% (cleave + slams), 66-33% (+ hounds, horn charge), <33% (+ spin, rockfall).
 // Quake Rings and the Horn Sweep come in every phase (more rings / more often later).

@@ -31,6 +31,7 @@ import { snapPoses, poseFrame } from '/poses.js'; // kneel / sit / bow (F5)
 import { initTalents } from '/talents.js';
 import { initLoot } from '/loot.js'; // affixes, set progress, loadouts, item tooltips (H2)
 import { initBotWheel } from '/botwheel.js';
+import { initLabClient } from '/labyrinth.js'; // the labyrinths before each boss (Floor 1: the Undercrypt)
 import { initBell } from '/bell.js'; // the Tower Bell and the engraved Hall stones
 import { initCine } from '/cine.js'; // film view camera, titles, fades, letterbox, light (F4)
 import { initWellWake } from '/wellwake.js'; // the well wakes when your Floor 2 opens (a short shot)
@@ -132,6 +133,9 @@ const f3 = initFloor3Client({
   send: o => send(o), banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), floatNum: (...a) => floatNum(...a),
   log: (a, b) => log(a, b), shake: a => shake(a), project: (x, y, z) => project(x, y, z), hallOpen: () => !$('hall').classList.contains('hidden'),
 });
+// Labyrinths (labyrinth.js): the Undercrypt's look, stairs, spike plates, the crypt's darkness, the key.
+const lab = initLabClient({ scene, occluders, sun, floor1, fx, sfx, state, players, send: o => send(o), banner: (a, b) => banner(a, b),
+  callout: (a, b, c) => callout(a, b, c), log: (a, b) => log(a, b), project: (x, y, z) => project(x, y, z), tip: id => guide.tip(id) });
 // Boss arenas with areas (arenas.js): the fall, the lower area's look and rules (sludge, fire, pillars) for prediction.
 const arenas = initArenas({ scene, fx, sfx, state, mobs, players, camera, views: { colossus: f3.world.arena }, tip: id => guide.tip(id),
   banner: (a, b) => banner(a, b), callout: (a, b, c) => callout(a, b, c), shake: a => shake(a) });
@@ -497,6 +501,7 @@ function onSnapshot({ st, me, w }, arrival) {
   if (w.gate) { state.gate = w.gate; state.gateOpen = !!w.gate[0]; gateMesh.set(state.gateOpen); }
   if (w.f2) f2.snap(w.f2); // on Floor 2, state.gate/gateOpen become Floor 2's gate
   if (w.f3) f3.snap(w.f3); // likewise Floor 3's Storm Gate
+  lab.snap(w.lb); // labyrinths: the server's clock (spike plates), the crypt breathing
   if (w.f3) arenas.snap(w.f3.ar); // boss arenas: which area (and its colliders for prediction), the fall, fire
   state.phase = w.phase || 0;
   twists.snap(w);
@@ -546,6 +551,7 @@ function handleEvent(e) {
   if (cine.event(e)) return; // shots, titles, fades, letterbox, clean feed, light
   if (arenas.event(e)) return; // the fall to a boss's lower area (arenas.js)
   if (f3.onEvent(e)) return; // Floor 3 (floor3client.js)
+  if (lab.onEvent(e)) return; // labyrinths (labyrinth.js)
   f2.onEvent(e);
   if (bell.event(e)) return; // the Tower Bell
   if (bossTeam.event(e)) return; // boss team mechanics (stack / spread / tether)
@@ -1369,7 +1375,7 @@ function interactKind() {
   if (mastery.near()) return 'shrine'; // Skill Shrine (public/mastery.js)
   if (ground.near()) return 'pickup';
   if (!state.gateOpen && (inGateZone(state.x, state.z) || inGateZone2(state.x, state.z) || inGateZone3(state.x, state.z))) return 'gate';
-  return f3.interactKind() || f2.interactKind(); // the waypoints and the Stairways
+  return lab.interactKind() || f3.interactKind() || f2.interactKind(); // the labyrinths' stairs, the waypoints and the Stairways
 
 }
 function interact() {
@@ -1380,7 +1386,7 @@ function interact() {
   else if (k === 'shrine') talents.toggle();
   else if (k === 'pickup') { send({ type: 'pickup', id: ground.near() }); }
   else if (k === 'gate') { send({ type: 'ready' }); sfx.play('ui'); state.meReady = state.meReady ? 0 : 1; updateGateBox(true); }
-  else if (!f3.interact(k)) f2.interact(k);
+  else if (!lab.interact(k) && !f3.interact(k)) f2.interact(k);
 }
 
 // ---------------- titles & Hall of Clearers ----------------
@@ -1539,13 +1545,13 @@ function updateGateBox(force) {
   const el = $('gatebox');
   const [open, waiting, ready, count] = state.gate;
   const show = !state.spectator && !state.dead && !open && (inGateZone(state.x, state.z) || inGateZone2(state.x, state.z) || inGateZone3(state.x, state.z));
-  const key = `${show}|${waiting}|${ready}|${Math.ceil(count)}|${state.meReady}`;
+  const key = `${show}|${waiting}|${ready}|${Math.ceil(count)}|${state.meReady}|${state.inv?.life?.lab1Keys || 0}`;
   if (key === gateKey && !force) return;
   gateKey = key;
   el.classList.toggle('hidden', !show);
   if (!show) return;
   const gate2 = onFloor2(state.x) || onFloor3(state.x);
-  el.innerHTML = `<b>${onFloor3(state.x) ? 'THE STORM GATE' : gate2 ? 'THE SUNKEN GATE' : 'RAID GATE'}</b><div class="sub">${onFloor3(state.x) ? f3.gateText() : f2.gateText()} · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}</div>`
+  el.innerHTML = `<b>${onFloor3(state.x) ? 'THE STORM GATE' : gate2 ? 'THE SUNKEN GATE' : 'RAID GATE'}</b><div class="sub">${onFloor3(state.x) ? f3.gateText() : f2.gateText()} · ${ready}/${waiting} ready${waiting > 1 ? '' : ' (solo)'}${ready && ready < waiting && !count ? '<br>Opens 20 s after the first ready, even if not everyone is' : ''}${gate2 ? '' : lab.gateLine(1)}</div>`
     + (count > 0 ? `<div class="count">${Math.ceil(count)}</div>` : '')
     + `<button class="${state.meReady ? 'on' : ''}">${state.meReady ? 'Ready ✓' : `Ready${isTouch ? '' : ' (F)'}`}</button>`;
   if (!onFloor3(state.x)) twists.gateBox(el, onFloor2(state.x)); // the twist of the boss behind this gate (the Warden's, or the Sovereign's on Floor 2)
@@ -1727,7 +1733,7 @@ function updateHud(now) {
     }
     if (btn.dataset.slot === 'guard') { btn.classList.toggle('on', combat.guarding); continue; }
     if (btn.dataset.slot === 'cover') { threat.coverCd(btn); continue; }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : state.meReady ? 'Unready' : 'Ready'); continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? 'Enter' : state.meReady ? 'Unready' : 'Ready'); continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : { cd: mastery.cd(slot) }; // mastery/branch cooldowns
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;
@@ -2251,6 +2257,7 @@ function frame(now) {
   }
   sun.position.set(cx + 30, 60, cz - 20); sun.target.position.set(cx, 0, cz);
   floor1.visible = floorOf(cx) === 1; // Floor 1's town, field, chamber and skyline (incl. the tower spire) aren't drawn from Floors 2 and 3
+  lab.update(vdt, me && { x: me.model.group.position.x, z: me.model.group.position.z }); // (after floor1.visible: hides the field from the crypt)
   if (state.joined) treeFader.update(dt, camera.position, cx, cz);
   twists.frame(vdt, cx, cz); // Eclipse darkness
   sfx.listener.x = cx; sfx.listener.z = cz;

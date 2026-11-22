@@ -22,6 +22,7 @@ export const STEPS = [ // (the Game Menu's Controls & guide lists them too)
 ];
 
 const TIPS = {
+  lab: 'The Undercrypt: a maze under the field. Red-glowing grates are spike plates: wait for them to sink, or jump or roll across as they rise. The Gravekeeper in the Ossuary at the heart holds the Horn Key, which unlocks the Chamber Gate. Now and then the crypt breathes: the torches gutter and the dead climb out of the floor.',
   wedge: 'Red wedge: a bite is coming. Step out of it or roll.',
   aim: 'Something is aiming down that red line. Sidestep it.',
   slam: 'Red circle: a ground slam (the Warden rears up, axe overhead). Roll out, or jump just as it lands: you can steer in the air.',
