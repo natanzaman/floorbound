@@ -30,6 +30,7 @@ const HOOK_SLACK = 0.35; // s past the bite window a strike still counts (the ro
 const MOVE_CANCEL = 1.2; // m: walking this far stops gathering
 const MSG_GAP = 0.12; // s: life messages closer together than this are dropped (rate limit)
 const matName = id => MATS[id]?.name || id;
+const own = (o, k) => (Object.hasOwn(o, k) ? o[k] : undefined); // (ids come from the client: never 'constructor' and friends)
 const listText = o => Object.entries(o).map(([k, v]) => `${v} ${matName(k)}`).join(', ');
 
 // The saved record (characters.life). (spots: at most one timer per spot, so it never grows past SPOTS.length)
@@ -61,7 +62,7 @@ export const LifeMethods = {
 
   lifeXp(p, skill, n) {
     const L = this.lifeOf(p);
-    if (!LIFE_SKILLS[skill] || !(n > 0)) return;
+    if (!own(LIFE_SKILLS, skill) || !(n > 0)) return;
     const before = lifeLevel(L.skills[skill]);
     L.skills[skill] = Math.min(LIFE_XP[LIFE_MAX], (L.skills[skill] || 0) + n);
     const after = lifeLevel(L.skills[skill]);
@@ -96,7 +97,7 @@ export const LifeMethods = {
   },
 
   lifeLearn(p, id) {
-    const L = this.lifeOf(p), S = LIFE_SKILLS[id];
+    const L = this.lifeOf(p), S = own(LIFE_SKILLS, id);
     if (!S || !nearStation('hall', p.x, p.z, PAD)) return false;
     if (knows(L, id)) { this.sys(`You already know ${S.name}.`, p.id); return false; }
     L.learned.push(id);
@@ -107,7 +108,7 @@ export const LifeMethods = {
   },
 
   lifeGather(p, id) {
-    const s = SPOT_BY_ID[id], T = SPOT_TYPES[s?.type], K = SPOT_KINDS[T?.kind];
+    const s = own(SPOT_BY_ID, id), T = s && own(SPOT_TYPES, s.type), K = SPOT_KINDS[T?.kind];
     if (!s || !K || p.lifeAct) return false;
     if (Math.hypot(p.x - s.x, p.z - s.z) > SPOT_USE + PAD) return false;
     const L = this.lifeOf(p), sk = LIFE_SKILLS[K.skill];
@@ -205,7 +206,7 @@ export const LifeMethods = {
   },
 
   lifeMake(p, id) {
-    const rc = LIFE_RECIPE_BY_ID[id];
+    const rc = own(LIFE_RECIPE_BY_ID, id);
     if (!rc || !nearStation(STATION_OF[rc.skill], p.x, p.z, PAD)) return false;
     const L = this.lifeOf(p), S = LIFE_SKILLS[rc.skill], lvl = lifeLevel(L.skills[rc.skill]);
     if (!knows(L, rc.skill)) { this.sys(`Learn ${S.name} at the Life Hall first.`, p.id); return false; }
@@ -231,7 +232,7 @@ export const LifeMethods = {
   },
 
   lifeEat(p, id) {
-    const F = FOODS[id];
+    const F = own(FOODS, id);
     if (!F || !((this.matsOf(p)[id] || 0) > 0)) return false;
     const L = this.lifeOf(p);
     this.matsOf(p)[id]--;

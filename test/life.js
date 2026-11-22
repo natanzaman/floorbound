@@ -124,6 +124,8 @@ await t('learn at the Life Hall only, free, once', () => {
   assert.equal(act(p, { a: 'learn', id: 'herbalist' }), true);
   assert.equal(act(p, { a: 'learn', id: 'herbalist' }), false);
   assert.equal(act(p, { a: 'learn', id: 'bogus' }), false);
+  for (const id of ['constructor', '__proto__', 'toString']) { assert.equal(act(p, { a: 'learn', id }), false); assert.equal(act(p, { a: 'gather', id }), false); assert.equal(act(p, { a: 'make', id }), false); assert.equal(act(p, { a: 'eat', id }), false); }
+  assert.deepEqual(p.life.learned.sort(), ['herbalist', 'smith']);
   assert.ok(g.lifeMsg(p).learned.includes('herbalist'));
   assert.ok(p.lifeDirty && p.dirty);
 });
