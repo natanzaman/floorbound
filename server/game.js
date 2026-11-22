@@ -55,7 +55,7 @@ const WARDEN_TIMERS = { slam: 'slamT', quake: 'quakeT', charge: 'chargeT', spin:
 
 // Interest management (viewFor): how far a browser sees players and mobs, in metres. The fog closes in from 70 m and
 // hides everything by 230 m (public/world.js), so entities come in well inside it.
-export const VIEW = { in: 140, out: 165 };
+export const VIEW = { in: 150, out: 180 }; // (High quality draws characters up to 140 m from the camera: public/quality.js charDist)
 
 export class Game {
   constructor() {
@@ -1427,14 +1427,18 @@ export class Game {
     const mobs = [];
     for (const m of this.mobs.values()) {
       if (m.dead || m.hidden) continue; // burrowed lurkers are sent as w.f2.bur
-      mobs.push({ id: m.id, x: m.x, z: m.z, fl: floorOf(m.x), boss: !!m.def.boss, s: JSON.stringify([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase >= 2 ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0) | (m.windupAt ? 16 : 0) | (this.time < m.staggerUntil ? 32 : 0) | (this.time < m.frenzyUntil ? 64 : 0) | (this.time < (m.launchUntil || 0) ? 128 : 0) | (this.time < (m.weakUntil || 0) ? 256 : 0), this.posturePct(m)]) });
+      mobs.push({ id: m.id, x: m.x, z: m.z, fl: floorOf(m.x), keep: !!(m.def.boss || m.def.rare), s: JSON.stringify([m.id, MOB_IDS.indexOf(m.type), r2(m.x), r2(m.z), r2(m.face), m.hp, m.maxHp, (m.moving ? 1 : 0) | (m.threat.size ? 2 : 0) | (m.phase >= 2 ? 4 : 0) | (this.time < m.stunUntil ? 8 : 0) | (m.windupAt ? 16 : 0) | (this.time < m.staggerUntil ? 32 : 0) | (this.time < m.frenzyUntil ? 64 : 0) | (this.time < (m.launchUntil || 0) ? 128 : 0) | (this.time < (m.weakUntil || 0) ? 256 : 0), this.posturePct(m)]) });
     }
     const g = this.gate;
     const waiting = [...this.players.values()].filter(p => !p.dead && inGateZone(p.x, p.z)).length;
     const gate = [g.open ? 1 : 0, waiting, g.ready.size, g.countAt ? r1(Math.max(0, g.countAt - this.time)) : 0];
     // Players and mobs go in last-minute: spectators, the director's film view and the server's own bots get the whole
     // world (this string); a browser gets only what is near it (viewFor: interest management, bandwidth).
-    const pre = JSON.stringify({ players: 0, mobs: 0, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.(), op: this.openSnap(), du: this.duelsSnap?.() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
+    // Everyone online in brief, once a second (the Players panel: level, floor, LFG, up or down), since a browser's
+    // players list now holds only who is near: [id, lvl, floor, lfg, dead].
+    let pl;
+    if (this.time >= (this._plT || 0)) { this._plT = this.time + 1; pl = []; for (const p of this.players.values()) pl.push([p.id, p.lvl, floorOf(p.x), p.lfg || this.partyOf(p)?.open ? 1 : 0, p.dead ? 1 : 0]); }
+    const pre = JSON.stringify({ players: 0, mobs: 0, pl, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.(), op: this.openSnap(), du: this.duelsSnap?.() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
     const tail = pre.slice('{"players":0,"mobs":0'.length); // (the first two keys, as written above)
     this.snapParts = { players, mobs, tail, show: !!this.director?.running };
     this.events = [];
@@ -1443,7 +1447,7 @@ export class Game {
 
   /**
    * The last snapshot as browser `v` sees it: everyone and everything on its floor within VIEW of it, its party and
-   * duel wherever they are, and its floor's boss. Hysteresis (in at VIEW.in, out past VIEW.out) keeps an entity from
+   * duel wherever they are, and its floor's boss and rare (the rare's compass hint). Hysteresis (in at VIEW.in, out past VIEW.out) keeps an entity from
    * popping in and out at the edge; `v.inView` remembers who is shown. During a director show: everything.
    */
   viewFor(v) {
@@ -1458,7 +1462,7 @@ export class Game {
     };
     const ps = [], ms = [];
     for (const r of S.players) if (r.id === v.id || (v.party && r.party === v.party) || (v.duel && r.duel === v.duel) || near(r)) { ps.push(r.s); now.add(r.id); }
-    for (const r of S.mobs) if ((r.boss && r.fl === fl) || near(r)) { ms.push(r.s); now.add(r.id); }
+    for (const r of S.mobs) if ((r.keep && r.fl === fl) || near(r)) { ms.push(r.s); now.add(r.id); }
     v.inView = now;
     return `{"players":[${ps.join(',')}],"mobs":[${ms.join(',')}]${S.tail}`;
   }

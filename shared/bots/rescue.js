@@ -40,7 +40,7 @@ function helps(b, P, vid, tr, max) {
   const others = free.filter(p => p.role !== 'tank');
   if (b.role === 'tank' && others.length) return false; // the tank keeps the boss
   const victim = P.all.find(p => p.id === vid) || b.players.find(p => p.id === vid);
-  const prop = b.mobs.find(m => m.id === tr.prop);
+  const prop = (b.allMobs || b.mobs).find(m => m.id === tr.prop); // (the trap's prop, even out of sight)
   const at = tr.k === 'pillar' ? prop : victim;
   if (!at) return false;
   const pool = (others.length ? others : free).filter(p => p.bot);
@@ -112,5 +112,5 @@ export function propApproach(b, tgt, ranged) {
 export function rescueTarget(b, P) {
   const j = job(b, P);
   if (!j || j[1].k === 'vines') return null;
-  return b.mobs.find(x => x.id === j[1].prop) || null;
+  return (b.allMobs || b.mobs).find(x => x.id === j[1].prop) || null;
 }

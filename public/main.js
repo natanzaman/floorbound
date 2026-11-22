@@ -495,6 +495,7 @@ function onSnapshot({ st, me, w }, arrival) {
     state.gold = me.gold; state.meReady = me.ready; state.tonic = me.tonic; state.draught = me.draught;
     for (const id of CONSUMABLE_IDS) if (now - (state.ccdPress?.[id] || 0) > 350) state.ccdReady[id] = now + (me.ccd?.[id] || 0) * 1000;
   }
+  if (w.pl) state.others = new Map(w.pl.map(a => [a[0], a])); // everyone online in brief (the Players panel; players only holds who is near)
   if (w.gi) ground.set(w.gi);
   if (w.gate) { state.gate = w.gate; state.gateOpen = !!w.gate[0]; gateMesh.set(state.gateOpen); }
   if (w.f2) f2.snap(w.f2); // on Floor 2, state.gate/gateOpen become Floor 2's gate
@@ -1626,11 +1627,12 @@ function renderPlayers() {
     if (r.bot) continue; // bots and the Named: the Bots section (public/playerbots.js listHtml)
     online++;
     if (id === state.myId) continue;
-    const p = players.get(id);
+    const p = players.get(id), o = state.others?.get(id); // (p: near me, drawn; o: [id, lvl, floor, lfg, dead] for anyone)
     const inParty = state.party && p?.party === state.party;
-    const lfgTag = (p?.buffs || 0) & 4 ? '<span class="tag">LFG</span>' : '';
-    const pf = p ? floorOf(p.tx ?? p.x) : 1, floorTag = pf > 1 ? `<span class="tag f2">F${pf}</span>` : '';
-    rows.push(`<div class="p"><span>${looks.swatch(id)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}${p && !p.dead ? `<button data-duel="${id}" title="Challenge to a duel">Duel</button>` : ''}</div>`);
+    const lfgTag = (p ? (p.buffs || 0) & 4 : o?.[3]) ? '<span class="tag">LFG</span>' : '';
+    const pf = p ? floorOf(p.tx ?? p.x) : o?.[2] || 1, floorTag = pf > 1 ? `<span class="tag f2">F${pf}</span>` : '';
+    const up = p ? !p.dead : o ? !o[4] : false;
+    rows.push(`<div class="p"><span>${looks.swatch(id)}${esc(r.name)} <small style="opacity:.6">Lv ${p?.lvl ?? o?.[1] ?? 1} ${CLASSES[r.cls].name}</small>${lfgTag}${floorTag}${titleTag(r.title)}</span>${inParty ? '<small>Party</small>' : `<button data-inv="${id}">Invite</button>`}${up ? `<button data-duel="${id}" title="Challenge to a duel">Duel</button>` : ''}</div>`);
   }
   const meE = players.get(state.myId), seeking = !!((meE?.buffs || 0) & 4);
   const lfgBtn = `<button class="lfg ${seeking ? 'on' : ''}">${state.party ? (seeking ? 'Recruiting via party finder ✓' : 'Recruit with party finder') : seeking ? 'Searching for a party… (cancel)' : 'Find party'}</button>`;

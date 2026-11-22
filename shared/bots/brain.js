@@ -157,6 +157,7 @@ function onSnap(b, msg) {
   if (b.t - (b.dodgePressed || -9) > 0.3) b.dodgeCd = msg.me.dodge || 0;
   const world = decodeWorld(msg.w);
   b.mobs = perceivable(b, world.mobs);
+  b.allMobs = world.mobs; // (every mob: orders and rescue props name a mob that may be out of sight)
   readDuel(b, msg.w.du); // duels: drop every stand-in but my live opponents' (b.duel: my duel while I'm still in it)
   const f2 = msg.w.f2, f3 = msg.w.f3, fl = floorOf(b.x), gate = fl === 3 ? f3?.gate : fl === 2 ? f2?.gate : msg.w.gate;
   b.gateOpen = !!gate?.[0];
@@ -316,7 +317,7 @@ function command(b, c) {
     }
     case 'stay': b.cmd = { ...base, k: 'stay', x: b.x, z: b.z }; return ack('stay');
     case 'attack': {
-      const m = b.mobs.find(m => m.id === c.tgt);
+      const m = b.mobs.find(m => m.id === c.tgt) || b.allMobs?.find(m => m.id === c.tgt && floorOf(m.x) === floorOf(b.x)); // (an order may name a mob out of sight)
       if (!m) return ack('noTarget');
       b.cmd = { ...base, k: 'attack', tgt: m.id, prev: b.cmd?.k === 'attack' ? b.cmd.prev : b.cmd };
       b.tgtId = null;

@@ -3,9 +3,8 @@
 //  - gzip: text and models are compressed once (zlib level 9) and kept in memory, keyed by the file's size and mtime,
 //    so an edited file is picked up on the next request (local play) and the CPU cost is paid once per file.
 //  - ETag + 304: the browser revalidates and gets "not modified" for files it already has.
-//  - Cache-Control: code and pages are revalidated on every load (`no-cache`: a deploy is seen at once); heavy assets
-//    that rarely change (models, Three.js, sounds) are fresh for a day and then revalidated, so a repeat visit doesn't
-//    even ask for them.
+//  - Cache-Control: everything is revalidated on every load (`no-cache`: a deploy is seen at once, and an unchanged
+//    file costs a 304 from the browser's cache), except Three.js under /vendor/, fresh for a day.
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
@@ -13,7 +12,9 @@ import crypto from 'node:crypto';
 
 export const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json; charset=utf-8', '.glb': 'model/gltf-binary', '.mp3': 'audio/mpeg', '.txt': 'text/plain; charset=utf-8', '.yaml': 'text/yaml; charset=utf-8' };
 const ZIP = new Set(['.html', '.js', '.mjs', '.css', '.svg', '.json', '.glb', '.txt', '.yaml']); // (png and mp3 are compressed already)
-const LONG = new Set(['.glb', '.mp3', '.png']); // heavy assets: cached for a day (plus anything under /vendor/)
+// Only Three.js (/vendor/, versioned with the npm package) is cached for a day; models and sounds revalidate like code
+// (a deploy may change a model together with the code that uses it), which costs a 304 and no download.
+const LONG = new Set();
 const MAX_CACHED = 4 << 20; // files bigger than this are streamed as they are, not kept in memory
 
 const cache = new Map(); // file -> { key, ready: Promise<{ etag, raw, gz }> }
@@ -44,7 +45,7 @@ export function serveFile(req, res, file, long = false) {
       'cache-control': long || LONG.has(ext) ? 'public, max-age=86400' : 'no-cache',
       vary: 'accept-encoding',
     };
-    if (st.size > MAX_CACHED) { res.writeHead(200, headers); return fs.createReadStream(file).pipe(res); }
+    if (st.size > MAX_CACHED) { res.writeHead(200, headers); return fs.createReadStream(file).on('error', () => res.destroy()).pipe(res); }
     load(file, st).then(e => send(req, res, e, headers), () => { res.writeHead(404); res.end('Not found'); });
   });
 }
