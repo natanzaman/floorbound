@@ -61,7 +61,7 @@ export function tipHtml(it, eq, cls, worn) {
   return h;
 }
 
-export function initLoot({ state, send, $, styleTitle = () => '', fx, sfx, guide, players, floatNum }) {
+export function initLoot({ state, send, $, styleTitle = () => '', tipExtra = () => '', fx, sfx, guide, players, floatNum }) {
   const style = document.createElement('style'); style.textContent = CSS; document.head.appendChild(style);
   const tip = document.createElement('div'); tip.id = 'itemtip'; tip.style.display = 'none'; document.body.appendChild(tip);
   const ui = { arm: -1, armT: 0 };
@@ -75,11 +75,12 @@ export function initLoot({ state, send, $, styleTitle = () => '', fx, sfx, guide
 
   // Hover cards on any panel whose rows carry data-tu="<item uid>".
   function bindTips(el) {
-    el.addEventListener('mousemove', e => {
-      const row = e.target.closest('[data-tu]');
+    el.addEventListener('pointermove', e => {
+      if (e.pointerType && e.pointerType !== 'mouse') { tip.style.display = 'none'; return; } // touch: tapping opens the card instead
+      const row = e.target.closest('[data-tu]:not(.open)');
       const f = row && findItem(+row.dataset.tu);
       if (!f) { tip.style.display = 'none'; return; }
-      const st = styleTitle(f.it), html = tipHtml(f.it, state.inv.eq, state.cls, f.worn) + (st ? `<div class="sep"></div><div class="sub" style="margin:0">${esc(st)}</div>` : '');
+      const st = styleTitle(f.it), html = tipHtml(f.it, state.inv.eq, state.cls, f.worn) + (st ? `<div class="sep"></div><div class="sub" style="margin:0">${esc(st)}</div>` : '') + tipExtra(f.it, f.worn);
       if (tip.innerHTML !== html) tip.innerHTML = html;
       tip.style.display = '';
       const w = tip.offsetWidth, h = tip.offsetHeight;
@@ -88,7 +89,7 @@ export function initLoot({ state, send, $, styleTitle = () => '', fx, sfx, guide
       if (y + h > innerHeight - 6) y = innerHeight - h - 6;
       tip.style.left = `${x}px`; tip.style.top = `${Math.max(6, y)}px`;
     });
-    el.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+    el.addEventListener('pointerleave', () => { tip.style.display = 'none'; });
   }
   const hideTip = () => { tip.style.display = 'none'; };
 
@@ -166,5 +167,7 @@ export function initLoot({ state, send, $, styleTitle = () => '', fx, sfx, guide
     return true;
   }
 
-  return { lines, setTag, setsHtml, loadoutsHtml, click, bindTips, hideTip, canSwap, onLoot, event };
+  const tipFor = (it, worn) => tipHtml(it, state.inv?.eq, state.cls, worn); // the full details (an open item card)
+  const setCount = it => `${setCounts(state.inv?.eq)[it.set] || 0}/${setSize(it.set)}`;
+  return { tipHtml: tipFor, setCount, lines, setTag, setsHtml, loadoutsHtml, click, bindTips, hideTip, canSwap, onLoot, event };
 }

@@ -7,13 +7,13 @@ import {
   MATS, MAT_IDS, SMITH, nearSmithAt, refineCost, applyRefine, salvageYield, reforgeCost, RECIPES, recipeName, canAfford, REFINE_MAX,
 } from '/shared/crafting.js';
 import { STYLES } from '/shared/styles.js';
-import { rerollCost, affixText, isTeamAffix } from '/shared/loot.js';
-import { axHtml, setTagHtml } from '/loot.js';
+import { rerollCost, affixText, isTeamAffix, setCounts, setSize } from '/shared/loot.js';
+import { tipHtml } from '/loot.js';
+import { cardHtml, openState, shortStat } from '/itemcard.js';
 import { keyHtml, tapping } from '/keyname.js'; // prompts name the player's key on the active device
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, flatShading: true, ...opts });
 const TABS = [['refine', 'Refine'], ['craft', 'Craft'], ['salvage', 'Salvage'], ['reforge', 'Reforge'], ['reroll', 'Affixes']];
-const statsText = st => Object.entries(st || {}).map(([k, v]) => statLabel(k, v)).join(' · ');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // Forge, anvil, quench barrel and a weapon rack, facing the plaza (same style as the merchant's stall).
@@ -62,7 +62,7 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
   $('bag').parentNode.appendChild(panel);
   const lbl = document.createElement('div'); lbl.id = 'smith-lbl'; lbl.className = 'lbl npc smith'; lbl.style.display = 'none';
   $('labels').appendChild(lbl);
-  const ui = { tab: 'refine', confirm: 0, npc: null, hammerT: 2, t: 0 };
+  const ui = { tab: 'refine', confirm: 0, npc: null, hammerT: 2, t: 0, open: openState() };
 
   const near = () => !state.dead && nearSmithAt(state.x, state.z, 1);
   const isOpen = () => !panel.classList.contains('hidden');
@@ -104,7 +104,16 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
     const out = bagOnly ? [] : SLOTS.filter(s => inv.eq[s]).map(s => ({ it: inv.eq[s], eq: s }));
     return out.concat(inv.bag.map(it => ({ it, eq: null })));
   };
-  const itemHead = (it, eq) => `<span class="slot">${eq ? `${eq}<br><em>worn</em>` : it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${setTagHtml(it, state.inv?.eq)}</b><small>${statsText(it.st)}${usable(it) ? '' : ` · ${CLASSES[it.cls]?.name || ''} only`}${axHtml(it, state.cls)}</small>`;
+  // Compact item cards (public/itemcard.js): the essentials on the card, the full text behind ⋯ / a tap / the hover card.
+  const details = (it, eq) => tipHtml(it, state.inv?.eq, state.cls, !!eq);
+  const card = (it, eq, o = {}) => {
+    let badges = eq ? '<span class="ic-b" style="color:#86efac">worn</span>' : '';
+    if (!usable(it)) badges += `<span class="ic-b no">${esc(CLASSES[it.cls]?.name || '')} only</span>`;
+    const setCount = it.set ? `${setCounts(state.inv?.eq)[it.set] || 0}/${setSize(it.set)}` : null;
+    return cardHtml(it, { ...o, key: `f${it.u}`, badges, setCount, open: ui.open.is(`f${it.u}`), more: details(it, eq) + (o.more || '') });
+  };
+  const empty = text => `<div class="ic empty"><span class="ic-ico">·</span><span class="ic-main"><span class="ic-sum">${text}</span></span><span></span></div>`;
+  const costLine = (cost, label) => `<span class="ic-foot">${label ? `<i class="ic-dim">${label}</i> ` : ''}${costHtml(cost)}</span>`;
 
   function matsStrip() {
     const have = mats();
@@ -113,50 +122,57 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
 
   function tabRefine() {
     const list = gear().filter(({ it }) => !it.ks); // keepsakes are never refined
-    if (!list.length) return '<div class="it empty"><span class="nm"><small>No gear to refine yet.</small></span></div>';
-    return `<p class="hint">Each level adds +10% of the item's base stats, up to +${REFINE_MAX}. Weapons take Tusks and Fangs, armour Pelts, charms Resin; +4 and +5 need Horn Shards. Refining never fails.</p>` + list.map(({ it, eq }) => {
+    if (!list.length) return empty('No gear to refine yet.');
+    return `<small class="ic-hint">+10% of the base stats per level, up to +${REFINE_MAX}. Never fails.</small>` + list.map(({ it, eq }) => {
       const cost = refineCost(it), ok = usable(it);
-      let next = '';
-      if (cost) { const nx = applyRefine({ ...it, st: { ...it.st }, b: it.b ? { ...it.b } : undefined, lv: (it.lv || 0) + 1 }); next = `<small class="next">→ +${nx.lv}: ${statsText(nx.st)}</small>`; }
-      return `<div class="it">${itemHead(it, eq)}${next}${cost ? costHtml(cost) : '<small class="max">Fully refined</small>'}</span>${cost && ok ? btn('refine', `+${(it.lv || 0) + 1}`, afford(gold(), mats(), cost), `data-u="${it.u}"`) : ''}</div>`;
+      let foot = '<span class="ic-foot ic-dim">Fully refined</span>';
+      if (cost) {
+        const nx = applyRefine({ ...it, st: { ...it.st }, b: it.b ? { ...it.b } : undefined, lv: (it.lv || 0) + 1 });
+        foot = `<span class="ic-foot ic-next">→ +${nx.lv}: ${Object.entries(nx.st).map(([k, v]) => esc(shortStat(k, v))).join(' · ')}</span>${costLine(cost)}`;
+      }
+      return card(it, eq, { foot, main: cost && ok ? btn('refine', `Refine +${(it.lv || 0) + 1}`, afford(gold(), mats(), cost), `data-u="${it.u}"`) : '' });
     }).join('');
   }
 
   function tabCraft() {
-    return '<p class="hint">Named gear with fixed, top-of-range stats. Weapons are forged for your class.</p>' + RECIPES.filter(rc => !rc.style || STYLES[rc.style]?.cls === state.cls).map(rc => { // weapon-style recipes: your class only
-      const cost = { gold: rc.gold, mats: rc.mats }, can = afford(gold(), mats(), cost) && state.inv && state.inv.bag.length < 24;
-      return `<div class="it recipe"><span class="slot">${rc.slot}<br><em class="r${rc.r}">${RARITY[rc.r].name}</em></span><span class="nm"><b class="r${rc.r}">${esc(recipeName(rc, state.cls))}</b><small>${statsText(rc.st)}</small><small class="desc">${esc(rc.desc)}</small>${costHtml(cost)}</span>${btn('craft', 'Forge', can, `data-id="${rc.id}"`)}</div>`;
+    return '<small class="ic-hint">Named gear with fixed, top-of-range stats. Weapons are forged for your class.</small>' + RECIPES.filter(rc => !rc.style || STYLES[rc.style]?.cls === state.cls).map(rc => { // weapon-style recipes: your class only
+      const cost = { gold: rc.gold, mats: rc.mats }, can = afford(gold(), mats(), cost) && state.inv && state.inv.bag.length < 24, key = `r${rc.id}`;
+      const it = { name: recipeName(rc, state.cls), r: rc.r, slot: rc.slot, st: rc.st };
+      return cardHtml(it, { key, open: ui.open.is(key), badges: `<span class="ic-b" style="color:${RARITY[rc.r].color}">${RARITY[rc.r].name}</span>`, foot: costLine(cost),
+        more: `<div class="desc">${esc(rc.desc)}</div><div class="sep"></div>${Object.entries(rc.st).map(([k, v]) => `<div class="st">${esc(statLabel(k, v))}</div>`).join('')}`,
+        main: btn('craft', 'Forge', can, `data-id="${rc.id}"`) });
     }).join('');
   }
 
   function tabSalvage() {
     const list = gear(true).filter(({ it }) => !it.ks);
-    if (!list.length) return '<div class="it empty"><span class="nm"><small>Your bag is empty. Salvage breaks bag items down into Dust (Common), Essence (Uncommon/Rare) or Prism (Epic).</small></span></div>';
-    return '<p class="hint">Break bag items down for Dust (Common), Essence (Uncommon, Rare) or Prism (Epic). Refined items give back half their Tusks, Pelts or Resin.</p>' + list.map(({ it }) => {
+    if (!list.length) return empty('Your bag is empty. Salvage breaks bag items down into Dust, Essence or Prism.');
+    return '<small class="ic-hint">Common gives Dust, Uncommon and Rare Essence, Epic Prism. Refined items give back half their upgrade parts.</small>' + list.map(({ it }) => {
       const out = salvageYield(it), sure = ui.confirm === it.u;
-      return `<div class="it">${itemHead(it)}${out ? yieldHtml(out) : '<small class="max">Can\'t be salvaged</small>'}</span>${out ? btn('salvage', sure ? 'Sure?' : 'Salvage', true, `data-u="${it.u}" class="${sure ? 'warn' : 'sell'}"`) : ''}</div>`;
+      return card(it, null, { foot: out ? `<span class="ic-foot">${yieldHtml(out)}</span>` : '<span class="ic-foot ic-dim">Can\'t be salvaged</span>',
+        main: out ? btn('salvage', sure ? 'Sure?' : 'Salvage', true, `data-u="${it.u}" class="${sure ? 'warn' : 'sell'}"`) : '' });
     }).join('');
   }
 
   function tabReforge() {
     const list = gear().filter(({ it }) => reforgeCost(it, 'stats'));
-    if (!list.length) return '<div class="it empty"><span class="nm"><small>Nothing to reforge. Crafted and Last Attack items are fixed.</small></span></div>';
-    return '<p class="hint">Reroll an item\'s stats within its rarity range, or give a charm a different affix. Keeps its refine level.</p>' + list.map(({ it, eq }) => {
+    if (!list.length) return empty('Nothing to reforge. Crafted and Last Attack items are fixed.');
+    return '<small class="ic-hint">Reroll the stats within the rarity\'s range (or give a charm a different stat). Keeps its refine level.</small>' + list.map(({ it, eq }) => {
       const ok = usable(it), cs = reforgeCost(it, 'stats'), ca = reforgeCost(it, 'affix');
       const b1 = ok ? btn('reforge', 'Reroll', afford(gold(), mats(), cs), `data-u="${it.u}" data-m="stats"`) : '';
-      const b2 = ok && ca ? btn('reforge', 'New affix', afford(gold(), mats(), ca), `data-u="${it.u}" data-m="affix"`) : '';
-      return `<div class="it">${itemHead(it, eq)}<small class="lbl2">Reroll</small>${costHtml(cs)}${ca ? `<small class="lbl2">New affix</small>${costHtml(ca)}` : ''}</span><span class="btns">${b1}${b2}</span></div>`;
+      const b2 = ok && ca ? btn('reforge', 'New stat', afford(gold(), mats(), ca), `data-u="${it.u}" data-m="affix"`) : '';
+      return card(it, eq, { foot: costLine(cs, ca ? 'Reroll' : '') + (ca ? costLine(ca, 'New stat') : ''), main: b1 + b2, col: !!ca });
     }).join('');
   }
 
   // Reroll one affix (shared/loot.js rerollCost): it becomes a different affix, the others stay.
   function tabReroll() {
     const list = gear().filter(({ it }) => rerollCost(it));
-    if (!list.length) return '<div class="it empty"><span class="nm"><small>No gear with affixes. Uncommon and better drops roll 1–3 bonus stats; Epic set pieces roll 2.</small></span></div>';
-    return '<p class="hint">Reroll ONE affix into a different one (the item keeps its other affixes, stats and refine level). Set pieces cost double.</p>' + list.map(({ it, eq }) => {
+    if (!list.length) return empty('No gear with bonuses. Uncommon and better drops roll 1–3 of them.');
+    return '<small class="ic-hint">Reroll ONE bonus into a different one; the rest stays. Set pieces cost double.</small>' + list.map(({ it, eq }) => {
       const cost = rerollCost(it), ok = usable(it), can = afford(gold(), mats(), cost);
-      const rows = it.ax.map((a, i) => `<div class="axrow"><span class="ax-l${isTeamAffix(a) ? ' team' : ''}">${esc(affixText(a, state.cls))}</span>${ok ? btn('reroll', 'Reroll', can, `data-u="${it.u}" data-i="${i}"`) : ''}</div>`).join('');
-      return `<div class="it" data-tu="${it.u}"><span class="slot">${eq ? `${eq}<br><em>worn</em>` : it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${setTagHtml(it, state.inv?.eq)}</b><small>${statsText(it.st)}</small>${rows}${costHtml(cost)}</span></div>`;
+      const rows = it.ax.map((a, i) => `<span class="ic-axrow"><span class="ax-l${isTeamAffix(a) ? ' team' : ''}">${esc(affixText(a, state.cls))}</span>${ok ? btn('reroll', 'Reroll', can, `data-u="${it.u}" data-i="${i}"`) : ''}</span>`).join('');
+      return card(it, eq, { foot: rows + costLine(cost, 'Per reroll') });
     }).join('');
   }
 
@@ -172,11 +188,12 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
   }
 
   panel.addEventListener('click', e => {
+    if (ui.open.click(e)) { sfx.play('ui'); return render(); } // open or close an item card
     const b = e.target.closest('button'); if (!b || b.disabled) return;
     const a = b.dataset.a;
     sfx.play('ui');
     if (a === 'close') return toggle(false);
-    if (a === 'tab') { ui.tab = b.dataset.t; ui.confirm = 0; return render(); }
+    if (a === 'tab') { ui.tab = b.dataset.t; ui.confirm = 0; ui.open.close(); return render(); }
     const u = +b.dataset.u;
     if (a === 'refine') send({ type: 'smith', a: 'refine', u });
     if (a === 'reforge') send({ type: 'smith', a: 'reforge', u, mode: b.dataset.m });
@@ -239,5 +256,5 @@ export function createSmith({ scene, occluders, fx, sfx, send, state, project, l
     if (isOpen() && (d > SMITH.r + 6 || state.dead)) toggle(false);
   }
 
-  return { near, toggle, render, matsHtml, onLoot, onForge, frame, addNpc, isOpen };
+  return { near, toggle, render, matsHtml, onLoot, onForge, frame, addNpc, isOpen, panel };
 }

@@ -336,14 +336,17 @@ export function initStyles(ctx) {
     return ` · <span class="sty" title="${esc(s.desc)}">${esc(s.name)}</span>${s.def ? '' : `<span class="sty-p">${esc(s.passive)} ${esc(s.tweak)}</span>`}`;
   }
   const title = it => { const s = it?.slot === 'weapon' && it.cls ? STYLES[styleOf(it, it.cls)] : null; return s ? `${s.name}: ${s.desc}${s.def ? '' : ` Passive: ${s.passive} ${s.tweak}`}` : ''; };
-  function shopName(s, cls) {
+  // A short badge for a weapon's style on an item card (public/itemcard.js); the default style shows none.
+  const styleName = it => { const s = it?.slot === 'weapon' && it.cls ? STYLES[styleOf(it, it.cls)] : null; return s && !s.def ? s.name : ''; };
+  // A shop line's weapon style (the alternate style of your class), or null: { name, passive, desc }.
+  function shopStyle(s, cls) {
     if (s.slot !== 'weapon') return null;
     const id = s.alt ? altStyle(cls) : null;
-    return id ? `Uncommon ${STYLES[id].name} (${STYLES[id].passive})` : null;
+    return id ? STYLES[id] : null;
   }
   const barNote = () => { const s = STYLES[state.style]; return s ? ` [${s.name}] ${s.def ? '' : s.desc}` : ''; };
 
   const ownsBasic = () => !!myBasic(); // the style replaces the class's basic attack (Twin Daggers, Halberd, War Drum, ...)
 
-  return { snap, event, basicCd, aim, ownsBasic, tag, title, shopName, barNote };
+  return { snap, event, basicCd, aim, ownsBasic, tag, title, styleName, shopStyle, barNote };
 }

@@ -35,6 +35,7 @@ import { initNamed, talkTo } from '/named.js'; // the Friends tab: the Named and
 import { snapPoses, poseFrame } from '/poses.js'; // kneel / sit / bow (F5)
 import { initTalents } from '/talents.js';
 import { initLoot } from '/loot.js'; // affixes, set progress, loadouts, item tooltips (H2)
+import { injectCss as itemCardCss, cardHtml, rowHtml, openState, ICON, statDelta } from '/itemcard.js'; // compact item cards (bag, merchant, Smith)
 import { initBotWheel } from '/botwheel.js';
 import { initLabClient } from '/labyrinth.js'; // the labyrinths before each boss (Floor 1: the Undercrypt)
 import { initBell } from '/bell.js'; // the Tower Bell and the engraved Hall stones
@@ -428,7 +429,7 @@ const guilds = initGuilds({ $, send, state, log: (a, b) => log(a, b), sfx, proje
 pbots.addTab(guilds); // the Guild tab
 // talent trees + the Skill Tree window (K): progression track, talents, abilities (public/talents.js)
 const talents = initTalents({ state, players, fx, sfx, send, floatNum, mastery, guide, isTouch, $ });
-const loot = initLoot({ state, send, $, styleTitle: it => styles.title(it), fx, sfx, guide, players, floatNum: (...a) => floatNum(...a) });
+const loot = initLoot({ state, send, $, styleTitle: it => styles.title(it), tipExtra: (it, worn) => (worn ? '' : cmpHtml(it)), fx, sfx, guide, players, floatNum: (...a) => floatNum(...a) });
 // the Tower Bell (toll, sway, banner) and the engraved Hall stones (public/bell.js)
 const bell = initBell({ scene, sfx, guide, banner: (a, b, c) => banner(a, b, c) });
 // downed + revive: your downed overlay, "Hold E to revive", markers over downed partymates (public/revive.js)
@@ -1544,52 +1545,111 @@ function toggleBag() {
   if (!el.classList.contains('hidden')) { state.shopOpen = nearMerchant(); renderBag(); guide.did('bag'); sfx.play('ui'); }
 }
 $('bag-btn').onclick = toggleBag;
-loot.bindTips($('bag')); // item hover cards
+itemCardCss();
+loot.bindTips($('bag')); loot.bindTips(smith.panel); // item hover cards
 $('skills-btn').onclick = () => talents.toggle(); // Skill Tree window (also K, or F at a Skill Shrine)
 
-const statsText = it => Object.entries(it.st).map(([k, v]) => statLabel(k, v)).join(' · ');
 function mainStat(it) { return it ? (it.st.atk ?? it.st.hp ?? Object.values(it.st).reduce((a, b) => a + b, 0)) : 0; }
-const stackBtns = (kind, id) => `<button data-a="dropStack" data-k="${kind}" data-id="${id}" title="Drop 1 on the ground (Shift: the whole stack)">Drop</button><button class="del" data-a="discardStack" data-k="${kind}" data-id="${id}" title="Delete 1 (Shift: the whole stack)">Delete</button>`;
-// A keepsake (story item, shared/items.js): its own colour, its line of text instead of stats, and no sell / drop / delete.
-const keepsakeRow = (it, slotName, actions) => `<div class="it keepsake" title="${esc(it.desc || '')}"><span class="slot">${slotName}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}</b><small class="ks-desc">${esc(it.desc || '')}</small><small>Keepsake · it stays with you</small></span>${actions}</div>`;
-function renderBag() {
-  const el = $('bag');
-  if (el.classList.contains('hidden') || !state.inv) return;
-  const inv = state.inv, near = nearMerchant();
-  const shopping = near && state.shopOpen;
-  const row = (it, slotName, actions) => it?.ks ? keepsakeRow(it, slotName, actions) : it
-    ? `<div class="it" data-tu="${it.u}"><span class="slot">${slotName}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${loot.setTag(it)}</b><small>${statsText(it)}${styles.tag(it)}${loot.lines(it)}</small></span>${actions}</div>`
-    : `<div class="it empty"><span class="slot">${slotName}</span><span class="nm"><small>Empty</small></span></div>`;
-  let h = `<div class="top"><span>Bag <span class="gold">${inv.gold} gold</span></span><button class="x" data-a="close">✕</button></div>`;
-  if (shopping) {
-    h += `<div class="shop"><h4>Merchant</h4>${SHOP.map((s, i) => { if (!towns.shopHas(s)) return ''; // a town's own stock shows at its own merchant (public/towns.js)
-      const name = s.kind === 'cons' ? CONSUMABLES[s.id].name : s.kind === 'mat' ? `${MATS[s.id]?.name || s.id} <small>(you have ${inv.mats?.[s.id] || 0})</small>` : styles.shopName(s, state.cls) || `${s.r === 2 ? 'Rare' : 'Uncommon'} ${s.slot === 'weapon' ? 'weapon (your class)' : 'armour'}${s.town ? ' <small>(town stock)</small>' : ''}`;
-      const desc = s.kind === 'cons' ? CONSUMABLES[s.id].desc : s.kind === 'mat' ? s.desc : s.r === 2 ? (s.slot === 'weapon' ? '+11–15% damage' : '+14–18% max health') : s.slot === 'weapon' ? '+7–9% damage' : '+8–12% max health';
-      const price = towns.price(s.kind === 'cons' ? CONSUMABLES[s.id].price : s.price); // tax, a citizen's discount, the market
-      return `<div class="it"><span class="nm"><b>${name}</b><small>${desc}</small></span><button data-a="buy" data-i="${i}" ${inv.gold < price ? 'disabled style="opacity:.4"' : ''}>${price}g</button></div>`;
-    }).join('')}</div>`;
-  } else if (near) h += `<div class="it"><span class="nm"><small>You're at the merchant.</small></span><button data-a="shop">Trade</button></div>`;
-  h += `<h4>Equipped</h4>${SLOTS.map(sl => row(inv.eq[sl], sl, inv.eq[sl] ? `<button data-a="unequip" data-s="${sl}">Remove</button>` : '')).join('')}`;
-  h += row(inv.eq.weapon2, '2nd weapon', inv.eq.weapon2 ? `<button data-a="swap" title="Swap (${esc(keyLabel('weaponSwap'))}): only the worn weapon counts">Swap</button><button data-a="unequip" data-s="weapon2">Remove</button>` : ''); // a spare weapon (server/weaponswap.js)
+// The bag window (character sheet + the merchant): tabs, and compact item cards (public/itemcard.js) whose details and
+// less common buttons open with ⋯ or a tap; on desktop the hover card shows the full details too.
+const bagUi = { tab: 'gear', open: openState(), wasShop: false };
+const BAG_TABS = [['shop', 'Shop'], ['gear', 'Gear'], ['supplies', 'Supplies'], ['build', 'Build'], ['titles', 'Titles']];
+const delBtn = (a, extra, label = 'Delete') => `<button class="del" data-a="${a}" ${extra} title="Delete for good (asks twice)">${label}</button>`;
+const stackBtns = (kind, id) => `<button data-a="dropStack" data-k="${kind}" data-id="${id}" title="Drop 1 on the ground (Shift: the whole stack)">Drop 1</button><button data-a="dropStack" data-k="${kind}" data-id="${id}" data-all="1">Drop all</button>${delBtn('discardStack', `data-k="${kind}" data-id="${id}"`, 'Delete 1')}${delBtn('discardStack', `data-k="${kind}" data-id="${id}" data-all="1"`, 'Delete all')}`;
+// The full details of an item (inside an open card): the hover card's text (public/loot.js tipHtml) and the weapon style.
+const itemDetails = (it, worn) => { const st = styles.title(it); return loot.tipHtml(it, worn) + (st ? `<div class="sep"></div><div class="desc">${esc(st)}</div>` : '') + (worn ? '' : cmpHtml(it)); };
+// "Compared with what you wear": each main stat's change, in short form (bonuses aren't counted).
+function cmpHtml(it) {
+  const cur = state.inv?.eq?.[it.slot];
+  if (!cur || it.ks || cur.ks) return '';
+  const keys = [...new Set([...Object.keys(it.st || {}), ...Object.keys(cur.st || {})])];
+  const parts = keys.map(k => { const d = Math.round(((it.st?.[k] || 0) - (cur.st?.[k] || 0)) * 10) / 10; return d ? `<span class="${d > 0 ? 'up' : 'down'}">${esc(statDelta(k, d))}</span>` : ''; }).filter(Boolean);
+  return `<div class="sep"></div><div class="sub" style="margin:0 0 2px">vs your ${esc(cur.name)}</div><div class="ic-cmp">${parts.join(' · ') || 'Same main stats'}</div>`;
+}
+function gearCard(it, o = {}) {
+  const usable = !it.cls || it.cls === state.cls, sty = styles.styleName(it);
+  let badges = sty ? `<span class="ic-b sty" title="Weapon style">${esc(sty)}</span>` : '';
+  if (!usable) badges += `<span class="ic-b no">${esc(CLASSES[it.cls]?.name || '')} only</span>`;
+  if (it.ac) badges += '<span class="ic-b" title="On loan from the Academy" style="color:#93c5fd">Academy</span>';
+  return cardHtml(it, { ...o, badges: badges + (o.badges || ''), setCount: it.set ? loot.setCount(it) : null, open: bagUi.open.is(it.u), more: itemDetails(it, o.worn) });
+}
+function bagTabGear(inv) {
+  let h = '';
   const st = inv.stats;
-  h += `<div class="stats"><span>Damage ${st.atk}</span><span>Health ${st.maxHp}</span><span>Crit ${st.crit}%</span><span>Cooldowns −${st.haste}%</span><span>Switch +${st.sw}%</span><span>Damage taken −${st.dr}%</span></div>`;
-  h += loot.setsHtml(inv) + loot.loadoutsHtml(inv); // set progress and loadouts (public/loot.js)
-  h += `<h4>Consumables</h4>${CONSUMABLE_IDS.map(id => `<div class="it"><span class="slot">${CONSUMABLES[id].key}</span><span class="nm"><b>${CONSUMABLES[id].name} ×${inv.cons[id] || 0}</b><small>${CONSUMABLES[id].desc}</small></span><button data-a="use" data-id="${id}" ${inv.cons[id] ? '' : 'disabled style="opacity:.4"'}>Use</button>${inv.cons[id] ? stackBtns('cons', id) : ''}</div>`).join('')}`;
+  const sv = (label, v, txt) => `<span>${label}<b class="${v ? '' : 'dim'}">${txt}</b></span>`; // a zero is dimmed
+  h += `<div class="ic-stats" title="Your totals with gear, talents and level">${sv('Damage', 1, st.atk)}${sv('Health', 1, st.maxHp)}${sv('Crit', st.crit, `${st.crit}%`)}${sv('Cooldowns', st.haste, `−${st.haste}%`)}${sv('Switch', st.sw, `+${st.sw}%`)}${sv('Dmg taken', st.dr, `−${st.dr}%`)}</div>`;
+  h += '<h4>Equipped</h4>';
+  const worn = (sl, label) => {
+    const it = inv.eq[sl];
+    if (!it) return `<div class="ic empty slim" style="--rc:#94a3b8"><span class="ic-ico">${ICON[sl] || '•'}</span><span class="ic-main"><span class="ic-nm"><span class="n">No ${label}</span></span></span><span class="ic-act"></span></div>`;
+    if (sl === 'weapon2') return gearCard(it, { worn: false, main: `<button data-a="swap" title="Swap (${esc(keyLabel('weaponSwap'))}): only the worn weapon counts">Swap</button>`, btns: '<button data-a="unequip" data-s="weapon2">Take off</button>', badges: '<span class="ic-b" style="color:#94a3b8">2nd</span>' });
+    if (it.ks) return gearCard(it, { worn: true, btns: `<button data-a="unequip" data-s="${sl}">Take off</button>` });
+    return gearCard(it, { worn: true, btns: `<button data-a="unequip" data-s="${sl}">Take off</button>` });
+  };
+  h += SLOTS.map(sl => worn(sl, sl === 'armor' ? 'armour' : sl)).join('');
+  if (inv.eq.weapon2) h += worn('weapon2', '2nd weapon');
   h += `<h4>Bag (${inv.bag.length}/24)</h4>`;
   h += inv.bag.length ? inv.bag.map(it => {
     const cur = inv.eq[it.slot], diff = Math.round((mainStat(it) - mainStat(cur)) * 10) / 10; // refined stats have one decimal
-    const cmp = it.slot !== 'charm' && cur ? (diff > 0 ? ` <span class="up">▲${diff}</span>` : diff < 0 ? ` <span class="down">▼${-diff}</span>` : '') : !cur ? ' <span class="up">new</span>' : '';
+    const cmp = it.ks ? '' : it.slot !== 'charm' && cur ? (diff > 0 ? `<span class="up" title="Better than what you wear">▲${diff}</span>` : diff < 0 ? `<span class="down" title="Worse than what you wear">▼${-diff}</span>` : '') : !cur ? '<span class="ic-b new">new</span>' : '';
     const usable = !it.cls || it.cls === state.cls;
-    if (it.ks) return keepsakeRow(it, it.slot, `<button data-a="equip" data-u="${it.u}">Wear</button>`); // keepsakes: no sell, drop or delete
-    return `<div class="it" data-tu="${it.u}"><span class="slot">${it.slot}</span><span class="nm"><b class="r${it.r}">${esc(it.name)}${loot.setTag(it)}${cmp}</b><small>${statsText(it)}${usable ? '' : ` · ${CLASSES[it.cls].name} only`}${styles.tag(it)}${loot.lines(it)}</small></span>${usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : ''}${usable && it.slot === 'weapon' ? `<button data-a="equip2" data-u="${it.u}" title="Carry it as your 2nd weapon: swap with ${esc(keyLabel('weaponSwap'))}, even mid-fight">2nd</button>` : ''}${shopping ? `<button class="sell" data-a="sell" data-u="${it.u}">${sellPrice(it)}g</button>` : ''}<button data-a="drop" data-u="${it.u}" title="Drop on the ground for anyone to pick up">Drop</button><button class="del" data-a="discard" data-u="${it.u}" title="Delete for good">Delete</button></div>`;
-  }).join('') : '<div class="it empty"><span class="nm"><small>Nothing yet. Enemies drop gear; the Warden always does.</small></span></div>';
-  { // materials, each with Drop / Delete
-    const have = inv.mats || {}, ids = MAT_IDS.filter(k => have[k] > 0);
-    h += `<h4>Materials</h4>` + (ids.length ? ids.map(k => `<div class="it"><span class="slot" style="color:${MATS[k].color}">mat</span><span class="nm"><b>${esc(MATS[k].name)} ×${have[k]}</b><small>${life.isFood(k) ? esc(life.foodText(k)) : `from ${esc(MATS[k].from)}`}</small></span>${life.isFood(k) ? `<button data-a="eat" data-id="${k}">Eat</button>` : ''}${stackBtns('mat', k)}</div>`).join('') + '<small class="mats-hint">Monster parts go to the Smith in town (F); herbs, ore, fish and crops to the Life skills (Game Menu → Life skills). Shift+click Drop/Delete to do the whole stack.</small>'
-      : '<div class="it empty"><span class="nm"><small>None yet. Monsters drop materials for the Smith in town.</small></span></div>');
-  }
-  h += renderTitles(inv.life);
+    if (it.ks) return gearCard(it, { cmp, main: `<button data-a="equip" data-u="${it.u}">Wear</button>` }); // keepsakes: no sell, drop or delete
+    const btns = (usable && it.slot === 'weapon' ? `<button data-a="equip2" data-u="${it.u}" title="Carry it as your 2nd weapon: swap with ${esc(keyLabel('weaponSwap'))}, even mid-fight">Carry as 2nd</button>` : '')
+      + `<button data-a="drop" data-u="${it.u}" title="Drop on the ground for anyone to pick up">Drop</button>` + delBtn('discard', `data-u="${it.u}"`);
+    return gearCard(it, { cmp, main: usable ? `<button data-a="equip" data-u="${it.u}">Equip</button>` : '', btns });
+  }).join('') : '<div class="ic empty"><span class="ic-ico">·</span><span class="ic-main"><span class="ic-sum">Nothing yet. Enemies drop gear; the Warden always does.</span></span><span></span></div>';
+  return h;
+}
+function bagTabSupplies(inv) {
+  let h = '<h4>Consumables</h4>';
+  h += CONSUMABLE_IDS.map(id => { const C = CONSUMABLES[id], n = inv.cons[id] || 0, k = `c:${id}`;
+    return rowHtml({ key: k, open: bagUi.open.is(k), color: CONS_COLOR[id] || '#f87171', icon: esc(C.key), iconTxt: 1, name: `${esc(C.name)} <span class="ic-b" style="color:#e2e8f0">×${n}</span>`, sum: `<i>${esc(C.desc)}</i>`,
+      main: `<button data-a="use" data-id="${id}" ${n ? '' : 'disabled'}>Use</button>`, btns: n ? stackBtns('cons', id) : '' }); }).join('');
+  const have = inv.mats || {}, ids = MAT_IDS.filter(k => have[k] > 0);
+  h += '<h4>Materials</h4>';
+  h += ids.length ? ids.map(k => { const M = MATS[k], key = `m:${k}`, food = life.isFood(k);
+    return rowHtml({ key, open: bagUi.open.is(key), color: M.color, icon: '●', name: `${esc(M.name)} <span class="ic-b" style="color:#e2e8f0">×${have[k]}</span>`, sum: `<i class="ic-dim">${food ? esc(life.foodText(k)) : `from ${esc(M.from)}`}</i>`,
+      main: food ? `<button data-a="eat" data-id="${k}">Eat</button>` : '', btns: stackBtns('mat', k) }); }).join('')
+    + '<small class="ic-hint">Monster parts go to the Smith in town; herbs, ore, fish and crops to the Life skills (Game Menu → Life skills).</small>'
+    : '<small class="ic-hint">None yet. Monsters drop materials for the Smith in town.</small>';
+  return h;
+}
+function bagTabShop(inv) {
+  let h = '<h4>Buy</h4>';
+  h += SHOP.map((s, i) => { if (!towns.shopHas(s)) return ''; // a town's own stock shows at its own merchant (public/towns.js)
+    const price = towns.price(s.kind === 'cons' ? CONSUMABLES[s.id].price : s.price); // tax, a citizen's discount, the market
+    const buy = `<button class="buy" data-a="buy" data-i="${i}" ${inv.gold < price ? 'disabled' : ''}>${price}g</button>`, key = `s:${i}`;
+    if (s.kind === 'cons') { const C = CONSUMABLES[s.id]; return rowHtml({ key, color: CONS_COLOR[s.id], icon: esc(C.key), iconTxt: 1, name: esc(C.name), badges: `<span class="ic-b" style="color:#94a3b8">have ${inv.cons[s.id] || 0}</span>`, sum: `<i>${esc(C.desc)}</i>`, main: buy }); }
+    if (s.kind === 'mat') { const M = MATS[s.id]; return rowHtml({ key, color: M?.color, icon: '●', name: esc(M?.name || s.id), badges: `<span class="ic-b" style="color:#94a3b8">have ${inv.mats?.[s.id] || 0}</span>`, sum: `<i class="ic-dim">${esc(s.desc)}</i>`, main: buy }); }
+    const r = s.r || 1, sty = styles.shopStyle(s, state.cls), R = RARITY[r];
+    const name = sty ? sty.name : s.slot === 'weapon' ? 'Weapon for your class' : 'Armour';
+    const stat = s.slot === 'weapon' ? (r === 2 ? '+11–15% DMG' : '+7–9% DMG') : (r === 2 ? '+14–18% HP' : '+8–12% HP');
+    return rowHtml({ key, open: bagUi.open.is(key), color: R.color, icon: ICON[s.slot], name: esc(name), badges: `${s.town ? '<span class="ic-b" style="color:#fcd34d">town stock</span>' : ''}`,
+      sum: `<i class="ic-st">${stat}</i><i class="ic-dim">${R.name}, random bonuses</i>`, main: buy,
+      more: sty ? `<div class="sub">Weapon style</div><div class="desc">${esc(sty.desc)}</div><div class="sep"></div><div class="st">Passive: ${esc(sty.passive)}</div>` : '' });
+  }).join('');
+  const sell = inv.bag.filter(it => !it.ks && sellPrice(it) > 0);
+  h += `<h4>Sell</h4>`;
+  h += sell.length ? sell.map(it => gearCard(it, { main: `<button class="sell" data-a="sell" data-u="${it.u}" title="Sell it to the merchant">${sellPrice(it)}g</button>` })).join('')
+    : '<small class="ic-hint">Nothing to sell: gear in your bag shows here.</small>';
+  return h;
+}
+const CONS_COLOR = { potion: '#f87171', tonic: '#fb923c', draught: '#a3e635' };
+function renderBag() {
+  const el = $('bag');
+  if (el.classList.contains('hidden') || !state.inv) return;
+  const inv = state.inv, shopping = nearMerchant() && state.shopOpen;
+  if (shopping && !bagUi.wasShop) { bagUi.tab = 'shop'; bagUi.open.close(); } // walking up to the merchant opens on the Shop tab
+  if (!shopping && bagUi.tab === 'shop') bagUi.tab = 'gear';
+  bagUi.wasShop = shopping;
+  let h = `<div class="top"><span>${shopping ? 'Merchant' : 'Bag'} <span class="gold">${inv.gold} gold</span></span><button class="x" data-a="close">✕</button></div>`;
+  h += `<div class="ic-tabs">${BAG_TABS.filter(([id]) => id !== 'shop' || shopping).map(([id, name]) => `<button data-tab="${id}" class="${id === 'shop' ? 'shoptab ' : ''}${bagUi.tab === id ? 'on' : ''}">${name}</button>`).join('')}</div>`;
+  if (!shopping && nearMerchant()) h += `<div class="ic" style="--rc:#fcd34d"><span class="ic-ico">⚖</span><span class="ic-main"><span class="ic-nm"><span class="n">You're at the merchant</span></span></span><span class="ic-act"><button class="buy" data-a="shop">Trade</button></span></div>`;
+  const body = { shop: bagTabShop, gear: bagTabGear, supplies: bagTabSupplies, build: i => loot.setsHtml(i) + loot.loadoutsHtml(i) || '', titles: i => renderTitles(i.life) }[bagUi.tab] || bagTabGear;
+  h += `<div class="bag-body">${body(inv) || '<small class="ic-hint">Nothing here yet.</small>'}</div>`;
+  const sc = el.scrollTop;
   el.innerHTML = h;
+  el.scrollTop = sc;
 }
 // Titles section of the bag: earned ones can be worn (shown under your name), locked ones show the requirement.
 function renderTitles(life) {
@@ -1603,9 +1663,11 @@ function renderTitles(life) {
   return `${h}</div>`;
 }
 $('bag').addEventListener('click', e => {
+  if (bagUi.open.click(e)) { loot.hideTip(); renderBag(); sfx.play('ui'); return; } // open or close an item card
   const b = e.target.closest('button'); if (!b || b.disabled) return;
   const a = b.dataset.a;
   if (a === 'close') { $('bag').classList.add('hidden'); loot.hideTip(); return; }
+  if (b.dataset.tab) { bagUi.tab = b.dataset.tab; bagUi.open.close(); $('bag').scrollTop = 0; renderBag(); sfx.play('ui'); return; }
   const lo = loot.click(b); // loadout buttons (public/loot.js)
   if (lo) { if (lo === 'render') renderBag(); sfx.play('ui'); return; }
   if (a === 'shop') { state.shopOpen = true; renderBag(); return; }
@@ -1615,9 +1677,9 @@ $('bag').addEventListener('click', e => {
   if (a === 'equip2') send({ type: 'equip2', u: +b.dataset.u }); // the 2nd weapon slot (server/weaponswap.js)
   if (a === 'swap') send({ type: 'swap' });
   if (a === 'drop') send({ type: 'drop', u: +b.dataset.u });
-  if (a === 'dropStack') send({ type: 'dropStack', kind: b.dataset.k, id: b.dataset.id, n: e.shiftKey ? 9999 : 1 });
+  if (a === 'dropStack') send({ type: 'dropStack', kind: b.dataset.k, id: b.dataset.id, n: b.dataset.all || e.shiftKey ? 9999 : 1 });
   if (a === 'discardStack') { // two clicks, like gear
-    if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = e.shiftKey ? 'All?' : 'Sure?'; b.dataset.all = e.shiftKey ? 1 : ''; setTimeout(() => { b.classList.remove('armed'); b.textContent = 'Delete'; }, 3000); return; }
+    if (!b.classList.contains('armed')) { const t = b.textContent; b.classList.add('armed'); b.textContent = e.shiftKey ? 'All?' : 'Sure?'; b.dataset.all = b.dataset.all || (e.shiftKey ? 1 : ''); setTimeout(() => { b.classList.remove('armed'); b.textContent = t; }, 3000); return; }
     send({ type: 'discardStack', kind: b.dataset.k, id: b.dataset.id, n: b.dataset.all || e.shiftKey ? 9999 : 1 });
   }
   if (a === 'discard') { // two clicks: the first arms it
