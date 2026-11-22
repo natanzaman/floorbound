@@ -167,11 +167,13 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender, re
   // Every bot (player-made and server bots) and the Named: where they are, and buttons for what you may do (a disabled
   // button says why in its tooltip). Invite / Kick: { type: 'pbot', op, bid | named }; Despawn / Respawn: the Named.
   const btn = (op, label, c, key, cls = '') => `<button data-pl="${op}" ${key} class="${cls}" ${c?.ok ? '' : 'disabled'} title="${esc(c?.ok ? '' : c?.why || '')}">${label}</button>`;
+  // Duel: a bot or one of the Named that's in the world and up (main.js binds [data-duel]: public/duels.js challenge)
+  const duelBtn = r => (r.pid && !r.dead && r.pid !== state.myId ? `<button data-duel="${r.pid}" title="Challenge to a duel (it accepts)">Duel</button>` : '');
   function listRow(b) {
     const tag = b.mine ? '<span class="pb-own">yours</span>' : b.creator ? `<span class="pb-own">${esc(b.creator)}'s</span>` : '<span class="pb-own adm">server bot</span>';
     const where = b.where?.k === 'party' && b.myParty ? 'In your party' : b.where?.text || '';
     const key = `data-bid="${b.bid}"`, ok = { ok: true };
-    const right = b.myParty ? btn('kick', 'Kick', b.ctl.kick, key, 'danger') : btn('invite', 'Invite to party', b.ctl.invite, key);
+    const right = (b.myParty ? btn('kick', 'Kick', b.ctl.kick, key, 'danger') : btn('invite', 'Invite to party', b.ctl.invite, key)) + duelBtn(b);
     // who may order / invite / kick it (its creator, or access 3+): Just me, Anyone, + name, - name (saved characters)
     const allow = b.canAllow ? `<small class="pl-where">Who may order it: ${esc(b.allow)}</small><span class="pl-btns pl-allow">${b.allow === 'just the creator' ? btn('allow', 'Anyone', ok, `${key} data-set="open"`) : btn('allow', 'Just me', ok, `${key} data-set="me"`)}${btn('allow', '+ Name', ok, `${key} data-set="add"`)}${b.allowList?.length ? btn('allow', '− Name', ok, `${key} data-set="remove"`) : ''}</span>` : '';
     return `<div class="p pl-bot" style="--c:${hex(b.cls)}"><span><span class="pb-dot"></span> ${esc(b.name)} <small style="opacity:.6">Lv ${b.lvl} ${esc(clsName(b.cls))}</small><span class="tag">BOT</span>${tag}<br><small class="pl-where">${esc(where)}${b.dead ? ' · down' : ''}</small></span><span class="pl-btns">${right}</span>${allow}</div>`;
@@ -179,7 +181,7 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender, re
   function namedRow(n) {
     const key = `data-named="${n.id}"`, c = `#${(n.color >>> 0).toString(16).padStart(6, '0').slice(-6)}`;
     const btns = n.state === 'despawned' ? btn('respawn', 'Respawn', n.ctl.respawn, key)
-      : `${n.myParty ? btn('kick', 'Kick', n.ctl.kick, key, 'danger') : btn('invite', 'Invite to party', n.ctl.invite, key)}${btn('despawn', 'Despawn', n.ctl.despawn, key, 'danger')}`;
+      : `${n.myParty ? btn('kick', 'Kick', n.ctl.kick, key, 'danger') : btn('invite', 'Invite to party', n.ctl.invite, key)}${duelBtn(n)}${btn('despawn', 'Despawn', n.ctl.despawn, key, 'danger')}`;
     return `<div class="p pl-bot ${n.state === 'online' ? '' : 'off'}" style="--c:${c}"><span><span class="pb-dot"></span> ${esc(n.name)} <small style="opacity:.6">Lv ${n.lvl} ${esc(clsName(n.cls))}</small><span class="tag nmtag">${esc(n.group === 'loner' ? 'LONE SOLDIER' : n.gname.toUpperCase())}</span><br><small class="pl-where">${esc(n.where)}${n.dead ? ' · down' : ''}</small></span><span class="pl-btns">${btns}</span></div>`;
   }
   function listHtml() {

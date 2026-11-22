@@ -655,8 +655,19 @@ export function makePlayerModel(cls) {
   return { group: g, root, mats, cursor, height, anim: new Animator(root, RIGS[cls]?.idle || 'Idle') };
 }
 
+// A duel stand-in (server/duels.js) rides on an opponent: the player model is theirs; this only marks them as a target.
+function makeDuelMark() {
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.78, 32), new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; body.add(ring);
+  const height = 2.35, cursor = cursorFor(0xef4444, height, 0.18);
+  g.add(cursor);
+  return { group: g, body, legs: [], armR: null, cursor, mats: [], height };
+}
+
 export function makeMobModel(type) {
   if (MOBS[type]?.prop) return makePropModel(type); // trap objects: vines, the pillar's orb, the storm crystal (public/rescue.js)
+  if (MOBS[type]?.duel) return makeDuelMark(); // a duel opponent's stand-in: a red ring at their feet, a red marker over their head
   if (MOBS[type]?.f2) return type === 'sovereign' && ASSETS ? makeSovereignRig() : makeF2Mob(type); // Floor 2 (floor2world.js)
   if (MOBS[type]?.f3) return type === 'colossus' && ASSETS ? makeColossusRig() : makeF3Mob(type); // Floor 3 (floor3world.js)
   if (type !== 'warden' || !ASSETS) return makeBlockMob(type);

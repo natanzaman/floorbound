@@ -42,6 +42,7 @@ import { installTeamplay } from './teamplay.js'; // skill combos + Team Burst + 
 import { installMvp } from './mvp.js'; // post-fight MVP card (G5)
 import { installLoot } from './loot.js';
 import { installLooks } from './looks.js'; // character looks: setLook, w.looks (I2)
+import { installDuels } from './duels.js'; // solo and team duels: challenges, stand-ins, rules, w.du (docs/briefs/duels.md)
 import { installTargeting } from './targeting.js'; // targeting modes + cleave (player settings, Controls → Combat)
 import { rollGear } from '../shared/loot.js'; // affixes, boss sets, loadouts, drop tables (H2)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
@@ -886,8 +887,8 @@ export class Game {
   }
 
   // peril: a perilous attack (Horn Sweep): only dodge i-frames or a parry avoid it; no damage reduction, jumping doesn't help.
-  damagePlayer(p, base, { ground = false, src = '?', peril = false, mob = null } = {}) {
-    if (p.dead || p.testWard || inTown(p.x, p.z)) return;
+  damagePlayer(p, base, { ground = false, src = '?', peril = false, mob = null, duel = null } = {}) {
+    if (p.dead || p.testWard || (inTown(p.x, p.z) && !duel)) return; // (duel: a duel hit from that player, server/duels.js: towns allow those)
     if (this.time < p.iframeUntil) { this.evadeHit(p, src, mob); return; } // may be a perfect dodge
     if (ground && !peril && this.time >= p.airFrom && this.time < p.airUntil) { this.events.push({ t: 'evade', id: p.id, to: p.id, k: 'jump' }); return; }
     if (!peril && this.purified(p, src, base)) return; // Miracle (server/mastery.js)
@@ -951,7 +952,7 @@ export class Game {
         continue;
       }
       const town = inTown(p.x, p.z);
-      if (p.hp < p.maxHp && (town || t - p.lastHurt > 6)) {
+      if (p.hp < p.maxHp && ((town && !p.duel) || t - p.lastHurt > 6)) { // (no fast town regeneration mid-duel: server/duels.js)
         p.regenAcc = (p.regenAcc || 0) + p.maxHp * (town ? 0.1 : 0.02) * dt;
         if (p.regenAcc >= 1) { const a = Math.floor(p.regenAcc); p.regenAcc -= a; p.hp = Math.min(p.maxHp, p.hp + a); }
       }
@@ -983,7 +984,7 @@ export class Game {
     // keep mobs from stacking: per floor (mobs on different floors never meet), and only where they move
     const byFloor = this._sepLists ||= { 1: [], 2: [], 3: [] };
     for (const k in byFloor) byFloor[k].length = 0;
-    for (const m of this.mobs.values()) { const f = floorOf(m.x); if (!m.dead && !m.def.prop && live.has(f)) byFloor[f].push(m); } // (trap objects stay put: J1)
+    for (const m of this.mobs.values()) { const f = floorOf(m.x); if (!m.dead && !m.def.prop && !m.def.duel && live.has(f)) byFloor[f].push(m); } // (trap objects stay put: J1; duel stand-ins ride on their players)
     for (const k in byFloor) {
       const list = byFloor[k];
       for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
@@ -1429,7 +1430,7 @@ export class Game {
     // (snapFor); spectators, the director's film view and the server's own bots get every floor (this string).
     const parts = [[], [], [], []];
     for (let i = 0; i < mobs.length; i++) parts[fl[i]].push(JSON.stringify(mobs[i]));
-    const pre = JSON.stringify({ players, mobs: 0, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.(), op: this.openSnap() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
+    const pre = JSON.stringify({ players, mobs: 0, gate, phase: this.boss?.phase || 0, twist: this.twist?.id || null, events: this.events, f2: this.f2Snap(), f3: this.f3Snap(), gi: this.groundSnap(), poses: this.posesSnap(), looks: this.looksSnap(), down: this.downSnap?.(), th: this.threatSnap(), tb: this.teamSnap(), trap: this.trapSnap?.(), op: this.openSnap(), du: this.duelsSnap?.() }); // poses: [[id, k]], only while any is held (server/poses.js); down: downed players (server/revive.js)
     const at = pre.indexOf('"mobs":0') + 7; // (the first "mobs" key: the players array before it holds only numbers)
     const head = pre.slice(0, at), tail = pre.slice(at + 1);
     this.snapParts = { head, tail, floors: parts.map(a => a.join(',')), byFloor: [] };
@@ -1490,6 +1491,7 @@ installLoot(Game); // loot and builds: drops from shared/loot.js, gear in p.tal,
 installLooks(Game); // character looks: setLook(entity, id), listed in snapshots as w.looks (server/looks.js)
 installNamed(Game); // the Named: humans-first rules, friendship, invites by tier (server/named.js); a no-op without a NamedManager
 installRescue(Game); // rescue traps (server/rescue.js); after the Named: its trap-object and crystal wrappers sit outside everyone's
+installDuels(Game); // duels (server/duels.js): outside the damage, heal and skill wrappers above, so a stand-in's hits skip them
 installPacing(Game); // a skill's cooldown starts when its last hit lands (server/pacing.js); keep it last
 if (process.env.TUNE_STATS) installTuneStats(Game); // testing aid (scripts/tuneboss.js): log boss moves used and hits taken; outermost
 
