@@ -161,7 +161,8 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
 
   const A = () => state.academy || null; // the last `path` message
   const ini = () => !!A()?.ini;
-  const near = () => !state.dead && !state.spectator && nearAcademy(state.x, state.z, 0.5);
+  const inTrial = () => !!ui.ac; // a trial or drill is running (me.ac): interact opens the panel with Leave (pad-reachable)
+  const near = () => !state.dead && !state.spectator && (nearAcademy(state.x, state.z, 0.5) || inTrial());
   const isOpen = () => !panel.classList.contains('hidden');
   function toggle(open = !isOpen()) {
     panel.classList.toggle('hidden', !open);
@@ -183,6 +184,13 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
     const a = A(), P = a?.path, lvl = state.lvl || 1, gold = state.inv?.gold ?? state.gold ?? 0;
     let h = `<div class="top"><span>THE ACADEMY</span><button class="x" data-a="close" data-nav="back">✕</button></div><div class="body">`;
     if (!a) { panel.innerHTML = h + '<p class="note">Opening the doors…</p></div>'; return; }
+    if (inTrial()) { // in the yard: only the goal and a way out
+      const ac = ui.ac;
+      h += `<h4>${esc(ac.n || '')}</h4><p class="note">Bronze / Silver / Gold: ${(ac.tiers || []).join(' / ')}${esc(ac.u || '')}. Walking out of the pen leaves it too.</p>
+        <div class="row"><span class="nm"><b>Give up</b><small>No medal; you go back to the Academy's door.</small></span><button class="warn" data-a="leave">Leave the ${esc(ac.k === 'drill' ? 'drill' : 'trial')}</button></div></div>`;
+      if (h !== ui.html) panel.innerHTML = ui.html = h;
+      return;
+    }
     const rk = a.rank | 0, pts = medalPoints(P), nextR = RANKS[rk + 1];
     h += `<div class="me"><div><b>${esc(label())}</b><small>Level ${lvl}${P?.stage === 'initiate' ? ` · trials open at level ${INITIATE.trialLvl}` : ''}</small></div>
       <div class="rank"><small>Class rank</small><b>${esc(rankName(rk))}</b><small>${pts} medal pts${nextR ? ` · ${esc(nextR.name)} at ${nextR.pts}${nextR.floors ? ` + ${nextR.floors} floor${nextR.floors > 1 ? 's' : ''}` : ''}` : ''}</small></div></div>`;
@@ -217,6 +225,7 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
     const a = b.dataset.a, id = b.dataset.id;
     sfx?.play('ui');
     if (a === 'close') return toggle(false);
+    if (a === 'leave') { send({ type: 'academy', op: 'leave' }); return toggle(false); }
     if (a === 'askgrad' || a === 'askchange') { ui.confirm = id; return render(); }
     ui.confirm = '';
     if (a === 'weapon') send({ type: 'academy', op: 'weapon', w: b.dataset.w });
@@ -283,7 +292,7 @@ export function createAcademy({ scene, occluders, state, send, project, sfx, ban
     }
   }
 
-  return { near, toggle, isOpen, render, onMessage, event, snapMe, frame, name, locked, label, rosterLabel, plateTag };
+  return { near, inTrial, toggle, isOpen, render, onMessage, event, snapMe, frame, name, locked, label, rosterLabel, plateTag };
 }
 
 // ---------- the creation screen: weapon cards ----------

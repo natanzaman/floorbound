@@ -34,8 +34,11 @@ Plans: `docs/briefs/bots-access.md`, `docs/briefs/waypoint.md`, `docs/briefs/tar
   the change fee 100 + 20/level, drill rewards, rank thresholds). Initiates can't Break (the Break skill is the level-3
   skill) until they graduate: fine for levels 1-5, but say if Initiates should keep it.
 - Known small things: a classmate's join line names its base class ("Tamsy the Swordsman entered the tower") because
-  bots join before the Academy makes them Initiates; classmates follow you into the yard's pen (trial enemies ignore
-  them and can't be hurt by them, so a trial stays solo).
+  bots join before the Academy makes them Initiates. Bots following you wait at the Academy's door during a trial.
+- Review fixes (same branch): Academy weapons (`it.ac`: the starter and every weapon a switch hands out) are worth
+  nothing and can't be sold, salvaged, dropped or worked by the Smith, and go back when swapped out; a full bag refuses
+  a switch or graduation instead of selling; 5 s between weapon changes, 4 s between head lines; ids are own-key only;
+  admin edits wait until a trial ends; Guardian wolves never fall; the Lancer trial counts tip thrusts only.
 
 ## Owner calls from the 2026-11-20 batch: decided 2026-11-21 (`feat/tweaks`, brief `docs/briefs/tweaks-2026-11-21.md`)
 - **Several of the Named per party: yes.** Any of the five can join one party, up to the normal 6 (open invites count);

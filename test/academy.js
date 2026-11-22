@@ -172,6 +172,84 @@ const finish = p => { tick(3); assert.equal(p.trial, null, 'home again'); };
   ok('armory changes the weapon and base class for free; heads talk; a legacy character gets a graduated path on its first trial');
 }
 
+// ---------------- 2b. review fixes: no minting, own keys only, no spam, solo trials, honest scoring ----------------
+{
+  const { sellPrice, BAG_SIZE, makeItem } = await import('../shared/items.js');
+  const { salvageYield } = await import('../shared/crafting.js');
+  const { BotManager } = await import('../server/botmanager.js');
+  const { inYard } = await import('../shared/academyyard.js');
+  const q = join('Quin', 'sword', 'swordsman'); atAcademy(q); q.testWard = true;
+  // switching weapon mints nothing of value: the swapped-out Academy weapon goes back, nothing is sold
+  const gold0 = q.gold, bag0 = q.inv.bag.length;
+  assert.ok(q.inv.eq.weapon.ac, 'the starter is an Academy weapon');
+  for (let k = 0; k < 12; k++) { tick(5.1); act(q, { op: 'weapon', w: A.WEAPON_IDS[(k + 1) % 5] }); }
+  assert.equal(q.gold, gold0, 'no gold from switching'); assert.equal(q.inv.bag.length, bag0, 'no weapons pile up');
+  assert.ok(q.inv.eq.weapon.ac && sellPrice(q.inv.eq.weapon) === 0 && salvageYield(q.inv.eq.weapon) === null, 'worth nothing, no salvage');
+  const ww = q.inv.eq.weapon; q.inv.eq.weapon = null; q.inv.bag.push(ww);
+  g.dropItem(q, ww.u); assert.ok(q.inv.bag.includes(ww), 'not dropped');
+  g.teleport(q, 9, 3); g.sell(q, ww.u); assert.ok(q.inv.bag.includes(ww) && q.gold === gold0, 'not sold');
+  q.inv.bag.pop(); q.inv.eq.weapon = ww; atAcademy(q);
+  // the cooldown
+  tick(5.1); const w1 = q.path.weapon, w2 = w1 === 'bow' ? 'staff' : 'bow';
+  act(q, { op: 'weapon', w: w2 }); act(q, { op: 'weapon', w: w1 }); assert.equal(q.path.weapon, w2, 'a second change right away waits');
+  // a full bag with a real weapon in hand: refused, nothing sold (switching, graduating)
+  const epic = makeItem('weapon', 3, q.cls, () => 0.5, undefined, A.WEAPONS[w2].style === 'longbow' || A.WEAPONS[w2].style === 'staff' ? undefined : A.WEAPONS[w2].style);
+  q.inv.eq.weapon = epic; while (q.inv.bag.length < BAG_SIZE) q.inv.bag.push(makeItem('armor', 0, undefined, () => 0.5));
+  tick(5.1); act(q, { op: 'weapon', w: 'sword' });
+  assert.equal(q.path.weapon, w2, 'refused'); assert.equal(q.inv.eq.weapon, epic); assert.equal(q.gold, gold0);
+  assert.match(sysTo(q).at(-1), /bag is full/);
+  q.path.trials[A.WEAPONS[w2].leads[0]] = 1; act(q, { op: 'graduate', cls: A.WEAPONS[w2].leads[0] });
+  assert.equal(q.path.stage, 'initiate', 'graduating with a full bag: refused'); assert.equal(q.inv.eq.weapon, epic, 'the Epic is not sold');
+  q.inv.bag.length = 0;
+  ok('weapon changes mint nothing (Academy weapons: no sale, salvage or drop), wait 5 s, and a full bag refuses instead of selling');
+
+  // prototype keys: never a lookup hit, never a throw
+  const before = q.path.weapon, n0 = g.events.length;
+  for (const bad of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+    act(q, { op: 'talk', cls: bad }); act(q, { op: 'weapon', w: bad }); act(q, { op: 'drill', id: bad }); act(q, { op: 'trial', id: bad });
+    act(q, { op: 'graduate', cls: bad }); act(q, { op: 'change', cls: bad });
+  }
+  act(q, { op: 'talk', cls: { toString: null } }); g.academyAction(q, null);
+  assert.equal(q.path.weapon, before); assert.ok(!q.trial, 'no trial started'); assert.ok(!g.events.slice(n0).some(e => e.t === 'chat'), 'no head talked');
+  assert.equal(A.cleanPath({ weapon: 'toString', stage: 'initiate' }).weapon, 'sword');
+  assert.equal(A.newPath('constructor').weapon, 'sword'); assert.equal(A.trialBlock(null, 'constructor', 9), 'No such trial.');
+  assert.equal(A.gradBlock({ trials: { constructor: 3 } }, 'constructor', 'swordsman', 9, 1e6), 'No such class.');
+  assert.equal(A.headOf('constructor'), null); assert.equal(A.weaponOfClass('constructor'), 'sword'); assert.equal(A.gradStyle('constructor', 'toString'), '');
+  { g.joinWeapon = 'toString'; const z = g.addPlayer(sock(), 'Zed', 'swordsman'); g.joinWeapon = null; assert.equal(z.path, null); assert.equal(z.cls, 'swordsman'); }
+  const gr = join('Gra', null, 'guardian'); gr.lvl = 9; atAcademy(gr); act(gr, { op: 'trial', id: 'constructor' }); assert.ok(!gr.trial && gr.cls === 'guardian');
+  ok('ids like "constructor" / "toString" are refused everywhere (talk, weapon, trial, drill, graduate, change, paths, joins)');
+
+  // no spam: 'state' sends the path only; talking has a cooldown
+  act(q, { op: 'state' }); g.rosterDirty = false; q.dirty = false; q.pathDirty = false; act(q, { op: 'state' }); // (the first one enrols)
+  assert.ok(q.pathDirty && !g.rosterDirty && !q.dirty, 'state: the path message only');
+  const c0 = g.events.length; for (let k = 0; k < 5; k++) act(q, { op: 'talk', cls: 'ranger' });
+  assert.equal(g.events.slice(c0).filter(e => e.t === 'chat').length, 1, 'one line per cooldown');
+  ok('no spam: "state" neither rebroadcasts the roster nor saves; heads talk once per cooldown');
+
+  // trials stay solo: followers are sent to the Academy's door, never into the pen
+  const fol = { x: 0, z: 40 }, mgr = Object.create(BotManager.prototype); mgr.game = { teleport: (p2, x, z) => { p2.x = x; p2.z = z; } };
+  const pen = { x: A.PENS[1].cx, z: A.PENS[1].z0 + 4 };
+  mgr.catchUp(fol, pen); assert.ok(!inYard(fol.x, fol.z) && Math.hypot(fol.x - ACADEMY.x, fol.z - ACADEMY.z) < 12, `at the door (${fol.x}, ${fol.z})`);
+  const fx0 = fol.x; mgr.catchUp(fol, pen); assert.equal(fol.x, fx0, 'already there: stays');
+  ok('bots following a trialist wait at the Academy door (catchUp)');
+
+  // scoring: Guardian wolves can't be killed; Lancer counts only its own tip-of-reach thrusts
+  const gu = join('Gwen', 'sword', 'swordsman'); g.giveXp(gu, 1e5); atAcademy(gu); gu.testWard = true;
+  let S = runTrial(gu, 'trial', 'guardian');
+  for (const m of trialMobs(S)) for (let k = 0; k < 5; k++) g.damageMob(m, gu, 1e6);
+  assert.equal(trialMobs(S).length, 3, 'the wolves never fall'); act(gu, { op: 'leave' }); finish(gu);
+  const la = join('Lan', 'spear', 'lancer'); g.giveXp(la, 1e5); atAcademy(la); la.testWard = true;
+  S = runTrial(la, 'trial', 'lancer');
+  const d = trialMobs(S)[0];
+  g.teleport(la, d.x, d.z - 6); for (let k = 0; k < 10; k++) g.damageMob(d, la, 5);
+  assert.equal(S.score, 0, 'plain damage (areas, DoTs) does not count');
+  g.teleport(la, d.x, d.z - (2.6 + d.def.radius)); la.face = 0;
+  g.spearLine(la, 4.6, 0.6, 5, {}); assert.equal(S.score, 1, 'a tip-of-reach thrust counts');
+  g.teleport(la, d.x, d.z - (1.0 + d.def.radius)); g.spearLine(la, 4.6, 0.6, 5, {}); assert.equal(S.score, 1, 'a close thrust does not');
+  act(la, { op: 'leave' }); finish(la);
+  ok('Guardian: the wolves never fall (hold them, don\'t kill them); Lancer: only tip-of-reach thrusts score');
+}
+
 // ---------------- 3. the server and the database ----------------
 const DB = process.env.DATABASE_URL;
 if (!DB) { console.log('# skipped the server run: set DATABASE_URL (a local test database, never production)'); console.log(`1..${n}`); process.exit(0); }
@@ -212,6 +290,7 @@ try {
   const { token } = (await call('POST', '/api/guest')).body; assert.ok(token);
   const tag = String(Date.now() % 1e6);
   assert.equal((await call('POST', '/api/characters', token, { name: `Ini${tag}` })).status, 400, 'no weapon: refused');
+  for (const bad of [{ weapon: 'toString' }, { weapon: 'constructor' }, { cls: 'constructor' }, { cls: '__proto__' }]) assert.equal((await call('POST', '/api/characters', token, { name: `Bad${tag}`, ...bad })).status, 400, JSON.stringify(bad));
   const made = await call('POST', '/api/characters', token, { name: `Ini${tag}`, weapon: 'spear' });
   assert.equal(made.status, 200, JSON.stringify(made.body));
   const cid = made.body.character?.id ?? made.body.id;
@@ -233,9 +312,15 @@ try {
   c.send({ type: 'academy', op: 'trial', id: 'lancer' });
   await until(() => c.last.snap?.me?.ac?.id === 'lancer', 5000, 'trial running');
   assert.equal(c.last.path.loan, 1);
+  { // an admin edit while the kit is on loan would write the loan back over the real one: refused until the trial ends
+    const adminTok = (await call('POST', '/api/guest')).body.token, me = await call('GET', '/api/admin/me', adminTok);
+    await db.q('UPDATE accounts SET is_admin = true WHERE id = $1', [me.body.account.id]);
+    const r = await call('PATCH', `/api/admin/characters/${cid}`, adminTok, { gold: 777 });
+    assert.equal(r.status, 409, JSON.stringify(r.body));
+  }
   c.send({ type: 'test', trialWin: 2 });
   await until(() => c.last.path?.path?.trials?.lancer === 2 && !c.last.path.loan, 5000, 'silver');
-  ok('over the socket: level 5, enrolled at the Academy, a Lancer trial on loan, a silver medal by test hook');
+  ok('over the socket: level 5, enrolled at the Academy, a Lancer trial on loan (admin edits refused meanwhile), a silver medal by test hook; bad ids refused at creation');
   await until(() => c.roster?.filter(r => r.ini && r.owner).length === 2, 10000, 'two classmates in the roster');
   ok('two cohort classmates joined as Initiates');
   await until(() => c.last.path && !c.last.path.trial, 8000, 'home (the trial over)');

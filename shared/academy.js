@@ -17,16 +17,20 @@ export const WEAPONS = {
   staff: { name: 'Staff', base: 'cleric', style: 'staff', leads: ['cleric', 'bard'], blurb: 'Bolts that interrupt, and the first mending words.' },
   wand: { name: 'Wand', base: 'cleric', style: 'wand', leads: ['cleric', 'bard'], blurb: 'Fast, long bolts and a little healing. Light in the hand.' },
 };
+// Own-key lookups: ids come from clients and the database, and plain objects answer 'constructor' / 'toString' too.
+const own = (o, k) => typeof k === 'string' && Object.hasOwn(o, k);
+export const isWeapon = w => own(WEAPONS, w);
+export const isClass = c => own(CLASSES, c);
 // A graduated character's weapon family (legacy characters, cohort picks).
 export const CLASS_WEAPON = { swordsman: 'sword', guardian: 'sword', berserker: 'sword', lancer: 'spear', ranger: 'bow', cleric: 'staff', bard: 'staff' };
-export const weaponOfClass = cls => CLASS_WEAPON[cls] || 'sword';
+export const weaponOfClass = cls => (own(CLASS_WEAPON, cls) ? CLASS_WEAPON[cls] : 'sword');
 
 // The weapon style granted at graduation: [class][the Initiate's weapon] (else the class default, '').
 export const GRAD_STYLE = {
   swordsman: { sword: 'sword' }, guardian: { sword: 'shield', spear: 'spear' }, berserker: { sword: 'greataxe' },
   lancer: { spear: 'lance' }, ranger: { bow: 'longbow' }, cleric: { staff: 'staff', wand: 'wand' }, bard: {},
 };
-export const gradStyle = (cls, weapon) => GRAD_STYLE[cls]?.[weapon] || '';
+export const gradStyle = (cls, weapon) => (own(GRAD_STYLE, cls) && own(GRAD_STYLE[cls], weapon) ? GRAD_STYLE[cls][weapon] : '');
 
 // ---------- the Initiate kit ----------
 // pow: x attack and healing. lockedSlot: the level-3 skill stays shut until graduation. trialLvl: trials open.
@@ -47,7 +51,7 @@ export function kitName(path, cls, i) {
   return sk ? initiateName(cls, sk.id) || sk.name : null;
 }
 export const kitLocked = (path, slot) => isInitiate(path) && slot === INITIATE.lockedSlot;
-export const pathLabel = (path, cls) => isInitiate(path) ? `Initiate · ${WEAPONS[path.weapon]?.name || 'Sword'}` : CLASSES[cls]?.name || '';
+export const pathLabel = (path, cls) => isInitiate(path) ? `Initiate · ${isWeapon(path.weapon) ? WEAPONS[path.weapon].name : 'Sword'}` : isClass(cls) ? CLASSES[cls].name : '';
 
 // ---------- medals ----------
 export const MEDALS = ['', 'Bronze', 'Silver', 'Gold'];
@@ -74,6 +78,8 @@ export const TRIALS = {
   bard: { name: 'The Chorus', kind: 'buff', secs: 30, tiers: [14, 22, 30], unit: ' pts', goal: 'Keep the Ward Post buffed for 30 s: a song on it scores 1 a second, a Crescendo 2 a second (within 12 m).' },
 };
 
+export const isTrial = id => own(TRIALS, id);
+
 // ---------- drills (open to everyone, graduated or not; your own kit) ----------
 export const DRILL_IDS = ['dodge', 'punish', 'windup', 'interrupt', 'revive', 'chain'];
 export const DRILLS = {
@@ -84,6 +90,7 @@ export const DRILLS = {
   revive: { name: 'Revive Under Fire', kind: 'revive', secs: 45, tiers: [2, 3, 4], unit: ' revived', goal: 'Stand by the fallen dummy for 3 s to revive it while wolves harass you. Getting hit starts the 3 s again.' },
   chain: { name: 'Skill Chain', kind: 'chain', secs: 40, tiers: [2, 3, 4], unit: '', goal: 'Link your skills on the dummies: a skill, then another, before the chain lapses. Your best chain counts (x2, x3, x4).' },
 };
+export const isDrill = id => own(DRILLS, id);
 // One-time rewards per drill medal tier (each tier pays once; reaching gold first pays all three).
 export const DRILL_REWARD = [null, { gold: 25 }, { gold: 50, cons: { tonic: 1 } }, { gold: 100, cons: { draught: 1 } }];
 export const REVIVE_SECS = 3, REVIVE_R = 2.6;
@@ -113,6 +120,7 @@ export const changeFee = lvl => CHANGE_FEE.base + CHANGE_FEE.perLvl * Math.max(1
 
 // ---------- the hall heads (the Named) ----------
 export const HEADS = { swordsman: 'halvard', guardian: 'halvard', cleric: 'maribel', bard: 'maribel', ranger: 'tovin', lancer: 'sennet', berserker: 'cairn' };
+export const headOf = cls => (own(HEADS, cls) ? HEADS[cls] : null);
 export const HEAD_FRIENDSHIP = 2; // x the medal, when you pass that head's class trial
 export const HEAD_LINES = {
   halvard: ['Shield up before you need it. Not after.', 'A blade is for the space between their swings. Learn the space.', 'Hold the line long enough and the line holds you.'],
@@ -121,7 +129,7 @@ export const HEAD_LINES = {
   sennet: ['The tip is where the spear lives. Keep them there.', 'Step back is a strike too, if you mean it.', 'Reach is a promise: you hit first.'],
   cairn: ['Hit it until it stops. Then hit the next one.', 'Rage is just a bill. Pay it on their side.', 'They taught me nothing here. Learn more than I did.'],
 };
-export const headLine = (named, i) => { const L = HEAD_LINES[named] || []; return L.length ? L[Math.abs(i | 0) % L.length] : ''; };
+export const headLine = (named, i) => { const L = own(HEAD_LINES, named) ? HEAD_LINES[named] : []; return L.length ? L[Math.abs(i | 0) % L.length] : ''; };
 
 // ---------- cohorts (bot classmates) ----------
 export const COHORT_MAX = 2;
@@ -146,7 +154,7 @@ export function cohortClasses(playerCls, botWeapons) {
 // { stage: 'initiate' | 'class', weapon, trials: { cls: medal }, drills: { id: medal }, keep: { cls: { mastery, talents } },
 //   cohort: [bot names], armed (the starter weapon was given), enrolled (first Academy visit done), paid: { drill: medal paid } }
 export function newPath(weapon, stage = 'initiate') {
-  return { stage, weapon: WEAPONS[weapon] ? weapon : 'sword', trials: {}, drills: {}, keep: {}, cohort: [], armed: 0, enrolled: 0, paid: {} };
+  return { stage, weapon: isWeapon(weapon) ? weapon : 'sword', trials: {}, drills: {}, keep: {}, cohort: [], armed: 0, enrolled: 0, paid: {}, gear: {} };
 }
 const medalMap = (raw, ok) => {
   const out = {};
@@ -157,31 +165,32 @@ const medalMap = (raw, ok) => {
 export function cleanPath(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const p = newPath(raw.weapon, raw.stage === 'initiate' ? 'initiate' : 'class');
-  p.trials = medalMap(raw.trials, k => !!TRIALS[k]);
-  p.drills = medalMap(raw.drills, k => !!DRILLS[k]);
-  p.paid = medalMap(raw.paid, k => !!DRILLS[k]);
+  p.trials = medalMap(raw.trials, isTrial);
+  p.drills = medalMap(raw.drills, isDrill);
+  p.paid = medalMap(raw.paid, isDrill);
   if (raw.keep && typeof raw.keep === 'object' && !Array.isArray(raw.keep)) {
-    for (const [cls, v] of Object.entries(raw.keep)) if (CLASSES[cls] && v && typeof v === 'object') p.keep[cls] = { mastery: v.mastery && typeof v.mastery === 'object' ? v.mastery : null, talents: v.talents && typeof v.talents === 'object' ? v.talents : null };
+    for (const [cls, v] of Object.entries(raw.keep)) if (isClass(cls) && v && typeof v === 'object') p.keep[cls] = { mastery: v.mastery && typeof v.mastery === 'object' ? v.mastery : null, talents: v.talents && typeof v.talents === 'object' ? v.talents : null };
   }
   p.cohort = Array.isArray(raw.cohort) ? raw.cohort.filter(s => typeof s === 'string').map(s => s.slice(0, 16)).slice(0, COHORT_MAX) : [];
   p.armed = raw.armed ? 1 : 0; p.enrolled = raw.enrolled ? 1 : 0;
+  if (raw.gear && typeof raw.gear === 'object' && !Array.isArray(raw.gear)) for (const [w, u] of Object.entries(raw.gear)) if (isWeapon(w) && Number.isInteger(u)) p.gear[w] = u;
   return p;
 }
 
 // Why `cls`'s trial is shut for this character (null: open). path null counts as graduated.
 export function trialBlock(path, cls, lvl) {
-  if (!TRIALS[cls]) return 'No such trial.';
+  if (!isTrial(cls) || !isClass(cls)) return 'No such trial.';
   if (isInitiate(path)) {
     if ((lvl | 0) < INITIATE.trialLvl) return `Class trials open at level ${INITIATE.trialLvl}.`;
-    if (!WEAPONS[path.weapon]?.leads.includes(cls)) return `The ${WEAPONS[path.weapon]?.name || 'weapon'} doesn't lead to the ${CLASSES[cls].name}. Change weapon at the armory.`;
+    if (!isWeapon(path.weapon) || !WEAPONS[path.weapon].leads.includes(cls)) return `The ${isWeapon(path.weapon) ? WEAPONS[path.weapon].name : 'weapon'} doesn't lead to the ${CLASSES[cls].name}. Change weapon at the armory.`;
   }
   return null;
 }
 // Why you can't graduate into / change to `cls` now (null: you can).
 export function gradBlock(path, cls, curCls, lvl, gold) {
-  if (!CLASSES[cls]) return 'No such class.';
-  if (!(path?.trials?.[cls] > 0)) return `Pass the ${CLASSES[cls].name} trial first.`;
-  if (isInitiate(path)) return WEAPONS[path.weapon]?.leads.includes(cls) ? null : 'That class isn\'t on your weapon\'s path.';
+  if (!isClass(cls)) return 'No such class.';
+  if (!(own(path?.trials || {}, cls) && path.trials[cls] > 0)) return `Pass the ${CLASSES[cls].name} trial first.`;
+  if (isInitiate(path)) return isWeapon(path.weapon) && WEAPONS[path.weapon].leads.includes(cls) ? null : 'That class isn\'t on your weapon\'s path.';
   if (cls === curCls) return `You are already a ${CLASSES[cls].name}.`;
   if ((gold | 0) < changeFee(lvl)) return `Changing class costs ${changeFee(lvl)} gold.`;
   return null;

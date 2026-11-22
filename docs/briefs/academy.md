@@ -24,6 +24,10 @@
   healing, `INITIATE.pow`), and **no level-3 skill** (shown locked: "Academy"). The **talent tree is locked**; points
   bank up by level as always (`pointsAt`), so they are all there at graduation. **Mastery still accrues**.
 - Starter weapon: a Common weapon of the base class and style, equipped once (`path.armed`).
+- **Academy weapons** (`it.ac`): the starter and any weapon a weapon or class change hands out. Worth nothing; never
+  sold, salvaged, dropped or worked by the Smith; one swapped out goes back to the Academy (not to the bag), so switching
+  mints nothing. A switch that would push a real weapon into a full bag is refused (nothing is ever auto-sold). The
+  graduation weapon is yours (untagged). Weapon changes are 5 s apart.
 - Nameplate and Players list: "Initiate · Sword". The snapshot row is unchanged (class index of the base class, style
   index); the roster carries `ini` (weapon id) and `rk` (rank index). No wire index moved.
 - Anonymous mode: the join form picks a weapon too (memory-only path). Joins that send a `cls` (bots, tests, old

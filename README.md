@@ -440,7 +440,7 @@ Talents are saved with the character (a `talents` JSONB column, `{ nodeId: rank 
 
 New characters start as **Initiates**: you pick a name and a **weapon** (sword, spear, bow, staff or wand), not a class. An Initiate fights with the weapon's base class at 85% power, with plain skill names (a sword's Rush is "Lunge") and no level-3 skill; the talent tree stays locked but points bank up by level, and skill mastery still grows.
 
-- **The Academy** is the stone hall west of the Town of Beginnings' square (interact to open it). From **level 5** an Initiate may take the **class trials** its weapon leads to (sword: Swordsman, Guardian, Berserker; spear: Lancer, Guardian; bow: Ranger; staff and wand: Cleric, Bard). The armory changes your weapon for free until you graduate.
+- **The Academy** is the stone hall west of the Town of Beginnings' square (interact to open it). From **level 5** an Initiate may take the **class trials** its weapon leads to (sword: Swordsman, Guardian, Berserker; spear: Lancer, Guardian; bow: Ranger; staff and wand: Cleric, Bard). The armory changes your weapon for free until you graduate (Academy weapons are lent: worth nothing, never sold or salvaged, and handed back when you switch; the weapon you graduate with is yours).
 - **Trials** run in the walled yard behind the hall, one pen per player, with that class's full kit on loan (nothing is saved). The enemies are yours alone and give no XP or loot. Medals: bronze, silver, gold.
 
 | Class | Trial | Bronze / Silver / Gold |

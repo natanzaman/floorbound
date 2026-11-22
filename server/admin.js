@@ -340,6 +340,10 @@ async function editCharacter(id, body) {
   const r = await loadFull(id);
   if (!r) throw new Bad('No such character.', 404);
   let p = liveChar(id);
+  // In a class trial the live player wears a loaned kit (class, mastery, talents: server/academy.js p.loan), so an edit
+  // built from it would overwrite the real ones when the loan is given back. Wait for the trial to end.
+  const inTrial = () => { if (p?.loan) throw new Bad('That character is in a class trial: try again when it ends (under a minute).', 409); };
+  inTrial();
   const src = p || r;
   const c = {
     name: p ? p.name : r.name, cls: p ? p.cls : r.cls, lvl: src.lvl, xp: src.xp, gold: src.gold,
@@ -354,10 +358,10 @@ async function editCharacter(id, body) {
     catch (e) { if (e.code === '23505') throw new Bad('That name is taken.', 409); throw e; }
   }
   p = liveChar(id); // (it may have come online meanwhile)
+  inTrial();
   if (p) {
     // Online: change the live player first (so the periodic save can't write old values back), then save.
     const lvlChanged = p.lvl !== c.lvl;
-    if (c.pathEdited && p.trial) game.academyEnd(p, 'quit'); // (gives back a loaned kit first)
     Object.assign(p, { name: c.name, lvl: c.lvl, xp: c.xp, gold: c.gold, inv: c.inv, stats: c.stats, mastery: c.mastery });
     if (c.pathEdited) { p.path = c.path; game.markPath(p); }
     game.setTalents(p, c.talents); // re-sends the Skill Tree data

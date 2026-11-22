@@ -25,7 +25,7 @@ import { TICK_RATE, inArena } from '../shared/data.js';
 import { floorOf, inArena2 } from '../shared/floor2.js';
 import { inArena3 } from '../shared/floor3.js';
 import { clampAccess } from '../shared/accesslevels.js'; // account access levels (permissions, not character levels)
-import { WEAPONS } from '../shared/academy.js'; // Initiates pick a weapon (docs/briefs/academy.md)
+import { WEAPONS, isWeapon } from '../shared/academy.js'; // Initiates pick a weapon (docs/briefs/academy.md)
 import { carveRanks } from './academy.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -52,7 +52,9 @@ setInterval(() => { crashes = Math.max(0, crashes - 5); }, 60000).unref();
 
 const game = new Game();
 game.track = track.record;
-game.onClear = rec => { hall.add(carveRanks(game, rec)); broadcastHall(); }; // (each name's class rank carved beside it: server/academy.js) // Hall of Clearers (DB insert + in-memory cache); the engraved stones update live
+// Hall of Clearers (DB insert + in-memory cache); the engraved stones update live. Each name's class rank is carved
+// beside it (server/academy.js carveRanks).
+game.onClear = rec => { hall.add(carveRanks(game, rec)); broadcastHall(); };
 const spectators = new Set(); // watch-only clients (?spectate=1)
 // The server's own bots (admin, player-added, the Named) talk to it through in-process sockets (server/localws.js):
 // no JSON or loopback socket per bot per tick. BOT_TRANSPORT=ws puts them back on real WebSockets (benchmarks, tests).
@@ -131,7 +133,7 @@ function onConnection(ws) {
       return p;
     }
     if (bots.isBotJoin(msg)) return bots.addBotPlayer(ws, msg); // server-run bot (server/botmanager.js)
-    if (WEAPONS[msg.weapon]) { // an anonymous Initiate: a weapon instead of a class (a join with cls stays graduated: bots, tests, old links)
+    if (isWeapon(msg.weapon)) { // an anonymous Initiate: a weapon instead of a class (a join with cls stays graduated: bots, tests, old links)
       game.joinWeapon = msg.weapon;
       try { return game.addPlayer(ws, msg.name, WEAPONS[msg.weapon].base); } finally { game.joinWeapon = null; }
     }

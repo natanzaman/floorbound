@@ -9,9 +9,9 @@
 import crypto from 'node:crypto';
 import * as db from './db.js';
 const q = (...a) => db.q(...a);
-import { CLASSES, MAX_LEVEL } from '../shared/data.js';
+import { MAX_LEVEL } from '../shared/data.js';
 import { isNamedName } from '../shared/named.js';
-import { WEAPONS, newPath } from '../shared/academy.js';
+import { WEAPONS, newPath, isWeapon, isClass } from '../shared/academy.js';
 import { cleanControls, CONTROLS_MAX_BYTES } from '../shared/controls.js';
 import { cleanAllow, ALLOW_CREATOR, ALLOW_MAX } from '../shared/accesslevels.js';
 
@@ -176,10 +176,10 @@ export async function handle(req, res, url) {
       const a = await accountFromToken(bearer(req));
       if (!a) return json(res, 401, { error: 'signed out' }), true;
       const { name: raw, cls: clsIn, weapon } = await readBody(req); // a weapon: a new Initiate (docs/briefs/academy.md); a cls alone: graduated in it (admin tools, tests)
-      const cls = WEAPONS[weapon] ? WEAPONS[weapon].base : clsIn, path = WEAPONS[weapon] ? JSON.stringify(newPath(weapon)) : null;
+      const cls = isWeapon(weapon) ? WEAPONS[weapon].base : clsIn, path = isWeapon(weapon) ? JSON.stringify(newPath(weapon)) : null;
       const name = String(raw || '').trim().replace(/\s+/g, ' ');
       if (!NAME_RE.test(name)) return json(res, 400, { error: 'Names are 3–16 letters or numbers (spaces, _ . - allowed inside).' }), true;
-      if (!CLASSES[cls]) return json(res, 400, { error: 'Pick a weapon.' }), true;
+      if (!isClass(cls)) return json(res, 400, { error: 'Pick a weapon.' }), true;
       if (process.env.NAMED_ENABLED !== '0' && isNamedName(name)) return json(res, 409, { error: 'That name is taken.' }), true; // the Named's names are theirs (shared/named.js)
       const [{ n }] = await q('SELECT count(*)::int AS n FROM characters WHERE account_id = $1', [a.id]);
       if (n >= MAX_CHARACTERS) return json(res, 400, { error: `You can have up to ${MAX_CHARACTERS} characters.` }), true;

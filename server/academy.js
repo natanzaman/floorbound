@@ -11,31 +11,33 @@
 // giveXp, handle, update, meFor, validTarget, damageMob, damagePlayer, breakMob, killMob, chainNote, crescBurst,
 // removePlayer.
 import { CLASSES, MOBS, walkable, angleTo, resolveCollision } from '../shared/data.js';
-import { makeItem, BAG_SIZE, sellPrice } from '../shared/items.js';
+import { makeItem, BAG_SIZE } from '../shared/items.js';
 import { newTalents, talentTotals } from '../shared/talents.js';
 import { STYLES } from '../shared/styles.js';
 import {
-  WEAPONS, INITIATE, TRIALS, DRILLS, DRILL_REWARD, REVIVE_SECS, REVIVE_R, HEADS, HEAD_FRIENDSHIP, MEDALS, COHORT,
+  WEAPONS, INITIATE, TRIALS, DRILLS, DRILL_REWARD, REVIVE_SECS, REVIVE_R, HEAD_FRIENDSHIP, MEDALS, COHORT,
   isInitiate, pathLabel, medalFor, rankOf, rankName, changeFee, newPath, cleanPath, trialBlock, gradBlock, gradStyle,
-  weaponOfClass, headLine, cohortClasses,
+  weaponOfClass, headLine, cohortClasses, isWeapon, isClass, isTrial, isDrill, headOf,
 } from '../shared/academy.js';
 import { PENS, ACADEMY, nearAcademy, penAt, penStart, penFar } from '../shared/academyyard.js';
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
 const COUNTDOWN = 3, HOME_AFTER = 2.5;
+const TOUGH = 999; // the health multiplier of training enemies that never fall (m.tough)
+const WEAPON_CD = 5, TALK_CD = 4; // seconds between weapon changes (the armory) and between hall-head lines
 const defOf = T => (T.kind === 'trial' ? TRIALS : DRILLS)[T.id];
 
 export const AcademyMethods = {
   // ---------- the path ----------
   initPath(p, raw) {
     let path = cleanPath(raw);
-    if (!path && this.joinWeapon && WEAPONS[this.joinWeapon]) path = newPath(this.joinWeapon); // an anonymous Initiate (index.js)
+    if (!path && isWeapon(this.joinWeapon)) path = newPath(this.joinWeapon); // an anonymous Initiate (index.js)
     p.path = path;
     if (!isInitiate(path)) return;
     const W = WEAPONS[path.weapon];
     if (p.cls !== W.base) this.swapClass(p, W.base, path.keep[W.base]); // (an admin edit, a stale row)
-    if (!path.armed) { this.armWith(p, W.base, 0, W.style); path.armed = 1; p.dirty = true; }
+    if (!path.armed && this.armWith(p, W.base, 0, W.style)) { path.armed = 1; p.dirty = true; }
     p.pathDirty = true;
   },
   pathStats(p) { if (isInitiate(p.path) && !p.loan) p.atk *= INITIATE.pow; },
@@ -70,21 +72,31 @@ export const AcademyMethods = {
     p.cds = [0, 0, 0, 0]; p.combo = 0; p.chain = null;
     p.masteryDirty = p.masteryNow = true;
   },
-  // Equip a weapon of `cls` (rarity, style): one from the bag if there is one of that class and style, else a new one.
-  // What was worn goes to the bag (or is sold if the bag is full).
-  armWith(p, cls, rarity, style, fresh = false) {
-    const fit = it => it?.slot === 'weapon' && it.cls === cls && (it.style || '') === (style && !STYLES[style]?.def ? style : '');
-    let it = fresh ? null : (fit(p.inv.eq.weapon) ? p.inv.eq.weapon : null);
-    if (it) return it;
+  // Weapons the Academy hands out are tagged `ac`: worth nothing, never sold, salvaged, dropped or worked by the Smith
+  // (shared/items.js sellPrice, shared/crafting.js, server/game.js sell, server/ground.js, server/smith.js). One that is
+  // swapped out goes back to the Academy (it is not bagged), so switching weapon or class mints nothing of value.
+  acFit(cls, style) { const st = style && !STYLES[style]?.def ? style : ''; return it => it?.slot === 'weapon' && it.cls === cls && (it.style || '') === st; },
+  // Is there room to arm cls / style? (What is worn goes to the bag unless it is an Academy weapon; nothing is ever sold.)
+  canArm(p, cls, style, fresh = false) {
+    const fit = this.acFit(cls, style), worn = p.inv.eq.weapon;
+    if (!fresh && fit(worn)) return true;
+    if (!worn || worn.ac) return true;
+    if (!fresh && p.inv.bag.some(fit)) return true; // (a swap: the worn one takes its place in the bag)
+    return p.inv.bag.length < BAG_SIZE;
+  },
+  // Equip a weapon of `cls` (rarity, style): the worn one if it fits, else one from the bag, else a new one (an Academy
+  // weapon unless `keep`: the graduation weapon is yours). Returns the weapon, or null when the bag has no room.
+  armWith(p, cls, rarity, style, fresh = false, keep = false) {
+    if (!this.canArm(p, cls, style, fresh)) return null;
+    const fit = this.acFit(cls, style);
+    if (!fresh && fit(p.inv.eq.weapon)) return p.inv.eq.weapon;
     const i = fresh ? -1 : p.inv.bag.findIndex(fit);
+    let it;
     if (i >= 0) it = p.inv.bag.splice(i, 1)[0];
-    else it = makeItem('weapon', rarity, cls, () => 0.5, undefined, style || undefined);
+    else { it = makeItem('weapon', rarity, cls, () => 0.5, undefined, style || undefined); if (!keep) { it.ac = 1; it.name = `Academy ${it.name}`; } }
     const old = p.inv.eq.weapon;
     p.inv.eq.weapon = it;
-    if (old) {
-      if (p.inv.bag.length < BAG_SIZE) p.inv.bag.push(old);
-      else { p.gold += sellPrice(old); this.sys(`Bag full: ${old.name} was sold for ${sellPrice(old)} gold.`, p.id); }
-    }
+    if (old && !old.ac) p.inv.bag.push(old);
     this.invChanged(p);
     return it;
   },
@@ -98,7 +110,7 @@ export const AcademyMethods = {
     path.stage = 'class';
     const kept = path.keep[cls]; delete path.keep[cls];
     this.swapClass(p, cls, kept);
-    this.armWith(p, cls, INITIATE.gradRarity, gradStyle(cls, path.weapon), true);
+    this.armWith(p, cls, INITIATE.gradRarity, gradStyle(cls, path.weapon), true, true); // (yours to keep: not an Academy weapon)
     this.recompute(p); p.hp = p.maxHp;
     this.markPath(p);
     this.events.push({ t: 'grad', id: p.id, to: p.id, cls });
@@ -138,30 +150,46 @@ export const AcademyMethods = {
 
   // ---------- messages ----------
   academyAction(p, msg) {
+    try { return this.academyOp(p, msg); }
+    catch (e) { console.error('academy action failed', e); } // (a bad message never takes the server down)
+  },
+  academyOp(p, msg) {
+    if (!p || !msg) return;
     const op = String(msg.op || '');
     if (op === 'leave') { if (p.trial) this.academyEnd(p, 'quit'); return; }
-    if (op === 'state') { this.markPath(p); if (nearAcademy(p.x, p.z, 2) && !p.dead) this.enrol(p); return; }
+    if (op === 'state') { p.pathDirty = true; if (nearAcademy(p.x, p.z, 2) && !p.dead) this.enrol(p); return; } // (the path message only: no roster, no save)
     if (p.dead) return;
     if (!nearAcademy(p.x, p.z, 1.5)) return this.sys('Do that at the Academy, in the Town of Beginnings.', p.id);
     if (p.trial) return this.sys('Finish your trial first.', p.id);
     if (p.duel) return this.sys('Not during a duel.', p.id);
-    const path = p.path;
+    const path = p.path, t = this.time;
     if (op === 'weapon') {
       const w = String(msg.w || '');
-      if (!WEAPONS[w]) return;
+      if (!isWeapon(w)) return;
       if (!isInitiate(path)) return this.sys('Only Initiates change weapon at the armory. Graduates change class instead.', p.id);
+      if (path.weapon === w) return;
+      if (t < (p.acWeaponAt || 0)) return this.sys(`The armory is still fetching your last weapon (${Math.ceil(p.acWeaponAt - t)} s).`, p.id);
+      const W = WEAPONS[w];
+      if (!this.canArm(p, W.base, W.style)) return this.sys('Your bag is full: make room for the weapon in your hands first.', p.id);
+      p.acWeaponAt = t + WEAPON_CD;
       return this.changeWeapon(p, w);
     }
-    if (op === 'trial' || op === 'drill') return this.academyStart(p, op, String(msg.id || ''));
+    if (op === 'trial') { const id = String(msg.id || ''); return isTrial(id) ? this.academyStart(p, 'trial', id) : undefined; }
+    if (op === 'drill') { const id = String(msg.id || ''); return isDrill(id) ? this.academyStart(p, 'drill', id) : undefined; }
     if (op === 'graduate' || op === 'change') {
-      const cls = String(msg.cls || ''), why = gradBlock(path || { trials: {} }, cls, p.cls, p.lvl, p.gold);
+      const cls = String(msg.cls || '');
+      if (!isClass(cls)) return;
+      const why = gradBlock(path || { trials: {} }, cls, p.cls, p.lvl, p.gold);
       if (why) return this.sys(why, p.id);
       if (isInitiate(path) !== (op === 'graduate')) return;
+      const style = gradStyle(cls, path?.weapon || weaponOfClass(p.cls));
+      if (!this.canArm(p, cls, style, op === 'graduate')) return this.sys('Your bag is full: make room for the weapon in your hands first.', p.id);
       return op === 'graduate' ? this.graduate(p, cls) : this.changeClass(p, cls);
     }
     if (op === 'talk') {
-      const cls = String(msg.cls || ''), id = HEADS[cls];
-      if (!id) return;
+      const id = headOf(String(msg.cls || ''));
+      if (!id || t < (p.acTalkAt || 0)) return;
+      p.acTalkAt = t + TALK_CD;
       p.talkN = (p.talkN || 0) + 1;
       const name = id[0].toUpperCase() + id.slice(1);
       this.events.push({ t: 'chat', from: name, id: 0, text: headLine(id, p.talkN + p.id), ch: 's', x: r2(ACADEMY.x), z: r2(ACADEMY.z), head: 1 });
@@ -169,6 +197,8 @@ export const AcademyMethods = {
     }
     if (op === 'cohort') {
       if (!this.academyBots) return this.sys('Classmates are not available here.', p.id);
+      if (t < (p.acCohortAt || 0)) return;
+      p.acCohortAt = t + TALK_CD;
       const added = this.academyBots.addCohort(this.ensurePath(p), p);
       this.sys(added.length ? `Your classmates ${added.join(' and ')} join you.` : 'Your classmates are already here.', p.id);
       this.markPath(p);
@@ -197,16 +227,16 @@ export const AcademyMethods = {
 
   // ---------- trials and drills ----------
   academyStart(p, kind, id) {
-    const isTrial = kind === 'trial', def = (isTrial ? TRIALS : DRILLS)[id];
+    const trial = kind === 'trial', def = trial ? (isTrial(id) ? TRIALS[id] : null) : (isDrill(id) ? DRILLS[id] : null);
     if (!def) return;
-    if (isTrial) { const why = trialBlock(p.path, id, p.lvl); if (why) return this.sys(why, p.id); }
+    if (trial) { const why = trialBlock(p.path, id, p.lvl); if (why) return this.sys(why, p.id); }
     const pens = (this.acPens ||= new Map());
     const pen = PENS.find(q => !pens.has(q.i));
     if (!pen) return this.sys('Every training pen is in use. Try again in a minute.', p.id);
     pens.set(pen.i, p.id);
     const t = this.time;
     const T = p.trial = { kind, id, pen, t0: t + COUNTDOWN, until: t + COUNTDOWN + def.secs, score: 0, hits: 0, mobs: new Set(), spawned: false, ward: 100, wx: pen.cx, wz: pen.z0 + 12, base: p.perfects || 0, rev: 0, endAt: 0 };
-    if (isTrial) {
+    if (trial) {
       p.loan = { cls: p.cls, mastery: p.mastery, talents: p.talents };
       this.swapClass(p, id, null);
       p.talents = {}; p.tal = talentTotals(id, {});
@@ -225,15 +255,16 @@ export const AcademyMethods = {
     m.def = { ...MOBS[type], ...defExtra };
     m.trial = p.id; m.sx = m.x; m.sz = m.z;
     m.hp = m.maxHp = Math.max(20, Math.round(hpMul * p.atk));
+    if (hpMul >= TOUGH) m.tough = true;
     Object.assign(m, extra);
     T.mobs.add(m.id);
     return m;
   },
   acSpawnAll(p, T) {
     const pen = T.pen, [fx, fz] = penFar(pen), cx = pen.cx, K = defOf(T).kind;
-    const tough = 999;
+    const tough = TOUGH;
     if (K === 'break') this.acSpawn(p, T, 'tgolem', fx, fz, 30);
-    else if (K === 'hold') for (const dx of [-10, 0, 10]) this.acSpawn(p, T, 'twolf', cx + dx, fz, 25, { sx: T.wx, sz: T.wz }); // (they amble to the Ward Post)
+    else if (K === 'hold') for (const dx of [-10, 0, 10]) this.acSpawn(p, T, 'twolf', cx + dx, fz, tough, { sx: T.wx, sz: T.wz }); // (they amble to the Ward Post; they never fall, so the hold is about threat, not killing)
     else if (K === 'fell') for (const [ox, oz] of [[-7, 0], [-5.5, 1.5], [-8.5, 1.5], [7, -4], [5.5, -2.5], [8.5, -2.5]]) this.acSpawn(p, T, 'tdummy', cx + ox, fz + oz, 6);
     else if (K === 'tip') for (const dx of [-6, -2, 2, 6]) this.acSpawn(p, T, 'tdummy', cx + dx, fz, tough, { adv: 1.4 });
     else if (K === 'movers') for (let i = 0; i < 3; i++) this.acMover(p, T, i);
@@ -337,7 +368,7 @@ export const AcademyMethods = {
       }
       if (lines.length) this.invChanged(p);
     }
-    if (medal && T.kind === 'trial' && medal > best && HEADS[T.id]) this.addFriendship?.(p, HEADS[T.id], HEAD_FRIENDSHIP * (medal - best), 'request'); // the hall's head saw it
+    if (medal && T.kind === 'trial' && medal > best && headOf(T.id)) this.addFriendship?.(p, headOf(T.id), HEAD_FRIENDSHIP * (medal - best), 'request'); // the hall's head saw it
     if (p.loan) this.acRestore(p);
     const unit = def.unit || '';
     const scoreText = def.low && def.unit === 's' ? `${r1(this.time - T.t0)} s` : `${T.score}${unit}`;
@@ -361,7 +392,6 @@ export const AcademyMethods = {
     if (!p.dead && penAt(p.x, p.z)) { p.hp = p.maxHp; this.teleport(p, ACADEMY.x + 4.5, ACADEMY.z + 1); }
     this.markPath(p);
   },
-  trialOfMob(m) { const p = m.trial && this.players.get(m.trial); return p?.trial || null; },
 };
 
 export function installAcademy(Game) {
@@ -403,12 +433,17 @@ export function installAcademy(Game) {
     const T = m.trial && p?.trial;
     if (!T) return orig.call(this, m, p, base, opts);
     const K = defOf(T).kind, t = this.time, wind = m.windupAt, broken = t < m.staggerUntil;
-    if (K === 'tip' && dist(m, p) - m.def.radius >= 2.4) T.score++;
     const r = orig.call(this, m, p, base, opts);
     if (K === 'interrupt' && wind && !m.windupAt && !m.dead) { T.score++; this.events.push({ t: 'fx', k: 'ring', s: '', id: m.id, x: r2(m.x), z: r2(m.z), f: 0, r: 2, c: 'gold' }); }
     if (K === 'punish' && broken && T.pending) { T.pending = false; T.score++; }
-    if (m.hp < m.maxHp * 0.1 && m.maxHp > 900 * p.atk) m.hp = m.maxHp; // (the tough training dummies never fall)
+    if (m.tough && m.hp < m.maxHp * 0.1) m.hp = m.maxHp; // (the tough training enemies never fall)
     return r;
+  });
+  // The Lancer trial counts the spear's own tip-of-reach hits (spearLine's sweet spot), nothing else (no areas, no DoTs).
+  if (P.spearLine) wrap('spearLine', function (orig, p, ...a) {
+    const tip = orig.call(this, p, ...a), T = p?.trial;
+    if (T && !T.endAt && T.spawned && defOf(T).kind === 'tip') for (const id of tip) if (this.mobs.get(id)?.trial === p.id) T.score++;
+    return tip;
   });
   wrap('breakMob', function (orig, m, p, ...a) {
     const r = orig.call(this, m, p, ...a);
@@ -418,6 +453,7 @@ export function installAcademy(Game) {
   });
   wrap('killMob', function (orig, m, killer) {
     if (!m.trial) return orig.call(this, m, killer);
+    if (m.tough) { m.hp = m.maxHp; m.dead = false; return; } // (never falls, whatever the hit)
     const p0 = this.players.get(m.trial);
     if (p0?.trial && defOf(p0.trial).kind === 'break' && !p0.trial.broke) { m.hp = 1; return; } // (Break it first)
     m.dead = true; m.hp = 0;

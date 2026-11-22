@@ -38,6 +38,7 @@ import './newclasses.js'; // Ranger, Berserker, Lancer, Bard
 import { comboTurn, burstTurn, setupTurn, chainTurn } from './teamplay.js'; // combo payoffs + Team Burst (G2), setups for partners and skill chains
 import { readOpenings, openingTurn, gustDodge } from './openings.js'; // boss openings, Gale Push (J3)
 import { easeOff } from './threat.js'; // DPS ease off near 90% threat (J4)
+import { inYard, ACADEMY } from '../academyyard.js'; // the Academy's trial yard: solo, so followers wait at the door
 import { readDuels, foeMobs } from '../duels.js'; // duels: only my opponents' stand-ins are targets (server/duels.js)
 
 const BOSS_LVL = { 1: 5, 2: 15, 3: 25 }; // a leader levels on its floor's field until this, then goes for the boss
@@ -436,6 +437,7 @@ function thinkFree(b) {
   if (arenaTurn(b, moveToward)) return; // a boss arena: frozen through the fall, cover from the Tempest Beam
   if (b.healFocus && (b.healFocus.until < b.t || !P.all.some(p => p.id === b.healFocus.id))) b.healFocus = null;
   const M = decideMode(b, P);
+  if (M.anchor && inYard(M.anchor.x, M.anchor.z) && !inYard(b.x, b.z)) M.anchor = { ...M.anchor, x: ACADEMY.x + 6, z: ACADEMY.z + 2, face: 0 }; // (a class trial: wait outside)
   b.mode = M.mode;
   b.anchor = M.anchor ? { id: M.anchor.id, name: M.anchor.name, bot: !!M.anchor.bot } : null;
   upkeep(b, P, M);

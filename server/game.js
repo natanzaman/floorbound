@@ -45,8 +45,8 @@ import { installMvp } from './mvp.js'; // post-fight MVP card (G5)
 import { installLoot } from './loot.js';
 import { installLooks } from './looks.js'; // character looks: setLook, w.looks (I2)
 import { installDuels } from './duels.js'; // solo and team duels: challenges, stand-ins, rules, w.du (docs/briefs/duels.md)
-import { installTargeting } from './targeting.js';
-import { installAcademy } from './academy.js'; // Initiates, class trials, drills, ranks, cohorts (docs/briefs/academy.md) // targeting modes + cleave (player settings, Controls → Combat)
+import { installTargeting } from './targeting.js'; // targeting modes + cleave (player settings, Controls → Combat)
+import { installAcademy } from './academy.js'; // Initiates, class trials, drills, ranks, cohorts (docs/briefs/academy.md)
 import { rollGear } from '../shared/loot.js'; // affixes, boss sets, loadouts, drop tables (H2)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
 
@@ -446,6 +446,7 @@ export class Game {
     const i = p.inv.bag.findIndex(it => it.u === u);
     if (i < 0) return;
     if (p.inv.bag[i].ks) return this.sys("The merchant won't take a keepsake.", p.id);
+    if (p.inv.bag[i].ac) return this.sys("The merchant won't buy an Academy weapon.", p.id);
     const [it] = p.inv.bag.splice(i, 1);
     p.gold += sellPrice(it);
     this.events.push({ t: 'coin', id: p.id });

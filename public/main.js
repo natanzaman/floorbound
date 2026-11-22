@@ -339,6 +339,8 @@ const send = o => state.ws?.readyState === 1 && state.ws.send(JSON.stringify(o))
 // Lost the server (usually a deploy restarting it): cover the screen, wait until it answers again, then reload and
 // rejoin with the same character (sessionStorage 'fb_rejoin', picked up by initLogin; good for 10 minutes).
 function reconnect(joinMsg) {
+  const ac = state.academy; // an anonymous Initiate who graduated this session comes back graduated (the path itself is not kept)
+  if (joinMsg.weapon && ac?.path?.stage === 'class' && !ac.loan && CLASSES[ac.cls]) joinMsg = { type: 'join', name: joinMsg.name, cls: ac.cls };
   try { sessionStorage.setItem('fb_rejoin', JSON.stringify({ msg: joinMsg, t: Date.now() })); } catch {}
   let el = $('reconnect');
   if (!el) {
@@ -1777,7 +1779,7 @@ function updateHud(now) {
     }
     if (btn.dataset.slot === 'guard') { btn.classList.toggle('on', combat.guarding); continue; }
     if (btn.dataset.slot === 'cover') { threat.coverCd(btn); continue; }
-    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'academy' ? 'Enter' : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : state.meReady ? 'Unready' : 'Ready'); continue; }
+    if (btn.dataset.slot === 'act') { const a = interactKind(); btn.classList.toggle('on', !!a); setText(btn, a === 'shop' ? 'Trade' : a === 'hall' ? 'Read' : a === 'smith' ? 'Forge' : a === 'academy' ? (academy.inTrial() ? 'Leave' : 'Enter') : a === 'shrine' ? 'Skills' : a === 'pickup' ? 'Pick up' : a === 'warp' || a === 'stair' ? 'Warp' : a?.startsWith('lab-') ? lab.actLabel(a.slice(4)) : state.meReady ? 'Unready' : 'Ready'); continue; }
     const isDodge = btn.dataset.slot === 'dodge', isJump = btn.dataset.slot === 'jump';
     const slot = +btn.dataset.slot, sk = isDodge ? { cd: DODGE.cd } : isJump ? { cd: JUMP.cd } : { cd: mastery.cd(slot) }; // mastery/branch cooldowns
     const left = Math.max(0, (isDodge ? state.dodgeReady : isJump ? state.jumpReady : state.ready[slot]) - now) / 1000;

@@ -463,6 +463,7 @@ export class PlayerBots {
       if (!b) return;
       this.game.graduate(b, classes[i], { quiet: true });
       this.outfit(b, rec); // the new class's premade gear, mastery and talents
+      b.inv.bag = b.inv.bag.filter(it => it.slot !== 'weapon'); // (the weapons graduating swapped out: bots carry none)
       names.push(`${b.name} (${CLASSES[classes[i]].name})`);
     });
     if (names.length) this.game.sys(`Your classmates graduate with you: ${names.join(', ')}.`, p.id);
