@@ -1259,7 +1259,7 @@ function announceTarget() {
   const m = state.lock && mobs.get(state.lock), p = state.focus && players.get(state.focus);
   const el = $('selmsg');
   el.className = m ? 'foe' : p ? 'ally' : '';
-  const du = m?.def.duel && players.get(duels.ownerOf(m.id)); // a duel opponent's stand-in: their name
+  const du = m && m.def?.duel && players.get(duels.ownerOf(m.id)); // a duel opponent's stand-in: their name
   el.innerHTML = du ? `Target: <b>${esc(du.name)}</b> <small>Lv ${du.lvl ?? ''}</small>` : m ? `Target: <b>${esc(m.def.name)}</b> <small>Lv ${m.def.level ?? ''}</small>` : p ? `Following: <b>${esc(p.name)}</b> <small>Lv ${p.lvl ?? ''}</small>` : 'Target cleared';
   el.classList.add('show');
   clearTimeout(selMsgT); selMsgT = setTimeout(() => el.classList.remove('show'), 1800);
