@@ -84,19 +84,32 @@ try {
   const idle = await p.evaluate(() => window.__fb.vfx.stats());
   ok(idle.bands + idle.blades + idle.lances + idle.shards + idle.domes === 0, 'the batches empty out');
 
-  // --- hits: flashes and the camera kick are yours alone, and not under Reduce motion ---
+  // --- the camera kick: big moments only (not every heavy hit), yours alone, scaled by Camera shake, none under Reduce motion ---
   const hit = by => p.evaluate(by => { const f = window.__fb, m = [...f.mobs.values()].find(m => !m.def?.boss && !m.dying); if (!m) return null; f.handleEvent({ t: 'hit', id: m.id, by, a: 12, h: 1, c: 1 }); return f.vfx.stats().kick; }, by);
+  const pay = by => p.evaluate(by => { const f = window.__fb, m = [...f.mobs.values()].find(m => !m.def?.boss && !m.dying); if (!m) return null; f.handleEvent({ t: 'combo', id: m.id, by, from: 0, k: 'crosscut', n: 1, x: m.x, z: m.z }); return f.vfx.stats().kick; }, by);
   await p.evaluate(() => { const s = window.__fb.state; s.z = 120; }); // (out on the field: enemies in view)
   await p.waitForFunction(() => [...window.__fb.mobs.values()].some(m => !m.def?.boss), null, { timeout: 30000 });
-  const mine = await hit(await p.evaluate(() => window.__fb.state.myId));
-  ok(mine > 0.2, `my heavy crit kicks the camera (${mine?.toFixed(2)})`);
+  const myId = await p.evaluate(() => window.__fb.state.myId);
+  ok(await p.evaluate(() => window.__fb.settings.camShake) === 'low', 'Camera shake defaults to Low');
+  const heavy = await hit(myId);
+  ok(heavy < 0.05, `an ordinary heavy crit no longer kicks the camera (${heavy?.toFixed(2)})`);
+  const lowK = await pay(myId);
+  ok(lowK > 0.2 && lowK < 0.35, `my combo payoff kicks it, at half on Low (${lowK?.toFixed(2)})`);
   await sleep(900);
-  const theirs = await hit(424242);
+  await p.evaluate(() => { window.__fb.settings.camShake = 'full'; });
+  const full = await pay(myId);
+  ok(full > 0.45, `Full: the whole kick (${full?.toFixed(2)})`);
+  await sleep(900);
+  const theirs = await pay(424242);
   ok(theirs < 0.05, `someone else's does not (${theirs?.toExponential(1)})`);
-  await p.evaluate(() => { window.__fb.settings.reduceMotion = true; });
+  await p.evaluate(() => { window.__fb.settings.camShake = 'off'; });
   await sleep(300);
-  const calm = await hit(await p.evaluate(() => window.__fb.state.myId));
-  ok(calm < 0.05 && await p.evaluate(() => window.__fb.motion().shakeAmt < 0.02), 'Reduce motion: no kick, no shake');
+  const off = await pay(myId);
+  ok(off < 0.05 && await p.evaluate(() => { window.__fb.shake(0.4); return window.__fb.motion().shakeAmt < 0.02; }), 'Off: no kick, no shake');
+  await p.evaluate(() => { window.__fb.settings.camShake = 'low'; window.__fb.settings.reduceMotion = true; });
+  await sleep(300);
+  const calm = await pay(myId);
+  ok(calm < 0.05 && await p.evaluate(() => { window.__fb.shake(0.4); return window.__fb.motion().shakeAmt < 0.02; }), 'Reduce motion: no kick, no shake');
   await p.evaluate(() => { window.__fb.settings.reduceMotion = false; });
 
   // --- chain counter, call-out bubbles ---

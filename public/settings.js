@@ -58,6 +58,7 @@ export function initSettingsPanel({ el, settings, save, Q, PRESETS, perf, applyQ
     <label class="opt"><input type="checkbox" data-a="guardToggle" ${settings.guardToggle ? 'checked' : ''}> Toggle guard <small>press the guard key to raise it, again to lower it (instead of holding)</small></label>
     <label class="opt"><input type="checkbox" data-a="wheelToggle" ${settings.wheelToggle ? 'checked' : ''}> Toggle the bot wheel <small>press ${keyHtml('botWheel')} to open it, again gives the order you point at (Esc closes it)</small></label>
     <label class="opt"><input type="checkbox" data-a="reduceMotion" ${settings.reduceMotion ? 'checked' : ''}> Reduce motion <small>no camera shake, hit-stop or kill-zoom</small></label>
+    <label class="opt">Camera shake <select data-a="camShake">${[['off', 'Off'], ['low', 'Low'], ['full', 'Full']].map(([v, l]) => `<option value="${v}" ${settings.camShake === v ? 'selected' : ''}>${l}</option>`).join('')}</select> <small>shake and the zoom punch on big moments (combos, chain x4, Team Bursts, Breaks)</small></label>
     <label class="opt"><input type="checkbox" data-a="highContrast" ${settings.highContrast ? 'checked' : ''}> High-contrast HUD text <small>brighter text on darker panels</small></label>
     <label class="opt">Telegraph colours <select data-a="palette">${[['off', 'Default'], ['deuter', 'Red-green friendly'], ['trit', 'Blue-yellow friendly']].map(([v, l]) => `<option value="${v}" ${settings.palette === v ? 'selected' : ''}>${l}</option>`).join('')}</select> <small>safer colours plus a dashed edge on danger rings</small></label>
     <label class="opt"><input type="checkbox" data-a="telegraphSound" ${settings.telegraphSound ? 'checked' : ''}> Sound cue for attacks <small>a short chirp when a boss or trap telegraph starts</small></label>
@@ -82,6 +83,7 @@ export function initSettingsPanel({ el, settings, save, Q, PRESETS, perf, applyQ
     if (t.dataset.a === 'padSens') { settings.padSens = +t.value; el.querySelector('#padsens-v').textContent = `${settings.padSens.toFixed(1)}×`; }
     for (const k of ['guardToggle', 'wheelToggle', 'reduceMotion', 'highContrast', 'telegraphSound', 'hideSelfBar', 'noHurtFlash']) if (t.dataset.a === k) settings[k] = t.checked;
     if (t.dataset.a === 'palette') settings.palette = t.value;
+    if (t.dataset.a === 'camShake') settings.camShake = t.value;
     if (t.dataset.a === 'uiScale') { settings.uiScale = +t.value; el.querySelector('#uiscale-v').textContent = `${Math.round(settings.uiScale * 100)}%`; }
     applyAccess(settings);
     if (t.dataset.a === 'bub') { settings.bubbles = t.checked; if (!t.checked) bubbles.clear(); }

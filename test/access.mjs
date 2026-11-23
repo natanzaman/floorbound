@@ -72,7 +72,12 @@ try {
   // reduce motion: shake and slow-mo (hit-stop) are ignored
   const motion = () => S(() => { const f = window.__fb; f.shake(0.5); f.slowMotion(1, 0.5); return f.motion(); });
   const m0 = await motion();
-  assert.ok(m0.shakeAmt >= 0.45 && m0.slowMo > 0, `motion on by default: ${JSON.stringify(m0)}`);
+  assert.ok(Math.abs(m0.shakeAmt - 0.25) < 0.03 && m0.slowMo > 0, `motion on by default, shake at half (Camera shake: Low): ${JSON.stringify(m0)}`);
+  await frames(90);
+  await S(() => { window.__fb.settings.camShake = 'full'; });
+  const mf = await motion();
+  assert.ok(mf.shakeAmt >= 0.45, `Camera shake Full: the whole shake: ${JSON.stringify(mf)}`);
+  await S(() => { window.__fb.settings.camShake = 'low'; });
   await frames(90);
   await setOpt('reduceMotion', true);
   const m1 = await motion();
@@ -193,7 +198,7 @@ try {
 
   // stick sensitivity is stored for the pad code; everything is saved under fb_controls.access
   await setOpt('padSens', 2.2);
-  assert.deepEqual(await stored(), { sens: 1, invertY: false, padSens: 2.2, guardToggle: true, wheelToggle: true, reduceMotion: true, uiScale: 1.5, highContrast: true, palette: 'off', telegraphSound: false });
+  assert.deepEqual(await stored(), { sens: 1, invertY: false, padSens: 2.2, guardToggle: true, wheelToggle: true, reduceMotion: true, uiScale: 1.5, highContrast: true, palette: 'off', telegraphSound: false, hideSelfBar: false, noHurtFlash: false, camShake: 'low' });
   // and survives a reload
   await p.reload();
   await p.waitForFunction(() => !!window.__fb?.settings, null, { timeout: 60000 });

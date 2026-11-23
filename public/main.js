@@ -1,4 +1,5 @@
 // Floorbound browser client: networking, input, camera, entities and HUD.
+import { shakeMul } from '/access.js'; // Settings → Camera shake
 import * as THREE from 'three';
 import {
   CLASSES, CLASS_IDS, MOBS, MOB_IDS, PACE, PLAYER_SPEED, SPRINT_SPEED, SPRINT_AFTER, TICK_RATE, MAX_LEVEL, DODGE, JUMP,
@@ -448,7 +449,7 @@ const bossTeam = initBossTeam({ state, players, fx, sfx, guide, callout: (a, b, 
 const teamplay = initTeamplay({ state, players, mobs, fx, sfx, floatNum, project, send, guide, isTouch, callout: (a, b, c) => callout(a, b, c), shake: a => shake(a), $ });
 // the visuals pass (public/vfx.js): weapon trails, 3D skill effects, heavier hits, camera kick, the chain counter, burst traits
 const selfBar = initSelfBar({ state, players, project, settings, hud: $('labels') }); // your bar over your head, hurt feedback (public/selfbar.js)
-const vfx = initVfx({ scene, state, players, mobs, fx, camera, project, bubbles, shake: a => shake(a), calm: () => !!settings.reduceMotion, hud: $('labels') });
+const vfx = initVfx({ scene, state, players, mobs, fx, camera, project, bubbles, shake: a => shake(a), calm: () => !!settings.reduceMotion, kickMul: () => shakeMul(settings), hud: $('labels') });
 // the post-fight MVP card: every fighter's numbers and titles after a boss kill or wipe (public/mvp.js)
 const mvp = initMvp({ state, guide, hold: () => wellWake.active }); // (the well's shot first, then the card; the shot waits while the card is up)
 
@@ -2033,7 +2034,7 @@ function updateRareHint(now) { // a small HUD line pointing at a live rare: "Old
 // ---------------- main loop ----------------
 const v3 = new THREE.Vector3();
 let shakeAmt = 0;
-const shake = a => { if (!settings.reduceMotion) shakeAmt = Math.max(shakeAmt, a); };
+const shake = a => { const k = shakeMul(settings); if (k) shakeAmt = Math.max(shakeAmt, a * k); }; // Settings → Camera shake (Off / Low / Full), none under Reduce motion
 // A shake that fades with distance: full at the spot, 40% at r, nothing beyond (stomps, rockfall, Quake Rings).
 const shakeNear = (x, z, a, r) => { const d = Math.hypot(x - state.x, z - state.z); if (d < r && !state.dead) shake(a * (1 - (0.6 * d) / r)); };
 // Hit-stop: a boss's big hit landed on YOU (a `hurt` event tagged big). Only this client freezes; never on your own hits.
@@ -2423,7 +2424,7 @@ function frame(now) {
     if (low) allowed = Math.max(2, allowed * low.distance / len - 0.6);
   }
   camCur += (allowed - camCur) * Math.min(1, dt * (allowed < camCur ? 20 : 3));
-  const cd = camCur * (slowMo > 0 ? 1 - 0.22 * Math.sin(Math.PI * (1 - slowMo / slowMoLen)) : 1); // killing-blow zoom
+  const cd = camCur * (slowMo > 0 ? 1 - 0.22 * Math.max(0.5, shakeMul(settings)) * Math.sin(Math.PI * (1 - slowMo / slowMoLen)) : 1); // killing-blow zoom
   shakeAmt = Math.max(0, shakeAmt - dt);
   const sx = (Math.random() - 0.5) * shakeAmt, sy = (Math.random() - 0.5) * shakeAmt;
   const ly = arenas.camLift(); // (falling with your character)

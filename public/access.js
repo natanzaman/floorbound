@@ -8,7 +8,8 @@ export const ACCESS_DEFAULTS = {
   padSens: 1,         // stick look speed (x); stored here for the gamepad code (K1b) to read
   guardToggle: false, // guard: press to start, press again to stop (instead of hold)
   wheelToggle: false, // bot wheel: press V to open, press again (or Esc) to close (instead of hold)
-  reduceMotion: false, // no camera shake, hit-stop or kill zoom
+  reduceMotion: false, // no camera shake, hit-stop or kill zoom (overrides camShake)
+  camShake: 'low',    // camera shake and zoom punch: 'off' | 'low' (half) | 'full'
   uiScale: 1,         // size of panels, frames and chat (x)
   highContrast: false, // stronger HUD text and panels
   palette: 'off',     // telegraph colours: 'off' (the game's own) | 'deuter' (red-green) | 'trit' (blue-yellow); see palette.js
@@ -16,7 +17,7 @@ export const ACCESS_DEFAULTS = {
   hideSelfBar: false, // no health / stamina bar over your own character (public/selfbar.js)
   noHurtFlash: false, // no red pulse on the screen edges when you're hit or low on health
 };
-export const ENUMS = { palette: ['off', 'deuter', 'trit'] }; // string options and their allowed values
+export const ENUMS = { palette: ['off', 'deuter', 'trit'], camShake: ['off', 'low', 'full'] }; // string options and their allowed values
 export const RANGES = { sens: [0.3, 3], padSens: [0.3, 3], uiScale: [0.8, 1.5] };
 
 // Any stored value in, a complete valid access object out: unknown keys dropped, wrong types and NaN back to the
@@ -35,4 +36,8 @@ export function normalizeAccess(raw) {
 }
 
 // Merge a change into the stored object (and validate the result).
+// How much camera shake and zoom punch (0-1) under the Camera shake option (Reduce motion: none).
+export const SHAKE_MUL = { off: 0, low: 0.5, full: 1 };
+export const shakeMul = s => (s?.reduceMotion ? 0 : SHAKE_MUL[s?.camShake] ?? SHAKE_MUL.low);
+
 export const mergeAccess = (stored, patch) => normalizeAccess({ ...(stored && typeof stored === 'object' ? stored : {}), ...patch });
