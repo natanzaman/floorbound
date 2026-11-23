@@ -2253,7 +2253,7 @@ const camLow = new THREE.Vector3(), camDir = new THREE.Vector3(), camFrom = new 
 function frame(now) {
   requestAnimationFrame(frame);
   const t0 = performance.now(), gap = now - last;
-  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  const dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now; // (never negative: a clock that steps back must not grow the shake or slow-mo timers)
   hitStop = Math.max(0, hitStop - dt);
   slowMo = Math.max(0, slowMo - dt);
   const vdt = hitStop > 0 ? 0 : slowMo > 0 ? dt * slowMoScale : dt; // visual dt: animation and effects only (frozen during a hit-stop)
