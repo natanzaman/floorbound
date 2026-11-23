@@ -94,6 +94,7 @@ export const NAMED = [
     home: { floor: 1, zone: 'the Verdant Field' },
     blurb: 'Captain of the Hearthward. Counts heads before every pull.',
     persona: 'Halvard, captain and shield of the Hearthward. Steady, dry-humoured, plain-spoken. Counts heads before every pull and again after. Hates leaving anyone behind; forgives mistakes, not carelessness. Wants every one of his four to walk out of the tower.',
+    archetype: 'steady', // how the bot brain plays them (shared/bots/personality.js; their own lines stay theirs)
     trust: HERO_TRUST,
   },
   {
@@ -102,6 +103,7 @@ export const NAMED = [
     home: { floor: 1, zone: 'the Verdant Field' },
     blurb: 'The Hearthward\'s healer. Remembers who skipped their potions.',
     persona: 'Maribel, healer of the Hearthward. Warm, bossy, quick to laugh. Scolds people who skip their potions and remembers who did. Hums when she is nervous. Believes nobody climbs alone, and says so often.',
+    archetype: 'chatterbox', // how the bot brain plays them (shared/bots/personality.js; their own lines stay theirs)
     trust: HERO_TRUST,
   },
   {
@@ -110,6 +112,7 @@ export const NAMED = [
     home: { floor: 1, zone: 'the Verdant Field' },
     blurb: 'The Hearthward\'s archer. Keeps score of everything.',
     persona: 'Tovin, archer of the Hearthward. Cheerful show-off who keeps score of every kill and loses count on purpose when a friend is behind. Talks too much before a fight and not at all during one. Wants his name carved somewhere it will last.',
+    archetype: 'joker', // how the bot brain plays them (shared/bots/personality.js; their own lines stay theirs)
     trust: HERO_TRUST,
   },
   {
@@ -118,6 +121,7 @@ export const NAMED = [
     home: { floor: 1, zone: 'the Verdant Field' },
     blurb: 'The Hearthward\'s lancer. Writes every boss pattern in a notebook.',
     persona: 'Sennet, lancer of the Hearthward. Quiet, exact, a little shy. Studies every boss and writes its patterns in a notebook she lets nobody read. Speaks in short, careful sentences; warms slowly, then completely.',
+    archetype: 'careful', // how the bot brain plays them (shared/bots/personality.js; their own lines stay theirs)
     trust: HERO_TRUST,
   },
   {
@@ -126,6 +130,7 @@ export const NAMED = [
     home: { floor: 1, zone: 'the far side of the Verdant Field' },
     blurb: 'Hunts alone. Trusts what you do, not what you say.',
     persona: 'Cairn, a hunter who climbs alone. Says little and means all of it. Wherever someone fell he stacks a small pile of stones before moving on. Slow to trust: he respects people who fight beside him without asking for anything, and turns down every party until he calls someone a friend.',
+    archetype: 'quiet', // how the bot brain plays them (shared/bots/personality.js; their own lines stay theirs)
     trust: LONER_TRUST,
   },
 ];

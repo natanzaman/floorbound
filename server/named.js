@@ -372,6 +372,8 @@ export class NamedManager {
     const def = st.def, F = FLOORS[floor] || FLOORS[1];
     const [view] = this.mgr.start([def.cls], [def.name], { lvl: st.lvl, behaviour: F.beh.farm, follow: '', skill: NAMED_SKILL, join: { named: def.id, f2: 1, f3: 1 } });
     const e = this.mgr.bots.find(x => x.bid === view.bid);
+    e.persona = e.namedArch = def.archetype || 'steady'; // (their fixed personality: an admin's 'auto' comes back to it)
+    if (e.b.setPersona) { e.b.setPersona(e.persona); e.b.persona = { ...e.b.persona, noVoice: true }; } // (habits and play style, not the stock voice: their lines are their own)
     e.named = def.id; e.b.noBoss = true; e.allow = st.allow; e.creator = null; // (one of a kind: nobody's creation)
     st.e = e; st.pid = 0; st.hostT = null; st.fresh = true;
   }

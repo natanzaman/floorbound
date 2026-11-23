@@ -43,6 +43,8 @@ import { easeOff } from './threat.js'; // DPS ease off near 90% threat (J4)
 import { inYard, ACADEMY } from '../academyyard.js'; // the Academy's trial yard: solo, so followers wait at the door
 import { readParts, roleTurn, roleScore, wantsBreak } from './roles.js'; // boss parts, shields, flyers, casters (docs/briefs/combat-quickwins.md)
 import { readDuels, foeMobs } from '../duels.js'; // duels: only my opponents' stand-ins are targets (server/duels.js)
+import { rollPersonality, potionShift, backOffAt, tankWait, formation, isNeutral } from './personality.js'; // who the bot is (docs/briefs/personalities.md)
+import { idleOk, idleBegin, idleMoved, idleHabits, idleEvent, afkNow } from './idle.js'; // idle habits by personality
 
 const BOSS_LVL = { 1: 5, 2: 15, 3: 25 }; // a leader levels on its floor's field until this, then goes for the boss
 const floorFor = beh => (beh === 'floor3' ? 3 : beh === 'floor2' ? 2 : 0); // a behaviour's own floor (0: none)
@@ -54,7 +56,8 @@ const inAnyGate = (x, z) => inGateZone(x, z) || inGateZone2(x, z) || inGateZone3
 
 // peers: an optional shared Set of bot ids (bots started together that the server doesn't flag as bots, e.g. test/team.js
 // and /bots.html connect as ordinary players).
-export function createBot({ url, WebSocket: WS = globalThis.WebSocket, cls, name, join = {}, behaviour = 'field', follow = '', skill = 5, floor = 1, branch = null, log = null, logEvents = false, quiet = false, peers = null }) {
+// persona: an archetype id from shared/bots/personality.js, 'neutral' (none), or null (rolled from the name).
+export function createBot({ url, WebSocket: WS = globalThis.WebSocket, cls, name, join = {}, behaviour = 'field', follow = '', skill = 5, floor = 1, branch = null, log = null, logEvents = false, quiet = false, peers = null, persona = null }) {
   const b = {
     cls, name, behaviour, follow: String(follow || ''), floor: floorFor(behaviour) || floor, branch, log, logEvents, quiet,
     id: 0, x: 0, z: 0, seq: 0, face: 0, t: 0, mobs: [], players: [], me: null, dead: false, hp: 1, maxHp: 1, party: 0,
@@ -67,6 +70,8 @@ export function createBot({ url, WebSocket: WS = globalThis.WebSocket, cls, name
   };
   b.role = roleOf(cls);
   b.skill = clampSkill(skill); // capability level; 5 = perfect
+  b.persona = rollPersonality(name, persona); // who it is (same name, same personality)
+  b.setPersona = id => { b.persona = rollPersonality(b.name, id || null); b.idle = null; };
   b.send = o => b.ws.readyState === 1 && (b.ws.sendObj ? b.ws.sendObj(o) : b.ws.send(JSON.stringify(o))); // (sendObj: the server's in-process socket, server/localws.js)
   b.configure = o => configure(b, o);
   b.command = c => command(b, c);
@@ -268,6 +273,7 @@ function onEvent(b, e) {
     case 'chat': onChat(b, e); break;
     case 'botcmd': onBotCmd(b, e); break;
   }
+  idleEvent(b, e, { isBot, mateOf }); // bows to a human who joins, hops back at a partymate
   brainFor(b.cls).onEvent?.(b, e);
   runHooks('onEvent', b, e);
 }
@@ -476,8 +482,9 @@ function upkeep(b, P, M) {
     if (there && (!P.humans.length || ordered || b.gateReady > 0)) { b.readyT = b.t; b.send({ type: 'ready' }); }
     else if (!there) say(b, 'gateWait', {}, { p: 0.5, cd: 90 });
   }
-  if (!b.rev && b.hp / b.maxHp < potionAt(b) && b.t - b.potT > 10) { if (!drink(b)) b.potT = b.t; }
-  if (b.hp / b.maxHp < 0.3 && b.tgtId && b.t - (b.lowT || -99) > 20) {
+  const potAt = potionAt(b); // (0: forgot this time)
+  if (!b.rev && potAt > 0 && b.hp / b.maxHp < potAt + potionShift(b) && b.t - b.potT > 10) { if (!drink(b)) b.potT = b.t; }
+  if (b.hp / b.maxHp < backOffAt(b) && b.tgtId && b.t - (b.lowT || -99) > 20) {
     b.lowT = b.t;
     say(b, 'lowHp', {}, { p: 0.7, cd: 25 });
     if (b.role !== 'tank' && b.role !== 'healer' && P.all.some(p => p.role === 'healer' && !p.dead && p.id !== b.id)) b.backOff = b.t + 1.2;
@@ -568,7 +575,7 @@ function makeCtx(b, P, M, tgt, dodge) {
   ctx.tank = tank;
   ctx.leader = M.mode === 'lead' ? null : M.anchor || null;
   ctx.anchor = tankOn || (M.anchor && !M.anchor.dead && M.anchor.id !== b.id ? M.anchor : null);
-  ctx.ready = b.role === 'tank' || !tankOn || (!!hTank && b.t - hTank.first > 1.2);
+  ctx.ready = b.role === 'tank' || !tankOn || (!!hTank && b.t - hTank.first > tankWait(b)); // (patience: 0.6-1.8 s)
   if (tgt?.def.prop) { ctx.ready = true; ctx.anchor = null; } // a trap object (J1): straight at it
   ctx.party = { mates: P.mates, humans: P.humans, all: P.all };
   ctx.hurt = [...P.all.filter(p => p.downed?.by && d2(p.x, p.z, b.x, b.z) < 15), // a body being revived: a Heal speeds it up
@@ -705,28 +712,36 @@ function leadTarget(b, beh, here) {
 
 // ---------------- moving without a target ----------------
 function idle(b, P, M) {
-  if (M.mode === 'stay') { moveToward(b, b.cmd.x, b.cmd.z, 0.8); return; }
+  const calm = idleOk(b), s = calm ? idleBegin(b) : null; // personality habits (shared/bots/idle.js)
+  const walk = (x, z, stop, speed) => { if (calm) b.calmT = b.t; const moved = moveToward(b, x, z, stop, speed); if (moved && s) idleMoved(b); return moved; }; // (calm: a weave, capped turning)
+  if (M.mode === 'stay') { if (!walk(b.cmd.x, b.cmd.z, 0.8) && calm) idleHabits(b, P); return; }
   const a = M.anchor;
   if (M.mode !== 'lead' && a) {
-    if (a.dead) return; // hold here until they're back
-    // formation: fan out behind the anchor
+    if (a.dead) { if (calm) idleHabits(b, P); return; } // hold here until they're back
+    // formation: fan out behind the anchor (each personality keeps its own spot and distance, drifting a little)
     const flock = P.bots.filter(p => p.id !== a.id).map(p => p.id);
-    const k = Math.max(0, flock.indexOf(b.id)), n = Math.max(1, flock.length);
-    const ang = (a.face || 0) + Math.PI + (k - (n - 1) / 2) * 0.8, r = 3 + (k % 2) * 0.6;
+    const k = Math.max(0, flock.indexOf(b.id)), n = Math.max(1, flock.length), F = formation(b);
+    const drift = isNeutral(b) ? 0 : Math.sin(b.t * 0.15 + (b.persona.phase || 0)) * 0.25;
+    const ang = (a.face || 0) + Math.PI + (k - (n - 1) / 2) * 0.8 + F.ang + drift, r = F.r + (k % 2) * 0.6;
     const sx = a.x + Math.sin(ang) * r, sz = a.z + Math.cos(ang) * r, dA = d2(a.x, a.z, b.x, b.z);
-    if (dA > 5 || d2(sx, sz, b.x, b.z) > 1.5) moveToward(b, sx, sz, 0.6, dA > 9 ? SPRINT_SPEED : PLAYER_SPEED);
+    if (s?.sit && dA <= Math.max(6, F.r + 2.6)) return idleHabits(b, P); // sitting: stay down until the anchor walks off
+    if (dA > Math.max(5, F.r + 1.6) || d2(sx, sz, b.x, b.z) > 1.5) walk(sx, sz, 0.6, dA > 9 ? SPRINT_SPEED : PLAYER_SPEED);
+    else if (calm) idleHabits(b, P);
     return;
   }
   // leading: wait for bot teammates that fell behind (e.g. respawned in town), up to 20 s at a time
   const behind = P.mates.some(p => p.bot && !p.dead && floorOf(p.x) === floorOf(b.x) && d2(p.x, p.z, b.x, b.z) > 20);
   if (behind && !inBossRoom(b.x, b.z)) {
     b.waitFrom ??= b.t;
-    if (b.t - b.waitFrom < 20) return;
+    if (b.t - b.waitFrom < 20) { if (calm) idleHabits(b, P); return; }
   } else b.waitFrom = null;
   const beh = M.beh, fl = floorOf(b.x), lvl = b.me?.lvl || 1;
-  if (beh === 'follow') return;
-  if (beh === 'field') { const [x, z] = fieldSpot(b); moveToward(b, x, z, 1); return; }
-  if (beh !== 'warden' && (b.noBoss || lvl < BOSS_LVL[fl])) { moveToward(b, FLOOR_X[fl], fl > 1 ? 70 : 60); return; } // into the field
+  if (beh === 'follow') { if (calm) idleHabits(b, P); return; }
+  if (beh === 'field') {
+    if (calm && afkNow(b, P.humans.length > 0)) { idleHabits(b, P); return; } // a free bot farming alone: a short break now and then
+    const [x, z] = fieldSpot(b); walk(x, z, 1); return;
+  }
+  if (beh !== 'warden' && (b.noBoss || lvl < BOSS_LVL[fl])) { walk(FLOOR_X[fl], fl > 1 ? 70 : 60); return; } // into the field
   travelToBoss(b);
 }
 
@@ -748,6 +763,7 @@ function goalText(b, P, M, tgt) {
   if (fight) return fight;
   const gate = !b.gateOpen && inAnyGate(b.x, b.z);
   if (b.waitFrom != null && b.t - b.waitFrom < 20) return 'Waiting for the party';
+  if (b.idle && b.t < b.idle.afkUntil && M.mode === 'lead' && !P.humans.length) return 'AFK';
   if (M.beh === 'field') return 'Farming the field';
   if (M.beh === 'follow') return `Looking for ${b.follow || 'a player'}`;
   if (M.beh !== 'warden' && b.noBoss) return floorOf(b.x) > 1 ? 'Hunting the field' : 'Farming the field';

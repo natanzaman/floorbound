@@ -7,6 +7,7 @@ import { TITLES, STAT_KEYS } from '/shared/titles.js';
 import { MASTERY, BRANCHES, masteryLevel } from '/shared/mastery.js';
 import { TWISTS } from '/shared/twists.js';
 import { BOT_SKILLS, BOT_SKILL_DEFAULT } from '/shared/botskill.js';
+import { ARCHETYPES, ARCHETYPE_IDS } from '/shared/bots/personality.js'; // bot personalities (docs/briefs/personalities.md)
 import { STYLES, CLASS_STYLES, styleLine } from '/shared/styles.js';
 import { TREES, pointsAt, spentOf } from '/shared/talents.js';
 import { AFFIXES, AFFIX_IDS, SETS, affixText, isTeamAffix, setSlots, bestSetFor } from '/shared/loot.js';
@@ -239,6 +240,7 @@ function renderBotCards(list) {
   if (!list.length) root.innerHTML = '<div class="empty">No bots running. Pick a preset or add one on the left.</div>';
 }
 const focused = el => document.activeElement === el;
+function personaOptions() { return `<option value="auto">From name</option>${ARCHETYPE_IDS.map(k => `<option value="${k}">${esc(ARCHETYPES[k].name)}</option>`).join('')}<option value="neutral">Neutral (none)</option>`; }
 function behOptions(cur) { return Object.entries(botData.behaviours).map(([k, v]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${esc(v.split(' (')[0])}</option>`).join(''); }
 
 function buildCard(b) {
@@ -255,7 +257,9 @@ function buildCard(b) {
       <span>Level</span><span><span class="step"><button type="button" data-d="-1" title="Level down">−</button><input type="number" data-k="lvl" min="1" max="${MAX_LEVEL}" /><button type="button" data-d="1" title="Level up">+</button></span></span>
       <span>Capability</span><span><span class="seg" data-k="seg"></span></span>
       <span>Behaviour</span><span class="beh"><select data-k="beh"></select><select data-k="follow" class="hidden"></select></span>
+      <span>Personality</span><span><select data-k="persona" title="Who this bot is: how it fights, moves, idles and talks. Rolled from its name unless picked here (kept until the server restarts).">${personaOptions()}</select></span>
     </div>
+    <div class="goal" data-k="personaText" style="opacity:.75"></div>
     <div class="acts">
       <button class="small" data-a="heal" title="Heal to full">✚ Heal</button>
       <button class="small" data-a="kill" data-k="killbtn"></button>
@@ -292,6 +296,7 @@ function buildCard(b) {
     } else patch({ behaviour: v }, r => `${r.bot.name}: ${botData.behaviours[v].split(' (')[0]}.`);
   };
   q('follow').onchange = () => patch({ follow: q('follow').value }, `Following ${q('follow').value}.`);
+  q('persona').onchange = () => patch({ persona: q('persona').value }, r => `${r.bot.name}: ${r.bot.personaText}.`);
   // actions
   for (const btn of el.querySelectorAll('[data-a]')) btn.onclick = () => {
     const a = btn.dataset.a, name = nm.dataset.v;
@@ -334,6 +339,8 @@ function updateCard(el, b, force = false) {
   if (!focused(nm) && (force || nm.dataset.v !== b.name)) nm.value = b.name;
   nm.dataset.v = b.name;
   q('skilltag').innerHTML = skillTag(b.skill);
+  if (!focused(q('persona')) && q('persona').value !== (b.persona || 'auto')) q('persona').value = ARCHETYPES[b.persona] || b.persona === 'neutral' ? b.persona : 'auto'; // (auto: rolled from the name, shown in the line below)
+  q('personaText').textContent = b.personaText || '';
   if (q('seg').dataset.v !== String(b.skill)) { q('seg').innerHTML = segHtml(b.skill); q('seg').dataset.v = b.skill; }
   q('where').textContent = b.status === 'online' ? `${b.floor ? `F${b.floor} · ` : ''}${b.area}` : b.status;
   q('party').innerHTML = (b.party.length ? `<span class="sep">·</span> party: ${esc(b.party.join(', '))}` : '') + (b.owner ? ` <span class="sep">·</span> added by ${esc(b.owner)} (levels with them)` : b.creator ? ` <span class="sep">·</span> made by ${esc(b.creator)}` : '');

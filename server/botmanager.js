@@ -22,6 +22,7 @@ import { floorOf, inArena2 } from '../shared/floor2.js';
 import { inArena3 } from '../shared/floor3.js';
 import { inYard, ACADEMY } from '../shared/academyyard.js'; // the Academy's trial yard: solo, followers wait at the door
 import { clampSkill, skillName } from '../shared/botskill.js'; // capability levels 1-5
+import { describePersona } from '../shared/bots/personality.js'; // who a bot is (docs/briefs/personalities.md)
 import { BotEditMethods } from './botedit.js'; // live edits + actions (admin page)
 import { canControlBot, accessOf, ACCESS } from '../shared/accesslevels.js'; // who may control a bot
 
@@ -170,7 +171,7 @@ export class BotManager {
       bid: e.bid, id: e.b.id || 0, name: p?.name || e.b.name, cls: e.b.cls, lvl: p?.lvl ?? e.lvl, hp: p?.hp ?? 0, maxHp: p?.maxHp ?? 0,
       dead: !!p?.dead, area: p ? areaName(p.x, p.z) : 'joining…', floor: p ? floorOf(p.x) : 0,
       party: party ? party.members.filter(id => id !== p.id).map(id => g.players.get(id)?.name).filter(Boolean) : [],
-      behaviour: e.behaviour, follow: e.follow, team: e.team, owner: this.ownedRec?.(e.bid)?.ownerName || '', skill: e.b.skill, skillName: skillName(e.b.skill), status: e.b.closed ? 'gone' : p ? 'online' : 'joining', since: e.at,
+      behaviour: e.behaviour, follow: e.follow, team: e.team, owner: this.ownedRec?.(e.bid)?.ownerName || '', skill: e.b.skill, skillName: skillName(e.b.skill), persona: e.persona || 'auto', personaText: describePersona(e.b.persona), status: e.b.closed ? 'gone' : p ? 'online' : 'joining', since: e.at,
       goal: p?.dead ? 'Down' : e.b.goal || '', role: e.b.role, order: e.b.cmd ? { cmd: e.b.cmd.k, by: e.b.cmd.byName || '' } : null, partyLead: e.b.anchor?.name || '', look: e.look || '',
       creator: e.creator?.name || '', allow: e.allow || [],
     };

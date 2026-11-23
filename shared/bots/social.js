@@ -1,6 +1,8 @@
 // Level-1 social layer for bots: party orders (/b chat orders + the command wheel) and rate-limited chatter.
 // Shared by the bot brain (shared/bots/brain.js), the server (validates `botcmd`) and the client's command wheel.
 
+import { VOICE, chatScale } from './personality.js'; // chattiness and voice (docs/briefs/personalities.md)
+
 // Command ids, in command-wheel order. `wheel: false` ones are chat / menu only.
 export const BOT_COMMANDS = {
   follow: { label: 'Follow me', icon: '➜' },
@@ -118,6 +120,13 @@ export const pick = (key, vars = {}) => {
   return list[Math.floor(Math.random() * list.length)].replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 };
 
+// A line in the bot's own voice (shared/bots/personality.js VOICE) about half the time, else the stock line.
+export function voiced(b, key, vars = {}) {
+  const own = !b.persona?.noVoice && VOICE[b.persona?.id]?.[key];
+  if (own?.length && Math.random() < 0.5) return own[Math.floor(Math.random() * own.length)].replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+  return pick(key, vars);
+}
+
 // How chatty a bot is by capability (1-5): sloppier players chat less about tactics.
 const CHATTY = { 1: 0.4, 2: 0.55, 3: 0.75, 4: 0.9, 5: 1 };
 
@@ -131,12 +140,12 @@ export function say(b, key, vars = {}, { p = 1, cd = 20, force = false, text = n
     if (b.t - s.last < 0.8) return false;
     if (b.quiet || b.t < s.next || b.t < (s.cd[key] || 0)) return false;
     if (b.t - (b.partyChatT ?? -99) < 3) return false; // someone else just spoke
-    if (Math.random() > p * (CHATTY[b.skill] ?? 1)) { s.cd[key] = b.t + cd / 3; return false; }
+    if (Math.random() > p * (CHATTY[b.skill] ?? 1) * chatScale(b)) { s.cd[key] = b.t + cd / 3; return false; } // (personality: 0.35-1.4x)
     s.next = b.t + 6 + (5 - (b.skill || 5)) * 2;
     s.cd[key] = b.t + cd;
   }
   s.last = b.t;
-  b.send({ type: 'chat', text: (text ?? pick(key, { name: b.name, ...vars })).slice(0, 200), ch: ch || (b.party ? 'p' : 's') });
+  b.send({ type: 'chat', text: (text ?? voiced(b, key, { name: b.name, ...vars })).slice(0, 200), ch: ch || (b.party ? 'p' : 's') });
   b.lastSaid = { key, t: b.t };
   return true;
 }

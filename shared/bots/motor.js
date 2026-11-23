@@ -7,7 +7,8 @@ import { labSteer } from '../labyrinth.js'; // the labyrinths' walls (shared/lab
 import { skillReady, pressed, aimNoise, sweepError, quakeError } from '../botskill.js';
 import { brainFor, registerBotHook } from './registry.js';
 import { SPEC, sigOf } from '../subclasses.js'; // slot 5: the subclass's signature skill (me.sub)
-import { botStep, botSpeedAt, botCanRoll, arenaEscape, sidestep } from './arenas.js'; // boss arenas' areas (J2): sludge, fire, cover
+import { botStep, botSpeedAt, botCanRoll, arenaEscape, sidestep } from './arenas.js';
+import { traitOf, isNeutral } from './personality.js'; // calm walking by personality (docs/briefs/personalities.md) // boss arenas' areas (J2): sludge, fire, cover
 
 export const DT = 0.05; // one snapshot (20 Hz)
 export const d2 = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
@@ -24,6 +25,8 @@ export function useSkill(b, slot, face, tid) {
 }
 
 export function moveToward(b, tx, tz, stop = 0.4, speed = PLAYER_SPEED) {
+  const calm = b.calmT === b.t && !isNeutral(b); // walking with nothing to do (brain.js idle): weave a little, turn like a person
+  if (calm) { const [sx, sz] = labSteer(b.x, b.z, tx, tz); if (sx === tx && sz === tz) [tx, tz] = weave(b, tx, tz); } // (never in a labyrinth: a shifted spot could be another cell's route)
   [tx, tz] = labSteer(b.x, b.z, ...aimNoise(b, tx, tz)); // capability: positioning error in fights; labyrinths: round the walls (next cell first)
   const dx = tx - b.x, dz = tz - b.z, d = Math.hypot(dx, dz);
   if (d <= stop) return false;
@@ -37,8 +40,22 @@ export function moveToward(b, tx, tz, stop = 0.4, speed = PLAYER_SPEED) {
   [nx, nz] = resolveCollision(nx, nz);
   if (Math.hypot(nx - b.x, nz - b.z) < step * 0.3) [nx, nz] = sidestep(b, tx, tz, step, resolveCollision, (x, z) => walkable(x, z, !b.gateOpen)) || [nx, nz]; // stuck on a lower area's wall: round it
   if (!walkable(nx, nz, !b.gateOpen)) return false;
-  b.x = nx; b.z = nz; b.face = Math.atan2(dx, dz);
+  b.x = nx; b.z = nz;
+  b.face = calm ? turnToward(b, Math.atan2(dx, dz)) : Math.atan2(dx, dz);
   return true;
+}
+
+// A calm walk: a slow sideways weave off the straight line (fading out near the spot), by curiosity, at the bot's own phase.
+function weave(b, tx, tz) {
+  const dx = tx - b.x, dz = tz - b.z, d = Math.hypot(dx, dz);
+  if (d < 3) return [tx, tz];
+  const amp = (0.3 + traitOf(b, 'curiosity') * 0.9) * Math.min(1, (d - 3) / 6) * Math.sin(b.t * 0.8 + (b.persona.phase || 0));
+  return [tx + (dz / d) * amp, tz - (dx / d) * amp];
+}
+// Turning at a capped rate (rad/s by aggression: 5 to 11), not snapping round.
+function turnToward(b, want) {
+  const d = Math.atan2(Math.sin(want - b.face), Math.cos(want - b.face)), step = (5 + traitOf(b, 'aggression') * 6) * (b.dt || DT);
+  return Math.abs(d) <= step ? want : b.face + Math.sign(d) * step;
 }
 
 function roll(b, dir) {

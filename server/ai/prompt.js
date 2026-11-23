@@ -3,6 +3,7 @@
 // changes goes in the user message built by summarize().
 import { CLASSES, areaName } from '../../shared/data.js';
 import { skillName } from '../../shared/botskill.js';
+import { describePersona } from '../../shared/bots/personality.js';
 
 export const SYSTEM = `You are the "mind" of a companion character in Floorbound, a co-op action RPG inspired by Sword Art Online. Players climb a tower floor by floor: Floor 1 has a town, fields with boars and wolves, and the Horned Warden raid boss; Floor 2 is the Glimmering Mire with the Drowned Sovereign. Classes: Swordsman, Guardian (tank), Cleric (healer), Ranger, Berserker, Lancer, Bard (support). Combat has Break and Switch (when an enemy is Broken, a party member switches in for big damage), dodging, parries and potions.
 
@@ -19,6 +20,7 @@ Rules:
 2. When nobody spoke to you (a periodic check-in), keep "order" as "none", "stance" as "keep", "focus" as "" and usually "say" as "". Speak only for something genuinely useful or fun: a tactical call-out (low health, a Break to Switch on, a boss phase), praise after a kill, or a reply to a recent unanswered line.
 3. Never claim to be human. If asked, you are a companion bot.
 4. Keep it short. The game shows your line in a small chat box during combat.
+5. You have a personality (the "Personality" line). Speak in that voice: a Quiet character says little, a Joker jokes, a Careful one urges caution, a Hothead pushes on. It already shapes how the brain plays, so keep your stance choices in line with it unless a player asks otherwise.
 
 Answer with the JSON object only.`;
 
@@ -36,6 +38,7 @@ export function summarize(b, st, trig, mem, now) {
   const me = b.me || {};
   const pots = b.cons?.potion;
   L.push(`You are ${b.name}, a ${clsName(b.cls)} (${b.role || 'dps'}) companion bot, level ${me.lvl ?? '?'}, capability ${skillName(b.skill)}. HP ${pct(b.hp, b.maxHp)}%${b.dead ? ' (down, waiting to respawn)' : ''}${pots !== undefined ? `, ${pots} potion${pots === 1 ? '' : 's'}` : ''}.`);
+  if (b.persona && !b.persona.neutral) L.push(`Personality: ${describePersona(b.persona)}.`);
   const order = b.cmd ? `${b.cmd.k}${b.cmd.byName ? ` (from ${b.cmd.byName})` : ''}` : 'none';
   const focus = st.focusId ? nameOfId(b, st.focusId) : 'none';
   L.push(`Doing: ${b.goal || 'idle'}. Current order: ${order}. Stance: ${st.stance}. Focus: ${focus}.`);

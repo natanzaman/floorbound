@@ -88,7 +88,7 @@ function setup({ env = {}, reply, provider, now } = {}) {
   const noKey = new Minds({ cfg: cfgNoKey, provider: makeProvider(cfgNoKey, { env: {} }), env: {}, log: () => {} });
   ok(run(off) === base, 'no AI_PROVIDER: the bot sends and does exactly what it did without the mind layer');
   ok(run(noKey) === base && !noKey.active(), 'provider set but no key: still exactly the same, and the mind stays inactive');
-  ok(base.includes('Got you, Natan.'), '(sanity: the scripted run exercised the brain: a /b heal order fired)');
+  ok(/Got you, Natan\.|Keeping you up, Natan\.|Heals on you\./.test(base), '(sanity: the scripted run exercised the brain: a /b heal order fired)');
   const r = noKey.setEnabled(true);
   ok(!r.ok && /ANTHROPIC_API_KEY/.test(r.error), `can't switch on without a key: "${r.error}"`);
   ok(/no key/.test(noKey.status().line) && noKey.status().keySet === false, 'status line says the key is missing');
@@ -199,10 +199,10 @@ function setup({ env = {}, reply, provider, now } = {}) {
 }
 {
   let t = 4e6;
-  const { m, p, bots } = setup({ env: { AI_BOT_TOKENS_HOUR: '1000', AI_BOT_MIN_GAP_S: '0.5' }, now: () => t });
+  const { m, p, bots } = setup({ env: { AI_BOT_TOKENS_HOUR: '1200', AI_BOT_MIN_GAP_S: '0.5' }, now: () => t });
   const b = makeBot(); bots.push(b); snap(b);
   for (let i = 0; i < 4; i++) { snap(b, [chat(1, 'Natan', `Lyra ${i}?`)]); await flush(); t += 1000; }
-  ok(p.calls.length === 2 && m.stats.skipped['bot token budget used'] >= 1, 'per-bot token budget per hour (two ~900-token calls use up 1000)');
+  ok(p.calls.length === 2 && m.stats.skipped['bot token budget used'] >= 1, 'per-bot token budget per hour (two ~1000-token calls use up 1200)');
   t += 3601e3; snap(b, [chat(1, 'Natan', 'Lyra?')]); await flush();
   ok(p.calls.length === 3, 'the per-bot budget refills after an hour');
   current = null;
