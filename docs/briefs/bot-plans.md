@@ -22,12 +22,17 @@ free bots' own days.
 | `say` | a line | party / say chat | said | |
 | `emote` | sit, bow, kneel or hop; seconds (default 4) | the pose, then stand | time is up | |
 | `skill` | slot 1 to 4 | press that skill once | pressed | 10 s, then moves on |
+| `sell` | | walk to the Merchant, sell the bag's spare gear one piece at a time (not keepsakes, not Academy weapons) | nothing spare is left; it says what it got | 4 min to get there, then the plan stops |
+| `buy` | a count (default 3, 10 at most) | walk to the Merchant, buy that many Health Potions with its own gold | bought, or the gold ran out (it says so and moves on) | 4 min to get there, then the plan stops |
 
 Places (`PLACES`): the well, smith, merchant, hall, academy, garden, life hall, cooking fire, alchemy bench, registrar,
 field, gate (Floor 1); the camp (Floors 2 and 3); `here` (where the player stood when they gave the plan).
 Monsters: any non-boss, non-prop kind by id or name ("boars", "dire wolves").
 
-Not in this version: crafting, buying and selling (bots have no shop or crafting code yet), and gathering.
+Not in this version: crafting and gathering (bots have no code for them). `sell` and `buy` came with phase B
+(`docs/briefs/bot-days.md`, 2026-11-23): the bot keeps its gold and bag from the server's `inv` message (`b.gold`,
+`b.bag`, read only), and sends the same `sell` and `buy` messages a player's client does, so the server's own rules
+(reach, price, tax, what the merchant refuses) apply.
 
 ## Rules
 

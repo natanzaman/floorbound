@@ -7,9 +7,16 @@
 import { MOBS } from '../data.js';
 import { WAYPOINTS, floorOf, floorUnlocked } from '../floor2.js';
 import { GARDEN } from '../life.js';
+import { MERCHANT, SHOP } from '../items.js';
 import { useSkill, d2 } from './motor.js';
 import { STEPS, PLACES, PLAN_MAX, REACH, cleanPlan, planText, stepText, mobName } from './plan.js';
 
+const POTION_I = SHOP.findIndex(s => s.kind === 'cons' && s.id === 'potion'); // what a `buy` message names (server/game.js buy)
+const COUNTER = MERCHANT.r + 1.2; // m from the merchant: inside the server's reach (r + 1.5)
+const DEAL = () => 0.35 + Math.random() * 0.3; // s between two sales or purchases, like a player clicking through a bag
+// What a bot sells: everything in its bag (it wears what is better the moment it loots it, server/loot.js botLoot)
+// but keepsakes and Academy weapons, which the merchant refuses anyway.
+export const spareGear = b => (b.bag || []).filter(it => it && !it.ks && !it.ac);
 const COME_R = 6;  // m: "back with the player" (a follower's own spot in the formation is up to 5 m off)
 const GAP = 1;     // s without a turn (down, dead, a raid) before the clocks are held back
 
@@ -104,6 +111,11 @@ function begin(b, P, p, s, api) {
       if (floorOf(b.x) !== 1) return `the garden is on Floor 1`;
       hold(b, p, { x: GARDEN.x + 4, z: GARDEN.z + 3, r: 0, floor: 1 }, { tend: 1, stop: 0.8 });
       return;
+    case 'sell': case 'buy': { // to the merchant's counter (Floor 1; a waypoint trip from another floor), then deal
+      Object.assign(st, { x: MERCHANT.x, z: MERCHANT.z, fl: 1, stop: MERCHANT.r + 0.6, name: PLACES.merchant.name, at: null, next: 0, sent: s.k === 'sell' ? new Set() : 0 });
+      hold(b, p, { x: MERCHANT.x, z: MERCHANT.z, r: 0, floor: 1 }, { stop: st.stop });
+      return;
+    }
     case 'say': if (p.speak) api.say?.(b, 'plan', {}, { force: true, text: s.text }); return; // (one bot says it for a group)
     case 'emote':
       hold(b, p, { x: b.x, z: b.z, r: 0, floor: floorOf(b.x) });
@@ -154,8 +166,33 @@ function check(b, P, p, s) {
       st.pose = null;
       return 'done';
     case 'skill': if (useSkill(b, s.slot, b.face)) return 'done'; break;
+    case 'sell': case 'buy': {
+      if (st.at == null) { // on the way
+        if (floorOf(b.x) !== 1 || d2(b.x, b.z, st.x, st.z) > COUNTER) { if (t > REACH) return `I couldn't get to ${st.name}`; return null; }
+        Object.assign(st, { at: b.t, next: b.t + 0.6, gold0: b.gold || 0, pots0: b.cons?.potion || 0, last: -1 });
+      }
+      if (b.t < st.next) return null;
+      if (st.end) return 'done';
+      const finish = text => { st.end = 1; st.next = b.t + 0.8; st.note = text; return null; };
+      if (s.k === 'sell') {
+        const it = spareGear(b).find(it => !st.sent.has(it.u));
+        if (!it || st.sent.size >= 40) { // (the last sale's bag is in by now)
+          const sold = [...st.sent].filter(u => !(b.bag || []).some(it => it.u === u)).length, got = (b.gold || 0) - st.gold0;
+          return finish(sold ? `Sold ${sold} ${sold === 1 ? 'thing' : 'things'} for ${got} gold.` : 'Nothing to sell.');
+        }
+        st.sent.add(it.u); b.send({ type: 'sell', u: it.u });
+      } else {
+        const have = b.cons?.potion || 0, got = have - st.pots0;
+        if (st.sent >= s.n || (st.sent > 0 && have <= st.last)) { // enough, or the last one didn't come: out of gold
+          return finish(got >= s.n ? `Bought ${got} potion${got === 1 ? "" : "s"}.` : got > 0 ? `I could only pay for ${got} potion${got === 1 ? '' : 's'}.` : `I can't pay for a potion (${b.gold || 0} gold).`);
+        }
+        st.last = have; st.sent++; b.send({ type: 'buy', i: POTION_I });
+      }
+      st.next = b.t + DEAL();
+      return null;
+    }
   }
-  if (S.limit && t > S.limit) return S.hard ? ({ goto: `I couldn't get to ${st.name}`, come: `I couldn't reach ${who(p)}`, boss: 'the boss is still standing' })[s.k] : 'done';
+  if (S.limit && t > S.limit) return S.hard ? ({ goto: `I couldn't get to ${st.name}`, come: `I couldn't reach ${who(p)}`, boss: 'the boss is still standing' })[s.k] || `I couldn't get to ${st.name}` : 'done';
   return null;
 }
 
@@ -166,7 +203,7 @@ export function planTurn(b, P, api) {
   if (!p.adm && p.by && !P.all.some(q => q.id === p.by)) return endPlan(b); // the player who gave it left the party
   if (b.cmd?.defend || b.dead) return; // a town raid (brain.js 'release' puts our order back), or dead: the plan waits
   const gap = b.t - p.seen; p.seen = b.t;
-  if (gap > GAP) { p.t0 += gap; const st = p.st; if (st) { st.t0 += gap; if (st.at != null) st.at += gap; if (st.seen != null) st.seen += gap; } } // (its clocks waited too)
+  if (gap > GAP) { p.t0 += gap; const st = p.st; if (st) { st.t0 += gap; if (st.at != null) st.at += gap; if (st.seen != null) st.seen += gap; if (st.next) st.next += gap; } } // (its clocks waited too)
   if (b.t - p.t0 > PLAN_MAX) return void stop(b, api, 'it took too long');
   for (let n = 0; n < 3; n++) { // (a few instant steps a turn at most)
     const s = p.steps[p.i];
@@ -183,6 +220,7 @@ export function planTurn(b, P, api) {
     const r = check(b, P, p, s);
     if (!r) return;
     if (r !== 'done' && r !== 'keep') return void stop(b, api, r);
+    if (p.st.note) tell(b, api, p.st.note); // what a sell or buy step came to
     p.st = null;
     if (++p.i >= p.steps.length) {
       if (++p.loop < p.loops) p.i = 0;

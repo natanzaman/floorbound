@@ -15,7 +15,8 @@ import { createBot } from '../shared/bots/brain.js';
 import { registerBotHook } from '../shared/bots/registry.js';
 import { parseBotChat, botHelp, BOT_COMMANDS, botMayNotSend, say as botSay } from '../shared/bots/social.js';
 import { STEPS, STEP_IDS, PLACES, PLAN_STEPS_MAX, placeOf, mobKind, cleanPlan, planText, planProgress, planHelp } from '../shared/bots/plan.js';
-import { setPlan, endPlan, planTurn, planEvent, planNote } from '../shared/bots/planrun.js';
+import { setPlan, endPlan, planTurn, planEvent, planNote, spareGear } from '../shared/bots/planrun.js';
+import { MERCHANT, SHOP, CONSUMABLES } from '../shared/items.js';
 import { sanitizeIntent, INTENT_SCHEMA } from '../server/ai/intent.js';
 import { Minds } from '../server/ai/mind.js';
 import { readConfig } from '../server/ai/config.js';
@@ -51,6 +52,12 @@ ok(J(P('/b go smith then say hi: there')?.plan?.steps) === J([{ k: 'goto', place
 ok(P('/b farm 5 wardens hounds')?.plan?.steps[0].mob === 'hound' && P("/b hunt will-o'-wisps 2")?.plan?.steps[0].mob === 'wisp', 'monster names with an apostrophe or hyphens');
 ok(P('/b Hop follow', ['Hop', 'Rook'])?.name === 'Hop' && P('/b Hop follow', () => ['Hop'])?.cmd === 'follow' && P('/b hop', ['Hop'])?.plan?.steps[0].pose === 'hop' && P('/b Bow 2 farm 5 boars', ['Bow 2'])?.name === 'Bow 2' && J(P('/b stay here', ['Stay'])) === J({ cmd: 'stay', name: '' }) && P('/b attack boss', ['Attack'])?.cmd === 'attack' && P('/b Stay: come', ['Stay'])?.name === 'Stay', 'a bot named like a step (Hop, Bow 2) is a name when the server knows its party\'s bots; one named like an old order word (Stay) never changes what the order means');
 ok(/isn't a bot order/.test(P('/b constructor')?.error || '') && /place/.test(P('/b go __proto__')?.error || '') && P('/b say / / /b Zed: boss')?.plan?.steps[0].text === 'b Zed: boss', 'prototype keys are not orders or places; a line to say never starts with a slash');
+
+// sell and buy (the merchant)
+ok(J(P('/b sell loot then buy 5 potions')?.plan?.steps) === J([{ k: 'sell' }, { k: 'buy', n: 5 }]) && J(P('/b go merchant then sell and buy 3')?.plan?.steps.map(s => s.k)) === J(['goto', 'sell', 'buy'])
+  && P('/b restock')?.plan?.steps[0].n === 3 && P('/b buy 99 health potions')?.plan?.steps[0].n === 10 && P('/b sell')?.plan?.steps.length === 1, '/b sell loot then buy 5 potions; "restock" buys 3; at most 10 at a time');
+ok(/only buy Health Potions/.test(P('/b buy 2 tonics')?.error || '') && /only buy/.test(P('/b buy a sword')?.error || '') && P('/b say buy low and sell high')?.plan?.steps[0].text === 'buy low and sell high'
+  && planText(cleanPlan([{ do: 'sell' }, { do: 'buy', what: 'potions', n: 2 }])) === 'Plan: 1) sell my spare gear 2) buy 2 potions' && planHelp().join(' ').includes('sell · buy [3] potions'), 'only potions are bought; the words in a say line stay words; the plan text and the help name both steps');
 
 // ---------- 2. cleaning ----------
 ok(placeOf('the smith') === 'smith' && placeOf('to the raid gate') === 'gate' && placeOf('Town of Beginnings') === 'well' && placeOf('me') === 'here' && placeOf('life hall') === 'lifehall' && placeOf('floor 2') === 'camp2' && placeOf('nowhere') === '', 'places by loose name');
@@ -226,6 +233,44 @@ const walkCmd = b => { if (b.cmd?.k === 'stay') { b.x = b.cmd.x; b.z = b.cmd.z +
   turn(t, 0.1); turn(t, 601); turn(t, 601); turn(t, 601);
   ok(!t.plan && /took too long/.test(t.said.at(-1)), 'a plan ends after 30 minutes whatever is left');
 }
+{ // sell and buy: a stub merchant that answers the way server/game.js sell() and buy() do
+  const POT = SHOP.findIndex(s => s.kind === 'cons' && s.id === 'potion'), PRICE = CONSUMABLES.potion.price;
+  const shopper = (o = {}) => {
+    const b = stub({ x: MERCHANT.x, z: MERCHANT.z + 40, gold: 10, cons: { potion: 0 }, bag: [{ u: 11, name: 'Old Axe' }, { u: 12, name: 'Keepsake', ks: 1 }, { u: 13, name: 'Cap' }, { u: 14, name: 'Academy Bow', ac: 1 }], ...o });
+    b.send = m => {
+      b.sent.push(m);
+      const near = Math.hypot(b.x - MERCHANT.x, b.z - MERCHANT.z) < MERCHANT.r + 1.5;
+      if (m.type === 'sell' && near) { const i = b.bag.findIndex(it => it.u === m.u); if (i >= 0 && !b.bag[i].ks && !b.bag[i].ac) { b.bag = b.bag.filter((_, j) => j !== i); b.gold += 12; } }
+      if (m.type === 'buy' && near && m.i === POT && b.gold >= PRICE) { b.gold -= PRICE; b.cons = { ...b.cons, potion: b.cons.potion + 1 }; }
+    };
+    return b;
+  };
+  const b = shopper();
+  ok(J(spareGear(b).map(it => it.u)) === '[11,13]', 'spare gear: the bag without keepsakes and Academy weapons');
+  setPlan(b, [{ k: 'sell' }, { k: 'buy', n: 3 }, { k: 'say', what: 'stocked up' }], { by: 1, byName: 'Natan', at: [3, 5] }, api);
+  turn(b, 0.1);
+  ok(b.cmd?.k === 'stay' && b.cmd.plan && b.cmd.x === MERCHANT.x && b.cmd.z === MERCHANT.z && b.cmd.fl === 1 && b.cmd.stop < MERCHANT.r + 1.5 && planProgress(b) === 'step 1/3: sell my spare gear', 'sell: an order to the merchant\'s counter, inside the server\'s reach');
+  turn(b, 5);
+  ok(b.plan.i === 0 && !b.sent.length, 'nothing is sold on the way');
+  walkCmd(b); turn(b, 4);
+  ok(b.plan?.i === 1 && J(b.sent.filter(m => m.type === 'sell').map(m => m.u)) === '[11,13]' && b.bag.length === 2 && b.gold === 34 && b.said.includes('Sold 2 things for 24 gold.'), `at the counter: the two spare things are sold, one at a time, and it says what it got (${J(b.said.slice(-2))}, ${b.gold} gold)`);
+  turn(b, 6);
+  ok(b.cons.potion === 2 && b.gold === 4 && b.sent.filter(m => m.type === 'buy').length === 3 && b.said.includes('I could only pay for 2 potions.'), `buy 3 with gold for 2: two potions, and it says so (${J(b.said.slice(-2))})`);
+  turn(b, 3);
+  ok(!b.plan && b.said.includes('stocked up'), 'and the plan goes on to its next step');
+  const r = shopper({ gold: 100, bag: [] });
+  setPlan(r, [{ k: 'sell' }, { k: 'buy', n: 2 }], { by: 1, byName: 'Natan' }, api);
+  turn(r, 0.1); walkCmd(r); turn(r, 8);
+  ok(!r.plan && r.said.includes('Nothing to sell.') && r.said.includes('Bought 2 potions.') && r.cons.potion === 2 && r.gold === 100 - 2 * PRICE && r.sent.filter(m => m.type === 'buy').length === 2, `an empty bag: "Nothing to sell", then exactly two potions (${J(r.said.slice(-3))})`);
+  const q = shopper({ gold: 0, bag: [] });
+  setPlan(q, [{ k: 'buy', n: 2 }], { by: 1, byName: 'Natan' }, api);
+  turn(q, 0.1); walkCmd(q); turn(q, 5);
+  ok(!q.plan && q.said.some(t => /^I can't pay for a potion \(0 gold\)\.$/.test(t)) && q.sent.filter(m => m.type === 'buy').length === 1, 'no gold: one try, it says it can\'t pay, and the plan moves on');
+  const far = shopper();
+  setPlan(far, [{ k: 'sell' }], { by: 1, byName: 'Natan' }, api);
+  turn(far, 0.1); turn(far, 245);
+  ok(!far.plan && /Plan stopped: I couldn't get to the merchant\./.test(far.said.at(-1)) && !far.sent.length, 'it never gets there: the plan stops after 4 minutes');
+}
 
 // ---------- 4. the real brain on a fake socket ----------
 class FakeWS {
@@ -316,7 +361,7 @@ async function mindCase(reply, { mayOrder = null } = {}) {
 }
 ok(INTENT_SCHEMA.required.includes('plan') && J(INTENT_SCHEMA.properties.plan.items.properties.do.enum) === J(STEP_IDS) && INTENT_SCHEMA.properties.plan.items.additionalProperties === false, 'the intent schema carries a strict plan: steps from the menu only');
 ok(J(sanitizeIntent({ say: 'ok', plan: [{ do: 'farm', what: 'boars', n: 5 }, { do: 'buy', what: 'sword', n: 1 }, { do: 'come', what: '', n: 0 }] }).plan) === J([{ k: 'farm', mob: 'boar', n: 5 }]) && J(sanitizeIntent({ plan: 'farm' }).plan) === '[]' && J(sanitizeIntent({}).plan) === '[]', 'sanitizeIntent: clean steps only, [] for anything else');
-ok(/"plan"/.test(SYSTEM) && /cannot craft, buy, sell or gather/.test(SYSTEM) && SYSTEM.includes('smith') && /\[\] lets it carry on/.test(SYSTEM) && !SYSTEM.includes('"""'), 'the prompt lists the steps, the places, what a bot cannot do, and that [] keeps a running plan');
+ok(/"plan"/.test(SYSTEM) && /cannot craft, gather, trade with players or buy anything but potions/.test(SYSTEM) && /sell \(walk to the merchant/.test(SYSTEM) && SYSTEM.includes('smith') && /\[\] lets it carry on/.test(SYSTEM) && !SYSTEM.includes('"""'), 'the prompt lists the steps, the places, what a bot cannot do, and that [] keeps a running plan');
 {
   const { b, p } = await mindCase({ say: 'On it!', order: 'follow', stance: 'keep', focus: '', remember: '', plan: [{ do: 'farm', what: 'boar', n: 5 }, { do: 'goto', what: 'smith', n: 0 }, { do: 'craft', what: 'sword', n: 1 }] });
   snap(b);
@@ -350,7 +395,7 @@ current = null;
 if (process.env.NO_LIVE) { console.log(failed ? `${failed} of ${n} checks failed` : `all ${n} checks passed (live part skipped)`); process.exit(failed ? 1 : 0); }
 const PORT = Number(process.env.PORT) || 3745;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const env = { ...process.env, PORT: String(PORT), DATABASE_URL: '', NAMED_ENABLED: '0', AI_PROVIDER: '', START_LEVEL: '6' };
+const env = { ...process.env, PORT: String(PORT), DATABASE_URL: '', NAMED_ENABLED: '0', AI_PROVIDER: '', START_LEVEL: '6', TEST_HOOKS: '1' };
 const srv = spawn(process.execPath, ['server/index.js'], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
 let srvLog = ''; srv.stdout.on('data', d => { srvLog += d; }); srv.stderr.on('data', d => { srvLog += d; });
 const stop = code => { try { srv.kill(); } catch {} process.exit(code); };
@@ -392,6 +437,20 @@ try {
   ok(await until(() => team.every(b => b.plan?.steps[0].mob === 'boar'), 3000), 'live: farm 2 boars then come: taken');
   const done = await until(() => team.every(b => !b.plan), 150000);
   ok(done && await until(() => botChat().filter(t => /^Plan done, Nat\.$/.test(t)).length >= 2, 3000) && team.every(b => dist(b, h.x, h.z) < 9), `live: two boars killed, then back to the player (${team.map(b => `${b.name} ${b.plan ? planProgress(b) : 'done'} ${dist(b, h.x, h.z).toFixed(0)} m`).join(', ')})`);
+  // the merchant: Rook is given gold, buys a piece of armor by hand, then sells its bag and buys potions as a plan
+  {
+    const rook = team[0], armor = SHOP.findIndex(s => s.kind === 'gear' && s.slot === 'armor' && !s.town);
+    rook.send({ type: 'test', gold: 400 });
+    say('/b Rook: go merchant');
+    ok(await until(() => !rook.plan && dist(rook, MERCHANT.x, MERCHANT.z) < MERCHANT.r + 1.4 && rook.gold >= 400, 40000), `live: Rook walked to the merchant with 400 gold (${dist(rook, MERCHANT.x, MERCHANT.z).toFixed(1)} m, ${rook.gold} gold)`);
+    rook.send({ type: 'buy', i: armor });
+    await until(() => spareGear(rook).length > 0, 3000);
+    const had = spareGear(rook).length, pots = rook.cons?.potion || 0, gold = rook.gold, c0 = botChat().length;
+    say('/b Rook: sell then buy 2 potions then come');
+    const fin = await until(() => !rook.plan && botChat().slice(c0).some(t => /^Plan done, Nat\.$/.test(t)), 60000), lines = botChat().slice(c0);
+    ok(had > 0 && fin && spareGear(rook).length === 0 && lines.some(t => new RegExp(`^Sold ${had} things? for \\d+ gold\\.$`).test(t)), `live: it sold its ${had} spare thing(s) (${J(lines)})`);
+    ok((rook.cons?.potion || 0) === pots + 2 && lines.includes('Bought 2 potions.') && rook.gold !== gold && dist(rook, h.x, h.z) < 9, `live: bought two potions (${pots} -> ${rook.cons?.potion}), then came back (${gold} -> ${rook.gold} gold)`);
+  }
   // a bot the player added (server-managed: it follows them and is pulled back when it falls 45 m behind)
   h.ws.send(J({ type: 'pbot', op: 'add', cls: 'guardian', name: 'Zed' }));
   const zid = () => h.roster.find(r => r.name === 'Zed')?.id, zed = () => h.pl.get(zid());

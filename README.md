@@ -700,9 +700,11 @@ Teamwork comes from the party as each bot sees it, **real players included**:
 | `say <line>` | say, tell | said (by one bot when the plan is for several). The line runs to the next `;`, `>` or `then <step>` |
 | `sit`, `bow`, `kneel`, `hop` `[10]` | emote | the pose is held that many seconds (default 4) |
 | `skill <1-4>` | skill, cast, use | pressed once |
+| `sell` | sell | it walks to the Merchant (by waypoint from another floor) and sells the spare gear in its bag, one piece at a time: everything but what it wears, keepsakes and Academy weapons. It says what it got. 4 min to get there, or the plan stops |
+| `buy [3] potions` | buy, restock | it walks to the Merchant and buys that many Health Potions (default 3, 10 at most) with its own gold, at the town's prices; with too little gold it buys what it can, says so and goes on |
 | `repeat <n>` | repeat, loop | (last) runs the whole list n times, 5 at most |
 
-Not yet: crafting, buying, selling and gathering (bots have no code for them). A whole plan ends after 30 minutes.
+Not yet: crafting, gathering and buying anything but potions (bots have no code for them). A whole plan ends after 30 minutes.
 
 | Order | `/b` words | What the bot does |
 |---|---|---|

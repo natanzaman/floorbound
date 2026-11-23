@@ -100,7 +100,7 @@ function configure(b, o = {}) {
 // ---------------- messages ----------------
 function onMessage(b, msg) {
   if (msg.type === 'welcome') { Object.assign(b, { id: msg.id, x: msg.x, z: msg.z, seq: msg.seq }); b.peers?.add(msg.id); }
-  if (msg.type === 'inv') { b.life = msg.life; b.cons = msg.cons; }
+  if (msg.type === 'inv') { b.life = msg.life; b.cons = msg.cons; b.gold = msg.gold; b.bag = msg.bag; } // (gold and bag: a plan's sell and buy steps; read only)
   if (msg.type === 'roster') { b.roster = msg.players; b.names = new Map(msg.players.map(r => [r.id, r])); }
   if (msg.type === 'mastery') evolve(b, msg.m);
   if (msg.type === 'talents') spendTalent(b, msg);
