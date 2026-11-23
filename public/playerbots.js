@@ -36,7 +36,7 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender, re
       <div class="pb-skill"></div>
       <div class="pb-skilldesc"></div>
       <input class="pb-name" maxlength="16" placeholder="Name (optional)" autocomplete="off" spellcheck="false" />
-      <label class="pb-party"><input type="checkbox" class="pb-partybox" checked /> Join my party <small>(untick: it roams and farms on its own)</small></label>
+      <label class="pb-party"><input type="checkbox" class="pb-partybox" checked /> Join my party <small>(untick: it roams and lives its own day)</small></label>
       <div class="pb-preview"></div>
       <button class="pb-go">Add bot</button>
       <div class="pb-why"></div>

@@ -95,7 +95,7 @@ try {
   ok(r4.ok && /on its own/.test(r4.msg), `no cap: a 4th bot, outside the party: "${r4.msg || r4.error}"`);
   await sleep(1500);
   const b4 = (await A.list()).bots.find(b => b.bid === r4.bid);
-  ok(b4 && b4.mine && !b4.myParty && !b4.partied && b4.where.k === 'roam' && /Farming/.test(b4.doing), `...it roams and farms (${b4?.where.text}, ${b4?.doing})`);
+  ok(b4 && b4.mine && !b4.myParty && !b4.partied && b4.where.k === 'roam' && b4.mode === 'own' && b4.doing, `...it roams on its own day (${b4?.where.text}, ${b4?.doing})`);
   ok((await A.pbot({ op: 'dismiss', bid: r4.bid })).ok, '...and is dismissed again');
 
   // they join at Ann's level with the premade loadout, in Ann's party
@@ -178,7 +178,7 @@ try {
   await sleep(600);
   L = await A.list();
   const left = L.bots.find(b => b.bid === added[1]);
-  ok(L.mine === 2 && left && !left.myParty && left.where.k === 'roam' && left.mode === 'field', `"/b ${leaver.name}: leave": it leaves the party and roams (still Ann's, farming)`);
+  ok(L.mine === 2 && left && !left.myParty && left.where.k === 'roam' && left.mode === 'own', `"/b ${leaver.name}: leave": it leaves the party and roams (still Ann's, its own day)`);
   await sleep(5000); // (the order rate limit)
   ok((await A.pbot({ op: 'dismiss', bid: added[1] })).ok, 'Ann dismisses it');
   r = await A.pbot({ op: 'add', cls: picks[1].cls, skill: 3 });

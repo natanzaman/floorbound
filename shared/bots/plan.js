@@ -41,7 +41,7 @@ export const STEPS = {
   attack: { label: 'Attack my target', limit: 120 },
   tend: { label: 'Tend the garden', secs: [10, 900, 180], long: true },
   say: { label: 'Say a line' },
-  emote: { label: 'Sit, bow, kneel or hop', secs: [1, 60, 4] },
+  emote: { label: 'Sit, bow, kneel or hop', secs: [1, 300, 4] },
   skill: { label: 'Use a skill', n: [1, 4, 1], limit: 10 },
   sell: { label: 'Sell spare gear at the merchant', limit: REACH + 90, hard: true, long: true },
   buy: { label: 'Buy potions at the merchant', n: [1, 10, 3], limit: REACH + 90, hard: true },

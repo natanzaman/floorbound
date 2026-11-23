@@ -21,7 +21,8 @@ const COME_R = 6;  // m: "back with the player" (a follower's own spot in the fo
 const GAP = 1;     // s without a turn (down, dead, a raid) before the clocks are held back
 
 // Take a plan. o: { by (player id, 0 = code / admin page), byName, adm (not a party order), at ([x, z] of that player),
-// group (bot ids addressed), quiet (don't announce) }. api: { command, say } from the brain. Returns the clean plan, or
+// group (bot ids addressed), quiet (don't announce), day (a goal id: the bot's own day made it, shared/bots/day.js:
+// it says nothing about the plan, and why it stopped goes to b.dayStop) }. api: { command, say } from the brain. Returns the clean plan, or
 // null (nothing usable, or a scripted actor).
 export function setPlan(b, raw, o = {}, api) {
   const c = cleanPlan(raw);
@@ -29,7 +30,7 @@ export function setPlan(b, raw, o = {}, api) {
   const group = o.group?.length ? o.group : [b.id];
   const first = group.filter(id => id === b.id || b.players?.some(p => p.id === id && !p.dead))[0] === b.id; // one bot speaks for a group
   endPlan(b);
-  b.plan = { steps: c.steps, loops: c.loops, loop: 0, i: 0, by: o.by || 0, byName: o.byName || '', adm: !!o.adm, at: Array.isArray(o.at) && Number.isFinite(+o.at[0]) && Number.isFinite(+o.at[1]) ? [+o.at[0], +o.at[1]] : null, group, all: group.length > 1, speak: first || group.length < 2, t0: b.t, seen: b.t, st: null };
+  b.plan = { steps: c.steps, loops: c.loops, loop: 0, i: 0, by: o.by || 0, byName: o.byName || '', adm: !!o.adm, at: Array.isArray(o.at) && Number.isFinite(+o.at[0]) && Number.isFinite(+o.at[1]) ? [+o.at[0], +o.at[1]] : null, group, all: group.length > 1, speak: first || group.length < 2, day: o.day ? String(o.day) : '', t0: b.t, seen: b.t, st: null };
   b.cmd = null; b.tgtId = null; b.planNote = null;
   if (o.by) b.lastCmdBy = o.by;
   if (!o.quiet) tell(b, api, planText(b.plan) + '.');
@@ -43,17 +44,18 @@ export function endPlan(b, keep = false) {
   b.plan = null;
   if (b.cmd?.prev?.plan) b.cmd.prev = null; // (a raid's defend order was keeping our step's order to go back to)
   if (!b.cmd?.plan) return;
-  if (!keep) { b.cmd = null; return; }
+  if (!keep || p.day) { b.cmd = null; return; } // (the day's own plans never leave an order behind)
   delete b.cmd.plan;
   if (b.cmd.k === 'stay') b.cmd.post = 1; // a place it was sent to: it holds there (server/botmanager.js never pulls it back to its player)
 }
 
-const tell = (b, api, text) => { if (b.plan?.speak !== false) api?.say?.(b, 'plan', {}, { force: true, text: text.slice(0, 200) }); };
+const tell = (b, api, text) => { if (b.plan?.speak !== false && !b.plan?.day) api?.say?.(b, 'plan', {}, { force: true, text: text.slice(0, 200) }); };
 const who = p => p.byName || 'boss';
 // A plan that has to stop. One bot speaks for a group; another of the group says why it stopped a moment later, unless
 // somebody in the party spoke meanwhile (the speaker stopping for the same reason, most often).
 function stop(b, api, why) {
   const text = `Plan stopped: ${why}.`;
+  if (b.plan?.day) { b.dayStop = why; return endPlan(b); }
   if (b.plan?.speak === false) b.planNote = { at: b.t + 1 + Math.random() * 2, t: b.t, text };
   else tell(b, api, text);
   endPlan(b);

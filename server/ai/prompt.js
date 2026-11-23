@@ -5,6 +5,7 @@ import { CLASSES, areaName } from '../../shared/data.js';
 import { skillName } from '../../shared/botskill.js';
 import { describePersona } from '../../shared/bots/personality.js';
 import { PLACES, planProgress, planText } from '../../shared/bots/plan.js';
+import { dayLog, dayText } from '../../shared/bots/day.js';
 
 export const SYSTEM = `You are the "mind" of a companion character in Floorbound, a co-op action RPG inspired by Sword Art Online. Players climb a tower floor by floor: Floor 1 has a town, fields with boars and wolves, and the Horned Warden raid boss; Floor 2 is the Glimmering Mire with the Drowned Sovereign. Classes: Swordsman, Guardian (tank), Cleric (healer), Ranger, Berserker, Lancer, Bard (support). Combat has Break and Switch (when an enemy is Broken, a party member switches in for big damage), dodging, parries and potions.
 
@@ -44,7 +45,11 @@ export function summarize(b, st, trig, mem, now) {
   const order = b.cmd ? `${b.cmd.k}${b.cmd.byName ? ` (from ${b.cmd.byName})` : ''}` : 'none';
   const focus = st.focusId ? nameOfId(b, st.focusId) : 'none';
   L.push(`Doing: ${b.goal || 'idle'}. Current order: ${order}. Stance: ${st.stance}. Focus: ${focus}.`);
-  if (b.plan) L.push(`Your plan (from ${b.plan.byName || 'a player'}): ${planText(b.plan).replace(/^Plan: /, '')}. Now at ${planProgress(b)}. It carries on by itself; a new plan or order replaces it.`);
+  if (b.day?.goal) { // a free bot living its own day (shared/bots/day.js): what it chose, why, and what came before
+    const was = dayLog(b);
+    L.push(`You are on your own today and chose this yourself: ${dayText(b)}.${was ? ` Before that: ${was}.` : ''} Say so in your own words when someone asks what you are up to; an order or a plan from a player comes first.`);
+  }
+  if (b.plan && !b.plan.day) L.push(`Your plan (from ${b.plan.byName || 'a player'}): ${planText(b.plan).replace(/^Plan: /, '')}. Now at ${planProgress(b)}. It carries on by itself; a new plan or order replaces it.`);
   L.push(`Where: ${safeArea(b.x, b.z)}.`);
   const mates = partyMates(b);
   if (mates.length) {

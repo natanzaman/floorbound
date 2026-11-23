@@ -72,11 +72,11 @@ if (DB) await (await import('../server/db.js')).migrate(); // (the allow-list ch
   const rook = [...g.players.values()].find(p => p.name === 'Rook'), lyra = [...g.players.values()].find(p => p.name === 'Lyra');
   const eRook = mgr.entryOf(rook), eLyra = mgr.entryOf(lyra);
   ok(eRook.creator?.pid === ann.id && eRook.creator.name === 'Ann' && eRook.allow.length === 0, 'a bot records its creator (and an empty allow list)');
-  ok(!rook.party && lyra.party && lyra.party === ann.party && eRook.behaviour === 'field', 'unticked: Rook roams and farms; ticked: Lyra joins Ann\'s party');
+  ok(!rook.party && lyra.party && lyra.party === ann.party && eRook.behaviour === 'own', 'unticked: Rook roams and lives its own day; ticked: Lyra joins Ann\'s party');
   { // life classes: "Tend my garden" off Floor 1 is refused before anything changes (server/playerbots.js edit)
     const x = rook.x; rook.x = 650;
     let err = ''; try { pb.edit(ann, { bid: eRook.bid, mode: 'tend' }, false); } catch (e) { err = e.message; }
-    ok(/another floor/.test(err) && eRook.behaviour === 'field' && pb.owned.get(eRook.bid).mode === 'field', 'tend off Floor 1: refused, nothing changed');
+    ok(/another floor/.test(err) && eRook.behaviour === 'own' && pb.owned.get(eRook.bid).mode === 'own', 'tend off Floor 1: refused, nothing changed');
     rook.x = x;
   }
 
@@ -118,14 +118,14 @@ if (DB) await (await import('../server/db.js')).migrate(); // (the allow-list ch
   ok(rook.party && rook.party === cy.party && !pb.owned.get(eRook.bid).partied, 'Cy invites Rook from the list: it joins her party (still Ann\'s bot, not following her)');
   ok(ann.sent.length >= 0 && sys(ann).some(t => /invited your bot Rook/.test(t)), 'Ann is told');
   pb.kick(cy, { bid: eRook.bid }, false); tick(1);
-  ok(!rook.party && eRook.behaviour === 'field' && pb.owned.get(eRook.bid).mode === 'field', 'Cy kicks it: it roams and farms');
+  ok(!rook.party && eRook.behaviour === 'own' && pb.owned.get(eRook.bid).mode === 'own', 'Cy kicks it: it roams on its own day');
   let threw = ''; try { pb.kick(cy, { bid: eRook.bid }, false); } catch (e) { threw = e.message; }
   ok(/isn't in your party/.test(threw), 'kicking a bot not in your party: refused');
   pb.invite(ann, { bid: eRook.bid }, false);
   ok(rook.party === ann.party && pb.owned.get(eRook.bid).partied && pb.owned.get(eRook.bid).mode === 'follow', 'Ann invites it back: it serves her party again');
   // /b leave: it roams (not dismissed)
   g.leaveParty(tam); tick(1);
-  ok(pb.owned.has(mgr.entryOf(tam).bid) && !tam.party && pb.owned.get(mgr.entryOf(tam).bid).mode === 'field' && /roams on its own/.test(sys(ann).join()), 'a bot that leaves its creator\'s party roams on (still listed, farming)');
+  ok(pb.owned.has(mgr.entryOf(tam).bid) && !tam.party && pb.owned.get(mgr.entryOf(tam).bid).mode === 'own' && /roams on its own/.test(sys(ann).join()), 'a bot that leaves its creator\'s party roams on (still listed, its own day)');
 
   // the Named
   ok(INVITE_NEEDS_TIER === false, 'INVITE_NEEDS_TIER is off');
@@ -287,7 +287,7 @@ try {
   let L = await A.list();
   const free = L.bots.find(b => b.bid === bids[4]);
   ok(L.mine === 5 && L.bots.filter(b => b.mine && b.myParty).length === 4, 'no per-player cap: Ann has 5 bots, 4 in her party');
-  ok(free && !free.myParty && free.where.k === 'roam' && /Farming/.test(free.doing) && free.ctl.invite.ok, `the unticked one roams and farms ("${free?.doing}"), and can be invited`);
+  ok(free && !free.myParty && free.where.k === 'roam' && free.mode === 'own' && free.doing && free.ctl.invite.ok, `the unticked one roams on its own day ("${free?.doing}"), and can be invited`);
   ok(Array.isArray(L.named) && L.named.length === 5 && L.named.every(r => r.ctl.invite.ok || r.myParty), 'the list carries the Named, each invitable');
   ok(A.roster.find(r => r.name === `F4${tag}`)?.cid === A.id, 'roster: the free bot carries its creator\'s id (the wheel lists it)');
 

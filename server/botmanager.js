@@ -22,6 +22,7 @@ import { floorOf, inArena2 } from '../shared/floor2.js';
 import { inArena3 } from '../shared/floor3.js';
 import { inYard, ACADEMY } from '../shared/academyyard.js'; // the Academy's trial yard: solo, followers wait at the door
 import { clampSkill, skillName } from '../shared/botskill.js'; // capability levels 1-5
+import { daysEnabled } from '../shared/bots/day.js';
 import { describePersona } from '../shared/bots/personality.js'; // who a bot is (docs/briefs/personalities.md)
 import { BotEditMethods } from './botedit.js'; // live edits + actions (admin page)
 import { canControlBot, accessOf, ACCESS } from '../shared/accesslevels.js'; // who may control a bot
@@ -29,6 +30,7 @@ import { canControlBot, accessOf, ACCESS } from '../shared/accesslevels.js'; // 
 export const BEHAVIOURS = {
   follow: 'Follow a player (fight alongside, join their party)',
   field: 'Farm the field near town',
+  own: 'Live its own day (hunt, restock, rest, wander: docs/briefs/bot-days.md)',
   warden: 'Go fight the Warden',
   floor2: 'Floor 2 (the Mire, then the Sovereign)',
   floor3: 'Floor 3 (the Spires, then the Colossus)',
@@ -201,10 +203,11 @@ export class BotManager {
     }
   }
 
-  // A bot out of a party: back to roaming the field (kicked, or its party broke up). Its orders are cleared.
+  // A bot out of a party: back to roaming on its own (kicked, or its party broke up). Its orders are cleared.
   roam(e) {
-    e.b.configure({ behaviour: 'field', follow: '' }); // (this bot only: a team shares one group)
-    e.behaviour = 'field'; e.follow = ''; e.partied = true; // (partied: never pulled into anyone's party by upkeep)
+    const behaviour = daysEnabled() ? 'own' : 'field'; // its own day (shared/bots/day.js); BOT_DAYS=0: the field, as before
+    e.b.configure({ behaviour, follow: '' }); // (this bot only: a team shares one group)
+    e.behaviour = behaviour; e.follow = ''; e.partied = true; // (partied: never pulled into anyone's party by upkeep)
   }
 
   // Join the followed player's party (same as accepting an invite from them).

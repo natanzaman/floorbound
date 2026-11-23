@@ -12,6 +12,8 @@ import { BOT_SKILLS, BOT_SKILL_DEFAULT } from './botskill.js';
 export const MODES = {
   follow: { name: 'Follow me', doing: 'Following', behaviour: 'follow', follow: true },
   field: { name: 'Farm nearby', doing: 'Farming the field', behaviour: 'field' },
+  // its own day (shared/bots/day.js): hunts, restocks, rests, wanders; what a bot out of a party does by default
+  own: { name: 'Live its own day', doing: 'Out on its own', behaviour: 'own' },
   warden: { name: 'Go to the Warden', doing: 'Heading for the Warden', behaviour: 'warden' },
   stay: { name: 'Stay here', doing: 'Holding position', behaviour: 'follow', follow: false },
   // life classes (shared/life.js TEND): walk to the Town of Beginnings garden and stay there; crops grow faster

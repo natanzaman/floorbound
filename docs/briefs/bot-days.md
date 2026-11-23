@@ -81,7 +81,9 @@ players are. They count toward `MAX_BOTS`, show in the Bots list as the server's
 `RESIDENTS=0` turns it off. Their levels and gold are not saved in this version.
 
 ## Jev picks the goal (owner, 2026-11-23: for every bot with a day, not only those near players)
-An OpenRouter provider next to today's three (`typesafe/jev-1.14`, the decisions endpoint; the key is in Render).
+An OpenRouter provider next to today's three (the decisions endpoint; the key is in Render). The model is a setting,
+`BOT_DAY_MODEL` (default `typesafe/jev-1.14`): other makers' decision models take the same request, so a swap is one
+env var and a re-check of the blind test (comparison in the plan doc, "Similar models").
 The question is a Choice over the same goal list, with the bot's state, its personality line and the utility scores
 as hints. Jev answers with a probability for every goal; the bot rolls from those (so a 70/30 call goes the other way
 3 times in 10), and the plan is built as before.
@@ -96,7 +98,9 @@ as hints. Jev answers with a probability for every goal; the bot rolls from thos
 
 ## Not in this version
 Crafting, gathering and gardens of their own, smith upgrades, trading with players, joining guilds, weapon swap,
-saved lives across restarts, the proactive mind (phase C), learned movement (phase D).
+saved lives across restarts, the proactive mind (phase C), learned movement (phase D), and growth (phase E, the
+owner's idea, 2026-11-23: a Sonnet pass after a day with new history and an Opus pass every two weeks rewrite a
+saved bot's profile, lessons and goal preferences, which the chooser here would read as hints; plan doc, "Growth").
 
 ## Build order
 1. `sell` and `buy` plan steps and the bot's shop code.

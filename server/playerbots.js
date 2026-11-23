@@ -6,7 +6,7 @@
 //
 // Protocol (client → server):  { type: 'pbot', op: 'list' }
 //                               { type: 'pbot', op: 'add', cls, skill (1-5, default 4), name?, party? (default true) }
-//                               { type: 'pbot', op: 'edit', bid, skill?, mode? ('follow'|'field'|'warden'|'stay'), name? }
+//                               { type: 'pbot', op: 'edit', bid, skill?, mode? ('follow'|'field'|'own'|'warden'|'stay'|'tend'), name? }
 //                               { type: 'pbot', op: 'dismiss', bid }
 //                               { type: 'pbot', op: 'invite' | 'kick', bid } or { …, named: id }
 //                               { type: 'pbot', op: 'despawn' | 'respawn', named: id }
@@ -19,7 +19,7 @@
 // Rules (owner decisions 2026-11-20): no per-player cap, only the server's MAX_BOTS. A bot records its creator. Added
 // with "Join my party" (the default) it joins its creator's party (made if needed, never past PARTY_MAX) and follows
 // them, into any party they join; unticked it roams free of any party ("free"), doing its creator's chosen behaviour
-// (farming the field until they pick one). A bot that leaves a party (kicked, a /b leave order, invited away, the party
+// (living its own day, shared/bots/day.js, until they pick one; BOT_DAYS=0: farming the field). A bot that leaves a party (kicked, a /b leave order, invited away, the party
 // broke up) roams the same way; inviting it back puts it in your party. It levels with its creator (no XP of its own:
 // on join and whenever the creator levels it takes their level and that level's premade gear, mastery and talents).
 // Who may command, invite, kick it: shared/accesslevels.js canControlBot (creator, access 3+, its allow list, else
@@ -40,6 +40,7 @@ import { inArena3 } from '../shared/floor3.js';
 import { canManageBot, accessOf, minAccess, cleanAllow, allowLabel, ALLOW_CREATOR } from '../shared/accesslevels.js';
 import * as db from './db.js';
 import { GARDEN } from '../shared/life.js';
+import { daysEnabled, dayText } from '../shared/bots/day.js'; // a free bot's own day (docs/briefs/bot-days.md)
 import { floorOf } from '../shared/floor2.js';
 import { isAdmin } from './admin.js';
 import { resolveAllow } from './accounts.js';
@@ -48,7 +49,8 @@ import { WEAPONS, COHORT, COHORT_MAX, COHORT_NAMES, cohortClasses, isInitiate } 
 class PbError extends Error {}
 const fail = msg => { throw new PbError(msg); };
 const inBossRoom = p => inArena(p.x, p.z) || inArena2(p.x, p.z) || inArena3(p.x, p.z);
-const OTHER_DOING = { follow: 'Following', field: 'Farming the field', warden: 'Heading for the Warden', floor2: 'On Floor 2', auto: 'Levelling up' };
+const FREE_MODE = () => (daysEnabled() ? 'own' : 'field'); // what a bot out of a party does until its creator picks (BOT_DAYS=0: the field, as before)
+const OTHER_DOING = { follow: 'Following', field: 'Farming the field', own: 'Out on its own', warden: 'Heading for the Warden', floor2: 'On Floor 2', auto: 'Levelling up' };
 
 export class PlayerBots {
   constructor(game, mgr, { grace = Number(process.env.PLAYER_BOT_GRACE) || 60 } = {}) {
@@ -155,7 +157,7 @@ export class PlayerBots {
     }
     if (this.mgr.count() >= this.mgr.max) fail(`The server's bot limit is reached (${this.mgr.max}). Try again later.`);
     const lvl = Math.min(MAX_LEVEL, Math.max(1, p.lvl | 0));
-    const mode = partied ? 'follow' : 'field', M = MODES[mode];
+    const mode = partied ? 'follow' : FREE_MODE(), M = MODES[mode];
     let view;
     try { view = this.mgr.add({ cls, name, lvl, behaviour: M.behaviour, follow: M.follow ? p.name : '', skill, creator: { charId: p.charId || 0, accountId: p.accountId || 0, pid: p.id, name: p.name } }); }
     catch (e) { fail(e.message); }
@@ -167,7 +169,7 @@ export class PlayerBots {
     });
     g.rosterDirty = true;
     g.track(p, 'pbot_add', { cls, skill, lvl, party: partied }); // stats dashboard: bot vs player share
-    return { msg: `${view.name} the ${CLASSES[cls].name} (Lv ${lvl}, ${skillName(skill)}) ${partied ? 'is on the way.' : 'is out on its own (not in your party): farming the field until you give it a behaviour.'}`, bid: view.bid };
+    return { msg: `${view.name} the ${CLASSES[cls].name} (Lv ${lvl}, ${skillName(skill)}) ${partied ? 'is on the way.' : `is out on its own (not in your party): ${mode === 'own' ? 'living its own day' : 'farming the field'} until you give it a behaviour.`}`, bid: view.bid };
   }
 
   // ---------- edit / dismiss ----------
@@ -225,7 +227,7 @@ export class PlayerBots {
     }
     if (typeof e.b.command === 'function' && p && by) {
       const k = { follow: 'follow', stay: 'stay', field: 'farm', warden: 'boss' }[mode];
-      try { e.b.command({ k, by: by.id, byName: by.name, followId: by.id, adm, group: [p.id] }); } catch (err) { console.error('pbot order', err); }
+      if (k) try { e.b.command({ k, by: by.id, byName: by.name, followId: by.id, adm, group: [p.id] }); } catch (err) { console.error('pbot order', err); }
     }
   }
 
@@ -319,7 +321,7 @@ export class PlayerBots {
   freeBot(e, b) { // out of its party, roaming
     const rec = this.owned.get(e.bid);
     if (b.party) this.game.leaveParty(b);
-    if (rec) { Object.assign(rec, { partied: false, mode: 'field', inParty: 0, wantParty: false }); this.setMode(e, 'field', '', {}); }
+    if (rec) { const mode = FREE_MODE(); Object.assign(rec, { partied: false, mode, inParty: 0, wantParty: false }); this.setMode(e, mode, '', {}); }
     else this.mgr.roam(e);
   }
   // The Named (server/named.js): invite (their own rules: party room, busy; INVITE_NEEDS_TIER), kick, despawn, respawn.
@@ -377,6 +379,7 @@ export class PlayerBots {
       else if (v.dead) doing = 'Down';
       else if (rec) doing = MODES[rec.mode].doing + (rec.mode === 'follow' ? ` ${rec.partied || b?.party ? owner : `${owner} (not in a party)`}` : '');
       else doing = (OTHER_DOING[e.behaviour] || e.behaviour) + (e.behaviour === 'follow' && e.follow ? ` ${e.follow}` : '');
+      if (v.status === 'online' && !v.dead && e.behaviour === 'own') doing = dayText(e.b) || doing; // its day: what and why
       if (rec && rec.goneAt) doing = `Waiting for ${owner} (${Math.max(0, Math.ceil(this.grace - (Date.now() - rec.goneAt) / 1000))} s)`;
       return {
         bid: v.bid, id: v.id, name: v.name, cls: v.cls, lvl: v.lvl, hp: v.hp, maxHp: v.maxHp, dead: v.dead, area: v.area, floor: v.floor,

@@ -48,6 +48,7 @@ import { rollPersonality, potionShift, backOffAt, tankWait, formation, isNeutral
 import { idleOk, idleBegin, idleMoved, idleHabits, idleEvent, afkNow } from './idle.js'; // idle habits by personality
 import { planProgress } from './plan.js'; // plans: a list of steps (docs/briefs/bot-plans.md)
 import { setPlan, endPlan, planTurn, planEvent, planNote } from './planrun.js'; // (the runner)
+import { dayTurn, dayDied, hasDay } from './day.js'; // a free bot's own day (docs/briefs/bot-days.md)
 
 const BOSS_LVL = { 1: 5, 2: 15, 3: 25 }; // a leader levels on its floor's field until this, then goes for the boss
 const floorFor = beh => (beh === 'floor3' ? 3 : beh === 'floor2' ? 2 : 0); // a behaviour's own floor (0: none)
@@ -437,7 +438,7 @@ function decideMode(b, P) {
   if (P.humans.length) return { mode: 'follow', anchor: P.humans.find(h => h.id === b.lastCmdBy) || P.humans[0] };
   if (b.behaviour === 'follow') { const f = followed(b); if (f) return { mode: 'follow', anchor: f }; }
   if (b.party && P.botLeader && P.botLeader.id !== b.id) return { mode: 'follow', anchor: P.botLeader };
-  return { mode: 'lead', beh: b.behaviour };
+  return { mode: 'lead', beh: b.behaviour === 'own' ? (hasDay(b) ? 'idle' : 'field') : b.behaviour }; // (own: its day's plans do the work; between two it stands about. BOT_DAYS=0: the field)
 }
 
 function followed(b) { // the player named by the 'follow' behaviour, as seen in the last snapshot
@@ -461,10 +462,11 @@ function thinkFree(b) {
   if (b.script && scriptTurn(b)) return; // a scripted actor (server/director.js): its scripted action this turn
   const P = partyView(b);
   social(b, P);
-  if (b.dead) { b.goal = 'down'; return; }
+  if (b.dead) { b.goal = 'down'; dayDied(b); return; }
   if (downedTurn(b, P)) return; // downed: crawl to help
   if (arenaTurn(b, moveToward)) return; // a boss arena: frozen through the fall, cover from the Tempest Beam
   if (b.healFocus && (b.healFocus.until < b.t || !P.all.some(p => p.id === b.healFocus.id))) b.healFocus = null;
+  dayTurn(b, P, PLAN_API); // a free bot's own day picks its next plan (shared/bots/day.js)
   if (b.planNote) planNote(b, PLAN_API);
   if (b.plan) planTurn(b, P, PLAN_API); // a plan's step sets the order (shared/bots/planrun.js)
   const M = decideMode(b, P);
@@ -716,6 +718,7 @@ function leadTarget(b, beh, here) {
   const lvl = b.me?.lvl || 1, f2 = floorOf(b.x) > 1;
   const threat = r => nearest(here, m => { const d = d2(m.x, m.z, b.x, b.z); return !m.def.boss && m.engaged && d < r ? d : null; });
   if (beh === 'follow') return threat(6);
+  if (beh === 'idle') return threat(8); // between two goals of its day: only what attacks it
   if (beh === 'field') {
     const kind = b.cmd?.k === 'farm' && b.cmd.mob; // a plan's farm step: that kind of monster only (and what attacks us)
     if (kind) return threat(8) || nearest(here, m => (m.type === kind && !inBossRoom(m.x, m.z) ? d2(m.x, m.z, b.x, b.z) : null));
@@ -756,7 +759,7 @@ function idle(b, P, M) {
     if (b.t - b.waitFrom < 20) { if (calm) idleHabits(b, P); return; }
   } else b.waitFrom = null;
   const beh = M.beh, fl = floorOf(b.x), lvl = b.me?.lvl || 1;
-  if (beh === 'follow') { if (calm) idleHabits(b, P); return; }
+  if (beh === 'follow' || beh === 'idle') { if (calm) idleHabits(b, P); return; }
   if (beh === 'field') {
     if (calm && afkNow(b, P.humans.length > 0)) { idleHabits(b, P); return; } // a free bot farming alone: a short break now and then
     const kind = b.cmd?.k === 'farm' && b.cmd.mob, far = kind && nearest(b.allMobs || [], m => (m.type === kind && floorOf(m.x) === fl && !inBossRoom(m.x, m.z) ? d2(m.x, m.z, b.x, b.z) : null));
@@ -777,6 +780,10 @@ function fieldSpot(b) { // wander between random spots in the field (boar meadow
 }
 
 function goalText(b, P, M, tgt) {
+  if (b.plan?.day && !b.duel) { // its own day: what and why ("Hunting Forest Boars (4/12): levelling up")
+    const s = b.plan.steps[b.plan.i], d = b.day, n = s?.k === 'farm' ? ` (${b.plan.st?.kills || 0}/${s.n})` : '';
+    return `${tgt ? `Fighting ${tgt.def.name} · ` : ''}${d?.text || 'Plan'}${n}${d?.why ? `: ${d.why}` : ''}`;
+  }
   const plan = b.plan ? planProgress(b) : '';
   if (plan && !b.duel) return `${tgt ? `Fighting ${tgt.def.name}` : 'Plan'} (${plan})`;
   if (b.duel) return `Duelling ${tgt ? b.names.get(b.duel.fighters.find(f => f.mob === tgt.id)?.id)?.name || 'an opponent' : ''}`.trim();
@@ -789,6 +796,7 @@ function goalText(b, P, M, tgt) {
   if (b.waitFrom != null && b.t - b.waitFrom < 20) return 'Waiting for the party';
   if (b.idle && b.t < b.idle.afkUntil && M.mode === 'lead' && !P.humans.length) return 'AFK';
   if (M.beh === 'field') return 'Farming the field';
+  if (M.beh === 'idle') return 'Deciding what to do next';
   if (M.beh === 'follow') return `Looking for ${b.follow || 'a player'}`;
   if (M.beh !== 'warden' && b.noBoss) return floorOf(b.x) > 1 ? 'Hunting the field' : 'Farming the field';
   if (M.beh !== 'warden' && (b.me?.lvl || 1) < BOSS_LVL[floorOf(b.x)]) return 'Levelling up';
