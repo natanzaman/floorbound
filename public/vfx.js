@@ -255,7 +255,7 @@ function skillKey(e) {
 // A flourish per combo (shared/teamplay.js COMBOS ids); anything unknown gets the plain one.
 const COMBO_FX = { crosscut: 'cross', execute: 'cross', aftershock: 'quake', verdict: 'judge', downbeat: 'beat', shatter: 'beat', skewer: 'spike', pin: 'spike' };
 
-export function initVfx({ scene, state, players, mobs, fx, camera, project, bubbles, shake, calm, hud, kickMul = () => (calm() ? 0 : 1) }) {
+export function initVfx({ scene, state, players, mobs, fx, camera, project, bubbles, shake, calm, hud }) {
   const style = document.createElement('style'); style.textContent = CSS; document.head.appendChild(style);
   const me = () => state.myId;
   // ---------- batches ----------
@@ -426,7 +426,7 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
       chainEl.innerHTML = `<span>CHAIN <b>x${n}</b>${name ? ` · <i>${esc(name)}</i>` : ''}</span>`;
       chainEl.className = `on n${Math.min(4, n)}`;
       if (!calm()) { void chainEl.offsetWidth; chainEl.classList.add('pop'); }
-      if (n >= 4) kick(0.42); // (big moments only: a completed chain)
+      if (n >= 3) kick(0.3 + 0.12 * (n - 3));
     }
     if (!Q.fx3d || !p || p.culled) return;
     const g = p.model.group.position, col = classColor(p.cls);
@@ -443,8 +443,7 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
 
   // ---------- camera kick ----------
   let kickAmt = 0, kickFov = 0;
-  // Big moments only (combo payoffs, a completed chain, Team Bursts, Breaks), scaled by Settings → Camera shake (kickMul).
-  function kick(a) { const k = kickMul(); if (!k || state.spectator) return; kickAmt = Math.min(1, Math.max(kickAmt, a * k)); shake(0.1 + 0.16 * a); }
+  function kick(a) { if (calm() || state.spectator) return; kickAmt = Math.min(1, Math.max(kickAmt, a)); shake(0.1 + 0.16 * a); }
   /** After the game camera is placed: the FOV punch (widens for a moment, eases back). Not during a film shot. */
   function applyKick(cam, base = 60) {
     const f = kickAmt > 0.004 ? 3.4 * kickAmt : 0;
@@ -505,6 +504,7 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
     if (e.h) fx.spray(x, y, z, dx, 0.35, dz, e.c ? 14 : 9, e.c ? gold() : 0xffd9a0, 0.24, 11, 0.5);
     const by = players.get(e.by);
     if (by?.model.anim?.recoil && near(by)) by.model.anim.recoil(e.h ? 1 : 0.5);
+    if (e.by === me() && e.h) kick(e.c ? 0.5 : 0.36);
   }
 
   // ---------- trails: follow the weapon while a melee clip swings it ----------

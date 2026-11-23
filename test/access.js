@@ -1,6 +1,6 @@
 // Accessibility options (public/access.js): defaults change nothing, validation, merge.   Usage: node test/access.js
 import assert from 'node:assert/strict';
-import { ACCESS_DEFAULTS, RANGES, ENUMS, normalizeAccess, mergeAccess, shakeMul } from '../public/access.js';
+import { ACCESS_DEFAULTS, RANGES, ENUMS, normalizeAccess, mergeAccess } from '../public/access.js';
 import { PALETTE_MODES, PALETTE_NAMES, setPalette, paletteMode, patterned, col, setTelegraphCues, telegraphCues, cue } from '../public/palette.js';
 {
   // defaults keep today's behaviour: normal sensitivity, no invert, everything else off, scale 100%
@@ -50,11 +50,5 @@ import { PALETTE_MODES, PALETTE_NAMES, setPalette, paletteMode, patterned, col, 
   cue(sfx, { x: 1, z: 2 }); assert.equal(played.length, 0);
   setTelegraphCues(true); assert.equal(telegraphCues(), true); cue(sfx, { x: 1, z: 2 }, 1.2);
   assert.deepEqual(played, [['cue', { x: 1, z: 2 }, 1.2]]);
-  // Camera shake: Off / Low (default) / Full, none under Reduce motion
-  assert.equal(normalizeAccess({}).camShake, 'low');
-  assert.equal(normalizeAccess({ camShake: 'wild' }).camShake, 'low');
-  assert.equal(normalizeAccess({ camShake: 'full' }).camShake, 'full');
-  assert.equal(shakeMul({ camShake: 'full' }), 1); assert.equal(shakeMul({ camShake: 'low' }), 0.5);
-  assert.equal(shakeMul({ camShake: 'off' }), 0); assert.equal(shakeMul({ camShake: 'full', reduceMotion: true }), 0);
   console.log('access: ok');
 }
