@@ -145,7 +145,7 @@ export class BotManager {
       join: { bot: this.key, lvl, f2: behaviour === 'floor2' || behaviour === 'floor3' || behaviour === 'follow' ? 1 : 0, f3: behaviour === 'floor3' || behaviour === 'follow' ? 1 : 0, ...(join || {}) },
     });
     const out = group.team.map(b => ({ bid: bid || this.nextBid++, b, group, behaviour, follow, team, lvl, at: Date.now(), creator: null, allow: [] }));
-    for (const e of out) e.b.dayPeers = () => this.dayPeers(e); // who else has a day of its own (shared/bots/day.js: teaming up)
+    for (const e of out) { e.b.dayPeers = () => this.dayPeers(e); e.b.dayFloors = () => this.dayFloors(); } // who else has a day of its own (shared/bots/day.js: teaming up)
     this.bots.push(...out);
     return out.map(e => this.view(e));
   }
@@ -202,6 +202,18 @@ export class BotManager {
       const busy = sent || (e.b.tgtId && (inArena(p.x, p.z) || inArena2(p.x, p.z) || inArena3(p.x, p.z))); // don't pull it out of a boss fight
       if (t && !t.dead && !busy && Date.now() - (e.caughtUp || 0) > 8000 && (floorOf(p.x) !== floorOf(t.x) || Math.hypot(p.x - t.x, p.z - t.z) > 45)) { e.caughtUp = Date.now(); this.catchUp(p, t); }
     }
+  }
+
+  // The floors a player is on (a human, or a bot a player is playing with: anyone who can see a day being lived).
+  // A bot with a day keeps to these floors, and goes home to rest or travels when its own floor is empty.
+  dayFloors() {
+    const t = Date.now();
+    if (t - (this.flT || 0) < 1000) return this.fls; // (once a second: every bot asks)
+    this.flT = t;
+    const on = new Set();
+    for (const p of this.game.players.values()) if (!p.bot && !p.dead) on.add(floorOf(p.x));
+    if (!on.size) for (const p of this.game.players.values()) if (!p.dead && p.party) on.add(floorOf(p.x)); // (bot parties with nobody human: stay where they are)
+    return (this.fls = on.size ? [...on].sort((a, b) => a - b) : [1]);
   }
 
   // The other bots living a day of their own (behaviour `own`, never the Named): their player ids.

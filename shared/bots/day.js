@@ -17,6 +17,9 @@
 //            (dayChat), and asks any one player at most once in ASK_AGAIN seconds. No boss tries without a player
 //   picker   b.dayPicker(b, ask) may answer for the scores (Jev, server/ai/daypick.js): it calls ask.done(id) or
 //            leaves it; with no answer in PICK_WAIT seconds the top score is taken
+//   unseen   nobody on this floor (f.quiet, from b.dayFloors): a day is played where someone can see it. Only the
+//            goals that leave the floor's monster AI asleep are scored (rest and restock, both in town) plus travel:
+//            a sociable bot heads for a floor where players are
 //
 // BOT_DAYS=0: `own` is `field` (today's game). Pure where it can be: facts, needs, scoreGoals, pickKind and planFor
 // take a state and a random source, so tests replay them from a seed.
@@ -66,10 +69,21 @@ export function facts(b, d = b.day || {}) {
     pots: b.cons ? b.cons.potion || 0 : null, // (null: not told yet)
     gold: b.gold || 0, spare: spareGear(b).length, bag: (b.bag || []).length,
     town: inTown(b.x, b.z),
+    ...floorsFact(b, fl),
     sinceRest: t - (d.restT ?? d.t0 ?? t), sameFor: t - (d.sameT ?? t), alone: t - (d.seenT ?? d.t0 ?? t),
     deaths: d.deaths || 0, poor: d.poor ?? -99, people: near.length, humans: near.filter(p => !isBot(b, p.id)).length,
     last: d.log?.[0]?.g || '',
   };
+}
+
+// Where the people are: b.dayFloors(b) → the floors with a player on them (the server knows: server/botmanager.js).
+// quiet: nobody is on our floor; toFl: a floor with people this bot may travel to (its own town counts as open).
+// Without the hook (a bot out of the server's process, a test) nothing is quiet and every floor may be hunted.
+function floorsFact(b, fl) {
+  const fls = b.dayFloors?.(b);
+  if (!Array.isArray(fls)) return { fls: null, quiet: false, toFl: 0 };
+  const open = fls.filter(f => f !== fl && (f === 1 || floorUnlocked(b.life, f))).sort((a, c) => a - c);
+  return { fls, quiet: !fls.includes(fl), toFl: open[0] || 0 };
 }
 
 // Other free bots with a day close enough to walk up to: same floor, alive, in no party, within five levels.
@@ -115,8 +129,13 @@ export const GOALS = {
   },
   rest: {
     name: 'Resting', cool: 0.25,
-    score: (n, f, T) => clamp(n.rest * (0.7 + T('patience') * 0.5)),
-    why: (n, f) => (f.deaths >= 2 ? 'that went badly' : 'been at it a while'),
+    score: (n, f, T) => clamp(Math.max(n.rest, f.quiet ? 0.5 : 0) * (0.7 + T('patience') * 0.5)),
+    why: (n, f) => (f.quiet && n.rest < 0.5 ? 'nobody about' : f.deaths >= 2 ? 'that went badly' : 'been at it a while'),
+  },
+  travel: { // nobody on this floor: go where the players are (the camp there; the plan runner takes the waypoint)
+    name: 'Travelling', cool: 0.2,
+    score: (n, f, T) => (f.quiet && f.toFl ? clamp(0.4 + T('sociability') * 0.55) : 0),
+    why: () => 'the floor is empty',
   },
   wander: {
     name: 'Looking around', cool: 0.5,
@@ -135,13 +154,15 @@ export const GOALS = {
   },
 };
 export const GOAL_IDS = Object.keys(GOALS);
+// With nobody on this floor, only these are scored: the others would wake the floor's monsters for an empty floor.
+const QUIET_GOALS = ['rest', 'restock', 'travel'];
 
 // Every goal scored, best first: [{ id, score, why }]. rnd: 0 to 1 (luck, 0.85 to 1.15 on each score).
 export function scoreGoals(b, f, rnd = Math.random) {
   const n = needs(b, f), T = k => traitOf(b, k);
   return GOAL_IDS.map(id => {
     const G = GOALS[id];
-    const s = G.score(n, f, T) * (0.85 + rnd() * 0.3) * (f.last === id ? G.cool : 1);
+    const s = (f.quiet && !QUIET_GOALS.includes(id) ? 0 : G.score(n, f, T)) * (0.85 + rnd() * 0.3) * (f.last === id ? G.cool : 1);
     return { id, score: Math.round(s * 1000) / 1000, why: G.why(n, f) };
   }).sort((a, c) => c.score - a.score || a.id.localeCompare(c.id));
 }
@@ -191,6 +212,10 @@ export function planFor(id, b, f, rnd = Math.random, o = {}) {
     case 'group': { // up to the nearest free bot, then a moment for its answer (the invite goes out on arrival: dayTurn)
       const c = peersNear(b)[0]; if (!c) return null;
       return { by: c.id, cand: c.id, text: `Teaming up with ${nameOf(b, c.id)}`, steps: [{ k: 'come' }, { k: 'wait', n: 7 }] };
+    }
+    case 'travel': {
+      const fl = f.toFl; if (!fl) return null;
+      return { text: `Heading for ${PLACES[campOf(fl)].name}`, steps: [{ k: 'goto', place: campOf(fl) }, { k: 'wait', n: between(rnd, 5, 20) }] };
     }
     case 'hangout':
       return { text: f.fl === 1 ? 'Hanging out by the well' : 'Hanging out in camp', steps: [{ k: 'goto', place: f.fl === 1 ? 'well' : 'camp' }, { k: 'wait', n: between(rnd, 60, 120 + T('sociability') * 120) }] };

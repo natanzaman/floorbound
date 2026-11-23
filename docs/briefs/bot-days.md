@@ -63,15 +63,36 @@ page ("Restocking: out of potions"), goes into the AI mind's prompt so "what are
 gives the rule-based reply when the AI is off. Not saved across a restart.
 
 ## Bots nobody can see (CPU)
-The free plan has 0.15 of a CPU; 10 players and 30 bots use about 0.095 today.
-- Within 60 m of a player: as today (20 times a second).
-- Further off on the same floor and not in a fight: 5 times a second (10 today).
-- **A floor with no player on it:** an `own` bot goes home to its town and rests there (no mob AI runs for it), and a
-  sociable one travels to a floor where players are. So a day is played where someone can see it, the same rule the
-  Named follow. Bots told to farm a floor (`floor2`, `auto`, ...) keep doing that as today.
-- Nobody online: the world sleeps, as today.
-- `scripts/perfbench.js` gets free bots (`FREE=30`): runs at 10, 30, 60 and 100 before and after, numbers in this brief.
-  `MAX_BOTS` stays 30 until those numbers say what fits.
+The free plan has 0.15 of a CPU. Built as planned (`thinkEvery` in `server/index.js`, `dayFloors` in
+`server/botmanager.js`, `floorsFact` and the `travel` goal in `shared/bots/day.js`):
+- Within 60 m of a player on its floor, in a boss room or fight, downed or dead: every tick (20 Hz), as today.
+- Further off on a floor someone is on: every other tick (10 Hz), as today.
+- **A floor with nobody on it:** every fourth tick (5 Hz) for any server bot there, and an `own` bot's day only scores
+  the goals that keep that floor's monsters asleep: rest and restock (both in town, so `Game.activeFloors` leaves the
+  floor out) and **travel**, where a sociable bot heads for the waypoint of a floor players are on ("Heading for the
+  well: the floor is empty"). Hunting, wandering, hanging out and teaming up wait until someone is there. A bot's
+  hunts also keep to the floors players are on (`dayFloors` feeds `pickKind`). Bots told to farm a floor (`floor2`,
+  `auto`, ...) keep doing that as today, at 5 Hz while nobody is on it.
+- Nobody online: the world sleeps, as today. `BOT_THINK=20` puts every bot back to 20 Hz.
+- `scripts/perfbench.js` takes `FREE=10,30,60,100` (free bots added out of any party, one run each).
+
+Measured here (2 humans in town, Named on, 45 s windows; this container, not Render, so read the two columns against
+each other and not against the 0.15 limit):
+
+| Free bots | CPU s/s, days on | CPU s/s, `BOT_DAYS=0` (field, as before) | tick p50 / p95, days on | snapshot KB/s |
+|---|---|---|---|---|
+| 10 | 0.073 | 0.075 | 1.5 / 2.3 ms | 105 |
+| 30 | 0.113 | 0.099 | 1.9 / 2.8 ms | 140 |
+| 60 | 0.166 | 0.146 | 2.4 / 3.8 ms | 198 |
+| 100 (62 joined) | 0.170 | 0.146 | 2.6 / 4.1 ms | 204 |
+
+Reading it: a day costs a little more than farming the field, not less. At 30 bots it is 0.113 against 0.099 (14%),
+and `BOT_THINK=20` on both sides (every bot at 20 Hz) gives 0.135 against 0.128, so only half of that gap is the
+chooser and the walking: the rest is where a day takes a bot. Field farmers sit 60 m+ from the players and think at
+10 Hz; a bot living its day comes into town, stands next to the players and thinks at 20 Hz, which is the point of it.
+The 5 Hz tier is what pays for the floors nobody is on. 30 bots fit the free plan either way (and this container is not
+Render: read the columns against each other). Past about 62 bots the adds stop sticking in this container, so 100 was
+really 62: `MAX_BOTS` stays 30.
 
 ## Residents (owner call)
 Today a free bot exists only while the player who added it is online, so with nobody adding bots there is nobody to

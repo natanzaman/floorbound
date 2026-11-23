@@ -3,6 +3,7 @@
 // it hunts, every goal's plan, the day on a stub bot (a goal becomes a quiet plan, an order pauses it and it resumes,
 // a party with a player has no day, the picker's answer and its time limit, BOT_DAYS=0), and the real brain on a fake
 // socket (out of potions: walks to the merchant, sells, buys, then goes on with its day; nothing is said).
+// A floor nobody is on: quiet, so only resting, restocking and travelling to the floor with players are scored.
 // Company: a player in trouble is helped, two free bots team up and part again, a player is asked along and invited
 // only after a yes (unit, the real brain, and live for teaming up).
 // Live (skip with NO_LIVE=1): a server on PORT (default 3746) with a player in town and three free bots.
@@ -80,7 +81,7 @@ const top = (b, d, seed = 7) => scoreGoals(b, facts(b, d), rng(seed))[0];
   let bad = '';
   for (const id of GOAL_IDS) for (const fl of [1, 2]) for (let i = 0; i < 20; i++) {
     const x = fl === 2 ? 600 : 0, lvl = fl === 2 ? 13 : 6;
-    const b = stub({ x, life: { floor2: 1 }, me: { lvl }, players: [{ id: 2, x, z: 60 }, { id: 7, x: x + 20, z: 60, lvl }], dayPeers: () => [7] }), made = planFor(id, b, facts(b), r);
+    const b = stub({ x, life: { floor2: 1 }, me: { lvl }, players: [{ id: 2, x, z: 60 }, { id: 7, x: x + 20, z: 60, lvl }], dayPeers: () => [7], dayFloors: () => [fl, fl === 2 ? 1 : 2] }), made = planFor(id, b, facts(b), r);
     const c = cleanPlan(made?.steps), last = c?.steps.at(-1);
     if (!made?.text || !c || c.errors.length || c.steps.length !== made.steps.length || !(last.k === 'farm' || last.secs > 0)) bad ||= `${id} F${fl}: ${J(made)} ${J(c?.errors)}`;
   }
@@ -88,6 +89,30 @@ const top = (b, d, seed = 7) => scoreGoals(b, facts(b, d), rng(seed))[0];
   const rs = planFor('restock', stub({ cons: { potion: 1 } }, { caution: 1 }), facts(stub({ cons: { potion: 1 } })), rng(1));
   ok(J(rs.steps.slice(0, 2)) === J([{ k: 'sell' }, { k: 'buy', n: 5 }]) && potionsWanted(stub({}, { caution: 0 })) === 3 && potionsWanted(stub({}, { caution: 1 })) === 6, 'restock: sell, then buy up to its own number of potions (3 for the bold, 6 for the careful)');
   ok(GOALS.hunt && MODES.own?.behaviour === 'own' && BEHAVIOURS.own && daysEnabled(), 'the behaviour `own` is on the players\' and the admin\'s lists');
+}
+
+// ---------- 2b. a floor nobody is on ----------
+{
+  const r = rng(5), d = () => ({ t0: 0, restT: 1000, sameT: 1000, seenT: 1000, deaths: 0, log: [] }); // (nothing else wanted)
+  const alone = (o = {}, t = {}) => stub({ x: 600, life: { floor2: 1 }, me: { lvl: 13 }, dayFloors: () => [1], ...o }, t);
+  const f = facts(alone(), d());
+  ok(f.quiet === true && f.toFl === 1 && J(f.fls) === '[1]', 'a floor with nobody on it: quiet, and Floor 1 is where the people are');
+  const seen = facts(alone({ dayFloors: () => [1, 2] }), d());
+  ok(seen.quiet === false && seen.toFl === 1, 'a player on our floor: not quiet (another floor is still somewhere to go)');
+  const plain = facts(stub(), d());
+  ok(plain.quiet === false && plain.toFl === 0 && plain.fls === null, 'no hook at all (a bot outside the server): nothing is quiet');
+  const scores = scoreGoals(alone(), facts(alone(), d()), r);
+  ok(scores.every(g => ['rest', 'restock', 'travel'].includes(g.id) || g.score === 0), `quiet: only resting, restocking and travelling score (${J(scores.filter(g => g.score > 0).map(g => g.id))})`);
+  const soc = scoreGoals(alone({}, { sociability: 1 }), facts(alone({}, { sociability: 1 }), d()), rng(3))[0];
+  const hom = scoreGoals(alone({}, { sociability: 0 }), facts(alone({}, { sociability: 0 }), d()), rng(3))[0];
+  ok(soc.id === 'travel' && soc.why === 'the floor is empty' && hom.id === 'rest' && hom.why === 'nobody about', `a sociable bot travels, a loner stays home and rests (${soc.id}, ${hom.id})`);
+  const made = planFor('travel', alone(), facts(alone(), d()), r);
+  const up = planFor('travel', alone({ x: 0, me: { lvl: 6 }, dayFloors: () => [2] }), facts(alone({ x: 0, me: { lvl: 6 }, dayFloors: () => [2] }), d()), r);
+  ok(J(made.steps[0]) === J({ k: 'goto', place: 'well' }) && made.text === 'Heading for the well' && J(up.steps[0]) === J({ k: 'goto', place: 'camp2' }), `travel: to the waypoint of the floor the people are on (${made.text}, ${up.text})`);
+  const sealed = facts(alone({ life: {}, dayFloors: () => [2] }), d()); // (on Floor 1, Floor 2 still locked)
+  ok(facts(alone({ x: 0, life: {}, dayFloors: () => [2] }), d()).toFl === 0 && sealed.toFl === 0, 'a floor it cannot reach yet is nowhere to go');
+  const last = scoreGoals(alone(), facts(alone(), { ...d(), log: [{ g: 'rest' }] }), r);
+  ok(last.length === GOAL_IDS.length && last[0].score > 0, 'quiet: there is always something to do, even right after a rest');
 }
 
 // ---------- 3. the day on a stub bot ----------
@@ -155,6 +180,15 @@ function turn(b, secs = 0.5, P = PV(b), r = Math.random) { for (let left = secs;
   const g = stub({ cons: { potion: 0 } }); g.dayPicker = () => false;
   turn(g, 0.1, PV(g), r);
   ok(g.plan?.day === 'restock' && g.day.asked === 0, 'a picker that declines (capped, down): the scores decide at once');
+}
+{ // a floor nobody is on: the day only sends it home or to the people (so the floor's monsters stay asleep)
+  const b = stub({ x: 600, z: 60, life: { floor2: 1 }, me: { lvl: 13 }, dayFloors: () => [1] }, { sociability: 1 });
+  turn(b, 0.5, PV(b), rng(4));
+  ok(['travel', 'rest', 'restock'].includes(b.day.goal) && b.plan?.day === b.day.goal, `quiet floor: its day sends it home or after the players (${b.day.goal}: ${b.day.text})`);
+  b.dayFloors = () => [1, 2]; b.day.hold = 0; b.plan = null; b.day.goal = ''; b.day.log = [];
+  let hunted = false;
+  for (let k = 0; k < 40 && !hunted; k++) { const q = stub({ x: 600, z: 60, life: { floor2: 1 }, me: { lvl: 13 }, dayFloors: () => [1, 2] }); turn(q, 0.5, PV(q), rng(k + 1)); hunted ||= q.day.goal === 'hunt'; }
+  ok(hunted, 'a player on its floor: it hunts again');
 }
 { // BOT_DAYS=0: `own` is the field, as before
   const was = process.env.BOT_DAYS; process.env.BOT_DAYS = '0';
@@ -405,7 +439,7 @@ try {
   // a bot a player adds out of their party lives its own day, and its card says what it is doing
   h.ws.send(J({ type: 'pbot', op: 'add', cls: 'ranger', name: 'Zed', party: false }));
   const zed = () => h.replies.at(-1)?.list?.bots?.find(x => x.name === 'Zed');
-  ok(await until(() => { h.ws.send(J({ type: 'pbot', op: 'list' })); return /^(Hunting|Resting|Looking around|Hanging out|Restocking) .*: /.test(zed()?.doing || ''); }, 20000) && zed().mode === 'own', `live: a bot added out of the party lives its own day; its card says what and why (${zed()?.doing})`);
+  ok(await until(() => { h.ws.send(J({ type: 'pbot', op: 'list' })); return /^(Hunting|Resting|Looking around|Hanging out|Restocking|Heading for|Teaming up) .*: /.test(zed()?.doing || ''); }, 20000) && zed().mode === 'own', `live: a bot added out of the party lives its own day; its card says what and why (${zed()?.doing})`);
   h.ws.send(J({ type: 'pbot', op: 'edit', bid: zed().bid, mode: 'field' }));
   ok(await until(() => { h.ws.send(J({ type: 'pbot', op: 'list' })); return zed()?.mode === 'field' && zed().doing === 'Farming the field'; }, 8000), 'live: its creator can still tell it to farm the field instead');
   // two free bots team up: one walks up to the other and invites it; one leads the hunt, the other is out with it; then they part

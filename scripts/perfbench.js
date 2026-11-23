@@ -1,11 +1,13 @@
 // Server CPU benchmark: starts a real server (anonymous, no database) with N humans (fake WebSocket clients that move
-// about like players) and B player-added bots (each human adds up to 3 through the Bots tab's own messages), plus the 5
-// Named, then reads the server's own /status before and after a measuring window.
+// about like players), B player-added bots (each human adds up to 3 through the Bots tab's own messages) and F free
+// bots living their own day (added out of any party, shared/bots/day.js), plus the 5 Named, then reads the server's own
+// /status before and after a measuring window.
 // Reports: tick p50 / p95 (ms), server CPU seconds per wall second (process.cpuUsage, so 0.15 = Render's free plan),
 // snapshot bytes serialised per second, and who was online by kind.
 //
 // Usage: node scripts/perfbench.js                      (the three standard runs: 2h+0b, 2h+6b, 4h+9b, Named on)
-//        HUMANS=2 BOTS=6 node scripts/perfbench.js      (one run; NAMED=0 turns the Named off)
+//        HUMANS=2 BOTS=6 FREE=30 node scripts/perfbench.js  (one run; NAMED=0 turns the Named off)
+//        FREE=10,30,60,100 node scripts/perfbench.js     (one run per count, with HUMANS humans, default 2)
 //   env: SECS=60 measuring window, WARM=15 seconds before it, PORT=6050, SPOT=town|field (where the humans stand:
 //        town = the spawn; field = the Verdant Field, the Named's home), CLS=swordsman,cleric,... (the bots' classes),
 //        EXTRA="K=V K2=V2" extra server env (e.g. BOT_TRANSPORT=ws BOT_THINK=20), JSON=1 one JSON line per run,
@@ -69,8 +71,8 @@ function human(port, i, spot) {
   return h;
 }
 
-async function run({ humans: N, bots: B, named = true, port }) {
-  const srv = startServer(port, { NAMED_ENABLED: named ? '1' : '0', MAX_BOTS: '40' });
+async function run({ humans: N, bots: B, free = 0, named = true, port }) {
+  const srv = startServer(port, { NAMED_ENABLED: named ? '1' : '0', MAX_BOTS: String(Math.max(40, B + free + 10)) });
   try {
     await waitUp(port);
     const spot = SPOTS[process.env.SPOT || 'town'] || SPOTS.town;
@@ -82,13 +84,27 @@ async function run({ humans: N, bots: B, named = true, port }) {
       h.send({ type: 'pbot', op: 'add', cls: CLS[(k + 3) % CLS.length], skill: 5 });
       await sleep(150);
     }
+    // free bots: out of any party, so each lives its own day. The Bots tab allows 10 adds per 5 s per player
+    // (server/playerbots.js), so they go in slowly, and a refusal ("Slow down a little.") is tried again.
+    for (let k = 0, sent = 0, left = free; left > 0 && k < free * 4; k++) {
+      const h = hs[k % N];
+      h.send({ type: 'pbot', op: 'add', cls: CLS[k % CLS.length], skill: 4, party: false });
+      sent++;
+      await sleep(Math.ceil(700 / N));
+      const done = hs.reduce((a, q) => a + q.replies.filter(m => m.op === 'add' && m.ok).length, 0);
+      left = free - done;
+      if (sent >= free + left) sent = 0; // (keep going until they are all in)
+    }
+    const refused = hs.flatMap(h => h.replies.filter(m => m.op === 'add' && m.ok === false).map(m => m.error));
+    const got = hs.reduce((a, q) => a + q.replies.filter(m => m.op === 'add' && m.ok).length, 0);
+    if (got < free) console.log(`  (only ${got} of ${free} free bots: ${refused.at(-1) || 'no reply'})`);
     await sleep(WARM * 1000);
     const a = await status(port), ta = performance.now();
     await sleep(SECS * 1000);
     const b = await status(port), tb = performance.now();
     const wall = (tb - ta) / 1000;
     const res = {
-      humans: N, bots: B, named, spot: process.env.SPOT || 'town', extra: process.env.EXTRA || '',
+      humans: N, bots: B, free, named, spot: process.env.SPOT || 'town', extra: process.env.EXTRA || '',
       cpuPerSec: +((b.cpu.s - a.cpu.s) / wall).toFixed(4),
       tickP50: b.tick.p50, tickP95: b.tick.p95, tickMax: b.tick.max,
       bytesPerSec: Math.round((b.bytes.total - a.bytes.total) / wall),
@@ -104,10 +120,12 @@ async function run({ humans: N, bots: B, named = true, port }) {
 }
 
 const show = r => process.env.JSON ? JSON.stringify(r)
-  : `${r.humans} humans + ${r.bots} bots, Named ${r.named ? 'on' : 'off'} (${r.spot}${r.extra ? ', ' + r.extra : ''}): CPU ${r.cpuPerSec.toFixed(3)} s/s · tick p50 ${r.tickP50} ms, p95 ${r.tickP95} ms, max ${r.tickMax} ms · ${(r.bytesPerSec / 1024).toFixed(0)} KB/s serialised · online ${JSON.stringify(r.online)}`;
+  : `${r.humans} humans + ${r.bots} bots${r.free ? ` + ${r.free} free` : ''}, Named ${r.named ? 'on' : 'off'} (${r.spot}${r.extra ? ', ' + r.extra : ''}): CPU ${r.cpuPerSec.toFixed(3)} s/s · tick p50 ${r.tickP50} ms, p95 ${r.tickP95} ms, max ${r.tickMax} ms · ${(r.bytesPerSec / 1024).toFixed(0)} KB/s serialised · online ${JSON.stringify(r.online)}`;
 
-const runs = process.env.HUMANS
-  ? [{ humans: Number(process.env.HUMANS), bots: Number(process.env.BOTS) || 0, named: process.env.NAMED !== '0' }]
+const named = process.env.NAMED !== '0';
+const FREE = (process.env.FREE || '').split(',').filter(Boolean).map(Number);
+const runs = FREE.length ? FREE.map(free => ({ humans: Number(process.env.HUMANS) || 2, bots: Number(process.env.BOTS) || 0, free, named }))
+  : process.env.HUMANS ? [{ humans: Number(process.env.HUMANS), bots: Number(process.env.BOTS) || 0, free: 0, named }]
   : [{ humans: 2, bots: 0, named: true }, { humans: 2, bots: 6, named: true }, { humans: 4, bots: 9, named: true }];
 let port = BASE_PORT;
 for (const r of runs) console.log(show(await run({ ...r, port: port++ })));

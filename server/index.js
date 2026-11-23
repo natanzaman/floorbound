@@ -227,18 +227,25 @@ function perfStats() {
 }
 const sendCounted = (ws, str) => { perf.bytesAll += str.length; ws.send(str); };
 
-// Bot think rate: a server bot with no human within THINK_NEAR m (on its floor) and not in a boss fight gets every other
-// snapshot (its brain runs at 10 Hz; the skipped tick's events come with the next one, and msg.dt tells it the step).
-// Near humans, in a boss room or fight, or while the director films, every snapshot (20 Hz). BOT_THINK=20: always 20 Hz.
+// Bot think rate: how often a server bot's brain gets a snapshot (the skipped ticks' events come with the next one, and
+// msg.dt tells it the step). Near a human (within THINK_NEAR m on its floor), in a boss room or fight, downed, dead or
+// while the director films: every tick (20 Hz). Further off on a floor someone is on: every other tick (10 Hz).
+// On a floor with nobody human at all: every fourth (5 Hz) - its day keeps it in town there anyway, so nobody sees it.
+// BOT_THINK=20: always 20 Hz.
 const halfRateOn = () => process.env.BOT_THINK !== '20';
 const THINK_NEAR = 60;
 let tickNo = 0;
-function thinksSlow(p, humans) {
-  if (p.dead || p.downed || game.director?.running) return false;
-  if (inArena(p.x, p.z) || inArena2(p.x, p.z) || inArena3(p.x, p.z) || game.activeFightOf?.(p)) return false;
+function thinkEvery(p, humans) {
+  if (p.dead || p.downed || game.director?.running) return 1;
+  if (inArena(p.x, p.z) || inArena2(p.x, p.z) || inArena3(p.x, p.z) || game.activeFightOf?.(p)) return 1;
   const fl = floorOf(p.x);
-  for (const h of humans) if (floorOf(h.x) === fl && Math.abs(h.x - p.x) < THINK_NEAR && Math.abs(h.z - p.z) < THINK_NEAR && Math.hypot(h.x - p.x, h.z - p.z) < THINK_NEAR) return false;
-  return true;
+  let floorHasOne = false;
+  for (const h of humans) {
+    if (floorOf(h.x) !== fl) continue;
+    floorHasOne = true;
+    if (Math.abs(h.x - p.x) < THINK_NEAR && Math.abs(h.z - p.z) < THINK_NEAR && Math.hypot(h.x - p.x, h.z - p.z) < THINK_NEAR) return 1;
+  }
+  return floorHasOne ? 2 : 4;
 }
 
 function tick(dt) {
@@ -258,7 +265,7 @@ function tick(dt) {
     const pe = p.pev; p.pev = null; // private events (Game.priv): this player's socket only
     if (p.ws.local) {
       shared ||= localHub.freeze ? deepFreeze(JSON.parse(world)) : JSON.parse(world);
-      if (halfRate && (tickNo + p.id) % 2 && thinksSlow(p, humans)) { (p.evLater ||= []).push(shared.events); continue; } // 10 Hz: this tick's events wait for the next
+      if (halfRate && (tickNo + p.id) % thinkEvery(p, humans) && (p.evLater?.length || 0) < 7) { (p.evLater ||= []).push(shared.events); continue; } // slower: this tick's events wait for the next
       const later = p.evLater; p.evLater = null;
       const w = later ? { ...shared, events: [].concat(...later, shared.events) } : shared;
       p.ws.deliver({ type: 'snap', st, me: game.meFor(p), w, ...(later ? { dt: (later.length + 1) / TICK_RATE } : {}), ...(pe ? { pe } : {}) });
