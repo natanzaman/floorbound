@@ -9,7 +9,7 @@
 //  - Camera kick: a small FOV punch and shake on YOUR finishers, chain x3+, combos you're in and Team Bursts.
 //  - The Combos 2.0 events: the chain counter by your character, a flourish per combo, a look per Team Burst trait,
 //    bots' call-outs as bubbles.
-// Low (Q.fx3d false, Q.trails 0) gets none of it: the flat rings and arcs as before. Reduce motion: no camera kick.
+// Low (Q.fx3d false, Q.trails 0) gets none of it: the flat rings and arcs as before. No camera zoom or shake from here (owner's rule: see kick()).
 // main.js wiring: event(e) first in handleEvent (it only consumes chain / chainEnd / tcall), hit(m, e, dx, dz) from
 // hitJuice, frame(dt, vdt) after the characters are animated, applyKick(camera) after the camera is placed, warm(on).
 import * as THREE from 'three';
@@ -443,10 +443,12 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
 
   // ---------- camera kick ----------
   let kickAmt = 0, kickFov = 0;
-  function kick(a) { if (calm() || state.spectator) return; kickAmt = Math.min(1, Math.max(kickAmt, a)); shake(0.1 + 0.16 * a); }
+  // No zoom and no shake from these moments (owner, 2026-11-22: never zoom the player's camera; shake only for things that
+  // shake the ground). kick() is kept as the hook for a future camera take-over on a full-party moment.
+  function kick() {}
   /** After the game camera is placed: the FOV punch (widens for a moment, eases back). Not during a film shot. */
   function applyKick(cam, base = 60) {
-    const f = kickAmt > 0.004 ? 3.4 * kickAmt : 0;
+    const f = 0; // (no FOV punch: see kick())
     if (f === kickFov) return;
     kickFov = f; cam.fov = base + f; cam.updateProjectionMatrix();
   }
@@ -495,7 +497,7 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
     return false;
   }
   /** A player's hit landed on enemy m (main.js hitJuice; dx, dz: unit vector from the attacker to it). Heavier
-   *  blows get a flash, sparks thrown through the far side, the attacker's recoil, and (yours) a camera kick. */
+   *  blows get a flash, sparks thrown through the far side, the attacker's recoil. */
   function hit(m, e, dx, dz) {
     if (!Q.fx3d || !(e.h || e.c)) return;
     const g = m.model.group.position, r = m.def.radius * 0.8, y = Math.min(m.model.height * 0.55, m.def.boss ? 3.2 : 2.2);

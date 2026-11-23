@@ -8,7 +8,7 @@ export const ACCESS_DEFAULTS = {
   padSens: 1,         // stick look speed (x); stored here for the gamepad code (K1b) to read
   guardToggle: false, // guard: press to start, press again to stop (instead of hold)
   wheelToggle: false, // bot wheel: press V to open, press again (or Esc) to close (instead of hold)
-  reduceMotion: false, // no camera shake, hit-stop or kill zoom
+  reduceMotion: false, // no camera shake, hit-stop or slow-motion
   uiScale: 1,         // size of panels, frames and chat (x)
   highContrast: false, // stronger HUD text and panels
   palette: 'off',     // telegraph colours: 'off' (the game's own) | 'deuter' (red-green) | 'trit' (blue-yellow); see palette.js

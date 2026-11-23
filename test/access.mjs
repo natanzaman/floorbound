@@ -193,7 +193,7 @@ try {
 
   // stick sensitivity is stored for the pad code; everything is saved under fb_controls.access
   await setOpt('padSens', 2.2);
-  assert.deepEqual(await stored(), { sens: 1, invertY: false, padSens: 2.2, guardToggle: true, wheelToggle: true, reduceMotion: true, uiScale: 1.5, highContrast: true, palette: 'off', telegraphSound: false });
+  assert.deepEqual(await stored(), { sens: 1, invertY: false, padSens: 2.2, guardToggle: true, wheelToggle: true, reduceMotion: true, uiScale: 1.5, highContrast: true, palette: 'off', telegraphSound: false, hideSelfBar: false, noHurtFlash: false });
   // and survives a reload
   await p.reload();
   await p.waitForFunction(() => !!window.__fb?.settings, null, { timeout: 60000 });

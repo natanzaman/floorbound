@@ -295,7 +295,7 @@ export function initClassesB(ctx) {
         cone(ox, oz, e.f, e.r, e.h, e.ev === 'shatter' ? 0xf0abfc : 0xa855f7);
         sfx.play('discord', at, mine);
         break;
-      case 'feedback': fx.ring(ox, oz, e.r, 0xa855f7, 0.4); fx.ring(ox, oz, e.r * 0.6, 0xf0abfc, 0.35); shake(e.id === me() ? 0.2 : 0.05); sfx.play('discord', at, mine); break;
+      case 'feedback': fx.ring(ox, oz, e.r, 0xa855f7, 0.4); fx.ring(ox, oz, e.r * 0.6, 0xf0abfc, 0.35); sfx.play('discord', at, mine); break;
       case 'cresc': {
         const color = e.kind === 'encore' ? 0x5eead4 : e.kind === 'finale' ? 0xf43f5e : 0xfbbf24;
         follow(e.id, e.d, () => {
@@ -319,7 +319,7 @@ export function initClassesB(ctx) {
         if (e.er) { fx.ring(ox, oz, e.er, color, 0.6); fx.ring(ox, oz, e.er * 0.6, 0xffffff, 0.4); }
         if (e.kind !== 'finale') fx.ring(ox, oz, e.r, 0xfde68a, 0.7);
         fx.beam(ox, oz, color, 1.2); notes(ox, oz, color, 10, 3);
-        shake(e.id === me() ? 0.35 : 0.1); sfx.play('burst', at, mine);
+        sfx.play('burst', at, mine);
         break;
       }
       case 'crescFizzle': fx.end(auras.get(`${e.id}:cresc`)); auras.delete(`${e.id}:cresc`); fx.ring(e.x, e.z, 1.5, 0x9ca3af, 0.4); break;

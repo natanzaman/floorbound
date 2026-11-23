@@ -734,7 +734,6 @@ function handleEvent(e) {
         const ours = e.by === me || e.from === me; // the Switch is a reaction: its text is for the two who made it
         if (ours) floatNum(m.model.group.position, m.model.height * 0.85, `SWITCH! ${e.a}`, 'switch');
         fx.ring(m.x, m.z, m.def.radius + 4, 0xfde047, 0.6); fx.ring(m.x, m.z, m.def.radius + 1.5, 0xffffff, 0.4);
-        if (ours) shake(0.3);
         sfx.play('switch', m.model.group.position, ours ? 1 : 0.6);
       }
       break;
@@ -795,7 +794,6 @@ function handleEvent(e) {
         if (e.by === me) {
           guide.did('hit');
           state.lastCombat = performance.now();
-          if (e.h) shake(0.18); // (no hit-stop on player hits: that's for a boss's big hit landing on you)
           // knockback lands a little quicker than normal interpolation
           if (e.h && m.type !== 'warden') m.punch = 0.25;
         }
@@ -811,7 +809,7 @@ function handleEvent(e) {
         if (e.id === me) {
           floatNum(p.model.group.position, 2.2, `-${e.a}`, e.big || e.a >= state.maxHp * 0.12 ? 'hurt big' : 'hurt');
           selfBar.hurt(e.a, e.big);
-          if (e.big) { if (!settings.reduceMotion) hitStop = Math.max(hitStop, BIG_HIT_STOP); shake(0.3); } else shake(0.15);
+          if (e.big && !settings.reduceMotion) hitStop = Math.max(hitStop, BIG_HIT_STOP); // (no camera shake for a hit: shake is for the ground shaking)
         } else if (state.spectator) floatNum(p.model.group.position, 2.2, `-${e.a}`, 'other hurt');
       }
       break;
@@ -1992,15 +1990,15 @@ function hitJuice(m, e) {
   m.flinchAmt = big ? 0.03 : e.h ? 0.16 : 0.12;
   m.flinchPush = big ? 0 : e.h ? 0.35 : 0.22;
   m.flinchX = dx; m.flinchZ = dz;
-  vfx.hit(m, e, dx, dz); // heavy hits and crits: an impact flash, sparks through the far side, recoil, your camera kick
+  vfx.hit(m, e, dx, dz); // heavy hits and crits: an impact flash, sparks through the far side, recoil
 }
 
 // Slow down visual time (animation and effects only; input and movement keep real time).
 let slowMo = 0, slowMoScale = 1, slowMoLen = 1;
 function slowMotion(secs, scale, { force = false } = {}) { // force: the film director's slow-mo (public/cine.js) ignores Reduce motion
-  if (settings.reduceMotion && !force) return; // (Settings → Reduce motion: no slow-mo, kill zoom, shake or hit-stop)
+  if (settings.reduceMotion && !force) return; // (Settings → Reduce motion: no slow-mo, shake or hit-stop)
   slowMo = slowMoLen = secs; slowMoScale = scale;
-  shake(0.45); hitStop = 0; // (shake() is itself gated by Reduce motion)
+  hitStop = 0;
 }
 
 const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
@@ -2423,7 +2421,7 @@ function frame(now) {
     if (low) allowed = Math.max(2, allowed * low.distance / len - 0.6);
   }
   camCur += (allowed - camCur) * Math.min(1, dt * (allowed < camCur ? 20 : 3));
-  const cd = camCur * (slowMo > 0 ? 1 - 0.22 * Math.sin(Math.PI * (1 - slowMo / slowMoLen)) : 1); // killing-blow zoom
+  const cd = camCur; // (never a zoom on your camera: the owner's rule; film shots in cine.js are their own camera)
   shakeAmt = Math.max(0, shakeAmt - dt);
   const sx = (Math.random() - 0.5) * shakeAmt, sy = (Math.random() - 0.5) * shakeAmt;
   const ly = arenas.camLift(); // (falling with your character)

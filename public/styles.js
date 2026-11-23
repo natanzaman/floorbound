@@ -278,7 +278,6 @@ export function initStyles(ctx) {
         if (e.fin) {
           fx.ring(ox, oz, e.r, 0xfde047, 0.45); fx.ring(ox, oz, e.r * 0.6, 0xfffbeb, 0.3);
           fx.sparks(ox, 0.5, oz, 16, 0xfde047, 0.22, 7);
-          if (e.id === me) shake(0.18);
           sfx.play('bolt', at, mine);
         } else {
           fx.arc(ox, oz, e.f, e.r, e.h, 0xfacc15);
@@ -305,7 +304,6 @@ export function initStyles(ctx) {
         fx.ring(ox, oz, e.r, e.fin ? 0xf59e0b : 0xfdba74, e.fin ? 0.45 : 0.3);
         fx.ring(ox, oz, e.r * 0.55, 0xfde68a, 0.25);
         fx.sparks(ox, 0.3, oz, e.fin ? 14 : 6, 0xfcd34d, 0.2, 6);
-        if (e.fin && e.id === me) shake(0.12);
         sfx.play(e.fin ? 'boom' : 'hitHeavy', at, mine * (e.fin ? 0.6 : 0.7));
         break;
       }

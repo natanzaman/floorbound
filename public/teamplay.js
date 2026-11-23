@@ -135,7 +135,7 @@ export function initTeamplay({ state, players, mobs, fx, sfx, floatNum, project,
         const title = e.nm ? String(e.nm).toUpperCase() : e.n > 1 ? 'TEAM BURST' : 'BURST'; // (the burst's own name by its first two classes, when the server sends it)
         if (m) floatNum(m.model.group.position, m.model.height + 0.6, e.n > 1 ? `${title} ×${e.n}` : title, 'tburst');
         sfx.play(e.n >= 4 ? 'clear' : 'boom');
-        if (ours) { shake?.(0.25 + 0.05 * e.n); callout?.(e.n > 1 ? `${title} ×${e.n}` : title, e.nm ? (e.n > 1 ? `Team Burst · ${e.n} synced` : 'Burst') : e.n >= 4 ? 'Huge!' : e.n > 1 ? 'Synced!' : 'Solo burst', 1.4); }
+        if (ours) { callout?.(e.n > 1 ? `${title} ×${e.n}` : title, e.nm ? (e.n > 1 ? `Team Burst · ${e.n} synced` : 'Burst') : e.n >= 4 ? 'Huge!' : e.n > 1 ? 'Synced!' : 'Solo burst', 1.4); }
         return true;
       }
     }

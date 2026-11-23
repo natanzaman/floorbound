@@ -232,10 +232,10 @@ export function initClassesA(ctx) {
     const ox = e.id === me() ? state.x : e.x, oz = e.id === me() ? state.z : e.z;
     switch (e.v) {
       case 'shot':
-        if (e.sty === 'crossbow') { anim(e.id, 'crossbow', e.n); sfx.play('xbow', at, mine * (e.fin ? 1.3 : 1)); if (e.fin && e.id === me()) shake(0.05); break; }
+        if (e.sty === 'crossbow') { anim(e.id, 'crossbow', e.n); sfx.play('xbow', at, mine * (e.fin ? 1.3 : 1)); break; }
         anim(e.id, 'shot', e.n); sfx.play(e.fin ? 'bowHeavy' : 'bow', at, mine); break;
       case 'draw': anim(e.id, 'draw'); drawLine(e.id, e.f, e.r, e.d, e.big); sfx.play('draw', at, mine); break;
-      case 'loose': anim(e.id, 'loose'); sfx.play('bowHeavy', at, mine * (e.big ? 1.4 : 1)); if (e.big && e.id === me()) shake(0.12); break;
+      case 'loose': anim(e.id, 'loose'); sfx.play('bowHeavy', at, mine * (e.big ? 1.4 : 1)); break;
       case 'rain': anim(e.id, 'rain'); rain(e.x2, e.z2, e.r, e.d); sfx.play('bowHeavy', at, mine); break;
       case 'disengage': anim(e.id, 'disengage'); fx.line(e.x0, e.z0, e.x2, e.z2, 0x99f6e4, 0.6, 0.35, 0.6); caltrops(e.x0, e.z0, e.r, e.d); sfx.play('roll', at, mine); sfx.play('trap', { x: e.x0, z: e.z0 }, 0.5 * mine); break;
       case 'snare': anim(e.id, 'snare'); fx.line(e.x0, e.z0, e.x2, e.z2, 0x99f6e4, 0.6, 0.3, 0.6); snare(e.x0, e.z0, e.r, e.d); sfx.play('roll', at, mine); break;
@@ -260,10 +260,10 @@ export function initClassesA(ctx) {
           else { fx.arc(ox, oz, e.f, e.r, e.h ?? 1.2, 0xd6d3d1); fx.sparks(ox + Math.sin(e.f) * e.r * 0.7, 0.4, oz + Math.cos(e.f) * e.r * 0.7, 8, 0xa8a29e, 0.22, 4); }
           sfx.play('hammer', at, mine); break;
         }
-        anim(e.id, 'chop', e.n); fx.arc(ox, oz, e.f, e.r, e.h ?? 1.1, e.fin ? 0xfca5a5 : 0xfee2e2); sfx.play('axe', at, mine * (e.fin ? 1.3 : 1)); if (e.fin && e.id === me()) shake(0.08); break;
-      case 'cleave': anim(e.id, 'cleave'); fx.arc(ox, oz, e.f, e.r, e.h, e.rage > 60 ? 0xef4444 : e.rage > 25 ? 0xf87171 : 0xfecaca); fx.arc(ox, oz, e.f, e.r * 0.7, e.h, 0xfff1f2); sfx.play('axe', at, mine * 1.3); if (e.id === me()) shake(0.1); break;
+        anim(e.id, 'chop', e.n); fx.arc(ox, oz, e.f, e.r, e.h ?? 1.1, e.fin ? 0xfca5a5 : 0xfee2e2); sfx.play('axe', at, mine * (e.fin ? 1.3 : 1)); break;
+      case 'cleave': anim(e.id, 'cleave'); fx.arc(ox, oz, e.f, e.r, e.h, e.rage > 60 ? 0xef4444 : e.rage > 25 ? 0xf87171 : 0xfecaca); fx.arc(ox, oz, e.f, e.r * 0.7, e.h, 0xfff1f2); sfx.play('axe', at, mine * 1.3); break;
       case 'whirl': if (!e.n) anim(e.id, 'whirl'); fx.ring(ox, oz, e.r, 0xf87171, 0.35); fx.arc(ox, oz, e.f + e.n * 2, e.r, Math.PI, 0xfecaca); sfx.play('axe', at, mine); break;
-      case 'execute': anim(e.id, 'execute'); fx.arc(ox, oz, e.f, e.r, e.h, 0x7f1d1d); fx.arc(ox, oz, e.f, e.r * 0.8, e.h * 0.6, 0xef4444); sfx.play('axe', at, mine * 1.4); if (e.id === me()) shake(0.15); break;
+      case 'execute': anim(e.id, 'execute'); fx.arc(ox, oz, e.f, e.r, e.h, 0x7f1d1d); fx.arc(ox, oz, e.f, e.r * 0.8, e.h * 0.6, 0xef4444); sfx.play('axe', at, mine * 1.4); break;
       case 'leap': anim(e.id, 'leap'); ringOnly(e.x2, e.z2, e.r, 0xf97316, e.d, 0.8); fx.zone(e.x2, e.z2, e.r, e.d, 0xfb923c); sfx.play('roll', at, mine); break;
       case 'slam': anim(e.id, 'slam'); fx.ring(e.x, e.z, e.r, e.big ? 0xfbbf24 : 0xf97316, 0.5); fx.ring(e.x, e.z, e.r * 0.6, 0xfed7aa, 0.35); fx.sparks(e.x, 0.3, e.z, 18, 0xd6d3d1, 0.3, 8); sfx.play('boom', at, mine); shake(e.id === me() ? 0.3 : 0.1); break;
       case 'pounce': anim(e.id, 'pounce'); fx.line(e.x0, e.z0, e.x2, e.z2, 0xfca5a5, 0.8, 0.35, 0.8); fx.ring(e.x2, e.z2, 2, 0xef4444, 0.35); sfx.play('axe', at, mine * 1.3); if (e.id === me()) shake(0.15); break;

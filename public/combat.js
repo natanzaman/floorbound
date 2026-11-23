@@ -285,7 +285,7 @@ export function initCombat(ctx) {
         sfx.play('parry', g, e.id === me ? 1.2 : 0.8);
         if (mineTo(e)) floatNum(g, 2.6, 'PARRY!', 'parry');
         p.model.anim?.shot('Block_Attack', 1.6);
-        if (e.id === me || state.spectator) { slowMotion(0.3, 0.3); shake(0.3); }
+        if (e.id === me || state.spectator) slowMotion(0.3, 0.3);
         const m = mobs.get(e.m);
         if (m) { m.flash = 0.12; m.model.anim?.shot('Hit_B', 1.2); }
         return true;

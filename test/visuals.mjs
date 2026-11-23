@@ -84,19 +84,24 @@ try {
   const idle = await p.evaluate(() => window.__fb.vfx.stats());
   ok(idle.bands + idle.blades + idle.lances + idle.shards + idle.domes === 0, 'the batches empty out');
 
-  // --- hits: flashes and the camera kick are yours alone, and not under Reduce motion ---
-  const hit = by => p.evaluate(by => { const f = window.__fb, m = [...f.mobs.values()].find(m => !m.def?.boss && !m.dying); if (!m) return null; f.handleEvent({ t: 'hit', id: m.id, by, a: 12, h: 1, c: 1 }); return f.vfx.stats().kick; }, by);
+  // --- the camera never zooms or shakes for hits, combos, chains or bursts (owner's rule: shake is for the ground shaking) ---
+  const big = by => p.evaluate(by => { const f = window.__fb, m = [...f.mobs.values()].find(m => !m.def?.boss && !m.dying); if (!m) return null;
+    const fov0 = f.camera.fov;
+    f.handleEvent({ t: 'hit', id: m.id, by, a: 12, h: 1, c: 1 });
+    f.handleEvent({ t: 'combo', id: m.id, by, from: 0, k: 'crosscut', n: 1, x: m.x, z: m.z });
+    f.handleEvent({ t: 'chain', id: by, n: 4, k: 'stormburst', nm: 'Storm Burst', s: 'burst' });
+    f.handleEvent({ t: 'tburst', key: by, ids: [by], n: 3, x: m.x, z: m.z, m: m.id, cls: ['lancer', 'ranger'], nm: 'Rain of Spears' });
+    return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r({ fov: f.camera.fov - fov0, shake: f.motion().shakeAmt }))));
+  }, by);
   await p.evaluate(() => { const s = window.__fb.state; s.z = 120; }); // (out on the field: enemies in view)
   await p.waitForFunction(() => [...window.__fb.mobs.values()].some(m => !m.def?.boss), null, { timeout: 30000 });
-  const mine = await hit(await p.evaluate(() => window.__fb.state.myId));
-  ok(mine > 0.2, `my heavy crit kicks the camera (${mine?.toFixed(2)})`);
-  await sleep(900);
-  const theirs = await hit(424242);
-  ok(theirs < 0.05, `someone else's does not (${theirs?.toExponential(1)})`);
+  await sleep(800);
+  const r = await big(await p.evaluate(() => window.__fb.state.myId));
+  ok(r && r.fov === 0 && r.shake < 0.02, `my heavy crit, combo, x4 chain and Team Burst: no zoom, no shake (${JSON.stringify(r)})`);
+  ok(await p.evaluate(() => { window.__fb.shake(0.4); return window.__fb.motion().shakeAmt >= 0.35; }), 'ground shaking (shake()) still works');
   await p.evaluate(() => { window.__fb.settings.reduceMotion = true; });
-  await sleep(300);
-  const calm = await hit(await p.evaluate(() => window.__fb.state.myId));
-  ok(calm < 0.05 && await p.evaluate(() => window.__fb.motion().shakeAmt < 0.02), 'Reduce motion: no kick, no shake');
+  await sleep(600);
+  ok(await p.evaluate(() => { window.__fb.shake(0.4); return window.__fb.motion().shakeAmt < 0.02; }), 'Reduce motion: no shake');
   await p.evaluate(() => { window.__fb.settings.reduceMotion = false; });
 
   // --- chain counter, call-out bubbles ---

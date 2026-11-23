@@ -317,7 +317,7 @@ export function initMastery(ctx) {
       case 'shoulder': {
         fx.line(e.x, e.z, e.x2, e.z2, 0xfb923c, 1.8, 0.3); sfx.play('roll', at, mine);
         const m = mobs.get(e.m);
-        if (m) { fx.ring(m.x, m.z, m.def.radius + 1.6, 0xf97316, 0.4); fx.sparks(m.x, 1.3, m.z, 14, 0xfdba74, 0.32, 9); shake(e.id === me ? 0.3 : 0.1); sfx.play('hitHeavy', m.model.group.position, mine); }
+        if (m) { fx.ring(m.x, m.z, m.def.radius + 1.6, 0xf97316, 0.4); fx.sparks(m.x, 1.3, m.z, 14, 0xfdba74, 0.32, 9); sfx.play('hitHeavy', m.model.group.position, mine); }
         break;
       }
       case 'vortex': shrinkRing(ox, oz, e.r, 0x22d3ee, 0.35); shrinkRing(ox, oz, e.r * 0.7, 0x67e8f9, 0.3); sfx.play('whoosh', at, mine); break;
@@ -331,7 +331,7 @@ export function initMastery(ctx) {
       }
       case 'finisher':
         fx.arc(ox, oz, e.f, e.r, e.n ? 1.2 : 0.9, e.n ? 0xef4444 : 0xfca5a5);
-        if (e.n) { fx.ring(ox + Math.sin(e.f) * 2, oz + Math.cos(e.f) * 2, 2.6, 0xdc2626, 0.4); shake(e.id === me ? 0.25 : 0.1); }
+        if (e.n) { fx.ring(ox + Math.sin(e.f) * 2, oz + Math.cos(e.f) * 2, 2.6, 0xdc2626, 0.4); }
         sfx.play(e.n ? 'swingHeavy' : 'swing', at, mine); break;
       case 'challenge': {
         fx.line(ox, oz, e.x2, e.z2, 0xef4444, 0.35, 0.5, 1.6);
@@ -339,7 +339,7 @@ export function initMastery(ctx) {
         if (m) { fx.ring(m.x, m.z, m.def.radius + 1.2, 0xef4444, 0.7); floatNum(m.model.group.position, m.model.height + 0.3, 'CHALLENGED', 'crit', mine); }
         sfx.play('swingHeavy', at, mine); break;
       }
-      case 'warcry': fx.ring(ox, oz, e.r, 0xf97316, 0.7); fx.ring(ox, oz, e.r * 0.55, 0xfdba74, 0.5); shake(e.id === me ? 0.2 : 0.05); sfx.play('roar', at, 0.8 * mine); break;
+      case 'warcry': fx.ring(ox, oz, e.r, 0xf97316, 0.7); fx.ring(ox, oz, e.r * 0.55, 0xfdba74, 0.5); sfx.play('roar', at, 0.8 * mine); break;
       case 'bulwark': sfx.play('shield', at, mine); break;
       case 'ironskin': fx.sparks(ox, 1.2, oz, 14, 0xd1d5db, 0.25, 6); sfx.play('shield', at, mine); break;
       case 'quake':
