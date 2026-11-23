@@ -10,7 +10,8 @@
 //   roles     tank: peels and keeps threat; healer: heals the most hurt member (a "heal me" first) from behind the tank;
 //             DPS: waits for the tank, flanks, Switches on anyone's Break; support: plays its kit near allies
 //   commands  party members (and admins) order bots with /b chat lines or the command wheel (`botcmd` events):
-//             follow, stay, come, attack (my target), farm, boss, ready, heal (me), potion, leave, status
+//             follow, stay, come, attack (my target), farm, boss, ready, heal (me), potion, leave, status, cancel;
+//             a plan is a list of steps run one after another (shared/bots/plan.js: b.plan, b.setPlan)
 //   social    greetings, call-outs, thanks, wipes, kills, level-ups, rate-limited, party chat only (shared/bots/social.js)
 //
 // createBot() returns the bot object: b.configure({ behaviour, follow }), b.command({ k, by, byName, tgt }),
@@ -45,6 +46,7 @@ import { readParts, roleTurn, roleScore, wantsBreak } from './roles.js'; // boss
 import { readDuels, foeMobs } from '../duels.js'; // duels: only my opponents' stand-ins are targets (server/duels.js)
 import { rollPersonality, potionShift, backOffAt, tankWait, formation, isNeutral } from './personality.js'; // who the bot is (docs/briefs/personalities.md)
 import { idleOk, idleBegin, idleMoved, idleHabits, idleEvent, afkNow } from './idle.js'; // idle habits by personality
+import { setPlan, endPlan, planTurn, planEvent, planProgress } from './plan.js'; // plans: a list of steps (docs/briefs/bot-plans.md)
 
 const BOSS_LVL = { 1: 5, 2: 15, 3: 25 }; // a leader levels on its floor's field until this, then goes for the boss
 const floorFor = beh => (beh === 'floor3' ? 3 : beh === 'floor2' ? 2 : 0); // a behaviour's own floor (0: none)
@@ -75,6 +77,7 @@ export function createBot({ url, WebSocket: WS = globalThis.WebSocket, cls, name
   b.send = o => b.ws.readyState === 1 && (b.ws.sendObj ? b.ws.sendObj(o) : b.ws.send(JSON.stringify(o))); // (sendObj: the server's in-process socket, server/localws.js)
   b.configure = o => configure(b, o);
   b.command = c => command(b, c);
+  b.setPlan = (raw, o) => setPlan(b, raw, o, PLAN_API); // a list of steps (shared/bots/plan.js); null when nothing in it is usable
   b.setSkill = v => setSkill(b, v);
   b.stop = () => b.ws.close();
   b.ws = new WS(url);
@@ -90,7 +93,7 @@ export function createBot({ url, WebSocket: WS = globalThis.WebSocket, cls, name
 function configure(b, o = {}) {
   if (o.behaviour) { b.behaviour = o.behaviour; b.floor = floorFor(o.behaviour) || 1; }
   if (o.follow !== undefined) b.follow = String(o.follow);
-  b.tgtId = null; b.home = null; b.cmd = null;
+  b.tgtId = null; b.home = null; b.cmd = null; endPlan(b);
 }
 
 // ---------------- messages ----------------
@@ -209,7 +212,7 @@ function prune(b) {
 function onPartyChange(b, party) {
   b.wiped = false;
   if (party) b.greetAt = b.t + 0.8 + Math.random() * 2.2; // greet once the snapshot shows who's in it
-  else if (b.cmd && !b.cmd.adm) b.cmd = null;
+  else { if (b.plan && !b.plan.adm) endPlan(b); if (b.cmd && !b.cmd.adm) b.cmd = null; }
   b.healFocus = null;
 }
 
@@ -241,13 +244,14 @@ function onEvent(b, e) {
     case 'stair': b.stair = { x: e.x, z: e.z, until: b.t + e.d, f: e.f || 2 }; break;
     case 'sys': if (!e.to) L?.(`[sys] ${e.text}`); break;
     case 'hit': {
-      let h = b.hits.get(e.id); if (!h) b.hits.set(e.id, h = new Map());
+      let h = b.hits.get(e.id); if (!h) { b.hits.set(e.id, h = new Map()); h.kind = b.allMobs?.find(m => m.id === e.id)?.type; } // (kind: for a plan's farm count)
       const x = h.get(e.by); if (x) x.last = b.t; else h.set(e.by, { first: b.t, last: b.t });
       break;
     }
     case 'die': {
       const h = b.hits.get(e.id);
       if (e.b && h && [...h.keys()].some(id => id === me || mateOf(b, id))) say(b, 'bossKill', {}, { cd: 60 });
+      if (b.plan) planEvent(b, e, { hits: h, mateOf });
       b.hits.delete(e.id);
       if (b.cmd?.k === 'attack' && b.cmd.tgt === e.id) b.cmd = b.cmd.prev || null;
       break;
@@ -313,6 +317,7 @@ function onBotCmd(b, e) {
   if (!mine && !((e.adm || e.free) && named)) return;
   if (e.tgt) b.locks.set(e.by, e.tgt);
   const group = named ? [b.id] : partyBots(b).filter(id => !e.no?.includes(id));
+  if (e.cmd === 'plan') return void setPlan(b, e.plan, { by: e.by, byName: e.byName, adm: !mine, at: e.at, group }, PLAN_API); // a list of steps (the server cleaned it)
   command(b, { k: e.cmd, by: e.by, byName: e.byName, tgt: e.tgt || b.locks.get(e.by) || 0, group, all: group.length > 1, adm: !mine, x: e.x, z: e.z }); // (x, z: tend's garden)
 }
 
@@ -320,10 +325,12 @@ function onBotCmd(b, e) {
 function command(b, c) {
   const who = c.byName || 'you', group = c.group || [b.id];
   const first = group.filter(id => id === b.id || b.players.some(p => p.id === id && !p.dead))[0] === b.id; // one bot answers group orders
-  const ack = (key, vars = {}, text = null) => (first || !c.all) && say(b, key, { who, ...vars }, { force: true, text });
+  const ack = (key, vars = {}, text = null) => !c.quiet && (first || !c.all) && say(b, key, { who, ...vars }, { force: true, text }); // (quiet: a plan's step, the plan speaks for itself)
   const base = { by: c.by || 0, byName: c.byName || 'admin', adm: !!c.adm, at: b.t };
   b.lastCmdBy = c.by || b.lastCmdBy;
+  if (b.plan && !c.plan && !PLAN_KEEPS.has(c.k)) endPlan(b); // a new order ends the plan
   switch (c.k) {
+    case 'cancel': b.cmd = null; b.tgtId = null; return ack('cancel');
     case 'follow': case 'come': {
       const target = c.by ? c.by : c.followId;
       if (!target) return;
@@ -365,9 +372,11 @@ function command(b, c) {
 }
 
 function statusText(b) {
-  const pots = b.cons?.potion;
-  return `HP ${b.hp}/${b.maxHp} · Lv ${b.me?.lvl ?? '?'} · ${b.dead ? 'down' : b.goal}${pots !== undefined ? ` · ${pots} potion${pots === 1 ? '' : 's'}` : ''}`;
+  const pots = b.cons?.potion, plan = planProgress(b);
+  return `HP ${b.hp}/${b.maxHp} · Lv ${b.me?.lvl ?? '?'} · ${b.dead ? 'down' : b.goal}${pots !== undefined ? ` · ${pots} potion${pots === 1 ? '' : 's'}` : ''}${plan ? ` · plan ${plan}` : ''}`;
 }
+const PLAN_KEEPS = new Set(['status', 'potion', 'heal', 'setme', 'ready', 'defend', 'release']); // orders that don't end a plan
+const PLAN_API = { command, say };
 
 function drink(b, asked = false) {
   if (b.cons && !(b.cons.potion > 0)) {
@@ -451,6 +460,7 @@ function thinkFree(b) {
   if (downedTurn(b, P)) return; // downed: crawl to help
   if (arenaTurn(b, moveToward)) return; // a boss arena: frozen through the fall, cover from the Tempest Beam
   if (b.healFocus && (b.healFocus.until < b.t || !P.all.some(p => p.id === b.healFocus.id))) b.healFocus = null;
+  if (b.plan) planTurn(b, P, PLAN_API); // a plan's step sets the order (shared/bots/plan.js)
   const M = decideMode(b, P);
   if (M.anchor && inYard(M.anchor.x, M.anchor.z) && !inYard(b.x, b.z)) M.anchor = { ...M.anchor, x: ACADEMY.x + 6, z: ACADEMY.z + 2, face: 0 }; // (a class trial: wait outside)
   b.mode = M.mode;
@@ -495,8 +505,9 @@ function upkeep(b, P, M) {
 // floor's waypoint, its town centrepiece (once unlocked). Goes when the bot leads a run on a higher floor, or when its anchor is up there.
 function travel(b, M) {
   const own = floorFor(M.beh) || (M.beh === b.behaviour ? floorFor(b.behaviour) : 0);
-  const want = M.mode === 'lead' ? own : M.anchor ? floorOf(M.anchor.x) : 0, here = floorOf(b.x);
-  if (want < 2 || here === want || !floorUnlocked(b.life, want)) return false;
+  const post = M.mode === 'stay' && b.cmd?.plan ? b.cmd.fl || 0 : 0; // a plan's place on another floor (down to Floor 1 too)
+  const want = post || (M.mode === 'lead' ? own : M.anchor ? floorOf(M.anchor.x) : 0), here = floorOf(b.x);
+  if ((want < 2 && !post) || here === want || !floorUnlocked(b.life, want)) return false;
   if (M.mode === 'lead' && here > want) return false; // already above the run's floor (e.g. a Floor 2 bot up on Floor 3)
   b.goal = `Travelling to Floor ${want}`;
   const warp = () => { if (b.t - (b.warpT || -9) > 1) { b.warpT = b.t; b.send({ type: 'warp', f: want }); } };
@@ -623,7 +634,7 @@ function chooseTarget(b, P, M) {
   if (M.mode === 'attack') return here.find(m => m.id === b.cmd.tgt) || null;
   if (M.mode === 'stay') { // only what comes to us
     const c = b.cmd;
-    if (c.defend) return nearest(here, m => { if (m.def.boss) return null; const d = d2(m.x, m.z, c.x, c.z); return d < 22 ? d2(m.x, m.z, b.x, b.z) : null; }); // a town's raid: anything near the ward
+    if (c.defend || c.guard) return nearest(here, m => { if (m.def.boss || (c.guard && m.def.prop)) return null; const d = d2(m.x, m.z, c.x, c.z); return d < (c.defend ? 22 : 14) ? d2(m.x, m.z, b.x, b.z) : null; }); // a town's raid: anything near the ward; a plan's guard step: anything near the post
     return nearest(here, m => { const d = d2(m.x, m.z, b.x, b.z); return m.engaged && (d < m.def.radius + 3 || d2(m.x, m.z, c.x, c.z) < 7) ? d : null; });
   }
   if (M.mode === 'lead') {
@@ -699,6 +710,8 @@ function leadTarget(b, beh, here) {
   const threat = r => nearest(here, m => { const d = d2(m.x, m.z, b.x, b.z); return !m.def.boss && m.engaged && d < r ? d : null; });
   if (beh === 'follow') return threat(6);
   if (beh === 'field') {
+    const kind = b.cmd?.k === 'farm' && b.cmd.mob; // a plan's farm step: that kind of monster only (and what attacks us)
+    if (kind) return threat(8) || nearest(here, m => (m.type === kind && !inBossRoom(m.x, m.z) ? d2(m.x, m.z, b.x, b.z) : null));
     if (f2) return threat(10);
     return nearest(here, m => {
       const d = d2(m.x, m.z, b.x, b.z), fight = m.engaged && d < 12;
@@ -714,7 +727,7 @@ function leadTarget(b, beh, here) {
 function idle(b, P, M) {
   const calm = idleOk(b), s = calm ? idleBegin(b) : null; // personality habits (shared/bots/idle.js)
   const walk = (x, z, stop, speed) => { if (calm) b.calmT = b.t; const moved = moveToward(b, x, z, stop, speed); if (moved && s) idleMoved(b); return moved; }; // (calm: a weave, capped turning)
-  if (M.mode === 'stay') { if (!walk(b.cmd.x, b.cmd.z, 0.8) && calm) idleHabits(b, P); return; }
+  if (M.mode === 'stay') { if (!walk(b.cmd.x, b.cmd.z, b.cmd.stop ?? 0.8, d2(b.cmd.x, b.cmd.z, b.x, b.z) > 12 && b.cmd.plan ? SPRINT_SPEED : PLAYER_SPEED) && calm) idleHabits(b, P); return; } // (stop: a plan's place has its own size)
   const a = M.anchor;
   if (M.mode !== 'lead' && a) {
     if (a.dead) { if (calm) idleHabits(b, P); return; } // hold here until they're back
@@ -739,6 +752,8 @@ function idle(b, P, M) {
   if (beh === 'follow') { if (calm) idleHabits(b, P); return; }
   if (beh === 'field') {
     if (calm && afkNow(b, P.humans.length > 0)) { idleHabits(b, P); return; } // a free bot farming alone: a short break now and then
+    const kind = b.cmd?.k === 'farm' && b.cmd.mob, far = kind && nearest(b.allMobs || [], m => (m.type === kind && floorOf(m.x) === fl && !inBossRoom(m.x, m.z) ? d2(m.x, m.z, b.x, b.z) : null));
+    if (far) { walk(far.x, far.z, 8, SPRINT_SPEED); return; } // a plan's farm step: over to where that kind lives
     const [x, z] = fieldSpot(b); walk(x, z, 1); return;
   }
   if (beh !== 'warden' && (b.noBoss || lvl < BOSS_LVL[fl])) { walk(FLOOR_X[fl], fl > 1 ? 70 : 60); return; } // into the field
@@ -755,6 +770,8 @@ function fieldSpot(b) { // wander between random spots in the field (boar meadow
 }
 
 function goalText(b, P, M, tgt) {
+  const plan = b.plan ? planProgress(b) : '';
+  if (plan && !b.duel) return `${tgt ? `Fighting ${tgt.def.name}` : 'Plan'} (${plan})`;
   if (b.duel) return `Duelling ${tgt ? b.names.get(b.duel.fighters.find(f => f.mob === tgt.id)?.id)?.name || 'an opponent' : ''}`.trim();
   const fight = tgt ? `Fighting ${tgt.def.name}` : '';
   if (M.mode === 'stay') return `${fight || 'Holding position'}${b.cmd?.byName ? ` (${b.cmd.byName}'s order)` : ''}`;

@@ -19,6 +19,7 @@ Start every session by reading `docs/NEXT.md` (what to do next, local setup), th
 - **Shared** (`shared/`): data and tuning, item, talent, style, mastery and twist tables, and the bot code.
   - `shared/bots/`: brain, motor, registry, social, classes, style.
   - `shared/botskill.js`: capability levels 1–5.
+  - `shared/bots/plan.js`: plans, a list of steps a bot runs one after another (`/b farm 10 boars then go smith then come`, the AI mind's `plan`, `b.setPlan`); every step drives `b.cmd`. Plan: `docs/briefs/bot-plans.md`.
   - `shared/bots/personality.js` + `shared/bots/idle.js`: personalities (archetype + traits rolled from the name; idle habits); `BOT_PERSONA=0` = neutral, the old behaviour. Plan: `docs/briefs/personalities.md`.
 - **Persistence:** Postgres (Neon in production). Characters carry JSONB columns `inv`, `stats`, `mastery`, `talents`, `life`, `town`, `path` (the Academy and subclass) (plus the `guilds`/`guild_members` tables and the server-wide `towns` table). Migrations live in `server/db.js`. Without `DATABASE_URL` the game runs in anonymous mode.
 - **Deploy:** Render free plan, service `floorbound` (Docker), with auto-deploy on every push to `main`.
@@ -43,6 +44,6 @@ Start every session by reading `docs/NEXT.md` (what to do next, local setup), th
   - Bot boss runs: `ROLES=guardian,ranger,... BOT_SKILL=5 RUNS=2 PORT=36xx node test/wardenskill.js`. Also accepts `START_STYLE`, `STATS=1`, `LOG_TALENTS=1`.
   - Browser checks: Python Playwright with swiftshader. Start a server with `PORT=xxxx START_LEVEL=10 SPAWN_AT=0,150 node server/index.js`. Headless rendering is slow, so judge by game state, not by frame timing.
   - Use unique ports and kill test servers by PID (use `nohup node … &` with `$!`, not a `cd && …` subshell).
-  - New feature tests: `itemcards`, `selfbar` (browser, `.mjs`), `accesslevels`, `freebots`, `targeting` (+ `targeting.py`), `wellwake` (+ `wellwake.py`), `guilds` (+ `guilds.py`), `academy`, `subclasses`, `life`, `towns` (each + `.py`), `combatqw`, `crossfeature`, `personality`.
+  - New feature tests: `itemcards`, `selfbar` (browser, `.mjs`), `accesslevels`, `freebots`, `targeting` (+ `targeting.py`), `wellwake` (+ `wellwake.py`), `guilds` (+ `guilds.py`), `academy`, `subclasses`, `life`, `towns` (each + `.py`), `combatqw`, `crossfeature`, `personality`, `botplans`.
 - **Style:** small, focused diffs that respect existing patterns. Data-driven over per-case hardcoding. Keep the in-game guide (`public/guide.js`) and README in step with mechanics.
 - **Talking to the owner:** concise and outcome-first, in plain words. He reads on his phone.

@@ -684,6 +684,26 @@ Teamwork comes from the party as each bot sees it, **real players included**:
 
 **Orders.** Party members order the bots in their party, and anyone may order a **free bot** (one not in a party with a player; not the Named) by name, if the bot's rules let them (see *Who may control a bot* above; admins: any bot, by name), with **`/b` chat orders** or the **command wheel**: hold **V** (or press *⌘ Bot orders* under the party frames), point at an order and release V, or click it (leaving the window while holding V gives no order); the chips under the wheel pick all bots or one. Only lines starting with `/b` (or `/bot`, `/bots`) are orders: **ordinary chat never orders bots**. `/b <order>` orders every bot in your party (skipping any you may not order), `/b <name>: <order>` (or `/b <name> <order>`) one bot, in your party or free; a unique start of the name is enough (`/b ly: heal`). The wheel has a chip for each of your free bots too. `/b help` lists the orders; a `/b` line is never shown as chat (you get a short confirmation, the bots answer in party chat). Parsing: `parseBotChat` in `shared/bots/social.js`; the server turns the line into the same `botcmd` event as the wheel (`server/game.js` `botChat`).
 
+**Plans** (`shared/bots/plan.js`, plan `docs/briefs/bot-plans.md`): a list of up to 8 steps a bot carries out one after another. Chain them with `then` (or `;`, `>`): `/b farm 10 boars then go smith then come`, `/b Lyra: guard here 2m then sit 10 then follow`. One step with an argument is a plan too (`/b farm boars`); a plain order word is still the order below. The bot says its plan, a line when a long step starts, and when it is done or has to stop. Fights interrupt a step and the bot picks it up again; **any new order ends the plan**, and so does `/b cancel` or the player who gave it leaving the party. With AI companions on, asking a bot by name for a task or a sequence ("Rook, farm 10 boars then meet me at the smith") gives the same plan.
+
+| Step | Words | Ends when |
+|---|---|---|
+| `go <place>` | go, goto, walk, head | it gets there (4 min, or the plan stops). Places: well (town), smith, merchant, hall, academy, garden, life hall, fire, bench, registrar, field, gate; mirelight and windbreak (the camps, by waypoint if the floor is open to the bot); camp (this floor's waypoint); here (where you stood) |
+| `come` | come, regroup, return | it is back with you |
+| `follow [30s]` | follow | the time is up (default 60 s); as the last step it stays following |
+| `wait [30s]` | wait, stay, hold | the time is up (default 20 s) |
+| `guard [place] [2m]` | guard, defend, protect | the time is up (default 2 min, from arrival); fights whatever comes within 14 m of the post |
+| `farm [monster] [count]` | farm, hunt, kill, grind | the party has killed that many (default 10; 15 min at most). With a monster ("boars", "dire wolves") it hunts that kind only |
+| `boss` | boss, raid | this floor's boss dies (20 min, or the plan stops) |
+| `attack` | attack, focus | your locked target dies |
+| `tend [3m]` | tend | the time is up (the town garden, Floor 1) |
+| `say <line>` | say, tell | said |
+| `sit`, `bow`, `kneel`, `hop` `[10]` | emote | the pose is held that many seconds (default 4) |
+| `skill <1-4>` | skill, cast, use | pressed once |
+| `repeat <n>` | repeat, loop | (last) runs the whole list n times, 5 at most |
+
+Not yet: crafting, buying, selling and gathering (bots have no code for them). A whole plan ends after 30 minutes.
+
 | Order | `/b` words | What the bot does |
 |---|---|---|
 | follow | follow, f | follows you (and fights with you) |
@@ -697,6 +717,7 @@ Teamwork comes from the party as each bot sees it, **real players included**:
 | potion | potion, pot, drink | drinks a potion (or says it's out) |
 | leave | leave, dismiss | leaves the party and roams (farms the field) until someone invites it again |
 | status | status, report | answers with HP, level, potions and what it is doing |
+| cancel | cancel, abort | drops its plan and its current order |
 
 Chat channels: plain text goes to everyone, `/p text` to your party, `/s text` to players within 40 m. `/kneel`, `/sit`, `/bow` and `/stand` set a pose instead (never shown as chat).
 

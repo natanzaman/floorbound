@@ -22,7 +22,7 @@ const st = b => (b.idle ||= { seen: -9, still: 0, lookAt: null, lookT: 0, hopT: 
 
 // May habits run this turn? (the caller already knows there's no target and no dodge)
 export function idleOk(b) {
-  return !isNeutral(b) && !!b.me && !b.dead && !b.script && !b.duel && !b.trap && !b.roll && !b.tele?.length && !inBossRoom(b.x, b.z);
+  return !isNeutral(b) && !!b.me && !b.dead && !b.script && !b.duel && !b.trap && !b.roll && !b.tele?.length && !b.plan?.st?.pose && !inBossRoom(b.x, b.z); // (pose: a plan's emote step is holding one)
 }
 
 // The start of an idle turn: a fresh idle spell resets the clock. Returns the state.
@@ -39,7 +39,7 @@ export function idleMoved(b) { const s = st(b); s.still = b.t; s.sit = false; }
 // Free bots only: an AFK spell now? (s: the idle state). Rolls about once a minute.
 export function afkNow(b, withHuman) {
   const s = st(b);
-  if (isNeutral(b) || withHuman || b.party && b.cmd) { s.afkUntil = 0; return false; } // (a human or an order ends a break)
+  if (isNeutral(b) || withHuman || b.cmd) { s.afkUntil = 0; return false; } // (a human or an order ends a break)
   if (b.t < s.afkUntil) { b.goal = 'AFK'; return true; }
   if (b.t > s.afkT) {
     s.afkT = b.t + 50 + Math.random() * 30;

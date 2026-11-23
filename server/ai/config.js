@@ -90,7 +90,7 @@ export function readConfig(env = process.env) {
     dailyUsd: num(envGet(env, 'AI_DAILY_USD'), 1, 0),
     timeoutMs: num(envGet(env, 'AI_TIMEOUT_MS'), 8000, 500, 60000),
     maxBots: num(envGet(env, 'AI_MAX_BOTS'), 10, 1),
-    maxOutTokens: num(envGet(env, 'AI_MAX_OUT_TOKENS'), 300, 64, 4000),
+    maxOutTokens: num(envGet(env, 'AI_MAX_OUT_TOKENS'), 500, 64, 4000), // (room for a plan of 8 steps)
     namedReserve: num(envGet(env, 'AI_NAMED_RESERVE'), 0.2, 0, 1),
     namedMaxShare: num(envGet(env, 'AI_NAMED_MAX_SHARE'), 0.5, 0, 1),
     namedCallsMin: num(envGet(env, 'AI_NAMED_CALLS_MIN'), 12, 1),

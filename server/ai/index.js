@@ -34,7 +34,8 @@ export function installAI({ game = null, bots, server = null }, opts = {}) {
   const provider = opts.provider || makeProvider(cfg, { env });
   const listBots = () => (bots?.bots || []).filter(e => !e.b.closed && !e.director && !e.named).map(e => e.b); // (never the director's actors)
   const onThink = game ? (b, on) => { if (b.id) game.events.push({ t: 'mind', id: b.id, on: on ? 1 : 0, party: b.party || 0 }); } : null;
-  const minds = new Minds({ cfg, provider, listBots, env, now: opts.now, log: opts.log, onThink });
+  const mayOrder = game ? (b, id) => { if (!game.botControl) return true; const p = game.players.get(id), o = game.players.get(b.id); return !!p && !!o && !game.botControl(p, o, 'botCommand'); } : null; // who may order a bot (shared/accesslevels.js), as for /b
+  const minds = new Minds({ cfg, provider, listBots, env, now: opts.now, log: opts.log, onThink, mayOrder });
   if (game) game.aiOn = () => minds.active(); // (welcome: lets the client show the "talk to bots by name" tip)
   if (game?.named) minds.namedTalk = installNamedTalk({ game, minds }); // (NAMED_ENABLED=0: no Named, nothing to talk to)
   registerBotHook('onEvent', (b, e) => minds.onEvent(b, e));

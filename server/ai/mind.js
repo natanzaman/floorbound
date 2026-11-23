@@ -13,6 +13,7 @@
 // Off (no provider, no key, or toggled off): onEvent returns at once and tick() does nothing, so bots play exactly as
 // before. Any error, timeout or cap simply means no intent this time.
 import { say } from '../../shared/bots/social.js';
+import { planText } from '../../shared/bots/plan.js';
 import { INTENT_SCHEMA, sanitizeIntent } from './intent.js';
 import { SYSTEM, summarize, isBotId, nameOfId, partyMates } from './prompt.js';
 import { Budget } from './budget.js';
@@ -23,7 +24,7 @@ import { redact } from './providers/http.js';
 const STANCE_MS = 10 * 60e3;   // a stance / focus lasts 10 minutes unless changed
 const PENDING_MS = 20e3;       // an unanswered line older than this is dropped
 const UNPROMPTED_GAP_MS = 20e3; // at most one unprompted line per bot per 20 s
-const TEST_PROMPT = 'Trigger: the server admin is running a connection test (nobody is playing). Set "say" to a short in-character line confirming you can hear them (under 60 characters). Keep "order" none, "stance" keep, "focus" and "remember" empty.';
+const TEST_PROMPT = 'Trigger: the server admin is running a connection test (nobody is playing). Set "say" to a short in-character line confirming you can hear them (under 60 characters). Keep "order" none, "stance" keep, "focus" and "remember" empty, "plan" [].';
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Notes per (bot name, player name), 5 each, the 400 most recent pairs. `dirty` holds the keys changed since the last
@@ -63,7 +64,8 @@ export class Memory {
 export class Minds {
   // cfg: readConfig(); provider: makeProvider(); listBots(): live bot objects; env: for the key check.
   // onThink(b, on): a bot started / stopped thinking about a line said to it (the "…" over its head).
-  constructor({ cfg, provider, listBots = () => [], env = process.env, now = Date.now, log = console.log, onThink = null }) {
+  constructor({ cfg, provider, listBots = () => [], env = process.env, now = Date.now, log = console.log, onThink = null, mayOrder = null }) {
+    this.mayOrder = mayOrder; // (bot, player id) -> may that player order it? (server/ai/index.js: the /b rule; null: any party member)
     this.cfg = cfg; this.provider = provider; this.listBots = listBots; this.env = env; this.now = now; this.log = log; this.onThink = onThink;
     this.store = null; this.flushing = null; this.spendSaved = 0; this.callsSaved = 0; this.lastTest = null; this.testing = false; this.flushes = 0;
     this.on = !!(cfg.startOn && this.ready());
@@ -289,13 +291,16 @@ export class Minds {
 
   think1(b, on) { try { this.onThink?.(b, on); return true; } catch { return false; } }
 
-  // Put a sanitized intent into the game. Orders, stance and focus only answer a party member who spoke to us.
+  // Put a sanitized intent into the game. Orders, plans, stance and focus only answer a party member who spoke to us
+  // (and, for orders and plans, one who may order this bot: mayOrder, the same rule as /b).
   apply(b, s, it, trig) {
     const did = { say: '', order: 'none', stance: 'keep', focus: '' };
     const speaker = trig.kind === 'chat' ? partyMates(b).find(p => p.id === trig.id && !isBotId(b, p.id)) : null;
+    let plan = null;
     if (speaker) {
-      const byName = nameOfId(b, speaker.id);
-      if (it.order !== 'none' && typeof b.command === 'function') {
+      const byName = nameOfId(b, speaker.id), may = !this.mayOrder || !!this.mayOrder(b, speaker.id);
+      if (may && it.plan?.length && typeof b.setPlan === 'function') plan = { steps: it.plan, o: { by: speaker.id, byName, at: [speaker.x, speaker.z], group: [b.id] } }; // (given after our line, below)
+      else if (may && it.order !== 'none' && typeof b.command === 'function') {
         const c = { k: it.order, by: speaker.id, byName, tgt: b.locks?.get(speaker.id) || 0, group: [b.id], all: false, adm: false };
         if (it.say) { // our own line replaces the canned acknowledgement
           const send = b.send;
@@ -323,6 +328,7 @@ export class Minds {
       say(b, 'mind', {}, { force: true, text: it.say });
       s.lastSaid = this.now(); did.say = it.say;
     }
+    if (plan) { const c = b.setPlan(plan.steps, plan.o); if (c) did.plan = planText(c).replace(/^Plan: /, ''); } // (the bot says its plan itself)
     return did;
   }
 

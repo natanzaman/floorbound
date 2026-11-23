@@ -12,7 +12,7 @@ export function defaultMockReply({ user, system, schema }) {
     return { say: `(mock) ${me} heard you, ${who}.`, sentiment: 0, reason: 'mock', remember: '' };
   }
   const who = /^Trigger: (.+?) spoke to you: "/m.exec(user)?.[1];
-  return { say: who ? `(mock) Heard you, ${who}.` : '', order: 'none', stance: 'keep', focus: '', remember: '' };
+  return { say: who ? `(mock) Heard you, ${who}.` : '', order: 'none', stance: 'keep', focus: '', remember: '', plan: [] };
 }
 
 export function mockProvider({ model = 'mock', reply = defaultMockReply, delayMs = 0, fail = null } = {}) {

@@ -59,6 +59,7 @@ import { installClutch } from './clutch.js'; // Last Stand, the finisher's slow 
 import { installTowns } from './towns.js'; // floor towns that grow, citizens, raids, Stewards and elections (docs/briefs/towns.md)
 import { rollGear } from '../shared/loot.js'; // affixes, boss sets, loadouts, drop tables (H2)
 import { BOT_COMMANDS, parseBotChat, botHelp } from '../shared/bots/social.js'; // party orders for bots (botCommand, /b chat)
+import { cleanPlan, planText, planHelp } from '../shared/bots/plan.js'; // plans: a list of steps for a bot (docs/briefs/bot-plans.md)
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const r1 = v => Math.round(v * 10) / 10;
@@ -548,7 +549,8 @@ export class Game {
   botCommand(p, msg) {
     const cmd = String(msg.cmd || '');
     let name = msg.name ? String(msg.name).slice(0, 16) : '';
-    if (!BOT_COMMANDS[cmd]) return false;
+    const plan = cmd === 'plan' ? cleanPlan(msg.plan) : null; // a list of steps (shared/bots/plan.js): only what cleanPlan keeps goes out
+    if (cmd === 'plan' ? !plan?.steps.length : !BOT_COMMANDS[cmd]) return false;
     const party = this.partyOf(p), mates = party ? party.members.filter(id => id !== p.id).map(id => this.players.get(id)).filter(Boolean) : [];
     const block = o => (o?.bot && this.botControl?.(p, o, 'botCommand')) || '';
     const pick = list => { // by full name, else by a unique start of it ("/b ly: heal" is Lyra)
@@ -570,7 +572,7 @@ export class Game {
       no = bots.filter(o => block(o)).map(o => o.id);
       if (no.length && no.length === bots.length) { this.sys(block(bots[0]), p.id); return false; }
     }
-    this.events.push({ t: 'botcmd', by: p.id, byName: p.name, party: p.party || 0, cmd, ...(name ? { name } : {}), tgt: p.target || 0, ...(p.admin ? { adm: 1 } : {}), ...(free ? { free: 1 } : {}), ...(no?.length ? { no } : {}), ...(cmd === 'tend' ? { x: GARDEN.x + 4, z: GARDEN.z + 3 } : {}) }); // tend: the town garden (life classes)
+    this.events.push({ t: 'botcmd', by: p.id, byName: p.name, party: p.party || 0, cmd, ...(name ? { name } : {}), tgt: p.target || 0, ...(p.admin ? { adm: 1 } : {}), ...(free ? { free: 1 } : {}), ...(no?.length ? { no } : {}), ...(cmd === 'tend' ? { x: GARDEN.x + 4, z: GARDEN.z + 3 } : {}), ...(plan ? { plan: { steps: plan.steps, loops: plan.loops }, at: [r2(p.x), r2(p.z)] } : {}) }); // tend: the town garden (life classes); at: where "here" is for a plan
     return name || true;
   }
   // Bots that roam free of any human's party (a party of bots only counts as free), the Named excepted: they keep to their own plans.
@@ -581,10 +583,10 @@ export class Game {
 
   // A /b chat line (shared/bots/social.js parseBotChat): help, an error, or an order. Never shown as chat.
   botChat(p, o) {
-    if (o.help) { for (const line of botHelp()) this.sys(line, p.id); return; }
+    if (o.help) { for (const line of [...botHelp(), ...planHelp()]) this.sys(line, p.id); return; }
     if (o.error) return this.sys(o.error, p.id);
-    const to = this.botCommand(p, o);
-    if (to) this.sys(`Order to ${to === true ? 'your bots' : to}: ${BOT_COMMANDS[o.cmd].label}.`, p.id);
+    const to = this.botCommand(p, o.plan ? { cmd: 'plan', plan: o.plan, name: o.name } : o);
+    if (to) this.sys(`${o.plan ? 'Plan for' : 'Order to'} ${to === true ? 'your bots' : to}: ${o.plan ? planText(o.plan).replace(/^Plan: /, '') : BOT_COMMANDS[o.cmd].label}.`, p.id);
   }
 
   invite(p, targetId) {

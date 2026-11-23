@@ -2,6 +2,7 @@
 // Shared by the bot brain (shared/bots/brain.js), the server (validates `botcmd`) and the client's command wheel.
 
 import { VOICE, chatScale } from './personality.js'; // chattiness and voice (docs/briefs/personalities.md)
+import { parsePlan, isStepWord } from './plan.js'; // plans: several steps in one line (docs/briefs/bot-plans.md)
 
 // Command ids, in command-wheel order. `wheel: false` ones are chat / menu only.
 export const BOT_COMMANDS = {
@@ -18,12 +19,15 @@ export const BOT_COMMANDS = {
   status: { label: 'Status', icon: '?' },
   leave: { label: 'Leave party', icon: '⨯', wheel: false },
   tend: { label: 'Tend my garden', icon: '❀', wheel: false }, // life classes: hold at the town garden (shared/life.js)
+  cancel: { label: 'Cancel the plan', icon: '✕', wheel: false }, // drop the plan and the current order (shared/bots/plan.js)
 };
 export const BOT_COMMAND_IDS = Object.keys(BOT_COMMANDS);
 
 // Chat orders: only lines starting with /b (or /bot, /bots) are orders; ordinary chat never is.
 //   /b <order>          every bot in your party        /b <name>: <order>   one bot (also "/b <name> <order>")
 //   /b help             lists the orders               aliases below: the first word of the order picks it
+//   /b <step> then <step> ...   a plan (shared/bots/plan.js): also one step with arguments, "/b farm 10 boars"; a plain
+//                               single order word stays the order it always was
 export const BOT_ALIASES = {
   follow: ['follow', 'f'],
   stay: ['stay', 'hold', 'wait', 'stop', 'halt'],
@@ -38,6 +42,7 @@ export const BOT_ALIASES = {
   status: ['status', 'report', 'sitrep'],
   leave: ['leave', 'dismiss'],
   tend: ['tend', 'garden'],
+  cancel: ['cancel', 'abort', 'nevermind'],
 };
 const ALIAS = new Map(Object.entries(BOT_ALIASES).flatMap(([cmd, words]) => words.map(w => [w, cmd])));
 const ALL_WORDS = new Set(['all', 'bots', 'everyone', 'team', 'party']);
@@ -46,21 +51,27 @@ const word = s => s.toLowerCase().replace(/[^\w']/g, '');
 const cleanName = s => String(s || '').replace(/[^\w \-.]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
 
 // Parse a chat line. Returns null when it isn't a /b line (ordinary chat: never an order), else one of
-// { help: true } | { cmd, name } (name '' = every bot in your party) | { error }.
+// { help: true } | { cmd, name } (name '' = every bot in your party) | { plan: { steps, loops }, name } | { error }.
 export function parseBotChat(text) {
   const m = String(text || '').trim().match(PREFIX);
   if (!m) return null;
   const rest = m[1].trim();
   if (!rest || /^(help|\?|h)$/i.test(rest)) return { help: true };
   let name = '', order = rest;
-  const colon = rest.indexOf(':');
+  const colon = /^(say|tell|shout)\b/i.test(rest) ? -1 : rest.indexOf(':'); // (a line to say may hold a colon)
   if (colon >= 0) { name = rest.slice(0, colon); order = rest.slice(colon + 1); }
   else { // "/b Lyra heal": the words before the first order word are a name
     const words = rest.split(/\s+/);
-    const i = words.findIndex(w => ALIAS.has(word(w)));
+    const i = words.findIndex(w => ALIAS.has(word(w)) || isStepWord(w));
     if (i > 0) { name = words.slice(0, i).join(' '); order = words.slice(i).join(' '); }
   }
   const cmd = ALIAS.get(word(order.trim().split(/\s+/)[0] || ''));
+  const plan = parsePlan(order); // several steps, or one with arguments ("farm 10 boars"); a bare order word stays an order
+  if (plan && !(plan.bare && cmd)) {
+    name = cleanName(name);
+    if (plan.error) return { error: plan.error };
+    return { plan: { steps: plan.steps, loops: plan.loops }, name: ALL_WORDS.has(name.toLowerCase()) ? '' : name };
+  }
   if (!cmd) return { error: `"${order.trim().slice(0, 24) || rest.slice(0, 24)}" isn't a bot order. Type /b help for the list.` };
   name = cleanName(name);
   if (ALL_WORDS.has(name.toLowerCase())) name = '';
@@ -100,6 +111,7 @@ export const LINES = {
   potion: ['Drinking a potion.', 'Potion down.'],
   noPotion: ['Out of potions!', 'No potions left.'],
   leave: ['Heading off. Good luck!', 'Leaving the party. See you!'],
+  cancel: ['Okay, dropping that.', 'Standing down.', 'Cancelled.'],
   pull: ['Pulling the {mob} in 3...', 'Pulling {mob}, get ready!', 'Engaging the {mob}.'],
   lowHp: ['Low HP, backing off!', "I'm low!", 'Need a heal!'],
   thanks: ['Thanks, {who}!', 'Thanks for the heal, {who}.', 'Ty {who}!'],
