@@ -226,6 +226,24 @@ const lucky = () => 0.01, unlucky = () => 0.99;
   const twice = stub({ names: NAMES(), players: [{ id: 2, x: 0, z: 60 }, { ...VEX }], mobs: [mob(50, 11, 70)] });
   turn(twice, 3, PV(twice), unlucky); turn(twice, 20, PV(twice), lucky);
   ok(twice.day.goal !== 'help' && twice.day.helpSeen.get(4) > twice.t, 'it makes up its mind once per scrape, not every second');
+  // one bot speaks up, the rest leave it to that one (review: every free bot in earshot said "Hang on, Vex!" at once)
+  const second = stub({ names: NAMES(), players: [{ id: 2, x: 0, z: 60 }, { ...VEX, hp: 100 }, { ...WREN }] }, kind);
+  turn(second, 0.5, PV(second), unlucky); second.said.length = 0;
+  second.players[1].hp = 30; second.mobs = [mob(50, 11, 70)];
+  dayChat(second, { id: 7, text: 'Hang on, Vex!', ch: 's' });
+  turn(second, 3, PV(second), lucky);
+  ok(second.day.goal !== 'help' && !second.said.length && second.day.helpSeen.get(4) > second.t, 'another bot said "Hang on, Vex!" first: this one leaves Vex to it and says nothing');
+  const other = stub({ names: NAMES(), players: [{ id: 2, x: 0, z: 60 }, { ...VEX, hp: 100 }, { ...WREN }] }, kind);
+  turn(other, 0.5, PV(other), unlucky);
+  other.players[1].hp = 30; other.mobs = [mob(50, 11, 70)];
+  dayChat(other, { id: 7, text: 'Careful out here, Vex.', ch: 's' }); dayChat(other, { id: 7, text: 'Hang on, Zed!', ch: 's' }); dayChat(other, { id: 4, text: 'Hang on, Vex!', ch: 's' });
+  turn(other, 3, PV(other), lucky);
+  ok(other.day.goal === 'help', 'any other line, a rescue of somebody else, or a player saying it: it still helps');
+  // a "plan stopped" note belongs to the goal it stopped
+  const st = stub({ names: NAMES(), players: [{ id: 2, x: 0, z: 60 }] });
+  turn(st, 0.5, PV(st), unlucky); st.dayStop = 'none about';
+  st.plan = null; st.cmd = { k: 'stay', by: 4, byName: 'Vex', adm: true, x: 0, z: 60 }; turn(st, 0.5, PV(st), unlucky);
+  ok(st.dayStop == null && st.day.log[0].how === 'order', 'an order ends the goal: the old "plan stopped" note does not hang on for the next one');
 }
 { // teaming up with another free bot
   const soc = { sociability: 1 };
@@ -267,6 +285,15 @@ const lucky = () => 0.01, unlucky = () => 0.99;
   const f = stub({ names: NAMES(), party: 9, players: [{ id: 2, x: 0, z: 60, party: 9 }, { ...WREN, party: 9 }] });
   turn(f, 0.5, PV(f), rng(3)); turn(f, 5, GV(f, mate, 7), rng(3));
   ok(!f.plan && f.day.goal === 'with' && dayText(f) === 'Out with Wren: better together' && f.day.log[0].how === 'joined', `in another bot's party it drops its own plan and is out with it (${dayText(f)})`);
+  // asked while out on a hunt of its own, and it leads the two: the hunt is planned again, for both (review: it kept its solo plan)
+  const m = stub({ names: NAMES(), players: [{ id: 2, x: 0, z: 60, lvl: 6 }, { ...WREN }] });
+  turn(m, 0.5, PV(m), rng(3));
+  const alone = dayText(m), n1 = m.plan.steps.at(-1).n;
+  m.party = 9; m.players[0].party = 9; m.players[1].party = 9;
+  turn(m, 5, GV(m, mate), rng(3));
+  ok(/^Hunting /.test(alone) && !/ with /.test(alone) && m.plan?.day === 'hunt' && /^Hunting .+ with Wren: better together$/.test(dayText(m)) && m.day.log[0].how === 'joined' && m.day.crew === 1, `a bot joins the hunt it leads: it plans again for two (${alone} -> ${dayText(m)}, ${n1} -> ${m.plan?.steps.at(-1).n} kills)`);
+  const plans = m.day.log.length; turn(m, 6, GV(m, mate), rng(3));
+  ok(m.day.log.length === plans && m.plan?.day === 'hunt', '...once, not over and over');
   f.party = 0; turn(f, 8, PV(f), rng(3));
   ok(f.plan?.day && f.day.log[0].g === 'with' && f.day.groupT > 0, 'the party is gone: its own day again');
 }
@@ -293,6 +320,19 @@ const lucky = () => 0.01, unlucky = () => 0.99;
   const shy = stub({ names: NAMES(), players: near(), me: { lvl: 4 } }, { sociability: 0.2, chattiness: 0 });
   turn(shy, 2, PV(shy), lucky);
   ok(shy.plan?.day === 'hunt' && !shy.said.length, 'a shy bot asks nobody');
+  // another bot asked the same people a moment ago: ours is not the second
+  const echo = stub({ names: NAMES(), players: [...near(), { ...WREN, x: 12, z: 62 }], me: { lvl: 4 } }, keen);
+  turn(echo, 0.5, PV(echo), lucky);
+  const about = !!echo.day.ask && !echo.said.length;
+  dayChat(echo, { id: 7, text: 'Anyone for wolves?', ch: 's' });
+  turn(echo, 2, PV(echo), lucky);
+  ok(about && !echo.said.length && !echo.day.ask && echo.day.askedAt.get(4) > 0 && echo.plan?.day === 'hunt', 'a bot nearby asked "Anyone for wolves?" first: this one keeps quiet and goes hunting');
+  // an invitation is remembered for a minute and a half, not for ever
+  const gone = stub({ names: NAMES(), players: [{ id: 2, x: 0, z: 60, lvl: 6 }, { ...VEX, hp: 100, x: 5, z: 62 }] }, { ...keen, aggression: 1 });
+  turn(gone, 2, PV(gone), lucky); dayChat(gone, { id: 4, text: 'ok', ch: 's' });
+  const open = !!gone.day.invited; gone.t += 100; turn(gone, 0.5, PV(gone), lucky); gone.said.length = 0;
+  gone.party = 3; turn(gone, 1, PV(gone, [{ id: 4 }]), lucky);
+  ok(open && !gone.day.invited && !gone.said.length, 'they never came: much later, in a party with them, it does not say "Lead on to the Warden"');
   // at the boss's level a bold one asks about the boss, and says so once the player is in its party
   const bold = stub({ names: NAMES(), players: [{ id: 2, x: 0, z: 60, lvl: 6 }, { ...VEX, hp: 100, x: 5, z: 62 }] }, { ...keen, aggression: 1 });
   turn(bold, 2, PV(bold), lucky);
@@ -453,7 +493,7 @@ try {
   ok(await until(() => { if (!together() && ada.day.goal && ada.day.goal !== 'group' && ada.plan) { ada.day.groupT = null; bo.day.groupT = null; ada.plan = null; ada.cmd = null; } return together(); }, 120000), `live: a free bot walks up to another and they team up (Ada: ${dayLog(ada, 2)})`);
   ada.dayPicker = null;
   const lead = () => [ada, bo].find(b => b.plan?.day), tail = () => [ada, bo].find(b => b.day.goal === 'with');
-  ok(await until(() => lead() && tail() && lead() !== tail() && / with /.test(dayText(lead())), 40000), `live: one leads the hunt, the other is out with it (${ada.name}: ${dayText(ada)} | ${bo.name}: ${dayText(bo)})`);
+  ok(await until(() => lead() && tail() && lead() !== tail() && /^Hunting .+ with /.test(dayText(lead())), 40000), `live: one leads the hunt, the other is out with it (${ada.name}: ${dayText(ada)} | ${bo.name}: ${dayText(bo)})`);
   const t = tail(); if (t) t.day.groupUntil = 0;
   ok(await until(() => !ada.party && !bo.party, 60000) && await until(() => ada.plan?.day && bo.plan?.day && ada.day.goal !== 'with' && bo.day.goal !== 'with', 30000), `live: when one has had enough it leaves, and each goes on with its own day (${dayText(ada)} | ${dayText(bo)})`);
   for (const b of [...bots, ada, bo]) b.stop();

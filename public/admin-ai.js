@@ -41,6 +41,7 @@ function mountDay() {
   const el = document.createElement('div');
   el.className = 'card'; el.id = 'day-card';
   el.innerHTML = `<h2>Bot decisions <span class="pill" id="day-pill">…</span><span class="grow" style="flex:1"></span>
+    <button class="small" id="day-toggle" disabled title="The model, or the bots' own scores (until the server restarts; BOT_DAY_PICK=rules turns it off for good)">…</button>
     <button class="small" id="day-test" disabled title="One real decision call to check the key works (a fraction of a cent)">Test decision</button></h2>
     <div id="day-line" style="font-size:13px"></div>
     <div id="day-test-out" style="font-size:13px;margin-top:6px"></div>
@@ -52,14 +53,17 @@ function mountDay() {
   return el;
 }
 
-// The free bots' decider: the line, the per-model numbers and the last few picks with their odds.
+// The free bots' decider: the line, its switch, the per-model numbers and the last few picks with their odds.
+let dayOff = false;
 function renderDay(s, err) {
   const el = document.getElementById('day-card') || mountDay();
   if (!el) return;
   const pill = document.getElementById('day-pill'), tb = document.getElementById('day-test');
-  if (err || !s) { document.getElementById('day-line').textContent = err || ''; pill.textContent = '?'; tb.disabled = true; return; }
-  pill.textContent = s.how === 'rules' ? 'RULES' : s.ready ? 'MODEL' : 'NO KEY';
-  pill.className = `pill${s.ready ? ' on' : ''}`;
+  const sw = document.getElementById('day-toggle');
+  if (err || !s) { document.getElementById('day-line').textContent = err || ''; pill.textContent = '?'; tb.disabled = true; sw.disabled = true; return; }
+  dayOff = !!s.adminOff; sw.disabled = busy || !s.ready; sw.textContent = dayOff ? 'Turn on' : 'Turn off';
+  pill.textContent = s.how === 'rules' ? 'RULES' : !s.ready ? 'NO KEY' : s.adminOff ? 'OFF' : 'MODEL';
+  pill.className = `pill${s.ready && !s.adminOff ? ' on' : ''}`;
   tb.disabled = busy || !s.on;
   document.getElementById('day-line').textContent = s.line;
   const bits = [];
@@ -155,6 +159,13 @@ async function refresh() {
 const gone = id => document.getElementById(id)?.remove();
 
 document.addEventListener('click', async ev => {
+  if (ev.target?.id === 'day-toggle' && !busy) {
+    busy = true; ev.target.disabled = true;
+    const r = await api('POST', { on: dayOff }, '/day').catch(() => null);
+    busy = false;
+    if (r?.ok) renderDay(r.j); else document.getElementById('day-test-out').textContent = r?.j?.error || 'Could not reach the server.';
+    return;
+  }
   if (ev.target?.id === 'day-test' && !busy) {
     busy = true; ev.target.disabled = true; ev.target.textContent = 'Deciding…';
     const r = await api('POST', {}, '/day-test').catch(() => null);

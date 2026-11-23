@@ -5,7 +5,7 @@
 //     call: OK/error, latency, cost) and POST /api/admin/ai/named-test (the same for Named talk, in Cairn's voice),
 //     admins only
 //   - installs the free bots' decision model (server/ai/daypick.js: its own model, key and daily cap) and serves
-//     GET /api/admin/ai/day and POST /api/admin/ai/day-test for its card
+//     GET /api/admin/ai/day, POST /api/admin/ai/day { on } (its switch) and POST /api/admin/ai/day-test for its card
 //   - tells clients when a bot is thinking about a line said to it ({ t: 'mind', id, on, party } in game.events)
 //   - memories and the day's spend survive restarts once index.js calls minds.useStore(makeStore(db.q)) after migrate
 // Nothing here runs a model unless AI_PROVIDER, its key and the toggle are all set (the test call needs provider + key).
@@ -65,8 +65,13 @@ export function installAI({ game = null, bots, server = null }, opts = {}) {
       return json(res, 200, { test: r, ...minds.dayPick.status() });
     }
     if (/^\/api\/admin\/ai\/day/.test(req.url)) { // the free bots' decider: its own model, key and cap
-      if (req.method !== 'GET') return json(res, 405, { error: 'GET.' });
+      if (req.method !== 'GET' && req.method !== 'POST') return json(res, 405, { error: 'GET or POST.' });
       if (!minds.dayPick) return json(res, 400, { error: 'The bot decider is not installed.' });
+      if (req.method === 'POST') { // the card's switch: the model, or the bots' own scores (until the next restart)
+        const body = await readBody(req);
+        if (!body || typeof body.on !== 'boolean') return json(res, 400, { error: 'Send { "on": true | false }.' });
+        minds.dayPick.adminOff = !body.on;
+      }
       return json(res, 200, minds.dayPick.status());
     }
     if (/^\/api\/admin\/ai\/named-test/.test(req.url)) {

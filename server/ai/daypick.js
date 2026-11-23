@@ -59,6 +59,7 @@ export class DayPickers {
     this.fails = 0; this.pausedUntil = 0; this.pauseWhy = '';
     this.lastError = ''; this.lastErrorAt = 0;
     this.seen = new WeakMap(); // bot -> last ask time
+    this.adminOff = false;     // the admin card's switch (until the next restart; BOT_DAY_PICK=rules is the lasting one)
     this.skipped = {};
   }
 
@@ -73,8 +74,9 @@ export class DayPickers {
     this.rollDay();
     const t = this.now(), c = this.cfg;
     if (!this.ready()) return this.on() ? 'no key' : 'rules only';
+    if (this.adminOff) return 'turned off';
     if (t < this.pausedUntil) return `paused: ${this.pauseWhy}`;
-    if (c.dailyUsd >= 0 && this.daySpend >= c.dailyUsd) return 'daily cap';
+    if (this.daySpend >= c.dailyUsd) return 'daily cap';
     if (ask.facts.quiet) return 'nobody on this floor'; // (it is going home to rest: nothing to decide)
     const gap = (ask.facts.humans > 0 ? c.nearS : c.farS) * 1000;
     if (t - (this.seen.get(b) ?? -Infinity) < gap) return 'bot cooldown';
@@ -94,6 +96,7 @@ export class DayPickers {
     if (want.length < 2) { this.rules++; return false; }
     const t0 = this.now();
     this.asked++; this.inFlight++; this.calls.push(t0); this.seen.set(b, t0);
+    ask.wait = this.cfg.waitMs / 1000; // how long the bot waits for us (BOT_DAY_WAIT_MS)
     this.ask(b, ask, want, t0).catch(e => this.log('[daypick]', e?.message || e)).finally(() => { this.inFlight = Math.max(0, this.inFlight - 1); });
     return true;
   }
@@ -151,7 +154,7 @@ export class DayPickers {
     this.rollDay();
     const avg = s => (s.answered ? Math.round(s.ms / s.answered) : 0);
     return {
-      how: this.cfg.how, on: this.on(), ready: this.ready(), model: this.model(),
+      how: this.cfg.how, on: this.on(), ready: this.ready(), model: this.model(), adminOff: this.adminOff,
       keyEnv: this.cfg.keyEnvs[0], keySet: hasKey(this.cfg, this.env), keyCheck: keyReport(this.cfg, this.env),
       waitMs: this.cfg.waitMs, nearS: this.cfg.nearS, farS: this.cfg.farS,
       asked: this.asked, answered: this.answered, late: this.late, errors: this.errors, timeouts: this.timeouts, rules: this.rules,
@@ -166,6 +169,7 @@ export class DayPickers {
 
   line() {
     if (this.cfg.how === 'rules') return 'Bots decide by their own scores (BOT_DAY_PICK=rules).';
+    if (this.adminOff) return `${this.model()} is turned off here: the bots' own scores decide (until it is turned on again or the server restarts).`;
     if (!this.ready()) return `${this.model()} would decide, but no key is set (${this.cfg.keyEnvs[0]}). The bots' own scores decide meanwhile.`;
     const s = this.byModel.get(this.model());
     return `${this.model()} decides: ${this.answered} of ${this.asked} answered${this.late ? `, ${this.late} too late` : ''}${this.errors + this.timeouts ? `, ${this.errors + this.timeouts} failed` : ''} · ${this.rules} picks left to the scores · $${this.daySpend.toFixed(5)} today of $${this.cfg.dailyUsd.toFixed(2)}${s?.answered ? ` · avg ${Math.round(s.ms / s.answered)} ms` : ''}`;

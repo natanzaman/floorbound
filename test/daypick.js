@@ -163,7 +163,10 @@ const pickers = (provider, env = {}, more = {}) => new DayPickers({ env: { BOT_D
 }
 { // the state never carries anything but the game (no keys, no player names beyond the bot's own)
   const b = stub({ name: 'Rook' }), st = pickState(b, askOf(b));
-  ok(!/sk-|API|token|password/i.test(J(st)) && J(st).length < 1200, `the state is small and holds nothing private (${J(st).length} characters)`);
+  const ask = askOf(stub({ name: 'Rook', players: [{ id: 2, x: 0, z: 60 }, { id: 9, x: 3, z: 60, name: 'Natan' }], names: new Map([[9, { name: 'Natan' }]]) }));
+  const st2 = pickState(stub({ name: 'Rook' }), { ...ask, facts: { ...ask.facts, with: ['Natan'] } });
+  ok(J(Object.keys(st).sort()) === J(['its_own_scores', 'now', 'personality', 'who']) && J(Object.keys(st.now).sort()) === J(['bag_items', 'deaths_lately', 'floor', 'gold', 'health', 'in_a_team_of', 'in_town', 'last_thing_it_did', 'minutes_on_the_same_thing', 'minutes_since_it_rested', 'minutes_since_it_saw_anyone', 'other_free_bots_about', 'people_nearby', 'players_nearby', 'potions', 'spare_gear'])
+    && !J(st2).includes('Natan') && J(st).length < 1200, `the state is exactly these fields: small, and no player's name, id or account in it (${J(st).length} characters)`);
 }
 
 // ---------- 3. the day takes a model's pick ----------
@@ -191,6 +194,22 @@ const pickers = (provider, env = {}, more = {}) => new DayPickers({ env: { BOT_D
   const log = () => b.day.log[0];
   ok(log() && log().by === 'model' && log().odds === 0.6 && log().model === 'stub/1' && /Resting/.test(dayLog(b)), `every goal in the log keeps who decided it: the start of the trace (${dayLog(b, 1)})`);
   ok(PICK_WAIT === 0.4 && readDayConfig({}).waitMs === 400, 'the day and the picker agree on how long a bot waits (400 ms)');
+  { // BOT_DAY_WAIT_MS is the bot's wait too (a slower model can be given longer; before, its answers were paid for and dropped)
+    const slow = pickers(fake({ rest: 0.9, hunt: 0.1 }, { ms: 700 }), { BOT_DAY_WAIT_MS: '1500' }, { rnd: () => 0.01 });
+    const w = stub({ id: 8 });
+    w.dayPicker = (bot, ask) => slow.pick(bot, ask);
+    const step = () => { w.t += 0.25; dayTurn(w, PV(w), api, rng(2)); };
+    for (let i = 0; i < 4; i++) step(); // 1 s of bot time: past the default 0.4 s
+    const waited = !w.day.goal && w.day.pending?.wait === 1.5;
+    await sleep(800); step();
+    ok(waited && w.day.goal === 'rest' && w.day.by === 'model' && slow.late === 0, `BOT_DAY_WAIT_MS=1500: the bot waits that long, and a 700 ms answer is taken (${w.day.goal}, ${w.day.by}, ${slow.late} late)`);
+    const quick = pickers(fake({ rest: 0.9, hunt: 0.1 }, { ms: 700 }), {}, { rnd: () => 0.01 });
+    const q = stub({ id: 9 });
+    q.dayPicker = (bot, ask) => quick.pick(bot, ask);
+    for (let i = 0; i < 4; i++) { q.t += 0.25; dayTurn(q, PV(q), api, rng(2)); }
+    await sleep(800);
+    ok(q.day.goal && q.day.by === 'rules' && quick.late === 1, `at the default 400 ms the same answer is late: the scores decided and it is counted (${q.day.goal}, ${quick.late} late)`);
+  }
 }
 
 // ---------- 4. the admin route ----------
@@ -208,7 +227,14 @@ const pickers = (provider, env = {}, more = {}) => new DayPickers({ env: { BOT_D
   ok(g.status === 200 && g.j.how === 'mock' && typeof g.j.line === 'string' && Array.isArray(g.j.models), `GET /api/admin/ai/day: the decider's status (${g.j.line})`);
   const t = await call('/day-test', 'POST');
   ok(t.status === 200 && t.j.test.ok === true && t.j.test.pick === 'hunt' && t.j.test.odds.hunt === 0.55, `POST /api/admin/ai/day-test: one real decision (${t.j.test.pick}, ${J(t.j.test.odds)})`);
-  ok((await call('/day', 'POST')).status === 405 && (await call('')).status === 200, 'the method is checked, and the companions card still answers');
+  const post = async (path, body) => { const r = await fetch(`http://localhost:${PORT}/api/admin/ai${path}`, { method: 'POST', headers: { authorization: 'Bearer admin', 'content-type': 'application/json' }, body: J(body) }); return { status: r.status, j: await r.json().catch(() => ({})) }; };
+  const off = await post('/day', { on: false });
+  const sk = stub({ id: 31 });
+  ok(off.status === 200 && off.j.adminOff === true && /turned off/.test(off.j.line) && bots.dayPick(sk, askOf(sk)) === false && minds.dayPick.status().skipped['turned off'] === 1,
+    `the card's switch: off, and nobody is asked (${off.j.line})`);
+  const on = await post('/day', { on: true });
+  ok(on.status === 200 && on.j.adminOff === false && (await post('/day', {})).status === 400, 'and on again; a body without { on } is refused');
+  ok((await call('/day', 'DELETE')).status === 405 && (await call('')).status === 200, 'the method is checked, and the companions card still answers');
   ok(typeof bots.dayPick === 'function' && bots.dayPick(stub(), askOf(stub())) === true, 'installAI gives the bot manager the hook every bot with a day calls');
   server.close();
 }

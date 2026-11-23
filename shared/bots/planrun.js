@@ -231,7 +231,7 @@ function check(b, P, p, s) {
         const it = spareGear(b).find(it => !st.sent.has(it.u));
         if (!it || st.sent.size >= 40) { // (the last sale's bag is in by now)
           const sold = [...st.sent].filter(u => !(b.bag || []).some(it => it.u === u)).length, got = (b.gold || 0) - st.gold0;
-          return finish(sold ? `Sold ${sold} ${sold === 1 ? 'thing' : 'things'} for ${got} gold.` : 'Nothing to sell.');
+          return finish(sold ? `Sold ${sold} ${sold === 1 ? 'thing' : 'things'}${got > 0 ? ` for ${got} gold` : ''}.` : 'Nothing to sell.'); // (gold spent meanwhile, on gear say: no sum rather than a wrong one)
         }
         st.sent.add(it.u); b.send({ type: 'sell', u: it.u });
       } else {

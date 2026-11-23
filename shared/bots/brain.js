@@ -319,7 +319,7 @@ function partyBots(b) {
 function onChat(b, e) {
   if (e.id === b.id) return;
   if (e.ch === 'p' && e.party === b.party) b.partyChatT = b.t; // someone just spoke: don't talk over them
-  if (b.day?.ask && dayChat(b, e)) say(b, 'dayAsk', {}, { force: true, ch: 's', text: `Great, ${nameOf(b, e.id)}. Invite's out.` }); // a yes to "Anyone for wolves?"
+  if (b.day && dayChat(b, e)) say(b, 'dayAsk', {}, { force: true, ch: 's', text: `Great, ${nameOf(b, e.id)}. Invite's out.` }); // a yes to "Anyone for wolves?"
 }
 
 // e.free: the server checked the sender may order this free bot by name; e.no: party bots the sender may not order.
@@ -814,6 +814,7 @@ function goalText(b, P, M, tgt) {
     const s = b.plan.steps[b.plan.i], d = b.day, n = s?.k === 'farm' ? ` (${b.plan.st?.kills || 0}/${s.n})` : '';
     return `${tgt ? `Fighting ${tgt.def.name} · ` : ''}${d?.text || 'Plan'}${n}${d?.why ? `: ${d.why}` : ''}`;
   }
+  if (b.cmd?.day && b.day?.text && !b.duel) return `${tgt ? `Fighting ${tgt.def.name} · ` : ''}${b.day.text}${b.day.why ? `: ${b.day.why}` : ''}`; // helping a player: its own choice, nobody's order
   const plan = b.plan ? planProgress(b) : '';
   if (plan && !b.duel) return `${tgt ? `Fighting ${tgt.def.name}` : 'Plan'} (${plan})`;
   if (b.duel) return `Duelling ${tgt ? b.names.get(b.duel.fighters.find(f => f.mob === tgt.id)?.id)?.name || 'an opponent' : ''}`.trim();

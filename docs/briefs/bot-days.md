@@ -22,10 +22,10 @@ An order or a plan from a player always wins: the day pauses, and picks up again
 raid (the ward) and a party invite it accepts work as today.
 
 ## How it chooses (`shared/bots/day.js`)
-Utility scoring first (pure, no model call); Jev then picks from the scored list (below). When a goal ends (and at most every 30 s on a goal that can be dropped) the bot scores every goal:
+Utility scoring first (pure, no model call); the decision model then picks from the scored list (below). When a goal ends (and at most every 30 s on a goal that can be dropped) the bot scores every goal:
 
     score = need (0 to 1) x how much this bot cares (its traits) x a little luck (0.85 to 1.15)
-            + a small bonus for carrying on with what it is doing, - a cool-down for what it just did
+            - a cool-down for what it just did
 
 The top score becomes a **plan** built from the plan step menu (`b.setPlan`, `by: 0`), so the plan runner does the
 work, `/b <name>: status` and the bot's card show the step, and nothing new moves the character.
@@ -45,7 +45,7 @@ Goals in this version:
 
 | Goal | What you see |
 |---|---|
-| Hunt | farms a kind that fits its level (10 to 25 kills), on the field or its floor's wilds; changes ground between hunts |
+| Hunt | farms a kind that fits its level (10 to 28 kills alone, more for a group: x1.4 per mate), on the field or its floor's wilds; changes ground between hunts |
 | Restock | walks to the merchant, sells spare gear (never what it wears, keepsakes or Academy weapons), buys potions up to its own number (3 to 6), walks back |
 | Rest | sits by the well or the cooking fire for one to four minutes; some go AFK a while (phase A's habit) |
 | Wander | visits a place (smith, Hall, Academy, garden, the gate), looks around, moves on |
@@ -111,7 +111,7 @@ not obeyed, so a 70/30 call goes the other way about 3 times in 10 and bots on t
 The plan is built exactly as before.
 - **Settings:** `BOT_DAY_MODEL` (default `typesafe/jev-1.13`, the pinned version OpenRouter documents; a swap is one
   env var, and `~typesafe/jev-latest` follows the newest). `BOT_DAY_PICK=rules` turns it off; `=mock` is a decider in process (no key, no network) for local tries and tests.
-  Also `BOT_DAY_WAIT_MS`, `BOT_DAY_NEAR_S`, `BOT_DAY_FAR_S`, `BOT_DAY_CALLS_MIN`, `BOT_DAY_CONCURRENT`.
+  Also `BOT_DAY_WAIT_MS` (the bot really waits that long: the picker hands it over as `ask.wait`), `BOT_DAY_NEAR_S`, `BOT_DAY_FAR_S`, `BOT_DAY_CALLS_MIN`, `BOT_DAY_CONCURRENT`.
   The key comes from `OPENROUTER_API_KEY` (or `OPENROUTER_KEY`, `OPEN_ROUTER_API_KEY`) and is read per call, never kept.
   **Until that variable is set in Render, nothing is called and the bots' own scores decide**; the admin card says so.
 - **When:** a bot near a player asks whenever a goal ends, at most every 30 s. Further off, at most once a minute. A
@@ -122,6 +122,8 @@ The plan is built exactly as before.
   per hour of play. A cap of its own, `JEV_DAILY_USD` (default 0.50); at the cap the rules take over until midnight UTC.
 - **The trace the owner asked for:** every goal records who decided it and the odds it was given (`d.by`, `d.odds`,
   `d.model`, and the same on each log entry), so a bot's story shows which picks were the model's.
+- **Switch:** the card's **Turn off / Turn on** (`POST /api/admin/ai/day { on }`) swaps between the model and the
+  scores at once, until the next restart: the blind test runs both ways without a deploy.
 - **Admin:** a "Bot decisions" card under the companions one on `/admin.html` (Bots tab): the line, the key check, the
   per-model scoreboard (picks, answered, too late, failed, avg ms, $ per pick, what it picked) and the last few picks
   with their probabilities beside the bot's own scores. "Test decision" makes one real call.
@@ -132,6 +134,15 @@ The plan is built exactly as before.
 - **Boss tries:** a party of bots never goes for a boss by itself. Today a boss kill by ordinary bots alone is
   announced like a player's ("Floor cleared", the banner), and the quiet rule covers only the Named. A bold bot at the
   boss's level asks the players around instead ("Anyone up for the Warden?") and follows the one who says yes.
+
+## After the independent review (2026-11-23)
+- **One bot speaks up.** A bot that hears another bot's rescue line ("Hang on, Vex!") leaves that player to it, and one
+  that hears "Anyone for wolves?" counts the players there as asked (`dayHeard`): before, every free bot in earshot said
+  the same thing in the same second.
+- A bot that leads a new group while on a hunt begun alone plans that hunt again, once, for the group.
+- An invitation to a player who said yes is forgotten after 90 s; a stale "plan stopped" note no longer labels the
+  next goal; a helper's nameplate says "Helping Vex", not "admin's order"; "Sold 2 things" gives no sum when gold
+  was spent meanwhile.
 
 ## Not in this version
 Crafting, gathering and gardens of their own, smith upgrades, trading with players, joining guilds, weapon swap,

@@ -537,7 +537,7 @@ try {
     const had = spareGear(rook).length, pots = rook.cons?.potion || 0, gold = rook.gold, c0 = botChat().length;
     say('/b Rook: sell then buy 2 potions then come');
     const fin = await until(() => !rook.plan && botChat().slice(c0).some(t => /^Plan done, Nat\.$/.test(t)), 60000), lines = botChat().slice(c0);
-    const sold = Number(/^Sold (\d+) things? for /.exec(lines.find(t => /^Sold /.test(t)) || '')?.[1] || 0); // (a loot drop or the armour landing late makes it one more)
+    const sold = Number(/^Sold (\d+) things?\b/.exec(lines.find(t => /^Sold /.test(t)) || '')?.[1] || 0); // (a loot drop or the armour landing late makes it one more)
     ok(had > 0 && fin && spareGear(rook).length === 0 && sold >= had, `live: it sold its ${had} spare thing(s) (${J(lines)})`);
     ok((rook.cons?.potion || 0) === pots + 2 && lines.includes('Bought 2 potions.') && rook.gold !== gold && dist(rook, h.x, h.z) < 9, `live: bought two potions (${pots} -> ${rook.cons?.potion}), then came back (${gold} -> ${rook.gold} gold)`);
   }

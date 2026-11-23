@@ -35,7 +35,9 @@ import { setPlan, endPlan, spareGear } from './planrun.js';
 import { d2 } from './motor.js';
 
 export const RESUME = 20;     // s after an order ends before the day goes on
-export const PICK_WAIT = 0.4; // s a picker (Jev) has to answer
+export const PICK_WAIT = 0.4; // s a picker (the decision model) has to answer, unless it says otherwise (ask.wait)
+const PICK_WAIT_MAX = 5;      // s: the longest a picker may ask a bot to wait
+const INVITE_OPEN = 90;       // s an invitation to a player who said yes is remembered
 const RETHINK = 5;            // s between looks at a running goal (is something urgent?)
 const LOG = 8;                // goals remembered
 const HELP_R = 40;            // m: how far off a player in trouble is noticed
@@ -231,6 +233,7 @@ const fresh = b => ({ t0: b.t, goal: '', why: '', text: '', by: 'rules', odds: n
 
 // The goal is over (done, stopped, or dropped for an order): into the log.
 function close(b, d, how = 'done') {
+  b.dayStop = null; // (a "plan stopped" note belongs to the goal it stopped: dayTurn reads it before closing)
   if (!d.goal) return;
   d.log.unshift({ g: d.goal, why: d.why, text: d.text, at: Math.round(d.since), secs: Math.round(b.t - d.since), how, by: d.by || 'rules', odds: d.odds ?? null, model: d.model || '' });
   d.log.length = Math.min(d.log.length, LOG);
@@ -246,7 +249,7 @@ function begin(b, d, id, why, api, rnd, who = null) {
   const f = facts(b, d), ask = id === 'hunt' && askAlong(b, d, f, api, rnd);
   const made = planFor(id, b, f, rnd, { floors: b.dayFloors?.(b) || null, skip: d.skip, ask });
   if (!made || !setPlan(b, made.steps, { by: made.by || 0, adm: true, quiet: true, day: id }, api)) return false;
-  Object.assign(d, { goal: id, why, text: made.text, since: b.t, urgent: 0, cand: made.cand || 0, inv: 0, by: who?.by || 'rules', odds: who?.odds ?? null, model: who?.model || '' });
+  Object.assign(d, { goal: id, why, text: made.text, since: b.t, urgent: 0, cand: made.cand || 0, inv: 0, crew: f.mates || 0, by: who?.by || 'rules', odds: who?.odds ?? null, model: who?.model || '' });
   if (made.kind) d.kind = made.kind;
   if (made.sights) d.sights = [...made.sights, ...d.sights].slice(0, 6);
   if (ask) d.ask.kind = d.kind;
@@ -271,6 +274,8 @@ export function inTrouble(b, only = 0) {
 }
 const HELP_LINES = ['Hang on, {who}!', 'I\'ve got you, {who}.', 'Coming, {who}!', 'On my way, {who}.'];
 const HELPED_LINES = ['There. You all right, {who}?', 'That\'s the last of them.', 'Careful out here, {who}.'];
+// Lines other bots know when they hear them (one bot speaks up, the rest leave it to that one).
+const heard = lines => lines.map(l => new RegExp(`^${l.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{\w+\}/g, '.+')}$`));
 const attack = (b, mob, api) => { api.command(b, { k: 'attack', tgt: mob.id, by: 0, adm: true, quiet: true }); if (b.cmd?.k === 'attack' && b.cmd.tgt === mob.id) { b.cmd.day = 1; b.cmd.prev = null; return true; } return false; };
 // True while this bot is busy helping (the rest of the day waits).
 function helpTurn(b, d, api, rnd) {
@@ -321,9 +326,23 @@ function askAlong(b, d, f, api, rnd) {
   d.ask = { until: b.t + ASK_OPEN, boss, kind: '', said: false };
   return true;
 }
+const HELP_HEARD = heard(HELP_LINES), ASK_HEARD = heard([...ASK_LINES, ...BOSS_LINES]);
+// Another bot said it first: "Hang on, Vex!" (Vex is taken care of) or "Anyone for wolves?" (the people here have
+// been asked). Without this every free bot in earshot says the same thing in the same second.
+function dayHeard(b, d, e) {
+  const text = String(e.text || ''), s = (b.players || []).find(q => q.id === e.id);
+  if (!s || floorOf(s.x) !== floorOf(b.x) || d2(s.x, s.z, b.x, b.z) > HELP_R + 10) return;
+  if (HELP_HEARD.some(r => r.test(text))) {
+    for (const p of b.players || []) if (!isBot(b, p.id) && p.id !== b.id && text.includes(nameOf(b, p.id))) d.helpSeen.set(p.id, b.t + HELP_AGAIN);
+  } else if (ASK_HEARD.some(r => r.test(text))) {
+    for (const p of b.players || []) if (!isBot(b, p.id) && p.id !== b.id && !p.dead && d2(p.x, p.z, s.x, s.z) < 30) d.askedAt.set(p.id, b.t);
+    if (d.ask && !d.ask.said) d.ask = null; // (ours was about to be the second)
+  }
+}
 // A chat line (the brain's onChat): a yes from a player nearby to an open question gets the invite.
 export function dayChat(b, e) {
   const d = b.day, a = d?.ask;
+  if (d && e.id !== b.id && e.ch !== 'p' && isBot(b, e.id)) { dayHeard(b, d, e); return false; }
   if (!a || !a.said || b.t > a.until || e.id === b.id || isBot(b, e.id) || e.ch === 'p') return false;
   const p = (b.players || []).find(q => q.id === e.id);
   if (!p || p.dead || floorOf(p.x) !== floorOf(b.x) || d2(p.x, p.z, b.x, b.z) > 35) return false;
@@ -358,6 +377,7 @@ export function dayTurn(b, P, api, rnd = Math.random) {
   d.deadSeen = false;
   if ((b.players || []).some(p => p.id !== b.id && !p.dead && d2(p.x, p.z, b.x, b.z) < 15)) d.seenT = b.t; // company
   const mine = !!b.plan?.day, helping = !!b.cmd?.day;
+  if (d.invited && b.t - d.invited.at > INVITE_OPEN) d.invited = null; // (they never came: forget we asked)
   // not ours to choose: in a party with a player, somebody's plan or order, a raid
   if (P.humans.length > 0 || (b.plan && !mine) || (!b.plan && b.cmd && !helping)) {
     if (mine) endPlan(b);
@@ -385,7 +405,11 @@ export function dayTurn(b, P, api, rnd = Math.random) {
       api.say?.(b, 'dayBye', {}, { force: true, ch: 'p', text: pick(rnd, BYE_LINES) });
       b.send({ type: 'leave' });
       close(b, d, 'done');
-      Object.assign(d, { groupUntil: null, groupT: b.t, leftT: b.t, pending: null, hold: b.t + 2 + rnd() * 3 });
+      Object.assign(d, { groupUntil: null, groupT: b.t, leftT: b.t, pending: null, regrouped: false, hold: b.t + 2 + rnd() * 3 });
+      return;
+    }
+    if (!lead && mine && !d.crew && !d.regrouped && d.goal !== 'group' && !b.tgtId && !helping) { // others joined a hunt begun alone: plan again, once, for all of us
+      d.regrouped = true; endPlan(b); close(b, d, 'joined'); d.pending = null; d.hold = b.t + 0.5 + rnd();
       return;
     }
     if (lead) {
@@ -394,7 +418,7 @@ export function dayTurn(b, P, api, rnd = Math.random) {
       d.pending = null;
       return;
     }
-  } else if (!b.party && d.groupUntil != null) { d.groupUntil = null; d.groupT = b.t; } // the group broke up
+  } else if (!b.party && d.groupUntil != null) { d.groupUntil = null; d.groupT = b.t; d.regrouped = false; } // the group broke up
   if (d.goal === 'with') { close(b, d, 'done'); d.hold = b.t + 1 + rnd() * 3; }
   if (helpTurn(b, d, api, rnd)) return;
   if (mine) { // a goal is running: is something more urgent?
@@ -434,10 +458,11 @@ export function dayTurn(b, P, api, rnd = Math.random) {
         Object.assign(d.pending, { pick: id, meta });
         return true;
       } };
-    if (b.dayPicker?.(b, ask)) d.asked++; else d.pending.at = -1; // (nobody to ask: the scores decide now)
+    if (b.dayPicker?.(b, ask)) { d.asked++; d.pending.wait = ask.wait > 0 ? Math.min(ask.wait, PICK_WAIT_MAX) : PICK_WAIT; } // (the picker may say how long: BOT_DAY_WAIT_MS)
+    else d.pending.at = -1; // (nobody to ask: the scores decide now)
   }
   const p = d.pending;
-  if (!p.pick && p.at >= 0 && b.t - p.at < PICK_WAIT) return; // the picker has a moment yet
+  if (!p.pick && p.at >= 0 && b.t - p.at < (p.wait ?? PICK_WAIT)) return; // the picker has a moment yet
   d.pending = null;
   if (p.pick) d.picked++;
   const who = s => (s.id === p.pick ? { by: p.meta?.who || 'model', odds: p.meta?.odds ?? null, model: p.meta?.model || '' } : { by: 'rules', odds: s.score });

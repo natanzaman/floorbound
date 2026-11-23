@@ -32,7 +32,8 @@
 //   BOT_DAY_MODEL      a decision model on OpenRouter (default typesafe/jev-1.13)
 //   BOT_DAY_KEY_ENV    name of the env var holding the OpenRouter key (then OPENROUTER_API_KEY, OPENROUTER_KEY)
 //   JEV_DAILY_USD      spend cap per UTC day for these picks, apart from AI_DAILY_USD (default 0.50)
-//   BOT_DAY_WAIT_MS    how long a bot waits for the answer before its own scores decide (default 400)
+//   BOT_DAY_WAIT_MS    how long a bot waits for the answer before its own scores decide (default 400, 50 to 5000;
+//                      the picker hands it to the day as ask.wait)
 //   BOT_DAY_NEAR_S / BOT_DAY_FAR_S   least seconds between one bot's picks near a player / far from one (30 / 60)
 //   BOT_DAY_CALLS_MIN / BOT_DAY_CONCURRENT   calls a minute and calls in flight (default 120 / 6)
 //   BOT_DAY_PRICE_IN   USD per 1M input tokens, only used when the answer carries no cost (default 0.04)
