@@ -8,6 +8,7 @@ import { MOBS } from '../data.js';
 import { WAYPOINTS, floorOf, floorUnlocked } from '../floor2.js';
 import { GARDEN } from '../life.js';
 import { MERCHANT, SHOP } from '../items.js';
+import { labAt, portOpen, labWords } from '../labyrinth.js';
 import { useSkill, d2 } from './motor.js';
 import { STEPS, PLACES, PLAN_MAX, REACH, cleanPlan, planText, stepText, mobName } from './plan.js';
 
@@ -19,6 +20,21 @@ const DEAL = () => 0.35 + Math.random() * 0.3; // s between two sales or purchas
 export const spareGear = b => (b.bag || []).filter(it => it && !it.ks && !it.ac);
 const COME_R = 6;  // m: "back with the player" (a follower's own spot in the formation is up to 5 m off)
 const GAP = 1;     // s without a turn (down, dead, a raid) before the clocks are held back
+
+// The `lever` step (a labyrinth's two levers have to turn within a few seconds of each other, server/labyrinth.js
+// labAct): which lever is this bot's. One bot takes the lever its player is further from; of two bots sent together the
+// second takes the other one, so the player works none; a third has nothing to do.
+const LEVER_AT = 2.4; // m from the lever: inside the server's reach (2.6 + 0.5)
+function aimLever(b, p, st, L) {
+  const team = p.group.filter(id => id === b.id || b.players?.some(q => q.id === id && !q.dead)).sort((u, v) => u - v);
+  const i = Math.max(0, team.indexOf(b.id));
+  if (i > 1) { st.skip = true; return; }
+  const q = b.players?.find(q => q.id === p.by && !q.dead), by = q && labAt(q.x, q.z) === L ? q : b; // (nobody to share with: the nearer one first)
+  const far = [...L.leverList].sort((u, v) => d2(v.x, v.z, by.x, by.z) - d2(u.x, u.z, by.x, by.z));
+  const lv = by !== b ? far[i] : team.length > 1 ? L.leverList[i] : far[1];
+  Object.assign(st, { L, lk: lv.k, x: lv.x, z: lv.z, solo: team.length < 2, pulled: -99, seenEv: b.t });
+  hold(b, p, { x: lv.x, z: lv.z, r: 0, floor: floorOf(lv.x) }, { stop: 1.0 });
+}
 
 // Take a plan. o: { by (player id, 0 = code / admin page), byName, adm (not a party order), at ([x, z] of that player),
 // group (bot ids addressed), quiet (don't announce), day (a goal id: the bot's own day made it, shared/bots/day.js:
@@ -118,6 +134,13 @@ function begin(b, P, p, s, api) {
       hold(b, p, { x: MERCHANT.x, z: MERCHANT.z, r: 0, floor: 1 }, { stop: st.stop });
       return;
     }
+    case 'lever': {
+      const L = labAt(b.x, b.z), q = b.players?.find(q => q.id === p.by);
+      if (L?.leverList) { if (portOpen(L)) st.skip = true; else aimLever(b, p, st, L); return; }
+      if (!q || !labAt(q.x, q.z)?.leverList) return 'there are no levers here';
+      give('come'); // (its player is down there already: catch up first, server/botmanager.js catchUp)
+      return;
+    }
     case 'say': if (p.speak) api.say?.(b, 'plan', {}, { force: true, text: s.text }); return; // (one bot says it for a group)
     case 'emote':
       hold(b, p, { x: b.x, z: b.z, r: 0, floor: floorOf(b.x) });
@@ -168,6 +191,34 @@ function check(b, P, p, s) {
       st.pose = null;
       return 'done';
     case 'skill': if (useSkill(b, s.slot, b.face)) return 'done'; break;
+    case 'lever': {
+      if (st.skip) return 'done';
+      if (!st.L) { // still catching up with its player
+        const L = labAt(b.x, b.z);
+        if (!L?.leverList) return t > 30 ? 'there are no levers here' : null;
+        if (portOpen(L)) return 'done';
+        aimLever(b, p, st, L);
+        if (st.skip) return 'done';
+      }
+      const L = st.L, name = labWords(L).lever.toLowerCase();
+      if (portOpen(L)) return 'done';
+      if (labAt(b.x, b.z) !== L) return `I lost the ${name}`;
+      if (b.cmd?.k === 'stay' && (b.cmd.x !== st.x || b.cmd.z !== st.z)) hold(b, p, { x: st.x, z: st.z, r: 0, floor: floorOf(st.x) }, { stop: 1.0 }); // (the order was given again)
+      const ev = b.labLever;
+      if (ev && ev.t > st.seenEv && ev.l === L.id) { // a lever turned
+        st.seenEv = ev.t;
+        if (ev.by === b.id) { /* our own */ }
+        else if (ev.k !== st.lk) st.again = true; // the other one: ours now, and the gate opens
+        else if (st.solo) { const lv = L.leverList[1 - ev.k]; Object.assign(st, { lk: lv.k, x: lv.x, z: lv.z, did: 0 }); hold(b, p, { x: lv.x, z: lv.z, r: 0, floor: floorOf(lv.x) }, { stop: 1.0 }); } // (they took ours: the other is ours)
+      }
+      if (d2(b.x, b.z, st.x, st.z) <= LEVER_AT && b.t - st.pulled > 0.6 && (!st.did || st.again)) {
+        b.send({ type: 'lab', a: 'lever' });
+        Object.assign(st, { pulled: b.t, did: 1, again: false });
+        if (st.solo && !st.said) { st.said = 1; st.tell = `The ${name} here is turned. Work yours!`; }
+      }
+      if (t > secs) return st.did ? `nobody worked the other ${name}` : `I couldn't get to the ${name}`;
+      return null;
+    }
     case 'sell': case 'buy': {
       if (st.at == null) { // on the way
         if (floorOf(b.x) !== 1 || d2(b.x, b.z, st.x, st.z) > COUNTER) { if (t > REACH) return `I couldn't get to ${st.name}`; return null; }
@@ -220,6 +271,7 @@ export function planTurn(b, P, api) {
       p.st = { ...p.st, ...was }; // (its clock and counts carry on)
     }
     const r = check(b, P, p, s);
+    if (p.st?.tell) { tell(b, api, p.st.tell); p.st.tell = null; } // (a line in the middle of a step: the lever is turned)
     if (!r) return;
     if (r !== 'done' && r !== 'keep') return void stop(b, api, r);
     if (p.st.note) tell(b, api, p.st.note); // what a sell or buy step came to

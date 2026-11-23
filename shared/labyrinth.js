@@ -495,8 +495,12 @@ const BOSS_KILLS = { 1: 'wardenKills', 2: 'sovereignKills', 3: 'colossusKills' }
 export const hasLabKey = (stats, f) => !LABS[f] || (stats?.[LABS[f].key] || 0) > 0 || (stats?.[BOSS_KILLS[f]] || 0) > 0;
 
 // The snapshot's labyrinth part: [server time, [[layer id, portcullis up-until, lit torch ids, guttering s]]]
+// The server owns this state in its own process (it sets labRun itself): bots running there read it directly, so a
+// snapshot they handle a tick late never rolls it back (the same rule as shared/arenas.js).
+let OWNED = false;
+export function serverOwnsLab(on = true) { OWNED = !!on; }
 export function applyLabSnap(lb) {
-  if (!lb) return;
+  if (!lb || OWNED) return;
   RUN.now = lb[0];
   for (const [id, port, lit] of lb[1] || []) { RUN.portUp[id] = port; RUN.lit[id] = lit; }
 }

@@ -5,6 +5,7 @@
 //   steps    goto <place> · come · follow [s] · wait [s] · guard [place] [s] · farm [monster] [count] · boss ·
 //            attack (the player's locked target) · tend [s] · say <line> · emote <sit|bow|kneel|hop> [s] · skill <1-4> ·
 //            sell (spare gear, at the merchant) · buy [count] (potions, at the merchant)
+//            lever [s] (in a labyrinth: work the lever the player is not at, so the two open the gate together)
 //   arrives  a /b chat line with several steps or arguments (parsePlan, through shared/bots/social.js parseBotChat),
 //            the AI mind's intent (server/ai/intent.js `plan`), or b.setPlan(raw, { by, byName, at }) from code
 //   cleaned  cleanPlan() is the only way a plan reaches a bot: unknown steps, places and monsters are dropped
@@ -45,6 +46,7 @@ export const STEPS = {
   skill: { label: 'Use a skill', n: [1, 4, 1], limit: 10 },
   sell: { label: 'Sell spare gear at the merchant', limit: REACH + 90, hard: true, long: true },
   buy: { label: 'Buy potions at the merchant', n: [1, 10, 3], limit: REACH + 90, hard: true },
+  lever: { label: 'Work the other lever (in a labyrinth)', secs: [20, 600, 180], long: true }, // secs: how long it waits for the other one
 };
 export const STEP_IDS = Object.keys(STEPS);
 export const POSES = ['sit', 'bow', 'kneel', 'hop'];
@@ -134,7 +136,7 @@ function cleanStep(raw) {
     case 'emote': { const pose = String(what).toLowerCase().trim().replace(/^jump$/, 'hop'); return POSES.includes(pose) ? { k, pose, ...secs } : { error: `"${String(what).slice(0, 12)}" isn't a pose (sit, bow, kneel, hop)` }; }
     case 'skill': { const slot = Math.round(Number(num) || Number(String(what).replace(/\D/g, ''))); return slot >= 1 && slot <= 4 ? { k, slot } : { error: 'skills are 1 to 4' }; }
     case 'buy': { const t = mobKey(what); return !t || POTION.test(t) ? { k, n: int(num, S.n) } : { error: `I only buy ${CONSUMABLES.potion.name}s` }; }
-    default: return { k, ...secs }; // come, follow, wait, boss, attack, tend, sell
+    default: return { k, ...secs }; // come, follow, wait, boss, attack, tend, sell, lever
   }
 }
 
@@ -167,6 +169,7 @@ const WORDS = {
   skill: ['skill', 'cast', 'use'],
   sell: ['sell'],
   buy: ['buy', 'restock'],
+  lever: ['lever', 'levers', 'pull'],
 };
 const STEP_OF = new Map(Object.entries(WORDS).flatMap(([k, ws]) => ws.map(w => [w, k])));
 const REPEAT = /^(?:repeat|loop|again)\s*(?:x\s*)?(\d+)?(?:\s*(?:x|times?))?$|^x\s*(\d+)$/i;
@@ -245,6 +248,7 @@ export function parsePlan(text) {
       case 'follow': case 'wait': case 'tend': n = takeTime(rest).secs; rest = ''; break;
       case 'skill': { const num = /\d+/.exec(rest); n = num ? Number(num[0]) : 0; rest = ''; bare = false; break; }
       case 'sell': rest = ''; bare = false; break; // ("sell loot", "sell everything": it sells what it doesn't wear)
+      case 'lever': n = takeTime(rest).secs; rest = ''; bare = false; break; // ("lever", "pull the other lever", "lever 2m": how long it waits there)
       case 'buy': { const num = /\b(\d+)\b/.exec(rest); if (num) { n = Number(num[1]); rest = rest.replace(num[0], ' '); } bare = false; break; }
       default: rest = ''; // come, boss, attack
     }
@@ -261,7 +265,7 @@ export function parsePlan(text) {
 export function planHelp() {
   return [
     'Plans: chain steps with "then", e.g. /b farm 10 boars then go smith then come. /b cancel stops one. A plan that ends with "go <place>" or "wait" leaves the bot there.',
-    '  steps: go <place> · come · follow [30s] · wait [30s] · guard [place] [2m] · farm [monster] [count] · boss · attack · tend [3m] · say <line> · sit / bow / kneel / hop · skill <1-4> · sell · buy [3] potions · repeat <n>',
+    '  steps: go <place> · come · follow [30s] · wait [30s] · guard [place] [2m] · farm [monster] [count] · boss · attack · tend [3m] · say <line> · sit / bow / kneel / hop · skill <1-4> · sell · buy [3] potions · lever (in a labyrinth) · repeat <n>',
     `  places: ${Object.entries(PLACES).filter(([id]) => id !== 'spot').map(([, p]) => p.words[0]).join(', ')}`,
   ];
 }
@@ -287,6 +291,7 @@ export function stepText(s, last = false) {
     case 'skill': return `skill ${s.slot}`;
     case 'sell': return 'sell my spare gear';
     case 'buy': return `buy ${s.n} potion${s.n === 1 ? '' : 's'}`;
+    case 'lever': return 'work the other lever';
   }
   return s.k;
 }

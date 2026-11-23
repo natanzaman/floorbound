@@ -24,6 +24,7 @@ free bots' own days.
 | `skill` | slot 1 to 4 | press that skill once | pressed | 10 s, then moves on |
 | `sell` | | walk to the Merchant, sell the bag's spare gear one piece at a time (not keepsakes, not Academy weapons) | nothing spare is left; it says what it got | 4 min to get there, then the plan stops |
 | `buy` | a count (default 3, 10 at most) | walk to the Merchant, buy that many Health Potions with its own gold | bought, or the gold ran out (it says so and moves on) | 4 min to get there, then the plan stops |
+| `lever` | seconds to wait (default 180) | in a labyrinth layer with two levers: run to the lever the player is not at, turn it, and turn it again the moment the other one turns | the gate is up | its wait, then the plan stops |
 
 Places (`PLACES`): the well, smith, merchant, hall, academy, garden, life hall, cooking fire, alchemy bench, registrar,
 field, gate (Floor 1); the camp (Floors 2 and 3); `here` (where the player stood when they gave the plan).
@@ -33,6 +34,18 @@ Not in this version: crafting and gathering (bots have no code for them). `sell`
 (`docs/briefs/bot-days.md`, 2026-11-23): the bot keeps its gold and bag from the server's `inv` message (`b.gold`,
 `b.bag`, read only), and sends the same `sell` and `buy` messages a player's client does, so the server's own rules
 (reach, price, tax, what the merchant refuses) apply.
+
+`lever` (owner, 2026-11-23: "help me open the levers in the dungeons"). A layer's two levers must turn within a few
+seconds of each other (`server/labyrinth.js` `labAct`; a player alone gets the time to run between them). The step
+picks its lever (`aimLever`: one bot takes the lever its player is further from, the second of two bots the other, a
+third has nothing to do), holds there, and sends the same `{ type: 'lab', a: 'lever' }` a player's client does. It
+turns it once on arrival and again whenever the other lever turns (the `lab` `lever` event now carries `by`), so the
+second pull always falls inside the window. If the player turns the lever it was walking to, it takes the other. A bot
+not down there yet comes first (the server's catch-up brings it). Bots read the gate's state from the snapshot
+(`applyLabSnap`; `serverOwnsLab` keeps the server's own bots from rolling it back, as with arenas). **By itself**
+(`leverHelp` in `shared/bots/brain.js`): a party bot with no plan and no order but follow, in a lever layer with the
+gate shut and exactly one player of the party there, takes the step when that player stands within 3.2 m of a lever
+for 1.5 s or has just turned one; the healer goes only when no other bot can; 45 s between tries, 90 s wait.
 
 ## Rules
 

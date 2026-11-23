@@ -26,6 +26,7 @@ import { startTeam } from '../shared/teambots.js';
 import { SMITH } from '../shared/crafting.js';
 import { GARDEN } from '../shared/life.js';
 import { MOB_IDS } from '../shared/data.js';
+import { LAYERS, labRun, labAt, portOpen } from '../shared/labyrinth.js';
 
 let n = 0, failed = 0;
 function ok(cond, what) { n++; if (cond) console.log(`  ok ${n} - ${what}`); else { failed++; console.log(`  NOT OK ${n} - ${what}`); } }
@@ -252,7 +253,7 @@ const walkCmd = b => { if (b.cmd?.k === 'stay') { b.x = b.cmd.x; b.z = b.cmd.z +
   ok(b.cmd?.k === 'stay' && b.cmd.plan && b.cmd.x === MERCHANT.x && b.cmd.z === MERCHANT.z && b.cmd.fl === 1 && b.cmd.stop < MERCHANT.r + 1.5 && planProgress(b) === 'step 1/3: sell my spare gear', 'sell: an order to the merchant\'s counter, inside the server\'s reach');
   turn(b, 5);
   ok(b.plan.i === 0 && !b.sent.length, 'nothing is sold on the way');
-  walkCmd(b); turn(b, 4);
+  walkCmd(b); for (let k = 0; k < 14 && b.plan?.i === 0; k++) turn(b, 0.5); // (two sales, 0.35 to 0.65 s apart)
   ok(b.plan?.i === 1 && J(b.sent.filter(m => m.type === 'sell').map(m => m.u)) === '[11,13]' && b.bag.length === 2 && b.gold === 34 && b.said.includes('Sold 2 things for 24 gold.'), `at the counter: the two spare things are sold, one at a time, and it says what it got (${J(b.said.slice(-2))}, ${b.gold} gold)`);
   turn(b, 6);
   ok(b.cons.potion === 2 && b.gold === 4 && b.sent.filter(m => m.type === 'buy').length === 3 && b.said.includes('I could only pay for 2 potions.'), `buy 3 with gold for 2: two potions, and it says so (${J(b.said.slice(-2))})`);
@@ -270,6 +271,59 @@ const walkCmd = b => { if (b.cmd?.k === 'stay') { b.x = b.cmd.x; b.z = b.cmd.z +
   setPlan(far, [{ k: 'sell' }], { by: 1, byName: 'Natan' }, api);
   turn(far, 0.1); turn(far, 245);
   ok(!far.plan && /Plan stopped: I couldn't get to the merchant\./.test(far.said.at(-1)) && !far.sent.length, 'it never gets there: the plan stops after 4 minutes');
+}
+
+// ---------- 3c. the lever step (a labyrinth's two levers) ----------
+{
+  const GAL = LAYERS.find(L => L.id === 'galleries'), [l0, l1] = GAL.leverList, pulls = b => b.sent.filter(m => m.type === 'lab' && m.a === 'lever').length;
+  const inLab = (o = {}) => stub({ x: l0.x + 1, z: l0.z, players: [{ id: 1, x: l0.x, z: l0.z }, { id: 2, x: l0.x + 1, z: l0.z }], ...o });
+  labRun.now = 50; labRun.portUp.galleries = 0;
+  ok(J(P('/b lever')) === J({ plan: { steps: [{ k: 'lever', secs: 0 }], loops: 1 }, name: '' }) && P('/b Rook: pull the other lever').plan?.steps[0].k === 'lever' && P('/b come then lever 2m then follow').plan?.steps[1].secs === 120 && planText({ steps: [{ k: 'lever' }], loops: 1 }) === 'Plan: work the other lever', 'lever: "/b lever", "pull the other lever", a wait time; said as "work the other lever"');
+  { // out in the field: nothing to work
+    const b = stub(); setPlan(b, [{ k: 'lever' }], { by: 1, byName: 'Natan' }, api); turn(b);
+    ok(!b.plan && b.said.at(-1) === 'Plan stopped: there are no levers here.', 'lever: outside a labyrinth the plan stops and says why');
+  }
+  { // the player at one lever: the bot takes the other, turns it, and turns it again the moment the player's turns
+    const b = inLab(); setPlan(b, [{ k: 'lever' }], { by: 1, byName: 'Natan' }, api); turn(b, 0.5);
+    ok(b.cmd?.k === 'stay' && b.cmd.plan && b.cmd.x === l1.x && b.cmd.z === l1.z && !pulls(b), 'lever: it heads for the lever its player is not at');
+    b.x = l1.x; b.z = l1.z + 1; turn(b, 1);
+    ok(pulls(b) === 1 && b.said.at(-1) === 'The bone lever here is turned. Work yours!', `lever: there, it turns it and says so (${b.said.at(-1)})`);
+    turn(b, 5); ok(pulls(b) === 1 && b.plan, 'lever: then waits for the other one');
+    b.labLever = { l: 'galleries', k: l1.k, by: 2, t: b.t }; turn(b, 1);
+    ok(pulls(b) === 1, 'lever: its own pull coming back is not the other lever');
+    b.labLever = { l: 'galleries', k: l0.k, by: 1, t: b.t }; turn(b, 0.5);
+    ok(pulls(b) === 2, 'lever: the player turns theirs late: it turns its own again at once (inside the window)');
+    labRun.portUp.galleries = 95; turn(b, 0.5);
+    ok(!b.plan && b.said.at(-1) === 'Plan done, Natan.', 'lever: the gate is up: plan done');
+    labRun.portUp.galleries = 0;
+  }
+  { // the player takes the lever the bot was walking to
+    const b = inLab(); setPlan(b, [{ k: 'lever' }], { by: 1, byName: 'Natan' }, api); turn(b, 0.5);
+    turn(b, 0.5); b.labLever = { l: 'galleries', k: l1.k, by: 1, t: b.t }; turn(b, 0.5);
+    ok(b.cmd?.x === l0.x && b.cmd.z === l0.z && b.plan.st.lk === l0.k, 'lever: the player turned the one it was heading for: it takes the other');
+    turn(b, 1); ok(pulls(b) === 1, 'lever: and turns it (it stands right there)');
+  }
+  { // two bots sent together take one each; a third has nothing to do; nobody is told to work one
+    const pl = [{ id: 1, x: l0.x, z: l0.z }, { id: 2, x: l0.x + 1, z: l0.z }, { id: 3, x: l0.x + 1, z: l0.z }, { id: 5, x: l0.x + 1, z: l0.z }];
+    const [a, b, c] = [2, 3, 5].map(id => { const q = inLab({ id, players: pl }); setPlan(q, [{ k: 'lever' }], { by: 1, byName: 'Natan', group: [2, 3, 5] }, api); turn(q, 0.5); return q; });
+    ok(a.cmd?.x === l1.x && b.cmd?.x === l0.x && !c.plan, 'lever: of a group, the first takes the far lever, the second the near one, a third is done at once');
+    turn(b, 1); ok(pulls(b) === 1 && !b.said.some(t => /Work yours/.test(t)), 'lever: two bots work both: the player is not asked to');
+  }
+  { // nobody comes: it gives up after its wait
+    const b = inLab(); setPlan(b, [{ k: 'lever', n: 30 }], { by: 1, byName: 'Natan' }, api); turn(b, 0.5);
+    b.x = l1.x; b.z = l1.z; turn(b, 20); ok(b.plan && pulls(b) === 1, 'lever: waiting');
+    turn(b, 12); ok(!b.plan && b.said.at(-1) === 'Plan stopped: nobody worked the other bone lever.', `lever: nobody worked the other one in its time: the plan stops (${b.said.at(-1)})`);
+  }
+  { // the gate is already up; and a bot still upstairs catches up with its player first
+    labRun.portUp.galleries = 95;
+    const b = inLab(); setPlan(b, [{ k: 'lever' }, { k: 'wait', n: 5 }], { by: 1, byName: 'Natan' }, api); turn(b, 0.5);
+    ok(b.plan?.i === 1 && !pulls(b), 'lever: the gate is already up: nothing to do, next step');
+    labRun.portUp.galleries = 0;
+    const u = stub({ players: [{ id: 1, x: l0.x, z: l0.z }, { id: 2, x: 0, z: 5 }] }); setPlan(u, [{ k: 'lever' }], { by: 1, byName: 'Natan' }, api); turn(u, 0.5);
+    ok(u.plan && u.cmd?.k === 'come', 'lever: its player is down there and it is not: it comes first');
+    u.x = l0.x + 1; u.z = l0.z; turn(u, 0.5);
+    ok(u.cmd?.k === 'stay' && u.cmd.x === l1.x, 'lever: once down there it heads for its lever');
+  }
 }
 
 // ---------- 4. the real brain on a fake socket ----------
@@ -341,6 +395,41 @@ const planCmd = (plan, more = {}) => ({ t: 'botcmd', by: 1, byName: 'Natan', par
   snap(b, [{ t: 'hit', id: 81, by: 3 }, { t: 'die', id: 81, x: field[1][2], z: field[1][3], b: 0 }], { mobs: [field[0]] });
   ok(b.plan?.i === 1 && b.cmd?.k === 'stay', 'the wolf is hit and dies to us in one snapshot (already gone from it): one kill, next step');
   b.stop();
+}
+
+// the levers, by itself: the party's one player stands at a lever of the Drowning Galleries; Rook (not the healer) goes
+// for the other one through the maze, turns it, and turns it again when the player's turns; the gate up ends it
+{
+  const GAL = LAYERS.find(L => L.id === 'galleries'), [l0, l1] = GAL.leverList;
+  const labSnap = (b, { events = [], at1 = [l0.x, l0.z], up = 0, lyra = [l0.x + 1.5, l0.z] } = {}) => b.ws.emit('message', { type: 'snap', me: { cds: [0, 0, 0, 0], dodge: 0, lvl: 5, ccd: {} }, w: { mobs: [], gate: [0, 0, 0], events, lb: [b.t, [['galleries', up, [], 0, 0]]],
+    players: [row(1, at1[0], at1[1], 100, 0, 7), row(2, lyra[0], lyra[1], 100, 2, 7), row(3, b.x, b.z, 100, 1, 7)] } });
+  const pulls = b => b.ws.sent.filter(m => m.type === 'lab' && m.a === 'lever').length;
+  const b = makeBot(), lyra = makeBot('Lyra', 2, 'cleric');
+  for (const q of [b, lyra]) { q.x = l0.x + 2; q.z = l0.z + 1; }
+  for (let i = 0; i < 20; i++) { labSnap(b); labSnap(lyra); }
+  ok(!b.plan && !lyra.plan, 'levers: the player has only just stopped by a lever: nobody moves yet');
+  for (let i = 0; i < 30; i++) { labSnap(b); labSnap(lyra); }
+  ok(b.plan?.steps[0].k === 'lever' && b.cmd?.x === l1.x && chats(b).includes("I'll get the other bone lever, Natan.") && !lyra.plan, `levers: the player stays at one: Rook goes for the other by itself, the healer stays (${chats(b).at(-1)})`);
+  ok(!portOpen(GAL) && labAt(b.x, b.z) === GAL, 'levers: the bot knows the gate is shut from the snapshot');
+  let steps = 0; while (!pulls(b) && steps++ < 1200) labSnap(b);
+  ok(pulls(b) === 1 && Math.hypot(b.x - l1.x, b.z - l1.z) < 3 && chats(b).includes('The bone lever here is turned. Work yours!'), `levers: it walked the maze to the other lever and turned it (${steps} snapshots, ${Math.hypot(b.x - l1.x, b.z - l1.z).toFixed(1)} m from it)`);
+  labSnap(b, { events: [{ t: 'lab', s: 'lever', l: 'galleries', k: l1.k, d: 18, by: 3 }] }); for (let i = 0; i < 30; i++) labSnap(b);
+  ok(pulls(b) === 1, 'levers: its own pull is not a reason to pull again');
+  labSnap(b, { events: [{ t: 'lab', s: 'lever', l: 'galleries', k: l0.k, d: 18, by: 1 }] }); for (let i = 0; i < 20; i++) labSnap(b);
+  ok(pulls(b) === 2, 'levers: the player turns theirs: it turns its own again at once');
+  labSnap(b, { up: b.t + 45 }); labSnap(b, { up: b.t + 45 });
+  ok(!b.plan && chats(b).at(-1) === 'Plan done, Natan.', 'levers: the gate is up: done, back to following');
+  // two players down there work them together: no bot runs off
+  const c = makeBot(); c.x = l0.x + 2; c.z = l0.z + 1;
+  const two = q => q.ws.emit('message', { type: 'snap', me: { cds: [0, 0, 0, 0], dodge: 0, lvl: 5, ccd: {} }, w: { mobs: [], gate: [0, 0, 0], events: [], lb: [q.t, [['galleries', 0, [], 0, 0]]], players: [row(1, l0.x, l0.z, 100, 0, 7), row(4, l0.x + 3, l0.z, 100, 3, 7), row(3, q.x, q.z, 100, 1, 7)] } });
+  for (let i = 0; i < 80; i++) two(c);
+  ok(!c.plan, 'levers: two players in the party down there: the bots leave the levers to them');
+  // an order comes first
+  const d = makeBot(); d.x = l0.x + 2; d.z = l0.z + 1;
+  labSnap(d, { events: [{ t: 'botcmd', by: 1, byName: 'Natan', party: 7, cmd: 'stay' }] }); for (let i = 0; i < 80; i++) labSnap(d);
+  ok(!d.plan && d.cmd?.k === 'stay', 'levers: a bot told to stay stays');
+  for (const q of [b, lyra, c, d]) q.stop();
+  labRun.portUp.galleries = 0;
 }
 
 // ---------- 5. the AI mind ----------
@@ -466,6 +555,34 @@ try {
   ok(await until(() => { const p = zed(); return p && Math.hypot(p.x - h.x, p.z - h.z) < 9; }, 40000), 'live: /b come brings it back');
   if (process.env.SHOW_CHAT) console.log(botChat(), mine('chat').map(e => e.text));
   for (const b of team) b.stop();
+  // the levers of the Drowning Galleries, with a bot the server runs (it is pulled down the stairs after its player)
+  {
+    const GAL = LAYERS.find(L => L.id === 'galleries'), [l0, l1] = GAL.leverList;
+    const me = () => h.pl.get(h.id), zd = (x, z) => { const p = zed(); return p ? Math.hypot(p.x - x, p.z - z) : 999; };
+    const tp = (x, z) => h.ws.send(J({ type: 'test', life: { tp: [x, z] } })), pull = () => h.ws.send(J({ type: 'lab', a: 'lever' }));
+    const port = from => h.events.slice(from).some(e => e.t === 'lab' && e.s === 'port' && e.l === 'galleries');
+    const zsaid = (from, re) => h.events.slice(from).some(e => e.t === 'chat' && e.id === zid() && re.test(e.text));
+    h.ws.send(J({ type: 'test', labgo: 'galleries' }));
+    ok(await until(() => labAt(me()?.x, me()?.z) === GAL && labAt(zed()?.x, zed()?.z) === GAL, 20000), 'live: the player goes down into the Drowning Galleries and the bot is brought along');
+    // by order: the player turns one lever and says /b lever
+    let e1 = h.events.length;
+    tp(l0.x, l0.z + 1); await sleep(400); pull(); say('/b lever');
+    ok(await until(() => zsaid(e1, /^Plan: work the other lever\.$/), 4000), 'live: /b lever: the bot takes it');
+    const there = await until(() => port(e1) || zsaid(e1, /here is turned\. Work yours!$/), 60000);
+    if (!port(e1)) { await sleep(300); pull(); } // (it got there after the player's window: the player turns theirs again)
+    ok(there && await until(() => port(e1), 5000) && zd(l1.x, l1.z) < 3.5, `live: it ran to the other lever and the two opened the gate (${zd(l1.x, l1.z).toFixed(1)} m from its lever)`);
+    ok(await until(() => zsaid(e1, /^Plan done, Nat\.$/), 5000), 'live: plan done');
+    // by itself: the gate has fallen again, the player just stands at the other lever
+    tp(GAL.x0 + (GAL.start[0] + 0.5) * GAL.cell, GAL.z0 + (GAL.start[1] + 0.5) * GAL.cell); // (away from both levers while the gate falls)
+    await sleep(47000);
+    ok(!zsaid(e1, /I'll get the other/), 'live: away from the levers nobody runs off');
+    e1 = h.events.length; tp(l1.x, l1.z + 1);
+    ok(await until(() => zsaid(e1, /^I'll get the other bone lever, Nat\.$/), 25000), 'live: the player stands at a lever: the bot goes for the other one without being asked');
+    const turned = await until(() => zsaid(e1, /here is turned\. Work yours!$/), 60000);
+    pull();
+    ok(turned && await until(() => port(e1), 5000) && zd(l0.x, l0.z) < 3.5, `live: it turned its lever, the player theirs: the gate is up (${zd(l0.x, l0.z).toFixed(1)} m from its lever)`);
+    if (process.env.SHOW_CHAT) console.log(h.events.filter(e => e.t === 'chat' && e.id === zid()).map(e => e.text), h.sys.slice(-6));
+  }
   h.ws.close();
 } catch (err) { console.error(err); console.error(srvLog.slice(-2000)); failed++; }
 console.log(failed ? `${failed} of ${n} checks failed` : `all ${n} checks passed`);

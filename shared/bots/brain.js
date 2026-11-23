@@ -22,6 +22,7 @@ import { FLOOR_BOSS, FLOOR_X, inGateZone3, inArena3 } from '../floor3.js';
 import { beamDodge, overloadTurn } from './floor3.js'; // Floor 3 reflexes: Tempest Beam jumps, Overload Breaks
 import { arenaTurn } from './arenas.js'; // boss arenas' areas (J2): the fall, cover from the beam
 import { applyArenaSnap } from '../arenas.js';
+import { applyLabSnap, labAt, portOpen, labWords } from '../labyrinth.js'; // labyrinths: the gate's state, the levers
 import { MASTERY, BRANCHES, masteryLevel } from '../mastery.js';
 import { TREES, spendBlock, nodesOf } from '../talents.js';
 import { perceive, potionAt, setSkill, clampSkill } from '../botskill.js';
@@ -182,6 +183,7 @@ function onSnap(b, msg) {
   b.gateOpen = !!gate?.[0];
   b.gateReady = gate?.[2] || 0;
   b.ovOn = !!f3?.ov; b.air = f3?.air || []; // Floor 3: the Colossus's Overload; harpies aloft
+  applyLabSnap(msg.w.lb); // labyrinths: which gates are up (shared/labyrinth.js; a no-op inside the server)
   applyArenaSnap(f3?.ar); // boss arenas: which area (colliders, sludge, fire) (shared/arenas.js; a no-op inside the server)
   b.orbs = f2?.orbs || []; b.pools = f2?.pools || []; b.deluge = !!(f2?.del || f2?.dcall); // (dcall: the Deluge is being called: head in now)
   b.tb = msg.w.tb || null; // Team Burst gauges (server/teamplay.js teamSnap)
@@ -278,6 +280,7 @@ function onEvent(b, e) {
     case 'pjoin':
       if (e.id !== me && b.party && e.party === b.party && !isBot(b, e.id)) say(b, 'joinedHuman', { who: nameOf(b, e.id) }, { cd: 30 });
       break;
+    case 'lab': if (e.s === 'lever') b.labLever = { l: e.l, k: e.k, by: e.by || 0, t: b.t }; break; // a labyrinth's lever turned (the `lever` plan step, leverHelp)
     case 'chat': onChat(b, e); break;
     case 'botcmd': onBotCmd(b, e); break;
   }
@@ -472,6 +475,7 @@ function thinkFree(b) {
   if (downedTurn(b, P)) return; // downed: crawl to help
   if (arenaTurn(b, moveToward)) return; // a boss arena: frozen through the fall, cover from the Tempest Beam
   if (b.healFocus && (b.healFocus.until < b.t || !P.all.some(p => p.id === b.healFocus.id))) b.healFocus = null;
+  leverHelp(b, P); // a labyrinth's two levers: take the one our player is not at
   dayTurn(b, P, PLAN_API); // a free bot's own day picks its next plan (shared/bots/day.js)
   if (b.planNote) planNote(b, PLAN_API);
   if (b.plan) planTurn(b, P, PLAN_API); // a plan's step sets the order (shared/bots/planrun.js)
@@ -486,6 +490,26 @@ function thinkFree(b) {
   if (reviveTurn(b, P)) return; // a partymate is down and it's our job to pick them up
   if (rescueTurn(b, P)) return; // a partymate is caught in vines and it's our job to cut them free
   act(b, P, M);
+}
+
+// A labyrinth's two levers have to turn within seconds of each other (server/labyrinth.js labAct). When this bot's one
+// player stands at a lever, or has just turned one, one bot of the party goes to work the other by itself (the `lever`
+// plan step, shared/bots/planrun.js). An order or a plan comes first, and two players work them together.
+const LEVER_NEAR = 3.2, LEVER_STAND = 1.5, LEVER_AGAIN = 45, LEVER_WAIT = 90; // m, s, s, s
+function leverHelp(b, P) {
+  if (!P.humans.length || b.plan || b.script || (b.cmd && b.cmd.k !== 'follow' && b.cmd.k !== 'come') || b.t - (b.leverT ?? -99) < LEVER_AGAIN) return;
+  const L = labAt(b.x, b.z);
+  if (!L?.leverList || portOpen(L)) { b.leverAt = null; return; }
+  const inL = p => !p.dead && labAt(p.x, p.z) === L, hs = P.humans.filter(inL);
+  if (hs.length !== 1) return;
+  const h = hs[0], lv = L.leverList.find(lv => d2(lv.x, lv.z, h.x, h.z) < LEVER_NEAR);
+  const ev = b.labLever, turned = !!ev && ev.l === L.id && ev.by === h.id && b.t - ev.t < 3;
+  if (!lv) b.leverAt = null; else if (b.leverAt?.k !== lv.k) b.leverAt = { k: lv.k, t: b.t };
+  if (!turned && !(lv && b.t - b.leverAt.t > LEVER_STAND)) return;
+  const helper = P.bots.filter(inL).sort((u, v) => (u.role === 'healer') - (v.role === 'healer') || u.id - v.id)[0]; // (the healer stays with the player when another bot can go)
+  if (helper?.id !== b.id) return;
+  b.leverT = b.t; b.leverAt = null;
+  if (setPlan(b, [{ k: 'lever', n: LEVER_WAIT }], { by: h.id, byName: h.name, quiet: true }, PLAN_API)) say(b, 'plan', {}, { force: true, text: `I'll get the other ${labWords(L).lever.toLowerCase()}, ${h.name}.` });
 }
 
 function social(b, P) {

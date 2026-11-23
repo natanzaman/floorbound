@@ -7,7 +7,7 @@ import { walkable, resolveCollision, inGateZone, DODGE } from '../shared/data.js
 import { inGateZone2 } from '../shared/floor2.js';
 import { cellOf, shiftPhase } from '../shared/labyrinth.js';
 import { inGateZone3 } from '../shared/floor3.js';
-import { LABS, LAB_FLOORS, LAYERS, KEEPER, KEEPERS, NOISE, LURE, LAB_WORDS, gatedEdges, edgeShut, edgeSide, edgeOff, stripEdge, labAt, labSteer, hallCenter, startPoint, endPoint, inHall, inWater, trapState, onTrap, hasLabKey, stairsOf, leverWindow, labRun, portOpen, portSide, portOff, walkLab } from '../shared/labyrinth.js';
+import { LABS, LAB_FLOORS, LAYERS, KEEPER, KEEPERS, NOISE, LURE, LAB_WORDS, gatedEdges, edgeShut, edgeSide, edgeOff, stripEdge, labAt, labSteer, hallCenter, startPoint, endPoint, inHall, inWater, trapState, onTrap, hasLabKey, stairsOf, leverWindow, labRun, portOpen, portSide, portOff, walkLab, serverOwnsLab } from '../shared/labyrinth.js';
 
 const r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
 const rr = ([a, b]) => a + Math.random() * (b - a);
@@ -23,6 +23,7 @@ const keeperName = lab => KEEPERS[lab.layers.find(L => L.keeper)?.keeper]?.name 
 
 export const LabMethods = {
   initLabs() {
+    serverOwnsLab(true);
     this.labs = {}; // per layer id: { since, breatheAt, gutterUntil, lever: [t, t], lit: Map(k -> until) }
     this.lures = []; this.labLoot = new Map(); // character -> { chest key: refills at (game time) }
     for (const L of LAYERS) {
@@ -61,7 +62,7 @@ export const LabMethods = {
       S.lever[lv.k] = t;
       const people = [...this.players.values()].filter(q => !q.dead && !q.bot && labAt(q.x, q.z) === L).length;
       const win = leverWindow(L, people), other = S.lever[1 - lv.k];
-      this.events.push({ t: 'lab', s: 'lever', l: L.id, k: lv.k, d: r1(win) });
+      this.events.push({ t: 'lab', s: 'lever', l: L.id, k: lv.k, d: r1(win), by: p.id });
       if (t - other <= win) {
         labRun.portUp[L.id] = t + L.levers.open; S.lever = [-99, -99];
         this.events.push({ t: 'lab', s: 'port', l: L.id, d: L.levers.open });
