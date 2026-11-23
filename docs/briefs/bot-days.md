@@ -101,21 +101,30 @@ and personalities, mixed classes, levels spread up to the active players' level,
 players are. They count toward `MAX_BOTS`, show in the Bots list as the server's, and anyone may invite them.
 `RESIDENTS=0` turns it off. Their levels and gold are not saved in this version.
 
-## Jev picks the goal (owner, 2026-11-23: for every bot with a day, not only those near players)
-An OpenRouter provider next to today's three (the decisions endpoint; the key is in Render). The model is a setting,
-`BOT_DAY_MODEL` (default `typesafe/jev-1.14`): other makers' decision models take the same request, so a swap is one
-env var and a re-check of the blind test (comparison in the plan doc, "Similar models").
-The question is a Choice over the same goal list, with the bot's state, its personality line and the utility scores
-as hints. Jev answers with a probability for every goal; the bot rolls from those (so a 70/30 call goes the other way
-3 times in 10), and the plan is built as before.
-- **When:** a bot within 60 m of a player asks whenever a goal ends, at most every 30 s. A bot further off asks at most
-  once a minute. A bot resting at home on a floor with no player has nothing to decide and asks nothing.
-- **Never waits:** the bot carries on while the call is out. No answer in 400 ms, an error, no key, or the cap reached:
-  the utility scores decide. Three failures in a row: rules only for 5 minutes.
-- **Cost:** about $0.000017 a decision, so about $0.001 per bot per hour of play (twice that close to players). 30
-  bots for 4 hours is about 12 to 25 cents. A daily cap of its own, `JEV_DAILY_USD` (default 0.50), counted with the
-  AI spend on the admin page; at the cap the rules take over until midnight UTC.
-- `BOT_DAY_PICK=rules` turns Jev off. The blind test runs both ways, so we learn whether Jev is worth keeping.
+## A decision model picks the goal (built 2026-11-23; owner: for every bot with a day, not only those near players)
+`server/ai/providers/decisions.js` talks to OpenRouter's decisions endpoint (`POST /api/alpha/decisions`), next to
+today's three chat providers: one question, one answer with a probability per option, far cheaper and faster than a
+chat model. `server/ai/daypick.js` is the caller; `installDayPick` hangs it on the bot manager, and every bot with a
+day calls it through `b.dayPicker`. The question is a Choice over the goals that scored something, with the bot's
+state, its personality numbers and its own scores as hints (`pickState`); the answer's probabilities are **rolled**,
+not obeyed, so a 70/30 call goes the other way about 3 times in 10 and bots on the same floor do different things.
+The plan is built exactly as before.
+- **Settings:** `BOT_DAY_MODEL` (default `typesafe/jev-1.13`, the pinned version OpenRouter documents; a swap is one
+  env var, and `~typesafe/jev-latest` follows the newest). `BOT_DAY_PICK=rules` turns it off; `=mock` is a decider in process (no key, no network) for local tries and tests.
+  Also `BOT_DAY_WAIT_MS`, `BOT_DAY_NEAR_S`, `BOT_DAY_FAR_S`, `BOT_DAY_CALLS_MIN`, `BOT_DAY_CONCURRENT`.
+  The key comes from `OPENROUTER_API_KEY` (or `OPENROUTER_KEY`, `OPEN_ROUTER_API_KEY`) and is read per call, never kept.
+  **Until that variable is set in Render, nothing is called and the bots' own scores decide**; the admin card says so.
+- **When:** a bot near a player asks whenever a goal ends, at most every 30 s. Further off, at most once a minute. A
+  bot alone on its floor (going home to rest) has nothing to decide and asks nothing.
+- **Never waits:** the bot carries on while the call is out. No answer in 400 ms (`PICK_WAIT`), an error, no key or the
+  cap reached: the scores decide, and a late answer is counted and dropped. Three failures in a row: rules for 5 min.
+- **Cost:** Jev is billed on input tokens only, about $0.04/M in, so roughly $0.00002 a decision: about $0.001 per bot
+  per hour of play. A cap of its own, `JEV_DAILY_USD` (default 0.50); at the cap the rules take over until midnight UTC.
+- **The trace the owner asked for:** every goal records who decided it and the odds it was given (`d.by`, `d.odds`,
+  `d.model`, and the same on each log entry), so a bot's story shows which picks were the model's.
+- **Admin:** a "Bot decisions" card under the companions one on `/admin.html` (Bots tab): the line, the key check, the
+  per-model scoreboard (picks, answered, too late, failed, avg ms, $ per pick, what it picked) and the last few picks
+  with their probabilities beside the bot's own scores. "Test decision" makes one real call.
 
 ## Built differently from the table above (2026-11-23)
 - **Group up:** not "at the well": a bot walks up to another free bot wherever it is and invites it. Only bots living
@@ -142,8 +151,10 @@ Then an independent review, fixes, the owner's OK, merge.
 - `node test/botdays.js` (new): scores are repeatable from a seed and stay in range; each need leads to its goal; no
   flip-flopping; an order pauses the day and it resumes; a real brain out of potions walks to the merchant, sells,
   buys, and has potions and less gold; ten minutes of a live free bot show three or more goals, no teleports and no
-  minute stuck; `BOT_DAYS=0` equals today; Jev (a mock provider): its pick is taken, a slow or failed call and a reached
-  cap fall back to the scores, far bots ask at most once a minute.
+  minute stuck; `BOT_DAYS=0` equals today.
+- `node test/daypick.js` (new): the request and the answer (odds, cost, a refusal, a made-up option, the key never in
+  an error), the picker (who decided and the odds, the 70/30 roll over 200 seeds, a late answer, three failures, every
+  skip gate, the state small and private), the day taking a model pick, and the admin route.
 - Existing bot tests still pass (`botbrain`, `botplans`, `freebots`, `playerbots`, `personality`, `towns`, `named`).
 - perfbench before and after.
 - Blind test: friends spend 20 minutes around town and the field and guess who is a bot.

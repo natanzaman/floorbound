@@ -1,6 +1,9 @@
 // Admin page: the "AI companions" card on the Bots tab (server/ai/). Shows the status line (on/off, calls, spend
 // estimate), a toggle, a "Test call" button (one tiny real call: OK/error, latency, cost) and the last few decisions,
 // plus Named talk (I3): its line, a "Test Named talk" button (the same, in Cairn's voice) and the last few exchanges.
+// Below it, "Bot decisions" (server/ai/daypick.js): which model picks a free bot's next thing, how many picks it
+// answered in time, what it costs, the per-model numbers (the scoreboard's first rows) and the last few picks with
+// the odds the model gave. Its own test button makes one real decision call.
 // Self-contained so admin.js stays untouched; polls every 5 s while the page is visible. Keys are never shown: the
 // server says which env var it reads, whether it's set, and after a test call at most the key's last 4 characters.
 const token = localStorage.getItem('fb_session');
@@ -30,6 +33,57 @@ function mount() {
     <ul id="ai-recent" style="margin:8px 0 0;padding-left:18px;font-size:12px"></ul>`;
   host.prepend(el);
   return el;
+}
+
+function mountDay() {
+  const host = document.getElementById('tab-bots');
+  if (!host || document.getElementById('day-card')) return null;
+  const el = document.createElement('div');
+  el.className = 'card'; el.id = 'day-card';
+  el.innerHTML = `<h2>Bot decisions <span class="pill" id="day-pill">…</span><span class="grow" style="flex:1"></span>
+    <button class="small" id="day-test" disabled title="One real decision call to check the key works (a fraction of a cent)">Test decision</button></h2>
+    <div id="day-line" style="font-size:13px"></div>
+    <div id="day-test-out" style="font-size:13px;margin-top:6px"></div>
+    <div id="day-more" class="dim" style="font-size:12px;margin-top:6px"></div>
+    <table id="day-models" style="font-size:12px;margin-top:6px;border-collapse:collapse"></table>
+    <ul id="day-recent" style="margin:8px 0 0;padding-left:18px;font-size:12px"></ul>`;
+  const ai = document.getElementById('ai-card');
+  if (ai) ai.after(el); else host.prepend(el);
+  return el;
+}
+
+// The free bots' decider: the line, the per-model numbers and the last few picks with their odds.
+function renderDay(s, err) {
+  const el = document.getElementById('day-card') || mountDay();
+  if (!el) return;
+  const pill = document.getElementById('day-pill'), tb = document.getElementById('day-test');
+  if (err || !s) { document.getElementById('day-line').textContent = err || ''; pill.textContent = '?'; tb.disabled = true; return; }
+  pill.textContent = s.how === 'rules' ? 'RULES' : s.ready ? 'MODEL' : 'NO KEY';
+  pill.className = `pill${s.ready ? ' on' : ''}`;
+  tb.disabled = busy || !s.on;
+  document.getElementById('day-line').textContent = s.line;
+  const bits = [];
+  if (s.how !== 'rules') bits.push(`Key: ${s.keyCheck.text}`);
+  bits.push(`Waits ${s.waitMs} ms for an answer, then the bot's own scores decide · asks each bot at most every ${s.nearS} s near a player, ${s.farS} s further off · BOT_DAY_PICK=rules turns it off, BOT_DAY_MODEL picks the model`);
+  if (s.paused) bits.push(`Paused ${s.paused.s} s: ${s.paused.why}`);
+  const sk = Object.entries(s.skipped || {}).map(([k, v]) => `${k} ${v}`).join(', ');
+  if (sk) bits.push(`Left to the scores: ${sk}`);
+  if (s.lastError) bits.push(`Last error: ${s.lastError}`);
+  document.getElementById('day-more').innerHTML = bits.map(esc).join('<br>');
+  const rows = s.models || [];
+  document.getElementById('day-models').innerHTML = rows.length
+    ? `<tr class="dim"><th align="left">Model</th><th align="right">picks</th><th align="right">answered</th><th align="right">too late</th><th align="right">failed</th><th align="right">avg ms</th><th align="right">$ / pick</th><th align="left">what it picked</th></tr>`
+      + rows.map(m => `<tr><td>${esc(m.model)}</td><td align="right">${m.picks}</td><td align="right">${m.answered}</td><td align="right">${m.late}</td><td align="right">${m.errors}</td><td align="right">${m.avgMs}</td><td align="right">$${m.perPick.toFixed(6)}</td><td>${esc(Object.entries(m.goals).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', '))}</td></tr>`).join('')
+    : '';
+  document.getElementById('day-recent').innerHTML = (s.recent || []).slice().reverse().map(d =>
+    `<li><b>${esc(d.bot)}</b> → ${esc(d.goal)}${d.odds != null ? ` (${Math.round(d.odds * 100)}%)` : ''}${d.late ? ' <span class="pill">too late</span>' : ''} <span class="faint">${esc(Object.entries(d.probs || {}).map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(', '))} · its scores ${esc(Object.entries(d.scores || {}).map(([k, v]) => `${k} ${v}`).join(', '))} · ${d.ms} ms · $${(d.cost || 0).toFixed(6)}</span></li>`).join('');
+}
+
+function dayTestLine(t) {
+  if (!t) return '';
+  const when = new Date(t.at).toLocaleTimeString();
+  if (t.ok) return `<span class="pill on">Decision OK</span> ${t.ms} ms · $${(t.cost || 0).toFixed(6)} · ${esc(t.model)} picked <b>${esc(t.pick)}</b> (${esc(Object.entries(t.odds || {}).map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(', '))}) <span class="faint">${when}</span>`;
+  return `<span class="pill">Decision failed</span> ${esc(t.error)}${t.ms !== undefined ? ` · ${t.ms} ms` : ''} <span class="faint">${when}</span>`;
 }
 
 let last = null, busy = false;
@@ -93,12 +147,22 @@ async function refresh() {
   if (document.hidden) return;
   const r = await api('GET').catch(() => null);
   if (!r) return render(null, 'Could not reach the server.');
-  if (r.status === 401 || r.status === 403) { document.getElementById('ai-card')?.remove(); return; } // the main page shows the gate
-  if (!r.ok) return render(null, r.j.error || `HTTP ${r.status}`);
-  render(r.j);
+  if (r.status === 401 || r.status === 403) { gone('ai-card'); gone('day-card'); return; } // the main page shows the gate
+  if (!r.ok) render(null, r.j.error || `HTTP ${r.status}`); else render(r.j);
+  const d = await api('GET', null, '/day').catch(() => null);
+  if (d?.ok) renderDay(d.j); else if (d && d.status !== 401 && d.status !== 403) renderDay(null, d.j?.error || `HTTP ${d.status}`);
 }
+const gone = id => document.getElementById(id)?.remove();
 
 document.addEventListener('click', async ev => {
+  if (ev.target?.id === 'day-test' && !busy) {
+    busy = true; ev.target.disabled = true; ev.target.textContent = 'Deciding…';
+    const r = await api('POST', {}, '/day-test').catch(() => null);
+    busy = false; ev.target.textContent = 'Test decision';
+    if (r?.j?.test) { document.getElementById('day-test-out').innerHTML = dayTestLine(r.j.test); if (r.j.line) renderDay(r.j); }
+    else document.getElementById('day-test-out').textContent = r?.j?.error || 'Could not reach the server.';
+    return;
+  }
   if (ev.target?.id === 'ai-ntest' && !busy) {
     busy = true; ev.target.disabled = true; ev.target.textContent = 'Testing…';
     const r = await api('POST', {}, '/named-test').catch(() => null);

@@ -145,7 +145,7 @@ export class BotManager {
       join: { bot: this.key, lvl, f2: behaviour === 'floor2' || behaviour === 'floor3' || behaviour === 'follow' ? 1 : 0, f3: behaviour === 'floor3' || behaviour === 'follow' ? 1 : 0, ...(join || {}) },
     });
     const out = group.team.map(b => ({ bid: bid || this.nextBid++, b, group, behaviour, follow, team, lvl, at: Date.now(), creator: null, allow: [] }));
-    for (const e of out) { e.b.dayPeers = () => this.dayPeers(e); e.b.dayFloors = () => this.dayFloors(); } // who else has a day of its own (shared/bots/day.js: teaming up)
+    for (const e of out) { e.b.dayPeers = () => this.dayPeers(e); e.b.dayFloors = () => this.dayFloors(); e.b.dayPicker = (b, ask) => !!this.dayPick?.(b, ask); } // who else has a day of its own (shared/bots/day.js: teaming up), and who picks its next thing (this.dayPick, set by server/ai/daypick.js)
     this.bots.push(...out);
     return out.map(e => this.view(e));
   }

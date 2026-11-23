@@ -15,8 +15,10 @@
 //            each leaves when it has had enough. ask along: before a hunt a sociable bot may ask the people around
 //            ("Anyone for wolves?", at boss level "Anyone up for the Warden?"); it invites a player only after a yes
 //            (dayChat), and asks any one player at most once in ASK_AGAIN seconds. No boss tries without a player
-//   picker   b.dayPicker(b, ask) may answer for the scores (Jev, server/ai/daypick.js): it calls ask.done(id) or
-//            leaves it; with no answer in PICK_WAIT seconds the top score is taken
+//   picker   b.dayPicker(b, ask) may answer for the scores (a decision model, server/ai/daypick.js): it calls
+//            ask.done(id, { odds, who, model }) or leaves it; with no answer in PICK_WAIT seconds the top score is
+//            taken. Every goal, picked either way, carries who decided it and the odds it was given (d.by, d.odds,
+//            d.model, and the same on each log entry): the trace the owner asked for, 2026-11-23
 //   unseen   nobody on this floor (f.quiet, from b.dayFloors): a day is played where someone can see it. Only the
 //            goals that leave the floor's monster AI asleep are scored (rest and restock, both in town) plus travel:
 //            a sociable bot heads for a floor where players are
@@ -118,37 +120,37 @@ export function needs(b, f) {
 // score(n, f, T): 0 to about 1 from the needs n, the facts f and the traits T(k). why(n, f): a few words for the card.
 export const GOALS = {
   hunt: {
-    name: 'Hunting', cool: 0.9,
+    name: 'Hunting', cool: 0.9, tell: 'Go and fight monsters that suit its level, for experience and loot.',
     score: (n, f, T) => clamp(0.42 + T('aggression') * 0.2 + (f.mates ? 0.15 : 0) - n.rest * 0.3 - (canShop(f) ? n.supplies * 0.5 : 0) - n.bag * 0.25),
     why: (n, f) => (f.mates ? 'better together' : f.pots === 0 && !canShop(f) ? 'no gold for potions' : f.lvl < (BOSS_LVL[f.fl] || 99) ? 'levelling up' : 'earning gold'),
   },
   restock: {
-    name: 'Restocking', cool: 0.3,
+    name: 'Restocking', cool: 0.3, tell: 'Walk to the merchant in town, sell the spare gear in its bag and buy health potions.',
     score: (n, f, T) => (canShop(f) ? clamp(Math.max(n.supplies, n.bag * 0.85) * (0.85 + T('caution') * 0.35)) : 0),
     why: (n, f) => (f.pots === 0 ? 'out of potions' : n.supplies >= n.bag * 0.85 ? 'low on potions' : 'bag is nearly full'),
   },
   rest: {
-    name: 'Resting', cool: 0.25,
+    name: 'Resting', cool: 0.25, tell: 'Sit down in town for a few minutes and take a breather.',
     score: (n, f, T) => clamp(Math.max(n.rest, f.quiet ? 0.5 : 0) * (0.7 + T('patience') * 0.5)),
     why: (n, f) => (f.quiet && n.rest < 0.5 ? 'nobody about' : f.deaths >= 2 ? 'that went badly' : 'been at it a while'),
   },
   travel: { // nobody on this floor: go where the players are (the camp there; the plan runner takes the waypoint)
-    name: 'Travelling', cool: 0.2,
+    name: 'Travelling', cool: 0.2, tell: 'Travel to the floor where the players are, because this one is empty.',
     score: (n, f, T) => (f.quiet && f.toFl ? clamp(0.4 + T('sociability') * 0.55) : 0),
     why: () => 'the floor is empty',
   },
   wander: {
-    name: 'Looking around', cool: 0.5,
+    name: 'Looking around', cool: 0.5, tell: 'Wander off to another spot in town and look around for a change of scene.',
     score: (n, f, T) => clamp(n.change * (0.45 + T('curiosity') * 0.8)),
     why: () => 'wants a change',
   },
   hangout: {
-    name: 'Hanging out', cool: 0.4,
+    name: 'Hanging out', cool: 0.4, tell: 'Stand about where the people are, greet them and chat.',
     score: (n, f, T) => clamp(n.company * (0.45 + T('sociability') * 0.8) * (f.people || f.town ? 1 : 0.7)),
     why: (n, f) => (f.humans ? 'people are about' : 'wants company'),
   },
   group: { // walk up to another free bot and team up (never while following; a leader may fetch a third)
-    name: 'Teaming up', cool: 0.2,
+    name: 'Teaming up', cool: 0.2, tell: 'Walk up to another bot out on its own and invite it to team up.',
     score: (n, f, T) => (!f.free || f.mates >= 2 || f.sinceGroup < GROUP_REST ? 0 : clamp((0.14 + n.company * 0.7) * (0.35 + T('sociability') * 0.9) * (f.mates ? 0.5 : 1))),
     why: (n, f) => (f.mates ? 'room for one more' : 'hunting is better together'),
   },
@@ -224,26 +226,27 @@ export function planFor(id, b, f, rnd = Math.random, o = {}) {
 }
 
 // ---------- the day itself ----------
-const fresh = b => ({ t0: b.t, goal: '', why: '', text: '', since: b.t, log: [], restT: b.t, sameT: b.t, seenT: b.t, deaths: 0, deadSeen: false, hold: 0, lookT: 0, sights: [], skip: [], kind: '', urgent: 0, pending: null, picked: 0, asked: 0,
+const fresh = b => ({ t0: b.t, goal: '', why: '', text: '', by: 'rules', odds: null, model: '', since: b.t, log: [], restT: b.t, sameT: b.t, seenT: b.t, deaths: 0, deadSeen: false, hold: 0, lookT: 0, sights: [], skip: [], kind: '', urgent: 0, pending: null, picked: 0, asked: 0,
   help: null, helpSeen: new Map(), helpT: 0, helped: 0, groupUntil: null, groupT: null, leftT: -9, lead: 0, cand: 0, inv: 0, ask: null, askedAt: new Map() });
 
 // The goal is over (done, stopped, or dropped for an order): into the log.
 function close(b, d, how = 'done') {
   if (!d.goal) return;
-  d.log.unshift({ g: d.goal, why: d.why, text: d.text, at: Math.round(d.since), secs: Math.round(b.t - d.since), how });
+  d.log.unshift({ g: d.goal, why: d.why, text: d.text, at: Math.round(d.since), secs: Math.round(b.t - d.since), how, by: d.by || 'rules', odds: d.odds ?? null, model: d.model || '' });
   d.log.length = Math.min(d.log.length, LOG);
   if (d.goal === 'rest' && how === 'done') { d.restT = b.t; d.deaths = 0; }
   if (d.goal === 'restock' && b.cons) d.poor = (b.cons.potion || 0) < potionsShort(b) ? b.gold || 0 : null; // (still short: the gold wasn't enough)
   if (d.goal !== d.log[1]?.g) d.sameT = d.since; // (a different thing from the one before: the "same old" clock runs from its start)
-  d.goal = ''; d.text = ''; d.why = ''; d.help = null; d.cand = 0; d.inv = 0; d.lead = 0;
+  d.goal = ''; d.text = ''; d.why = ''; d.help = null; d.cand = 0; d.inv = 0; d.lead = 0; d.by = 'rules'; d.odds = null; d.model = '';
 }
 
-// Take goal id: make its plan and start it. Returns false when it cannot be planned.
-function begin(b, d, id, why, api, rnd) {
+// Take goal id: make its plan and start it. who: { by ('rules' or 'model'), odds (0 to 1), model } for the trace.
+// Returns false when it cannot be planned.
+function begin(b, d, id, why, api, rnd, who = null) {
   const f = facts(b, d), ask = id === 'hunt' && askAlong(b, d, f, api, rnd);
   const made = planFor(id, b, f, rnd, { floors: b.dayFloors?.(b) || null, skip: d.skip, ask });
   if (!made || !setPlan(b, made.steps, { by: made.by || 0, adm: true, quiet: true, day: id }, api)) return false;
-  Object.assign(d, { goal: id, why, text: made.text, since: b.t, urgent: 0, cand: made.cand || 0, inv: 0 });
+  Object.assign(d, { goal: id, why, text: made.text, since: b.t, urgent: 0, cand: made.cand || 0, inv: 0, by: who?.by || 'rules', odds: who?.odds ?? null, model: who?.model || '' });
   if (made.kind) d.kind = made.kind;
   if (made.sights) d.sights = [...made.sights, ...d.sights].slice(0, 6);
   if (ask) d.ask.kind = d.kind;
@@ -424,16 +427,22 @@ export function dayTurn(b, P, api, rnd = Math.random) {
   if (b.t < d.hold || b.tgtId) return;
   if (!d.pending) {
     const f = facts(b, d), scores = scoreGoals(b, f, rnd);
-    d.pending = { at: b.t, scores, pick: '' };
-    const ask = { facts: f, scores, done: id => { if (d.pending?.scores === scores && scores.some(s => s.id === id)) d.pending.pick = id; } };
+    d.pending = { at: b.t, scores, pick: '', meta: null };
+    const ask = { bot: b.name, facts: f, scores, traits: b.persona?.t || {},
+      done: (id, meta = null) => { // true when the bot was still waiting for it (a late answer changes nothing)
+        if (!(d.pending?.scores === scores && scores.some(s => s.id === id))) return false;
+        Object.assign(d.pending, { pick: id, meta });
+        return true;
+      } };
     if (b.dayPicker?.(b, ask)) d.asked++; else d.pending.at = -1; // (nobody to ask: the scores decide now)
   }
   const p = d.pending;
   if (!p.pick && p.at >= 0 && b.t - p.at < PICK_WAIT) return; // the picker has a moment yet
   d.pending = null;
   if (p.pick) d.picked++;
-  for (const s of [...(p.pick ? [p.scores.find(s => s.id === p.pick)] : []), ...p.scores]) if (s.score > 0 || s.id === p.pick) { if (begin(b, d, s.id, s.why, api, rnd)) return; }
-  begin(b, d, 'hunt', 'nothing better to do', api, rnd);
+  const who = s => (s.id === p.pick ? { by: p.meta?.who || 'model', odds: p.meta?.odds ?? null, model: p.meta?.model || '' } : { by: 'rules', odds: s.score });
+  for (const s of [...(p.pick ? [p.scores.find(s => s.id === p.pick)] : []), ...p.scores]) if (s.score > 0 || s.id === p.pick) { if (begin(b, d, s.id, s.why, api, rnd, who(s))) return; }
+  begin(b, d, 'hunt', 'nothing better to do', api, rnd, { by: 'rules', odds: null });
 }
 
 // The bot died: a bad day wants a rest sooner (the brain calls this; a dead bot's turn stops before dayTurn).

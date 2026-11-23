@@ -4,6 +4,8 @@
 //   - serves GET /api/admin/ai (status), POST /api/admin/ai { on } (toggle) and POST /api/admin/ai/test (one tiny real
 //     call: OK/error, latency, cost) and POST /api/admin/ai/named-test (the same for Named talk, in Cairn's voice),
 //     admins only
+//   - installs the free bots' decision model (server/ai/daypick.js: its own model, key and daily cap) and serves
+//     GET /api/admin/ai/day and POST /api/admin/ai/day-test for its card
 //   - tells clients when a bot is thinking about a line said to it ({ t: 'mind', id, on, party } in game.events)
 //   - memories and the day's spend survive restarts once index.js calls minds.useStore(makeStore(db.q)) after migrate
 // Nothing here runs a model unless AI_PROVIDER, its key and the toggle are all set (the test call needs provider + key).
@@ -12,6 +14,7 @@ import { readConfig } from './config.js';
 import { makeProvider } from './providers/index.js';
 import { Minds } from './mind.js';
 import { installNamedTalk } from './namedtalk.js'; // talking to the Named (I3)
+import { installDayPick } from './daypick.js'; // a free bot's "what next" pick (docs/briefs/bot-days.md)
 import * as accounts from '../accounts.js';
 import { isAdmin } from '../admin.js';
 
@@ -37,6 +40,7 @@ export function installAI({ game = null, bots, server = null }, opts = {}) {
   const mayOrder = game ? (b, id) => { if (!game.botControl) return true; const p = game.players.get(id), o = game.players.get(b.id); return !!p && !!o && !game.botControl(p, o, 'botCommand'); } : null; // who may order a bot (shared/accesslevels.js), as for /b
   const minds = new Minds({ cfg, provider, listBots, env, now: opts.now, log: opts.log, onThink, mayOrder });
   if (game) game.aiOn = () => minds.active(); // (welcome: lets the client show the "talk to bots by name" tip)
+  minds.dayPick = opts.dayPick === false ? null : installDayPick({ bots }, { env, now: opts.now, log: opts.log });
   if (game?.named) minds.namedTalk = installNamedTalk({ game, minds }); // (NAMED_ENABLED=0: no Named, nothing to talk to)
   registerBotHook('onEvent', (b, e) => minds.onEvent(b, e));
   const tickMs = opts.tickMs ?? 1000;
@@ -46,7 +50,7 @@ export function installAI({ game = null, bots, server = null }, opts = {}) {
   if (server) {
     // Runs before the main request handler; claims /api/admin/ai synchronously (res.handled) so it isn't 404'd.
     server.prependListener('request', (req, res) => {
-      if (!req.url.startsWith('/api/admin/ai') || !/^\/api\/admin\/ai(\/test|\/named-test)?\/?(\?.*)?$/.test(req.url)) return;
+      if (!req.url.startsWith('/api/admin/ai') || !/^\/api\/admin\/ai(\/test|\/named-test|\/day|\/day-test)?\/?(\?.*)?$/.test(req.url)) return;
       res.handled = true;
       handle(req, res).catch(err => { console.error('[ai] admin', err); if (!res.headersSent) json(res, 500, { error: 'Server error.' }); });
     });
@@ -54,6 +58,17 @@ export function installAI({ game = null, bots, server = null }, opts = {}) {
   async function handle(req, res) {
     const code = await auth(req);
     if (code) return json(res, code, { error: code === 401 ? 'Signed out.' : 'Admins only.' });
+    if (/^\/api\/admin\/ai\/day-test/.test(req.url)) { // one real decision call (a fraction of a cent)
+      if (req.method !== 'POST') return json(res, 405, { error: 'POST.' });
+      if (!minds.dayPick) return json(res, 400, { error: 'The bot decider is not installed.' });
+      const r = await minds.dayPick.testCall();
+      return json(res, 200, { test: r, ...minds.dayPick.status() });
+    }
+    if (/^\/api\/admin\/ai\/day/.test(req.url)) { // the free bots' decider: its own model, key and cap
+      if (req.method !== 'GET') return json(res, 405, { error: 'GET.' });
+      if (!minds.dayPick) return json(res, 400, { error: 'The bot decider is not installed.' });
+      return json(res, 200, minds.dayPick.status());
+    }
     if (/^\/api\/admin\/ai\/named-test/.test(req.url)) {
       if (req.method !== 'POST') return json(res, 405, { error: 'POST.' });
       if (!minds.namedTalk) return json(res, 400, { error: 'The Named are off (NAMED_ENABLED=0).', ...minds.status() });

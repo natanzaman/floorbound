@@ -26,6 +26,16 @@
 //   AI_NAMED_GAP_S     seconds between two lines from one player to the Named (default 4)
 //   AI_NAMED_PHRASE_DAILY  requests and invitations the Named phrase in their own words, per player per day (on the
 //                      Named slice, not the player's talk calls; then canned lines; default 10)
+// A free bot's "what next" pick (server/ai/daypick.js) is a different model and a different budget, read by
+// readDayConfig: see docs/briefs/bot-days.md.
+//   BOT_DAY_PICK       model | mock | rules   (default model; with no key the bots' own scores decide and the card says so)
+//   BOT_DAY_MODEL      a decision model on OpenRouter (default typesafe/jev-1.13)
+//   BOT_DAY_KEY_ENV    name of the env var holding the OpenRouter key (then OPENROUTER_API_KEY, OPENROUTER_KEY)
+//   JEV_DAILY_USD      spend cap per UTC day for these picks, apart from AI_DAILY_USD (default 0.50)
+//   BOT_DAY_WAIT_MS    how long a bot waits for the answer before its own scores decide (default 400)
+//   BOT_DAY_NEAR_S / BOT_DAY_FAR_S   least seconds between one bot's picks near a player / far from one (30 / 60)
+//   BOT_DAY_CALLS_MIN / BOT_DAY_CONCURRENT   calls a minute and calls in flight (default 120 / 6)
+//   BOT_DAY_PRICE_IN   USD per 1M input tokens, only used when the answer carries no cost (default 0.04)
 export const DEFAULT_MODEL = { anthropic: 'claude-haiku-5-5', openai: 'gpt-6-luna', gemini: 'gemini-3.1-flash-lite', mock: 'mock' };
 // Key env var names per provider, first one wins. The extra names are common misnamings, accepted on purpose.
 export const KEY_ENV = {
@@ -99,6 +109,27 @@ export function readConfig(env = process.env) {
     namedGapS: num(envGet(env, 'AI_NAMED_GAP_S'), 4, 1),
     namedPhraseDaily: num(envGet(env, 'AI_NAMED_PHRASE_DAILY'), 10, 0),
     namedPhraseMs: 3000, // a phrasing that takes longer than this keeps the canned line
+  };
+}
+
+// ---------- the day picker (server/ai/daypick.js): its own model, key and daily cap ----------
+export const DAY_KEY_ENV = ['OPENROUTER_API_KEY', 'OPENROUTER_KEY', 'OPEN_ROUTER_API_KEY'];
+export const DAY_MODEL = 'typesafe/jev-1.13'; // the pinned id in OpenRouter's docs; `~typesafe/jev-latest` follows the newest
+export function readDayConfig(env = process.env) {
+  const custom = normName(envGet(env, 'BOT_DAY_KEY_ENV') || '');
+  const keyEnvs = [...new Set([...(custom && ENV_NAME.test(custom) ? [custom] : []), ...DAY_KEY_ENV])];
+  const how = String(envGet(env, 'BOT_DAY_PICK') || '').toLowerCase();
+  return {
+    provider: 'openrouter', keyEnvs,
+    how: how === 'rules' || how === 'off' || how === '0' ? 'rules' : how === 'mock' ? 'mock' : 'model',
+    model: String(envGet(env, 'BOT_DAY_MODEL') || DAY_MODEL),
+    dailyUsd: num(envGet(env, 'JEV_DAILY_USD'), 0.5, 0),
+    waitMs: num(envGet(env, 'BOT_DAY_WAIT_MS'), 400, 50, 5000),
+    nearS: num(envGet(env, 'BOT_DAY_NEAR_S'), 30, 1),
+    farS: num(envGet(env, 'BOT_DAY_FAR_S'), 60, 1),
+    callsMin: num(envGet(env, 'BOT_DAY_CALLS_MIN'), 120, 1),
+    concurrent: num(envGet(env, 'BOT_DAY_CONCURRENT'), 6, 1, 64),
+    priceIn: num(envGet(env, 'BOT_DAY_PRICE_IN'), 0.04, 0), // USD per 1M input tokens (Jev: output is free)
   };
 }
 
