@@ -33,6 +33,9 @@ Plans: `docs/briefs/bots-access.md`, `docs/briefs/waypoint.md`, `docs/briefs/tar
   Medium/High, 3D skill effects, attack accents, camera kick. Fable review: 8 issues, all fixed.
 - Bosses +20% health (Warden) / +35% (Sovereign, Colossus) so fights stay as long (owner's pick). Bot runs, 6 bots,
   skill 5, `scripts/tuneboss.js` 3 runs each, main → this batch: Warden 99 → 96 s, Sovereign 151 → 158 s, Colossus 137 → 150 s.
+- 2026-11-22 fix: Rush, Whirl and other instant skills now count as chain steps on real presses (the press time was
+  recorded after the skill had already hit). Bot runs after: Warden 94 s, Sovereign 161 s, Colossus 139 s (3/3 each).
+  Filmed clips of every combo kind: `/mnt/project-files/combos/` (how: LOCKSTEP server + Playwright fake clock).
 - Not measured: frame cost on a real GPU (headless software rendering: Medium/High frames +9-12%, draw calls +2%).
   Worth a look on the Mac: trails on the 2H axe and spear, the attack accents, bloom.
 
