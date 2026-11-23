@@ -76,7 +76,7 @@ export function createBot({ url, WebSocket: WS = globalThis.WebSocket, cls, name
   b.role = roleOf(cls);
   b.skill = clampSkill(skill); // capability level; 5 = perfect
   b.persona = rollPersonality(name, persona); // who it is (same name, same personality)
-  b.setPersona = id => { b.persona = rollPersonality(b.name, id || null); b.idle = null; };
+  b.setPersona = id => { b.persona = rollPersonality(b.personaName || b.name, id || null); b.idle = null; }; // (personaName: a resident's own name, kept through "Pip 2" and renames)
   b.send = o => b.ws.readyState === 1 && (b.ws.sendObj ? b.ws.sendObj(o) : b.ws.send(JSON.stringify(o))); // (sendObj: the server's in-process socket, server/localws.js)
   b.configure = o => configure(b, o);
   b.command = c => command(b, c);

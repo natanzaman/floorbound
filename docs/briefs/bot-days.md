@@ -115,10 +115,14 @@ day, and the sociable ones team up with another free bot now and then, as any fr
   as a player-added bot's: `premadeOutfit` in `server/playerbots.js`), next to the waypoint of the floor most players
   are on.
 - **Whose:** nobody's (no creator, empty allow list), so anyone may invite or order one; the Bots list tags them
-  "resident". They count toward `MAX_BOTS`: with the limit reached a resident waits for a slot.
-- **Names:** a name a player has taken: the resident joins as "Pip 2", keeping Pip's personality.
-- **Admin:** removing one (a row's remove, or "remove all") keeps it out for `RESIDENT_AWAY` (30 min), then it comes
-  back. `GET /api/admin/bots` carries `residents` (who is in, and how long a removed one stays out).
+  "resident". They count toward `MAX_BOTS` and leave 2 slots of it to the players' own bots (`RESIDENT_RESERVE`); with
+  no room a resident waits for a slot. One whose socket closed rejoins after 30 s (`RESIDENT_REJOIN`).
+- **Names:** a name a player has taken: the resident joins as "Pip 2", keeping Pip's personality (`b.personaName`,
+  which a rename and a respawn keep too).
+- **Shows:** while a director show is filmed they all leave (as the Named do), and come back after it.
+- **Admin:** removing one (a row's remove, or "remove all"; like any server bot, an access-3 player may dismiss one
+  too) keeps it out for `RESIDENT_AWAY` (30 min), then it comes back. "Respawn as…" keeps it a resident (tracked by
+  its bid). `GET /api/admin/bots` carries `residents` (who is in, and how long a removed one stays out).
 - **Switch:** on by default only on Render (`RENDER` is set there, as `server/shutdown.js` uses), so test and local
   servers are as before; `RESIDENTS=<n>` keeps the first n anywhere, `RESIDENTS=0` none. Test: `test/residents.js`.
 

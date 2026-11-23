@@ -140,7 +140,8 @@ export const BotEditMethods = {
     this.bots = this.bots.filter(x => x !== e);
     const view = this.start([cls], [p.name], keep, e.team, e.bid)[0];
     const ne = this.bots.find(x => x.bid === e.bid && x.b !== b);
-    Object.assign(ne, { partied: e.partied, carry, look: e.look, creator: e.creator, allow: e.allow, persona: e.persona, namedArch: e.namedArch }); // (its look goes back on in upkeep)
+    Object.assign(ne, { partied: e.partied, carry, look: e.look, creator: e.creator, allow: e.allow, persona: e.persona, namedArch: e.namedArch, resident: e.resident }); // (its look goes back on in upkeep; a resident stays one: server/residents.js finds it by bid)
+    if (b.personaName) { ne.b.personaName = b.personaName; if (!e.persona) ne.b.setPersona?.(null); } // (a resident's personality is its own name's)
     if (e.persona) { ne.b.setPersona?.(e.persona); if (e.namedArch && ne.b.persona) ne.b.persona = { ...ne.b.persona, noVoice: true }; } // an admin's pick, or a Named's own
     this.bots.splice(this.bots.indexOf(ne), 1); this.bots.splice(Math.max(0, i), 0, ne); // same place in the list
     return view;

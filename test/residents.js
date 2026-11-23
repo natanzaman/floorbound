@@ -16,7 +16,7 @@ import WebSocket from 'ws';
 import { Game } from '../server/game.js';
 import { BotManager } from '../server/botmanager.js';
 import { Residents } from '../server/residents.js';
-import { RESIDENTS, RESIDENT_GRACE, RESIDENT_AWAY, residentCount, residentLevel } from '../shared/residents.js';
+import { RESIDENTS, RESIDENT_GRACE, RESIDENT_AWAY, RESIDENT_REJOIN, RESIDENT_RESERVE, residentCount, residentLevel } from '../shared/residents.js';
 import { rollPersonality } from '../shared/bots/personality.js';
 import { canControlBot } from '../shared/accesslevels.js';
 import { floorOf, WAYPOINTS } from '../shared/floor2.js';
@@ -47,13 +47,13 @@ ok(new Set(RESIDENTS.map(r => r.cls)).size === 6, 'six different classes');
   const mgr = new BotManager(g, { url: 'ws://127.0.0.1:9/ws', max: 30 });
   clearInterval(mgr.timer);
   const starts = [];
-  mgr.start = function (roles, names, opts) { // a bot with no socket (as test/freebots.js)
+  mgr.start = function (roles, names, opts, team = 0, bidArg = 0) { // a bot with no socket (as test/freebots.js)
     starts.push(opts);
     this.joining = true;
     let p;
     try { p = g.addPlayer({ readyState: 1, send() {} }, names[0], roles[0]); } finally { this.joining = false; }
     p.bot = true; p.lvl = opts.lvl || 1; g.recompute(p); p.hp = p.maxHp;
-    const e = { bid: this.nextBid++, behaviour: opts.behaviour, follow: '', lvl: opts.lvl, at: Date.now(), creator: { name: 'x' }, allow: ['1'], b: { id: p.id, name: p.name, cls: p.cls, closed: false, skill: opts.skill } };
+    const e = { bid: bidArg || this.nextBid++, behaviour: opts.behaviour, follow: '', lvl: opts.lvl, at: Date.now(), creator: { name: 'x' }, allow: ['1'], b: { id: p.id, name: p.name, cls: p.cls, closed: false, skill: opts.skill, setPersona(id) { this.persona = rollPersonality(this.personaName || this.name, id || null); } } };
     e.group = { drop: b => { b.closed = true; g.removePlayer(p); } };
     this.bots.push(e);
     return [{ bid: e.bid }];
@@ -101,18 +101,55 @@ ok(new Set(RESIDENTS.map(r => r.cls)).size === 6, 'six different classes');
   tick(6);
   ok(ins().length === 6, 'and all back after it');
 
-  // a closed socket rejoins
+  // a closed socket rejoins, after a short wait (a join that keeps failing does not spin)
   const gid = R.list.find(st => st.def.name === 'Gideon').e;
   gid.b.closed = true;
   tick(2);
+  ok(!R.list.find(st => st.def.name === 'Gideon').e && R.status().find(s => s.name === 'Gideon').away > 0, `a resident whose socket closed waits (${RESIDENT_REJOIN} s)`);
+  tick(1, RESIDENT_REJOIN);
   const g2 = R.list.find(st => st.def.name === 'Gideon').e;
-  ok(g2 && g2 !== gid && !g2.b.closed, 'a resident whose socket closed rejoins');
+  ok(g2 && g2 !== gid && !g2.b.closed, 'then rejoins');
 
-  // the bot limit holds them back
+  // an admin's "Respawn as…": same bid, a new entry (server/botedit.js): still the resident, gear on again, no copy
+  {
+    const st = R.list.find(x => x.def.name === 'Talia'), old = st.e, bid = old.bid, op = mgr.livePlayer(old);
+    const nb = mgr.bots.length;
+    old.group.drop(old.b); mgr.bots = mgr.bots.filter(x => x !== old);
+    mgr.start(['lancer'], ['Talia'], { lvl: 3, behaviour: 'own' }, 0, bid);
+    const ne = mgr.bots.find(x => x.bid === bid);
+    Object.assign(ne, { creator: old.creator, allow: old.allow, resident: old.resident });
+    tick(2);
+    const np = mgr.livePlayer(ne);
+    ok(st.e === ne && mgr.bots.length === nb && R.list.filter(x => x.e).length === 6, 'a respawned resident stays the resident (found by its bid): no second Talia');
+    ok(np && np.inv.eq.weapon && op !== np, 'and gets its premade gear again');
+    ne.b.personaName = 'Pip'; ne.b.name = 'Renamed'; ne.b.setPersona(null);
+    ok(ne.b.persona.id === 'hothead', 'a rename keeps a resident\'s own personality (rolled from personaName)');
+  }
+
+  // one bad settle never holds up the rest
+  {
+    mgr.removeAll(); tick(1, RESIDENT_AWAY + 1);
+    const real = mgr.livePlayer; let threw = 0;
+    mgr.livePlayer = e => { if (e.resident === 'Marlo') { threw++; throw new Error('boom'); } return real.call(mgr, e); };
+    const err = console.error; console.error = () => {};
+    tick(7);
+    console.error = err; mgr.livePlayer = real;
+    ok(threw === 1 && ins().length === 6, 'a settle that throws is not retried, and the others still join');
+  }
+
+  // a director show parks them (as the Named)
+  g.director = { running: true };
+  tick(1);
+  ok(ins().length === 0 && mgr.count() === 0, 'a show is being filmed: they all leave');
+  g.director = null;
+  tick(7);
+  ok(ins().length === 6, 'and come back after it');
+
+  // the bot limit holds them back, and leaves the players' bots some room
   mgr.removeAll(); tick(1, RESIDENT_AWAY + 1);
-  mgr.max = 2;
+  mgr.max = 4;
   tick(6);
-  ok(ins().length === 2, 'the bot limit reached: the rest wait for a free slot');
+  ok(ins().length === 4 - RESIDENT_RESERVE, `the bot limit: they leave ${RESIDENT_RESERVE} slots to the players' own bots, the rest wait`);
   mgr.max = 30; tick(6);
   ok(ins().length === 6, 'and join when there is room');
 

@@ -120,7 +120,7 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender, re
   function botRow(b, full) {
     const c = hex(b.cls), pc = b.maxHp ? Math.round((b.hp / b.maxHp) * 100) : 0;
     const tags = `${b.myParty ? '<span class="tag">Party</span>' : ''}${b.dead ? '<span class="tag dead">Down</span>' : ''}${b.floor === 2 ? '<span class="tag f2">F2</span>' : ''}`;
-    const who = b.mine ? '' : b.owner ? `<span class="pb-own">${esc(b.owner)}'s</span>` : '<span class="pb-own adm">server bot</span>';
+    const who = b.mine ? '' : b.owner ? `<span class="pb-own">${esc(b.owner)}'s</span>` : b.resident ? '<span class="pb-own adm" title="Lives here: one of the server\'s own bots, living its own day. Anyone may invite it.">resident</span>' : '<span class="pb-own adm">server bot</span>';
     const party = !b.myParty && b.party?.length ? ` · party: ${esc(b.party.slice(0, 3).join(', '))}${b.party.length > 3 ? '…' : ''}` : '';
     let html = `<div class="pb-bot ${b.mine ? 'mine' : ''} ${full ? '' : 'compact'}" data-bid="${b.bid}" style="--c:${c}">
       <div class="pb-top"><span class="pb-dot"></span><b class="nm">${esc(b.name)}</b><small>Lv ${b.lvl} ${esc(clsName(b.cls))}</small>${tags}${who}</div>

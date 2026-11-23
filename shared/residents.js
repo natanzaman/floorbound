@@ -19,6 +19,8 @@ export const RESIDENTS = [
 
 export const RESIDENT_GRACE = 60;   // s with no player online before they leave the world (a quick reconnect keeps them)
 export const RESIDENT_AWAY = 1800;  // s a resident an admin removed stays out before it comes back
+export const RESIDENT_REJOIN = 30;  // s before one whose socket closed joins again
+export const RESIDENT_RESERVE = 2;  // MAX_BOTS slots residents leave free for the players' own bots
 
 // How many the server keeps: RESIDENTS if given (0 = none), else all six on Render and none elsewhere.
 export function residentCount(env = process.env) {
@@ -29,5 +31,3 @@ export function residentCount(env = process.env) {
 
 // A resident's level from the top online player's: spread below it, at least 1.
 export const residentLevel = (top, share) => Math.max(1, Math.round((top || 1) * share));
-
-export const isResidentName = n => RESIDENTS.some(r => r.name.toLowerCase() === String(n || '').toLowerCase());
