@@ -2,7 +2,7 @@
 // Shared by the bot brain (shared/bots/brain.js), the server (validates `botcmd`) and the client's command wheel.
 
 import { VOICE, chatScale } from './personality.js'; // chattiness and voice (docs/briefs/personalities.md)
-import { parsePlan, isStepWord } from './plan.js'; // plans: several steps in one line (docs/briefs/bot-plans.md)
+import { parsePlan, isStepWord, isSayWord } from './plan.js'; // plans: several steps in one line (docs/briefs/bot-plans.md; no bot code in there)
 
 // Command ids, in command-wheel order. `wheel: false` ones are chat / menu only.
 export const BOT_COMMANDS = {
@@ -52,22 +52,33 @@ const cleanName = s => String(s || '').replace(/[^\w \-.]/g, '').replace(/\s+/g,
 
 // Parse a chat line. Returns null when it isn't a /b line (ordinary chat: never an order), else one of
 // { help: true } | { cmd, name } (name '' = every bot in your party) | { plan: { steps, loops }, name } | { error }.
-export function parseBotChat(text) {
+// names: the names of the bots in the speaker's own party, when the caller knows them (a list, or a function giving
+// one): a bot called Bow or Hunt is then a name at the start of the line, not a step. (Never every bot on the server:
+// somebody else's bot called Stay would turn everyone's "/b stay here" into an order for it. A name that starts
+// with one of the old order words (Stay, Farm, Hunt) needs the colon form, as it always did.)
+export function parseBotChat(text, names = null) {
   const m = String(text || '').trim().match(PREFIX);
   if (!m) return null;
   const rest = m[1].trim();
   if (!rest || /^(help|\?|h)$/i.test(rest)) return { help: true };
   let name = '', order = rest;
-  const colon = /^(say|tell|shout)\b/i.test(rest) ? -1 : rest.indexOf(':'); // (a line to say may hold a colon)
-  if (colon >= 0) { name = rest.slice(0, colon); order = rest.slice(colon + 1); }
-  else { // "/b Lyra heal": the words before the first order word are a name
-    const words = rest.split(/\s+/);
-    const i = words.findIndex(w => ALIAS.has(word(w)) || isStepWord(w));
-    if (i > 0) { name = words.slice(0, i).join(' '); order = words.slice(i).join(' '); }
+  const orderWord = w => ALIAS.has(word(w)) || isStepWord(w);
+  const at = rest.indexOf(':'), before = at >= 0 ? rest.slice(0, at) : '';
+  const colon = at >= 0 && !/[;>→]/.test(before) && !before.split(/\s+/).some(w => isSayWord(w) || word(w) === 'then') ? at : -1; // (a line to say may hold a colon: "go smith then say hi: there")
+  if (colon >= 0) { name = before; order = rest.slice(colon + 1); }
+  else {
+    const low = rest.toLowerCase(), known = typeof names === 'function' ? names() : names;
+    const own = (known || []).map(n => String(n).toLowerCase()).sort((a, b) => b.length - a.length).find(n => n && !ALIAS.has(word(n.split(' ')[0])) && low.startsWith(`${n} `) && orderWord(rest.slice(n.length).trim().split(/\s+/)[0] || ''));
+    if (own) { name = rest.slice(0, own.length); order = rest.slice(own.length); } // a bot by its name, whatever the name is
+    else { // "/b Lyra heal": the words before the first order word are a name
+      const words = rest.split(/\s+/);
+      const i = words.findIndex(orderWord);
+      if (i > 0) { name = words.slice(0, i).join(' '); order = words.slice(i).join(' '); }
+    }
   }
   const cmd = ALIAS.get(word(order.trim().split(/\s+/)[0] || ''));
   const plan = parsePlan(order); // several steps, or one with arguments ("farm 10 boars"); a bare order word stays an order
-  if (plan && !(plan.bare && cmd)) {
+  if (plan && !((plan.bare || plan.soft) && cmd)) { // (bare, soft: nothing in it for a plan, so the old order word wins)
     name = cleanName(name);
     if (plan.error) return { error: plan.error };
     return { plan: { steps: plan.steps, loops: plan.loops }, name: ALL_WORDS.has(name.toLowerCase()) ? '' : name };
@@ -77,6 +88,11 @@ export function parseBotChat(text) {
   if (ALL_WORDS.has(name.toLowerCase())) name = '';
   return { cmd, name };
 }
+
+// What a bot's own socket may never send (server/index.js): a slash command in chat (/b, /duel, /g ...; the four poses
+// are fine) or a bot order. Bots pass every who-may-order check, so a line put in a bot's mouth (a plan's `say` step,
+// the AI mind's reply) must not be able to order other bots.
+export const botMayNotSend = msg => msg?.type === 'botcmd' || (msg?.type === 'chat' && /^\s*[/\\]/.test(String(msg.text ?? '')) && !/^\s*\/(kneel|sit|bow|stand)\s*$/i.test(String(msg.text)));
 
 // The /b help listing (system lines for the player who asked).
 export function botHelp() {
@@ -157,7 +173,9 @@ export function say(b, key, vars = {}, { p = 1, cd = 20, force = false, text = n
     s.cd[key] = b.t + cd;
   }
   s.last = b.t;
-  b.send({ type: 'chat', text: (text ?? voiced(b, key, { name: b.name, ...vars })).slice(0, 200), ch: ch || (b.party ? 'p' : 's') });
+  const out = String(text ?? voiced(b, key, { name: b.name, ...vars })).replace(/^[\s/\\]+/, '').slice(0, 200); // never a slash command: a line may carry a player's or a model's words
+  if (!out) return false;
+  b.send({ type: 'chat', text: out, ch: ch || (b.party ? 'p' : 's') });
   b.lastSaid = { key, t: b.t };
   return true;
 }

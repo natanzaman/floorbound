@@ -10,6 +10,7 @@ import * as track from './track.js';
 import * as hall from './hall.js';
 import * as admin from './admin.js';
 import { BotManager } from './botmanager.js';
+import { botMayNotSend } from '../shared/bots/social.js';
 import { makeLocalHub, deepFreeze } from './localws.js'; // in-process sockets for the server's own bots
 import { PlayerBots } from './playerbots.js';
 import { drain } from './shutdown.js';
@@ -185,6 +186,7 @@ function onConnection(ws) {
     }
     if (msg.type === 'hall') return ws.send(JSON.stringify(hall.message()));
     if (msg.type === 'pbot') return void playerBots.handle(player, msg).catch(e => console.error('pbot', e));
+    if (player.bot && botMayNotSend(msg)) return; // a bot's line may carry a player's or a model's words: never a command (shared/bots/social.js)
     game.handle(player, msg);
   });
 

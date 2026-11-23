@@ -19,7 +19,7 @@ Start every session by reading `docs/NEXT.md` (what to do next, local setup), th
 - **Shared** (`shared/`): data and tuning, item, talent, style, mastery and twist tables, and the bot code.
   - `shared/bots/`: brain, motor, registry, social, classes, style.
   - `shared/botskill.js`: capability levels 1–5.
-  - `shared/bots/plan.js`: plans, a list of steps a bot runs one after another (`/b farm 10 boars then go smith then come`, the AI mind's `plan`, `b.setPlan`); every step drives `b.cmd`. Plan: `docs/briefs/bot-plans.md`.
+  - `shared/bots/plan.js` (menu, parsing, cleaning; no bot code, the client loads it) + `shared/bots/planrun.js` (the runner): plans, a list of steps a bot runs one after another (`/b farm 10 boars then go smith then come`, the AI mind's `plan`, `b.setPlan`); every step drives `b.cmd`. A bot's own socket may never send a slash command or a bot order (`botMayNotSend`). Plan: `docs/briefs/bot-plans.md`.
   - `shared/bots/personality.js` + `shared/bots/idle.js`: personalities (archetype + traits rolled from the name; idle habits); `BOT_PERSONA=0` = neutral, the old behaviour. Plan: `docs/briefs/personalities.md`.
 - **Persistence:** Postgres (Neon in production). Characters carry JSONB columns `inv`, `stats`, `mastery`, `talents`, `life`, `town`, `path` (the Academy and subclass) (plus the `guilds`/`guild_members` tables and the server-wide `towns` table). Migrations live in `server/db.js`. Without `DATABASE_URL` the game runs in anonymous mode.
 - **Deploy:** Render free plan, service `floorbound` (Docker), with auto-deploy on every push to `main`.

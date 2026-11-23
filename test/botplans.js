@@ -13,8 +13,9 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { createBot } from '../shared/bots/brain.js';
 import { registerBotHook } from '../shared/bots/registry.js';
-import { parseBotChat, botHelp, BOT_COMMANDS } from '../shared/bots/social.js';
-import { STEPS, STEP_IDS, PLACES, PLAN_STEPS_MAX, placeOf, mobKind, parsePlan, cleanPlan, planText, planProgress, planHelp, setPlan, endPlan, planTurn, planEvent } from '../shared/bots/plan.js';
+import { parseBotChat, botHelp, BOT_COMMANDS, botMayNotSend, say as botSay } from '../shared/bots/social.js';
+import { STEPS, STEP_IDS, PLACES, PLAN_STEPS_MAX, placeOf, mobKind, cleanPlan, planText, planProgress, planHelp } from '../shared/bots/plan.js';
+import { setPlan, endPlan, planTurn, planEvent, planNote } from '../shared/bots/planrun.js';
 import { sanitizeIntent, INTENT_SCHEMA } from '../server/ai/intent.js';
 import { Minds } from '../server/ai/mind.js';
 import { readConfig } from '../server/ai/config.js';
@@ -39,17 +40,35 @@ const p2 = P('/b Lyra kill 5 wolves; guard here 2m; sit 10; repeat 2');
 ok(p2?.name === 'Lyra' && J(p2.plan.steps) === J([{ k: 'farm', mob: 'wolf', n: 5 }, { k: 'guard', place: 'here', secs: 120 }, { k: 'emote', pose: 'sit', secs: 10 }]) && p2.plan.loops === 2, 'a name, ";" between steps, minutes, a pose and "repeat 2"');
 ok(P('/b farm boars')?.plan?.steps[0].mob === 'boar' && P('/b all: farm boars').name === '' && P('/b wait 30 then come')?.plan?.steps[0].secs === 30 && P('/b guard')?.plan?.steps[0].place === 'spot', 'one step with an argument is a plan; "all:" is every bot; a bare guard holds this spot');
 ok(J(P('/b say hi: there then hop')?.plan?.steps) === J([{ k: 'say', text: 'hi: there' }, { k: 'emote', pose: 'hop', secs: 0 }]), 'a line to say may hold a colon');
-ok(/monster/.test(P('/b farm blorps')?.error || '') && /place/.test(P('/b go to the moon')?.error || '') && /Go where/.test(P('/b go')?.error || '') && /1 to 4/.test(P('/b skill 9')?.error || ''), 'an unknown monster, place or skill slot is an error for the player, not a guess');
+ok(/monster/.test(P('/b farm 3 blorps')?.error || '') && /place/.test(P('/b go to the moon')?.error || '') && /Go where/.test(P('/b go')?.error || '') && /1 to 4/.test(P('/b skill 9')?.error || ''), 'an unknown monster, place or skill slot is an error for the player, not a guess');
 ok(J(P('/b hunt dire wolves 3 > head to the raid gate > bow')?.plan?.steps.map(s => s.mob || s.place || s.pose)) === J(['wolf', 'gate', 'bow']) && P('/b skill 2 then use skill 3')?.plan?.steps[1].slot === 3, '">" between steps, names in full, "use skill 3"');
 ok(botHelp().length === Object.keys(BOT_COMMANDS).length + 1 && planHelp().length === 3 && planHelp().join(' ').includes('smith'), 'help: the orders as before, plus three plan lines');
+// the old single orders keep their meaning (review: parsing regressions)
+ok(P('/b kill it')?.cmd === 'attack' && P('/b kill my target')?.cmd === 'attack' && P('/b kill the boar')?.cmd === 'attack' && P('/b farm here')?.cmd === 'farm' && P('/b grind exp')?.cmd === 'farm' && P('/b farm blorps')?.cmd === 'farm' && P('/b come here')?.cmd === 'come' && P('/b attack 3')?.cmd === 'attack' && P('/b farm mobs')?.cmd === 'farm' && P('/b grind monsters')?.cmd === 'farm' && P('/b farm 5 mobs')?.plan?.steps[0].n === 5 && P('/b stay here', [])?.cmd === 'stay', '"kill it", "kill the boar", "farm here", "grind exp": the plain order they always were (a count makes "kill" a hunt)');
+ok(P('/b go floor 2')?.plan?.steps[0].place === 'camp2' && J(P('/b guard floor 2')?.plan?.steps[0]) === J({ k: 'guard', place: 'camp2', secs: 0 }) && P('/b guard floor 2 60')?.plan?.steps[0].secs === 60 && P('/b guard here 60')?.plan?.steps[0].secs === 60, '"go floor 2" is a place; a number after a guard\'s place is its time');
+ok(J(P('/b go smith and come')?.plan?.steps.map(s => s.k)) === J(['goto', 'come']) && J(P('/b farm 10 boars, then go smith and then come')?.plan?.steps.map(s => s.k)) === J(['farm', 'goto', 'come']) && P('/b wait 1m30s then come')?.plan?.steps[0].secs === 90, '"and" before a step word splits too; "1m30s" is 90 s');
+ok(J(P('/b go smith then say hi: there')?.plan?.steps) === J([{ k: 'goto', place: 'smith' }, { k: 'say', text: 'hi: there' }]) && P('/b say see you then')?.plan?.steps[0].text === 'see you then' && P('/b say hi and wave then hop')?.plan?.steps[0].text === 'hi and wave' && P('/b Lyra: say hi: there')?.name === 'Lyra', 'a colon or a "then" inside a line to say stays in the line');
+ok(P('/b farm 5 wardens hounds')?.plan?.steps[0].mob === 'hound' && P("/b hunt will-o'-wisps 2")?.plan?.steps[0].mob === 'wisp', 'monster names with an apostrophe or hyphens');
+ok(P('/b Hop follow', ['Hop', 'Rook'])?.name === 'Hop' && P('/b Hop follow', () => ['Hop'])?.cmd === 'follow' && P('/b hop', ['Hop'])?.plan?.steps[0].pose === 'hop' && P('/b Bow 2 farm 5 boars', ['Bow 2'])?.name === 'Bow 2' && J(P('/b stay here', ['Stay'])) === J({ cmd: 'stay', name: '' }) && P('/b attack boss', ['Attack'])?.cmd === 'attack' && P('/b Stay: come', ['Stay'])?.name === 'Stay', 'a bot named like a step (Hop, Bow 2) is a name when the server knows its party\'s bots; one named like an old order word (Stay) never changes what the order means');
+ok(/isn't a bot order/.test(P('/b constructor')?.error || '') && /place/.test(P('/b go __proto__')?.error || '') && P('/b say / / /b Zed: boss')?.plan?.steps[0].text === 'b Zed: boss', 'prototype keys are not orders or places; a line to say never starts with a slash');
 
 // ---------- 2. cleaning ----------
 ok(placeOf('the smith') === 'smith' && placeOf('to the raid gate') === 'gate' && placeOf('Town of Beginnings') === 'well' && placeOf('me') === 'here' && placeOf('life hall') === 'lifehall' && placeOf('floor 2') === 'camp2' && placeOf('nowhere') === '', 'places by loose name');
-ok(mobKind('boars') === 'boar' && mobKind('Dire Wolves') === 'wolf' && mobKind('alpha wolf') === 'alpha' && mobKind('harpies') === 'harpy' && mobKind('warden') === '' && mobKind('vines') === '' && mobKind('training dummy') === '', 'monsters by loose name; never a boss, a prop or an Academy dummy');
+ok(mobKind('boars') === 'boar' && mobKind('Dire Wolves') === 'wolf' && mobKind('alpha wolf') === 'alpha' && mobKind('harpies') === 'harpy' && mobKind('warden') === '' && mobKind('vines') === '' && mobKind('training dummy') === '' && mobKind('constructor') === '' && mobKind('mire') === '' && mobKind('ironhide') === 'ironboar', 'monsters by loose name; never a boss, a prop or an Academy dummy; a first word only when one monster has it');
 const dirty = cleanPlan([{ do: 'farm', what: 'boars', n: 999 }, { do: 'craft', what: 'sword', n: 1 }, { do: 'goto', what: 'the smith', n: 0 }, { do: 'say', what: '/b leave', n: 0 }, { do: 'say', what: 'see http://x.com', n: 0 }, { do: 'emote', what: 'backflip', n: 0 }, { do: 'wait', what: '', n: 99999 }, { do: 'skill', what: '', n: 7 }, { do: 'farm', what: 'the horned warden', n: 1 }]);
 ok(J(dirty.steps) === J([{ k: 'farm', mob: 'boar', n: 50 }, { k: 'goto', place: 'smith' }, { k: 'say', text: 'b leave' }, { k: 'wait', secs: 600 }]) && dirty.errors.length === 5, 'cleanPlan: numbers clamped; craft, a link, an unknown pose, slot 7 and a boss are dropped; a say step is never a slash command');
 ok(cleanPlan(Array.from({ length: 30 }, () => ({ k: 'wait', n: 1 }))).steps.length === PLAN_STEPS_MAX && cleanPlan({ steps: [{ k: 'come' }], loops: 99 }).loops === 5 && cleanPlan([]) === null && cleanPlan('farm') === null && cleanPlan([{ k: 'x' }]).steps.length === 0, `at most ${PLAN_STEPS_MAX} steps and 5 repeats; nothing usable is no plan`);
 ok(planText({ steps: p1.plan.steps, loops: 1 }) === 'Plan: 1) 10 Forest Boars 2) go to the smith 3) come back to you' && planText({ steps: [{ k: 'wait', secs: 120 }], loops: 3 }) === 'Plan: wait 2 min (x3)', 'the plan in words');
+ok(planText({ steps: [{ k: 'farm', mob: 'wolf', n: 3 }, { k: 'farm', mob: 'harpy', n: 2 }, { k: 'goto', place: 'smith' }], loops: 1 }) === 'Plan: 1) 3 Dire Wolves 2) 2 Gale Harpies 3) go to the smith and wait there' && planText({ steps: [{ k: 'goto', place: 'well' }, { k: 'wait', secs: 0 }], loops: 1 }) === 'Plan: 1) go to the well 2) wait there', 'plurals; a last goto or an open wait is where the bot stays');
+{
+  const hostile = cleanPlan([{ k: 'constructor' }, { k: '__proto__' }, { k: 'goto', what: 'constructor' }, { k: 'goto', what: 'toString' }, { do: 'say', what: ' / / /b leave' }, { do: 'say', what: '\\ /duel x' }, { do: 'say', what: '//' }]);
+  ok(J(hostile.steps) === J([{ k: 'say', text: 'b leave' }, { k: 'say', text: 'duel x' }]) && hostile.errors.length === 5, 'cleanPlan: prototype keys are no steps or places; however many slashes, a say step never starts with one');
+  ok(J(cleanPlan([{ k: 'farm', what: 'boar', n: 2 }, { k: 'craft' }, { k: 'come' }], { strict: true }).steps) === J([{ k: 'farm', mob: 'boar', n: 2 }]) && cleanPlan([{ k: 'craft' }, { k: 'come' }], { strict: true }).steps.length === 0, 'strict (the AI mind): a plan stops at its first unusable step, never a hole in the middle');
+  ok(botMayNotSend({ type: 'chat', text: '/b Zed: boss' }) && botMayNotSend({ type: 'chat', text: '  /duel Nat' }) && botMayNotSend({ type: 'chat', text: '\\b x' }) && botMayNotSend({ type: 'botcmd', cmd: 'boss' }) && !botMayNotSend({ type: 'chat', text: '/sit' }) && !botMayNotSend({ type: 'chat', text: '/stand ' }) && !botMayNotSend({ type: 'chat', text: 'On it!' }) && !botMayNotSend({ type: 'input' }), 'a bot\'s socket may never send a slash command (but a pose) or a bot order');
+  const fb = { me: {}, t: 5, name: 'Rook', party: 7, sent: [] }; fb.send = m => fb.sent.push(m);
+  botSay(fb, 'mind', {}, { force: true, text: ' / /b Zed: boss' }); botSay(fb, 'mind', {}, { force: true, text: '//' });
+  ok(fb.sent.length === 1 && fb.sent[0].text === 'b Zed: boss', 'say(): a line never goes out starting with a slash (the AI mind\'s words too)');
+}
 ok(STEP_IDS.every(k => STEPS[k].label) && Object.values(PLACES).every(p => p.words.length && p.name), 'every step and place has a name');
 
 // ---------- 3. the runner on a stub bot ----------
@@ -67,7 +86,7 @@ const api = {
   },
 };
 const PV = b => ({ all: b.players });
-const turn = (b, dt = 0.5) => { b.t += dt; planTurn(b, PV(b), api); };
+const turn = (b, dt = 0.5) => { for (let left = dt; left > 1e-9; left -= 0.5) { b.t += Math.min(0.5, left); planTurn(b, PV(b), api); } }; // (in think-sized steps: a long gap with no turn is a pause)
 const walkCmd = b => { if (b.cmd?.k === 'stay') { b.x = b.cmd.x; b.z = b.cmd.z + (b.cmd.stop || 0); } }; // (the brain walks to its order's spot)
 {
   const b = stub();
@@ -106,7 +125,7 @@ const walkCmd = b => { if (b.cmd?.k === 'stay') { b.x = b.cmd.x; b.z = b.cmd.z +
   setPlan(b, [{ k: 'farm', what: 'boar', n: 2 }, { k: 'attack' }, { k: 'follow' }], { by: 1, byName: 'Natan', group: [2, 3] }, api);
   turn(b);
   ok(b.cmd?.k === 'farm' && b.cmd.mob === 'boar' && J(b.cmd.group) === '[2,3]' && b.plan.all, 'farm: the farm order for the group, with the monster kind');
-  const hit = (kind, by = 2) => Object.assign(new Map([[by, { first: 0, last: 0 }]]), { kind });
+  const hit = (kind, by = 2) => Object.assign(new Map([[by, { first: 100, last: 100 }]]), { kind });
   const mate = (bb, id) => id === 3;
   planEvent(b, { t: 'die', id: 50 }, { hits: hit('wolf'), mateOf: mate }); planEvent(b, { t: 'die', id: 51 }, { hits: hit('boar', 9), mateOf: mate }); planEvent(b, { t: 'die', id: 52 }, { hits: null, mateOf: mate });
   ok(b.plan.st.kills === 0, 'a wolf, a stranger\'s kill and an unseen kill don\'t count');
@@ -121,7 +140,7 @@ const walkCmd = b => { if (b.cmd?.k === 'stay') { b.x = b.cmd.x; b.z = b.cmd.z +
   ok(b.plan?.i === 1 && b.said.includes('noTarget'), 'attack with nothing locked: says so and moves on');
   endPlan(b);
   setPlan(b, [{ k: 'farm', what: 'harpy', n: 3 }], { by: 1 }, api); turn(b); turn(b, 91);
-  ok(!b.plan && /no Gale Harpys? on this floor/.test(b.said.at(-1)), 'farming a monster that isn\'t on this floor stops after a while');
+  ok(!b.plan && /no Gale Harpies on this floor/.test(b.said.at(-1)), 'farming a monster that isn\'t on this floor stops after a while');
 }
 {
   const b = stub();
@@ -138,9 +157,9 @@ const walkCmd = b => { if (b.cmd?.k === 'stay') { b.x = b.cmd.x; b.z = b.cmd.z +
   walkCmd(b); turn(b);
   const prev = b.cmd; b.cmd = { k: 'stay', defend: 1, prev }; // a raid on the town (brain.js 'defend')
   turn(b, 0.05); turn(b, 100); turn(b, 100);
-  ok(b.plan?.i === 0 && b.plan.pause != null, 'a town raid pauses the plan');
+  ok(b.plan?.i === 0 && b.plan.st.at != null, 'a town raid pauses the plan');
   b.cmd = prev; turn(b, 1);
-  ok(b.plan?.i === 0 && b.plan.pause == null, 'released: the guard goes on, its clock not run down by the raid');
+  ok(b.plan?.i === 0 && b.t - b.plan.st.at < 3, 'released: the guard goes on, its clock not run down by the raid');
   turn(b, 31);
   ok(b.plan?.i === 1 && b.cmd.tend && b.cmd.x === GARDEN.x + 4, 'then tends the garden');
   b.players = [{ id: 2, x: 0, z: 0 }]; turn(b);
@@ -149,6 +168,59 @@ const walkCmd = b => { if (b.cmd?.k === 'stay') { b.x = b.cmd.x; b.z = b.cmd.z +
   ok(!b.plan && b.sent.some(m => m.type === 'skill' && m.slot === 2), 'skill 2: pressed once (a plan from code, by nobody)');
   const s = stub({ script: {} });
   ok(setPlan(s, [{ k: 'come' }], { by: 1 }, api) === null && !s.plan, 'a scripted actor never takes a plan');
+}
+{ // review fixes: where a plan ends, pauses, group plans, what counts as a kill
+  let b = stub();
+  setPlan(b, [{ k: 'goto', what: 'smith' }], { by: 1, byName: 'Natan' }, api); turn(b);
+  ok(b.said[0] === 'Plan: go to the smith and wait there.' && b.cmd?.plan, 'a single goto: the plan says it will wait there');
+  walkCmd(b); turn(b);
+  ok(!b.plan && b.cmd?.k === 'stay' && b.cmd.post === 1 && !b.cmd.plan && b.cmd.x === SMITH.x && b.said.at(-1) === "Plan done, Natan. I'll wait here.", 'goto as the last step: the plan ends and the bot holds there (its order stays, marked as a post)');
+  b = stub();
+  setPlan(b, [{ k: 'wait', n: 2 }, { k: 'wait' }], { by: 1, byName: 'Natan' }, api); turn(b, 0.1); turn(b, 2.5);
+  ok(!b.plan && b.cmd?.k === 'stay' && b.cmd.post === 1, 'an open wait as the last step: stays waiting');
+  b = stub();
+  setPlan(b, [{ k: 'wait', n: 10 }, { k: 'wait', n: 50 }], { by: 1 }, api); turn(b, 0.1); turn(b, 4);
+  b.dead = true; turn(b, 60); b.dead = false; turn(b, 3);
+  ok(b.plan?.i === 0, 'dead for a minute: the wait did not run down meanwhile');
+  b.t += 300; turn(b, 2); // (downed, in a boss arena's fall, encased: no turn at all for a while)
+  ok(b.plan?.i === 0 && b.t - b.plan.t0 < 12, 'no turn for five minutes: every clock waited (the 30 minute one too)');
+  turn(b, 3);
+  ok(b.plan?.i === 1, 'and then it runs out as it should');
+  // a group: one bot speaks
+  const g = stub({ id: 3, players: [{ id: 1, x: 3, z: 5 }, { id: 2, x: 0, z: 5 }, { id: 3, x: 0, z: 5 }] });
+  setPlan(g, [{ k: 'say', what: 'hello all' }, { k: 'attack' }, { k: 'goto', what: 'camp2' }], { by: 1, byName: 'Natan', group: [2, 3] }, api);
+  turn(g, 0.1); turn(g, 2);
+  ok(g.plan === null && !g.said.length && g.planNote?.text === 'Plan stopped: Floor 2 is sealed for me.', 'not the speaker of its group: says nothing for the plan, the say step or a missing target; a stop is noted for later');
+  g.t += 4; planNote(g, api);
+  ok(g.said.at(-1) === 'Plan stopped: Floor 2 is sealed for me.' && !g.planNote, 'nobody else said why: it does, a moment later');
+  setPlan(g, [{ k: 'goto', what: 'camp2' }], { by: 1, group: [2, 3] }, api); turn(g, 0.1);
+  const before = g.said.length; g.partyChatT = g.t + 0.5; g.t += 4; planNote(g, api);
+  ok(g.said.length === before && !g.planNote, 'somebody in the party spoke meanwhile (the speaker, for the same reason): it stays quiet');
+  // kills: what our party hit during the step, whatever the brain's own hit list still holds
+  const f = stub();
+  const mate = (bb, id) => id === 3;
+  setPlan(f, [{ k: 'farm', what: 'boar', n: 3 }, { k: 'wait', n: 5 }], { by: 1 }, api); turn(f);
+  planEvent(f, { t: 'hit', id: 60, by: 3 }, { mob: { type: 'boar' }, mateOf: mate }); planEvent(f, { t: 'die', id: 60, x: 0, z: 9 }, { hits: null, mob: null, mateOf: mate });
+  ok(f.plan.st.kills === 1, 'a boar a partymate hit, forgotten by the brain since (out of sight): still our kill');
+  planEvent(f, { t: 'hit', id: 61, by: 2 }, { mob: undefined, mateOf: mate }); planEvent(f, { t: 'die', id: 61 }, { hits: Object.assign(new Map([[2, {}]]), {}), mob: { type: 'boar' }, mateOf: mate });
+  ok(f.plan.st.kills === 2, 'hit and dead in one snapshot: the kind comes from the snapshot before');
+  planEvent(f, { t: 'hit', id: 62, by: 2, prop: 1 }, { mob: { type: 'boar' }, mateOf: mate }); planEvent(f, { t: 'die', id: 62 }, { hits: null, mateOf: mate });
+  planEvent(f, { t: 'hit', id: 63, by: 9 }, { mob: { type: 'boar' }, mateOf: mate }); planEvent(f, { t: 'die', id: 63 }, { hits: null, mateOf: mate });
+  const prev = f.cmd; f.cmd = { k: 'stay', defend: 1, prev };
+  planEvent(f, { t: 'hit', id: 64, by: 2 }, { mob: { type: 'boar' }, mateOf: mate }); planEvent(f, { t: 'die', id: 64 }, { hits: new Map([[2, {}]]), mob: { type: 'boar' }, mateOf: mate });
+  f.cmd = prev;
+  ok(f.plan.st.kills === 2, 'a prop, a stranger\'s boar and a kill made defending the town in a raid do not count');
+  planEvent(f, { t: 'hit', id: 65, by: 2 }, { mob: { type: 'boar' }, mateOf: mate }); f.t += 40; f.plan.seen = f.t;
+  planEvent(f, { t: 'die', id: 65 }, { hits: Object.assign(new Map([[2, { first: f.t - 40, last: f.t - 40 }]]), { kind: 'boar' }), mateOf: mate });
+  ok(f.plan.st.kills === 2, 'a boar we tapped 40 s ago that somebody else finished is not our kill');
+  f.cmd = { k: 'stay', defend: 1, prev }; endPlan(f);
+  ok(!f.plan && f.cmd.defend && f.cmd.prev === null, 'a plan that ends during a raid: the raid no longer goes back to its step\'s order');
+  const bs = stub();
+  setPlan(bs, [{ k: 'boss' }, { k: 'wait', n: 5 }], { by: 1 }, api); turn(bs);
+  planEvent(bs, { t: 'die', id: 70, b: 1, x: 3000, z: 0 }, { hits: null, mateOf: mate }); turn(bs);
+  ok(bs.plan?.i === 0, 'another floor\'s boss dying is not ours');
+  planEvent(bs, { t: 'die', id: 71, b: 1, x: 2, z: 160 }, { hits: null, mateOf: mate }); turn(bs);
+  ok(bs.plan?.i === 1, 'this floor\'s boss dies (whoever the brain saw hit it): the boss step is done');
   const t = stub();
   setPlan(t, [{ k: 'wait', n: 600 }, { k: 'wait', n: 600 }, { k: 'wait', n: 600 }, { k: 'wait', n: 600 }], { by: 1 }, api);
   turn(t, 0.1); turn(t, 601); turn(t, 601); turn(t, 601);
@@ -194,7 +266,9 @@ const planCmd = (plan, more = {}) => ({ t: 'botcmd', by: 1, byName: 'Natan', par
   run(b, 4, { mobs: near });
   ok(b.tgtId === 70, 'guard: fights what comes near the post, not what is far off');
   snap(b, [{ t: 'botcmd', by: 1, byName: 'Natan', party: 7, cmd: 'status' }]);
-  ok(b.plan && /plan step 1\/3/.test(chats(b).at(-1)), 'status: keeps the plan and reports it');
+  ok(b.plan && /\(step 1\/3: guard/.test(chats(b).at(-1)) && !/plan step/.test(chats(b).at(-1)), `status: keeps the plan and reports it once, in the goal (${chats(b).at(-1)})`);
+  snap(b, [{ t: 'botcmd', by: 1, byName: 'Natan', party: 7, cmd: 'attack', tgt: 999 }]);
+  ok(b.plan?.i === 0 && b.cmd?.guard, 'an order that cannot be carried out (attack, nothing locked) leaves the plan alone');
   snap(b, [{ t: 'botcmd', by: 1, byName: 'Natan', party: 7, cmd: 'follow' }]);
   ok(!b.plan && b.cmd?.k === 'follow' && !b.cmd.plan, 'a new order ends the plan');
   snap(b, [planCmd({ steps: [{ k: 'wait', secs: 60 }], loops: 1 })]);
@@ -219,9 +293,8 @@ const planCmd = (plan, more = {}) => ({ t: 'botcmd', by: 1, byName: 'Natan', par
   const field = [mobRow(80, 'boar', b.x + 6, b.z + 6), mobRow(81, 'wolf', b.x + 20, b.z + 30)];
   run(b, 6, { mobs: field });
   ok(b.cmd?.k === 'farm' && b.cmd.mob === 'wolf' && b.tgtId === 81, 'farm wolves: goes for the wolf, past a nearer boar');
-  snap(b, [{ t: 'hit', id: 81, by: 3 }], { mobs: field });
-  snap(b, [{ t: 'die', id: 81 }], { mobs: [field[0]] });
-  ok(b.plan?.i === 1 && b.cmd?.k === 'stay', 'the wolf dies to us: one kill, next step');
+  snap(b, [{ t: 'hit', id: 81, by: 3 }, { t: 'die', id: 81, x: field[1][2], z: field[1][3], b: 0 }], { mobs: [field[0]] });
+  ok(b.plan?.i === 1 && b.cmd?.k === 'stay', 'the wolf is hit and dies to us in one snapshot (already gone from it): one kill, next step');
   b.stop();
 }
 
@@ -230,7 +303,7 @@ let current = null;
 registerBotHook('onEvent', (b, e) => current?.onEvent(b, e));
 const chat = (id, from, text) => ({ t: 'chat', id, from, text, ch: 'p', party: 7 });
 async function mindCase(reply, { mayOrder = null } = {}) {
-  const cfg = readConfig({ AI_PROVIDER: 'mock', AI_ENABLED: '1', AI_THINK_S: '0' });
+  const cfg = readConfig({ AI_PROVIDER: 'mock', AI_ENABLED: '1', AI_THINK_S: '0', AI_BOT_MIN_GAP_S: '0.5' });
   const p = mockProvider({ reply: () => reply });
   const bots = [], m = new Minds({ cfg, provider: p, listBots: () => bots, env: {}, log: () => {}, mayOrder });
   current = m;
@@ -242,8 +315,8 @@ async function mindCase(reply, { mayOrder = null } = {}) {
   return { b, p, m };
 }
 ok(INTENT_SCHEMA.required.includes('plan') && J(INTENT_SCHEMA.properties.plan.items.properties.do.enum) === J(STEP_IDS) && INTENT_SCHEMA.properties.plan.items.additionalProperties === false, 'the intent schema carries a strict plan: steps from the menu only');
-ok(J(sanitizeIntent({ say: 'ok', plan: [{ do: 'farm', what: 'boars', n: 5 }, { do: 'buy', what: 'sword', n: 1 }] }).plan) === J([{ k: 'farm', mob: 'boar', n: 5 }]) && J(sanitizeIntent({ plan: 'farm' }).plan) === '[]' && J(sanitizeIntent({}).plan) === '[]', 'sanitizeIntent: clean steps only, [] for anything else');
-ok(/"plan"/.test(SYSTEM) && /cannot craft, buy, sell or gather/.test(SYSTEM) && SYSTEM.includes('smith'), 'the prompt lists the steps, the places and what a bot cannot do');
+ok(J(sanitizeIntent({ say: 'ok', plan: [{ do: 'farm', what: 'boars', n: 5 }, { do: 'buy', what: 'sword', n: 1 }, { do: 'come', what: '', n: 0 }] }).plan) === J([{ k: 'farm', mob: 'boar', n: 5 }]) && J(sanitizeIntent({ plan: 'farm' }).plan) === '[]' && J(sanitizeIntent({}).plan) === '[]', 'sanitizeIntent: clean steps only, [] for anything else');
+ok(/"plan"/.test(SYSTEM) && /cannot craft, buy, sell or gather/.test(SYSTEM) && SYSTEM.includes('smith') && /\[\] lets it carry on/.test(SYSTEM) && !SYSTEM.includes('"""'), 'the prompt lists the steps, the places, what a bot cannot do, and that [] keeps a running plan');
 {
   const { b, p } = await mindCase({ say: 'On it!', order: 'follow', stance: 'keep', focus: '', remember: '', plan: [{ do: 'farm', what: 'boar', n: 5 }, { do: 'goto', what: 'smith', n: 0 }, { do: 'craft', what: 'sword', n: 1 }] });
   snap(b);
@@ -251,7 +324,14 @@ ok(/"plan"/.test(SYSTEM) && /cannot craft, buy, sell or gather/.test(SYSTEM) && 
   ok(p.calls.length === 1 && b.plan?.steps.length === 2 && b.plan.by === 1 && b.cmd?.k === 'farm' && b.cmd.mob === 'boar', 'a plan from the model becomes the bot\'s plan (the unknown step dropped; the order beside it ignored)');
   ok(c.indexOf('On it!') >= 0 && c.indexOf('On it!') < c.findIndex(t => t.startsWith('Plan: 1) 5 Forest Boars 2) go to the smith')), 'it says its own line, then the plan');
   const sum = summarize(b, { stance: 'balanced', focusId: 0, events: [], chat: [] }, { kind: 'tick' }, null, Date.now());
-  ok(/Your plan \(from Natan\): 1\) 5 Forest Boars 2\) go to the smith\. Now at step 1\/2: 0\/5 Forest Boars/.test(sum), 'the next prompt shows the plan and where it is');
+  ok(/Your plan \(from Natan\): 1\) 5 Forest Boars 2\) go to the smith and wait there\. Now at step 1\/2: 0\/5 Forest Boars\. It carries on by itself/.test(sum), 'the next prompt shows the plan and where it is');
+  // the model repeats the running plan on a later line: it carries on, not from the start
+  b.plan.st.kills = 3; const t0 = b.plan.t0, saidBefore = chats(b).filter(t => t.startsWith('Plan:')).length;
+  await sleep(600); // (the gap between two calls for one bot)
+  snap(b, [chat(1, 'Natan', 'Rook, how is it going?')]);
+  for (let i = 0; i < 40 && p.calls.length < 2; i++) { await sleep(10); snap(b); }
+  await sleep(20); snap(b);
+  ok(p.calls.length === 2 && b.plan?.st?.kills === 3 && b.plan.t0 === t0 && chats(b).filter(t => t.startsWith('Plan:')).length === saidBefore, 'the same plan again from the model: the running one carries on (not restarted, not announced twice)');
   b.stop();
 }
 {
@@ -277,11 +357,13 @@ const stop = code => { try { srv.kill(); } catch {} process.exit(code); };
 try {
   for (let i = 0; i < 150; i++) { try { await fetch(`http://localhost:${PORT}/`); break; } catch { await sleep(200); } }
   const url = `ws://localhost:${PORT}/ws`;
-  const h = { id: 0, events: [], sys: [], ws: new WebSocket(url), x: 0, z: 0 };
+  const h = { id: 0, events: [], sys: [], ws: new WebSocket(url), x: 0, z: 0, pl: new Map(), roster: [] };
   h.ws.on('open', () => h.ws.send(J({ type: 'join', name: 'Nat', cls: 'swordsman' })));
   h.ws.on('message', d => {
     const m = JSON.parse(d.toString());
     if (m.type === 'welcome') { h.id = m.id; h.x = m.x; h.z = m.z; }
+    if (m.type === 'roster') h.roster = m.players;
+    if (m.type === 'snap') h.pl = new Map(m.w.players.map(p => [p[0], { x: p[1], z: p[2], party: p[8] }]));
     if (m.type === 'snap') for (const e of m.w.events || []) { h.events.push(e); if (e.t === 'invite' && e.to === h.id) h.ws.send(J({ type: 'accept', from: e.from })); if (e.t === 'sys' && e.to === h.id) h.sys.push(e.text); }
   });
   const say = text => h.ws.send(J({ type: 'chat', text }));
@@ -310,7 +392,20 @@ try {
   ok(await until(() => team.every(b => b.plan?.steps[0].mob === 'boar'), 3000), 'live: farm 2 boars then come: taken');
   const done = await until(() => team.every(b => !b.plan), 150000);
   ok(done && await until(() => botChat().filter(t => /^Plan done, Nat\.$/.test(t)).length >= 2, 3000) && team.every(b => dist(b, h.x, h.z) < 9), `live: two boars killed, then back to the player (${team.map(b => `${b.name} ${b.plan ? planProgress(b) : 'done'} ${dist(b, h.x, h.z).toFixed(0)} m`).join(', ')})`);
-  if (process.env.SHOW_CHAT) console.log(botChat());
+  // a bot the player added (server-managed: it follows them and is pulled back when it falls 45 m behind)
+  h.ws.send(J({ type: 'pbot', op: 'add', cls: 'guardian', name: 'Zed' }));
+  const zid = () => h.roster.find(r => r.name === 'Zed')?.id, zed = () => h.pl.get(zid());
+  ok(await until(() => zed()?.party && zed().party === h.pl.get(h.id)?.party, 15000), 'live: a bot the player added is in the party');
+  const e0 = h.events.length, mine = t => h.events.slice(e0).filter(e => e.t === t && (e.id === zid() || e.by === zid()));
+  say('/b Zed: say / / /b Rook: sit 30 then go field');
+  ok(await until(() => mine('chat').some(e => e.text === 'b Rook: sit 30'), 6000) && !mine('botcmd').length && !team[0].plan && !h.events.slice(e0).some(e => e.t === 'pose' && e.id === team[0].id), `live: a say step is plain chat, never a slash command: no order reaches another bot (${J(mine('chat').map(e => e.text))})`);
+  const fx = PLACES.field.x, fz = PLACES.field.z, far = () => { const p = zed(); return p ? Math.hypot(p.x - fx, p.z - fz) : 999; };
+  ok(Math.hypot(h.x - fx, h.z - fz) > 50 && await until(() => far() < 4 && mine('chat').some(e => /^Plan done, Nat\. I'll wait here\.$/.test(e.text)), 60000), `live: it walked to the field, more than 45 m from its player (${far().toFixed(1)} m from the spot)`);
+  await sleep(12000); // (two rounds of the server's catch-up for followers)
+  ok(far() < 12 && !mine('tp').length, `live: and stays there: not pulled back to the player (${far().toFixed(1)} m, ${mine('tp').length} teleports)`);
+  say('/b Zed: come');
+  ok(await until(() => { const p = zed(); return p && Math.hypot(p.x - h.x, p.z - h.z) < 9; }, 40000), 'live: /b come brings it back');
+  if (process.env.SHOW_CHAT) console.log(botChat(), mine('chat').map(e => e.text));
   for (const b of team) b.stop();
   h.ws.close();
 } catch (err) { console.error(err); console.error(srvLog.slice(-2000)); failed++; }

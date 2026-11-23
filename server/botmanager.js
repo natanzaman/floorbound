@@ -195,7 +195,8 @@ export class BotManager {
       // the human this bot's brain is sticking with (its party, or a follow / come order)
       const a = e.b.anchor && !e.b.anchor.bot ? this.game.players.get(e.b.anchor.id) : null;
       if (a && !a.bot) t = a;
-      const busy = e.b.tgtId && (inArena(p.x, p.z) || inArena2(p.x, p.z) || inArena3(p.x, p.z)); // don't pull it out of a boss fight
+      const sent = e.b.cmd?.post || (e.b.plan && e.b.cmd?.k !== 'come' && e.b.cmd?.k !== 'follow'); // a plan sent it somewhere (shared/bots/planrun.js): it stays there
+      const busy = sent || (e.b.tgtId && (inArena(p.x, p.z) || inArena2(p.x, p.z) || inArena3(p.x, p.z))); // don't pull it out of a boss fight
       if (t && !t.dead && !busy && Date.now() - (e.caughtUp || 0) > 8000 && (floorOf(p.x) !== floorOf(t.x) || Math.hypot(p.x - t.x, p.z - t.z) > 45)) { e.caughtUp = Date.now(); this.catchUp(p, t); }
     }
   }

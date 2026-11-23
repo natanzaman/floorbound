@@ -211,7 +211,7 @@ export class Game {
       case 'chat': { // ch: 'p' party chat, 's' say (heard nearby); otherwise everyone
         const text = String(msg.text || '').slice(0, 200).trim();
         if (!text) return;
-        const order = parseBotChat(text); // "/b <order>": a bot order, never chat (ordinary chat never orders bots)
+        const order = parseBotChat(text, () => (this.partyOf(p)?.members || []).map(id => this.players.get(id)).filter(o => o?.bot).map(o => o.name)); // (the names of their own party's bots: one called Bow or Hop is a name, not a step) // "/b <order>": a bot order, never chat (ordinary chat never orders bots)
         if (order) return this.botChat(p, order);
         const ch = msg.ch === 'p' && p.party ? { ch: 'p', party: p.party } : msg.ch === 's' ? { ch: 's', x: r2(p.x), z: r2(p.z) } : {};
         this.events.push({ t: 'chat', from: p.name, id: p.id, text, ...ch, ...(p.admin ? { adm: 1 } : {}) });
@@ -550,7 +550,7 @@ export class Game {
     const cmd = String(msg.cmd || '');
     let name = msg.name ? String(msg.name).slice(0, 16) : '';
     const plan = cmd === 'plan' ? cleanPlan(msg.plan) : null; // a list of steps (shared/bots/plan.js): only what cleanPlan keeps goes out
-    if (cmd === 'plan' ? !plan?.steps.length : !BOT_COMMANDS[cmd]) return false;
+    if (cmd === 'plan' ? !plan?.steps.length : !Object.hasOwn(BOT_COMMANDS, cmd)) return false;
     const party = this.partyOf(p), mates = party ? party.members.filter(id => id !== p.id).map(id => this.players.get(id)).filter(Boolean) : [];
     const block = o => (o?.bot && this.botControl?.(p, o, 'botCommand')) || '';
     const pick = list => { // by full name, else by a unique start of it ("/b ly: heal" is Lyra)
@@ -585,8 +585,9 @@ export class Game {
   botChat(p, o) {
     if (o.help) { for (const line of [...botHelp(), ...planHelp()]) this.sys(line, p.id); return; }
     if (o.error) return this.sys(o.error, p.id);
-    const to = this.botCommand(p, o.plan ? { cmd: 'plan', plan: o.plan, name: o.name } : o);
-    if (to) this.sys(`${o.plan ? 'Plan for' : 'Order to'} ${to === true ? 'your bots' : to}: ${o.plan ? planText(o.plan).replace(/^Plan: /, '') : BOT_COMMANDS[o.cmd].label}.`, p.id);
+    const plan = o.plan ? cleanPlan(o.plan) : null; // (what the bots will get: botCommand cleans it the same way)
+    const to = this.botCommand(p, plan ? { cmd: 'plan', plan, name: o.name } : o);
+    if (to) this.sys(`${plan ? 'Plan for' : 'Order to'} ${to === true ? 'your bots' : to}: ${plan ? planText(plan).replace(/^Plan: /, '') : BOT_COMMANDS[o.cmd].label}.`, p.id);
   }
 
   invite(p, targetId) {

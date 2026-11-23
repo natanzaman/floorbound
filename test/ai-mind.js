@@ -199,10 +199,10 @@ function setup({ env = {}, reply, provider, now } = {}) {
 }
 {
   let t = 4e6;
-  const { m, p, bots } = setup({ env: { AI_BOT_TOKENS_HOUR: '1200', AI_BOT_MIN_GAP_S: '0.5' }, now: () => t });
+  const { m, p, bots } = setup({ env: { AI_BOT_TOKENS_HOUR: '1800', AI_BOT_MIN_GAP_S: '0.5' }, now: () => t });
   const b = makeBot(); bots.push(b); snap(b);
   for (let i = 0; i < 4; i++) { snap(b, [chat(1, 'Natan', `Lyra ${i}?`)]); await flush(); t += 1000; }
-  ok(p.calls.length === 2 && m.stats.skipped['bot token budget used'] >= 1, 'per-bot token budget per hour (two ~1000-token calls use up 1200)');
+  ok(p.calls.length === 2 && m.stats.skipped['bot token budget used'] >= 1, 'per-bot token budget per hour (two ~1350-token calls use up 1800)');
   t += 3601e3; snap(b, [chat(1, 'Natan', 'Lyra?')]); await flush();
   ok(p.calls.length === 3, 'the per-bot budget refills after an hour');
   current = null;
@@ -256,7 +256,7 @@ function setup({ env = {}, reply, provider, now } = {}) {
 {
   const s = sanitizeIntent({ say: `  Hi\n\tthere ${'x'.repeat(300)}`, order: 'ATTACK', stance: 'Defensive', focus: 'Natan', remember: 'likes boars' });
   ok(s.say.startsWith('Hi there') && s.say.length === 160 && s.order === 'attack' && s.stance === 'defensive', 'whitespace, length and case normalised');
-  ok(JSON.stringify(sanitizeIntent(null)) === JSON.stringify({ say: '', order: 'none', stance: 'keep', focus: '', remember: '' }), 'null -> a do-nothing intent');
+  ok(JSON.stringify(sanitizeIntent(null)) === JSON.stringify({ say: '', order: 'none', stance: 'keep', focus: '', remember: '', plan: [] }), 'null -> a do-nothing intent');
 }
 
 // ---------- 8. adapters (fake fetch: request shape, parsing, usage, redaction) ----------

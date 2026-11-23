@@ -52,7 +52,7 @@ export function sanitizeIntent(raw) {
     stance: STANCES.includes(low(o.stance)) ? low(o.stance) : 'keep',
     focus: clean(o.focus, 24),
     remember: LINKISH.test(String(o.remember || '')) ? '' : clean(o.remember, 100),
-    plan: cleanPlan(Array.isArray(o.plan) ? o.plan : [])?.steps || [], // (clean steps only: shared/bots/plan.js)
+    plan: cleanPlan(Array.isArray(o.plan) ? o.plan : [], { strict: true })?.steps || [], // (clean steps only, up to the first one that isn't usable: shared/bots/plan.js)
   };
 }
 

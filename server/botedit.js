@@ -132,7 +132,7 @@ export const BotEditMethods = {
     if (keep.behaviour === 'follow' && keep.follow && !this.realPlayers().some(o => o.name.toLowerCase() === keep.follow.toLowerCase())) { keep.behaviour = 'field'; keep.follow = ''; }
     const carry = {
       party: party?.id || 0, mates: party ? party.members.filter(id => id !== p.id) : [], oldId: p.id, until: Date.now() + 30000,
-      cmd: b.cmd ? { ...b.cmd } : null, lastCmdBy: b.lastCmdBy || 0,
+      cmd: b.cmd && !b.cmd.plan ? { ...b.cmd, ...(b.cmd.prev?.plan ? { prev: null } : {}) } : null, lastCmdBy: b.lastCmdBy || 0,
       healFocus: b.healFocus && b.healFocus.until > b.t ? { id: b.healFocus.id, left: b.healFocus.until - b.t } : null,
     };
     const i = this.bots.indexOf(e);

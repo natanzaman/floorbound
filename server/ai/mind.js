@@ -299,7 +299,8 @@ export class Minds {
     let plan = null;
     if (speaker) {
       const byName = nameOfId(b, speaker.id), may = !this.mayOrder || !!this.mayOrder(b, speaker.id);
-      if (may && it.plan?.length && typeof b.setPlan === 'function') plan = { steps: it.plan, o: { by: speaker.id, byName, at: [speaker.x, speaker.z], group: [b.id] } }; // (given after our line, below)
+      const same = !!b.plan && JSON.stringify(b.plan.steps) === JSON.stringify(it.plan); // the model repeating the plan that is already running: let it carry on
+      if (may && it.plan?.length && typeof b.setPlan === 'function') { if (!same) plan = { steps: it.plan, o: { by: speaker.id, byName, at: [speaker.x, speaker.z], group: [b.id] } }; } // (given after our line, below)
       else if (may && it.order !== 'none' && typeof b.command === 'function') {
         const c = { k: it.order, by: speaker.id, byName, tgt: b.locks?.get(speaker.id) || 0, group: [b.id], all: false, adm: false };
         if (it.say) { // our own line replaces the canned acknowledgement
