@@ -1,7 +1,7 @@
 # Bot days: free bots that choose what to do (phase B of "bots that feel like real players")
 
 Plan doc: https://claude.ai/artifact/ET4pP7qqX3hefDepXzmPmX (layer 2, the life layer). Owner's go for the brief:
-2026-11-23 ("Merge, then start phase B"). **Not built yet: this brief waits for the owner's OK.**
+2026-11-23 ("Merge, then start phase B"). Owner 2026-11-23: Jev decides for every bot with a day. Residents: his call is still open.
 
 ## Goal
 A free bot today farms the field for ever. A real player hunts for a while, runs low on potions, walks back to town,
@@ -21,8 +21,8 @@ they are for anyone who picks them. Never: a bot in a human's party, the Named, 
 An order or a plan from a player always wins: the day pauses, and picks up again 20 s after the order ends. A town
 raid (the ward) and a party invite it accepts work as today.
 
-## How it chooses (`shared/bots/day.js`, pure, no model call)
-Utility scoring. When a goal ends (and at most every 30 s on a goal that can be dropped) the bot scores every goal:
+## How it chooses (`shared/bots/day.js`)
+Utility scoring first (pure, no model call); Jev then picks from the scored list (below). When a goal ends (and at most every 30 s on a goal that can be dropped) the bot scores every goal:
 
     score = need (0 to 1) x how much this bot cares (its traits) x a little luck (0.85 to 1.15)
             + a small bonus for carrying on with what it is doing, - a cool-down for what it just did
@@ -80,10 +80,19 @@ and personalities, mixed classes, levels spread up to the active players' level,
 players are. They count toward `MAX_BOTS`, show in the Bots list as the server's, and anyone may invite them.
 `RESIDENTS=0` turns it off. Their levels and gold are not saved in this version.
 
-## Jev trial (separate OK, after the rest works)
-An OpenRouter provider next to today's three. For bots within 60 m of a player, Jev picks the next goal from the same
-list, with the scores as hints; the scores decide on a slow or failed call. A flag switches it (`BOT_DAY_PICK=jev`),
-spend counts in the daily AI budget. It stays only if the blind test can tell the difference.
+## Jev picks the goal (owner, 2026-11-23: for every bot with a day, not only those near players)
+An OpenRouter provider next to today's three (`typesafe/jev-1.14`, the decisions endpoint; the key is in Render).
+The question is a Choice over the same goal list, with the bot's state, its personality line and the utility scores
+as hints. Jev answers with a probability for every goal; the bot rolls from those (so a 70/30 call goes the other way
+3 times in 10), and the plan is built as before.
+- **When:** a bot within 60 m of a player asks whenever a goal ends, at most every 30 s. A bot further off asks at most
+  once a minute. A bot resting at home on a floor with no player has nothing to decide and asks nothing.
+- **Never waits:** the bot carries on while the call is out. No answer in 400 ms, an error, no key, or the cap reached:
+  the utility scores decide. Three failures in a row: rules only for 5 minutes.
+- **Cost:** about $0.000017 a decision, so about $0.001 per bot per hour of play (twice that close to players). 30
+  bots for 4 hours is about 12 to 25 cents. A daily cap of its own, `JEV_DAILY_USD` (default 0.50), counted with the
+  AI spend on the admin page; at the cap the rules take over until midnight UTC.
+- `BOT_DAY_PICK=rules` turns Jev off. The blind test runs both ways, so we learn whether Jev is worth keeping.
 
 ## Not in this version
 Crafting, gathering and gardens of their own, smith upgrades, trading with players, joining guilds, weapon swap,
@@ -94,14 +103,15 @@ saved lives across restarts, the proactive mind (phase C), learned movement (pha
 2. The chooser, the solo goals (hunt, restock, rest, wander, hang out), `b.day`, the card and admin line, `own`.
 3. Company: help, group up, boss tries, ask along.
 4. Unseen bots: go home, think rates, perfbench with free bots.
-5. Residents (if OK). 6. Jev trial (if OK).
+5. Jev: the provider, the cap, the fallback. 6. Residents (if OK).
 Then an independent review, fixes, the owner's OK, merge.
 
 ## Checks
 - `node test/botdays.js` (new): scores are repeatable from a seed and stay in range; each need leads to its goal; no
   flip-flopping; an order pauses the day and it resumes; a real brain out of potions walks to the merchant, sells,
   buys, and has potions and less gold; ten minutes of a live free bot show three or more goals, no teleports and no
-  minute stuck; `BOT_DAYS=0` equals today.
+  minute stuck; `BOT_DAYS=0` equals today; Jev (a mock provider): its pick is taken, a slow or failed call and a reached
+  cap fall back to the scores, far bots ask at most once a minute.
 - Existing bot tests still pass (`botbrain`, `botplans`, `freebots`, `playerbots`, `personality`, `towns`, `named`).
 - perfbench before and after.
 - Blind test: friends spend 20 minutes around town and the field and guess who is a bot.
