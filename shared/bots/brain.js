@@ -48,7 +48,7 @@ import { rollPersonality, potionShift, backOffAt, tankWait, formation, isNeutral
 import { idleOk, idleBegin, idleMoved, idleHabits, idleEvent, afkNow } from './idle.js'; // idle habits by personality
 import { planProgress } from './plan.js'; // plans: a list of steps (docs/briefs/bot-plans.md)
 import { setPlan, endPlan, planTurn, planEvent, planNote } from './planrun.js'; // (the runner)
-import { dayTurn, dayDied, hasDay } from './day.js'; // a free bot's own day (docs/briefs/bot-days.md)
+import { dayTurn, dayDied, dayChat, dayInvite, hasDay } from './day.js'; // a free bot's own day (docs/briefs/bot-days.md)
 
 const BOSS_LVL = { 1: 5, 2: 15, 3: 25 }; // a leader levels on its floor's field until this, then goes for the boss
 const floorFor = beh => (beh === 'floor3' ? 3 : beh === 'floor2' ? 2 : 0); // a behaviour's own floor (0: none)
@@ -297,6 +297,11 @@ function onInvite(b, e) {
     if (human) say(b, 'busy', {}, { force: true, ch: 's', text: `Sorry ${nameOf(b, e.from)}, I'm already in a party.` });
     return;
   }
+  if (!human && hasDay(b) && !b.peers?.has(e.from)) { // (never a teammate: a team forms as before) another bot asks a bot with a day of its own: it joins when it feels like company (shared/bots/day.js)
+    const yes = dayInvite(b, e);
+    if (Math.random() < 0.6) say(b, 'dayGroup', {}, { force: true, ch: 's', text: yes ? ['Sure.', 'Why not.', 'Let\'s go.'][Math.floor(Math.random() * 3)] : 'Not right now.' });
+    if (!yes) return void b.send({ type: 'decline' });
+  }
   b.send({ type: 'accept', from: e.from });
 }
 
@@ -311,6 +316,7 @@ function partyBots(b) {
 function onChat(b, e) {
   if (e.id === b.id) return;
   if (e.ch === 'p' && e.party === b.party) b.partyChatT = b.t; // someone just spoke: don't talk over them
+  if (b.day?.ask && dayChat(b, e)) say(b, 'dayAsk', {}, { force: true, ch: 's', text: `Great, ${nameOf(b, e.id)}. Invite's out.` }); // a yes to "Anyone for wolves?"
 }
 
 // e.free: the server checked the sender may order this free bot by name; e.no: party bots the sender may not order.

@@ -3,6 +3,8 @@
 // it hunts, every goal's plan, the day on a stub bot (a goal becomes a quiet plan, an order pauses it and it resumes,
 // a party with a player has no day, the picker's answer and its time limit, BOT_DAYS=0), and the real brain on a fake
 // socket (out of potions: walks to the merchant, sells, buys, then goes on with its day; nothing is said).
+// Company: a player in trouble is helped, two free bots team up and part again, a player is asked along and invited
+// only after a yes (unit, the real brain, and live for teaming up).
 // Live (skip with NO_LIVE=1): a server on PORT (default 3746) with a player in town and three free bots.
 // Usage: node test/botdays.js
 import { spawn } from 'node:child_process';
@@ -10,7 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { createBot } from '../shared/bots/brain.js';
-import { GOALS, GOAL_IDS, RESUME, PICK_WAIT, facts, needs, scoreGoals, pickKind, planFor, potionsWanted, dayTurn, dayText, dayLog, hasDay, daysEnabled } from '../shared/bots/day.js';
+import { GOALS, GOAL_IDS, RESUME, PICK_WAIT, ASK_AGAIN, facts, needs, scoreGoals, pickKind, planFor, potionsWanted, dayTurn, dayText, dayLog, dayChat, dayInvite, inTrouble, peersNear, hasDay, daysEnabled } from '../shared/bots/day.js';
 import { cleanPlan } from '../shared/bots/plan.js';
 import { planTurn } from '../shared/bots/planrun.js';
 import { rng, rollPersonality, ARCHETYPE_IDS } from '../shared/bots/personality.js';
@@ -77,11 +79,12 @@ const top = (b, d, seed = 7) => scoreGoals(b, facts(b, d), rng(seed))[0];
   const r = rng(11);
   let bad = '';
   for (const id of GOAL_IDS) for (const fl of [1, 2]) for (let i = 0; i < 20; i++) {
-    const b = stub({ x: fl === 2 ? 600 : 0, life: { floor2: 1 }, me: { lvl: fl === 2 ? 13 : 6 } }), made = planFor(id, b, facts(b), r);
+    const x = fl === 2 ? 600 : 0, lvl = fl === 2 ? 13 : 6;
+    const b = stub({ x, life: { floor2: 1 }, me: { lvl }, players: [{ id: 2, x, z: 60 }, { id: 7, x: x + 20, z: 60, lvl }], dayPeers: () => [7] }), made = planFor(id, b, facts(b), r);
     const c = cleanPlan(made?.steps), last = c?.steps.at(-1);
     if (!made?.text || !c || c.errors.length || c.steps.length !== made.steps.length || !(last.k === 'farm' || last.secs > 0)) bad ||= `${id} F${fl}: ${J(made)} ${J(c?.errors)}`;
   }
-  ok(!bad, `every goal makes a plan the cleaner takes whole, ending in a step with an end (${bad || 'hunt, restock, rest, wander, hangout on Floors 1 and 2'})`);
+  ok(!bad, `every goal makes a plan the cleaner takes whole, ending in a step with an end (${bad || `${GOAL_IDS.join(', ')} on Floors 1 and 2`})`);
   const rs = planFor('restock', stub({ cons: { potion: 1 } }, { caution: 1 }), facts(stub({ cons: { potion: 1 } })), rng(1));
   ok(J(rs.steps.slice(0, 2)) === J([{ k: 'sell' }, { k: 'buy', n: 5 }]) && potionsWanted(stub({}, { caution: 0 })) === 3 && potionsWanted(stub({}, { caution: 1 })) === 6, 'restock: sell, then buy up to its own number of potions (3 for the bold, 6 for the careful)');
   ok(GOALS.hunt && MODES.own?.behaviour === 'own' && BEHAVIOURS.own && daysEnabled(), 'the behaviour `own` is on the players\' and the admin\'s lists');
@@ -90,9 +93,10 @@ const top = (b, d, seed = 7) => scoreGoals(b, facts(b, d), rng(seed))[0];
 // ---------- 3. the day on a stub bot ----------
 const api = {
   say: (b, key, vars, o) => b.said.push(o?.text || key),
-  command: (b, c) => { if (c.k === 'farm' || c.k === 'boss') b.cmd = { k: c.k, group: c.group }; },
+  command: (b, c) => { if (c.k === 'farm' || c.k === 'boss') b.cmd = { k: c.k, group: c.group }; if (c.k === 'come') b.cmd = { k: 'come', by: c.by }; if (c.k === 'attack' && b.mobs.some(m => m.id === c.tgt)) b.cmd = { k: 'attack', tgt: c.tgt, prev: b.cmd }; },
 };
-const PV = (b, humans = []) => ({ all: [{ id: b.id }, ...humans], humans, botLeader: { id: b.id } });
+const PV = (b, humans = [], mates = humans) => ({ all: [{ id: b.id }, ...mates], mates, humans, botLeader: { id: b.id } });
+const GV = (b, mate, lead = b.id) => ({ all: [{ id: b.id }, mate], mates: [mate], humans: [], botLeader: lead === b.id ? { id: b.id } : mate }); // a party of bots
 function turn(b, secs = 0.5, P = PV(b), r = Math.random) { for (let left = secs; left > 1e-9; left -= 0.5) { b.t += Math.min(0.5, left); dayTurn(b, P, api, r); if (b.plan) planTurn(b, P, api); } }
 {
   const b = stub(), r = rng(5);
@@ -118,12 +122,12 @@ function turn(b, secs = 0.5, P = PV(b), r = Math.random) { for (let left = secs;
   // in a party with a player: no day; following another bot's lead: no day
   turn(b, RESUME + 5, PV(b, [{ id: 1 }]), r);
   ok(!b.plan && !b.day.goal, 'in a party with a player it has no day of its own');
-  b.party = 7; turn(b, RESUME + 5, { all: [{ id: 2 }, { id: 3 }], humans: [], botLeader: { id: 3 } }, r);
-  ok(!b.plan, 'nor while it follows another bot\'s lead');
-  turn(b, RESUME + 5, { all: [{ id: 2 }, { id: 3 }], humans: [], botLeader: { id: 2 } }, r);
+  b.party = 7; turn(b, RESUME + 5, GV(b, { id: 3, name: 'Wren' }, 3), r);
+  ok(!b.plan && dayText(b) === 'Out with Wren: better together', `nor while it follows another bot's lead (${dayText(b)})`);
+  turn(b, RESUME + 5, GV(b, { id: 3, name: 'Wren' }), r);
   ok(b.plan?.day, 'leading a party of bots, it chooses for them');
   // a hunt that finds none of its kind: another kind next time
-  b.plan = null; b.cmd = null; b.day.goal = 'hunt'; b.day.kind = 'wolf'; b.dayStop = 'there are no Dire Wolves on this floor';
+  b.party = 0; b.plan = null; b.cmd = null; b.day.goal = 'hunt'; b.day.kind = 'wolf'; b.dayStop = 'there are no Dire Wolves on this floor';
   turn(b, 0.5, PV(b), r);
   ok(b.day.skip.includes('wolf') && b.day.log[0].how === 'stopped' && !b.said.length, 'a plan that had to stop: noted, not said, and that monster is skipped for a while');
   // dead: nothing is chosen; a behaviour change ends the day
@@ -159,6 +163,111 @@ function turn(b, secs = 0.5, P = PV(b), r = Math.random) { for (let left = secs;
   if (was === undefined) delete process.env.BOT_DAYS; else process.env.BOT_DAYS = was;
 }
 
+// ---------- 3b. company: help, teaming up, asking along ----------
+const VEX = { id: 4, x: 10, z: 70, hp: 30, maxHp: 100, lvl: 6, party: 0 }, WREN = { id: 7, x: 30, z: 60, hp: 100, maxHp: 100, lvl: 6, party: 0 };
+const NAMES = () => new Map([[4, { name: 'Vex', bot: false }], [7, { name: 'Wren', bot: true }]]);
+const mob = (id, x, z, type = 'wolf', more = {}) => ({ id, x, z, engaged: true, def: MOBS[type], ...more });
+const lucky = () => 0.01, unlucky = () => 0.99;
+{ // help: a player in trouble within 40 m
+  const kind = { sociability: 1, caution: 0, chattiness: 1 };
+  const b = stub({ names: NAMES(), players: [{ id: 2, x: 0, z: 60 }, { ...VEX, hp: 100 }] }, kind);
+  turn(b, 0.5, PV(b), unlucky); // (its day starts: a hunt)
+  const hunting = b.day.goal; b.said.length = 0;
+  b.players[1].hp = 30; b.mobs = [mob(50, 11, 70)];
+  turn(b, 2, PV(b), lucky);
+  ok(hunting === 'hunt' && b.day.goal === 'help' && b.cmd?.k === 'attack' && b.cmd.tgt === 50 && b.cmd.day && !b.plan && dayText(b) === 'Helping Vex: they were in trouble' && /Vex/.test(b.said[0] || ''), `a player under half health with a wolf on them: it drops its hunt and goes for the wolf ("${b.said[0]}", ${dayText(b)})`);
+  b.mobs = [mob(51, 9, 70)]; b.cmd = null; turn(b, 0.5, PV(b), lucky);
+  ok(b.day.goal === 'help' && b.cmd?.tgt === 51, 'that one down and another on them: the next one');
+  b.mobs = []; b.cmd = null; turn(b, 0.5, PV(b), lucky);
+  ok(!b.day.goal && b.day.log[0].g === 'help' && b.day.log[1].g === 'hunt' && b.day.log[1].how === 'cut short' && b.said.length === 2 && b.day.helped === 1, `all clear: a word, and the rescue is in its log ("${b.said[1]}")`);
+  turn(b, 8, PV(b), rng(4));
+  ok(b.plan?.day, `then on with its day (${dayText(b)})`);
+  // who is not helped
+  const calm = (o, t, r = lucky) => { const c = stub({ names: NAMES(), players: [{ id: 2, x: 0, z: 60 }, { ...VEX }], mobs: [mob(50, 11, 70)], ...o }, { ...kind, ...t }); turn(c, 3, PV(c), r); return c.day.log.some(e => e.g === 'help') || c.day.goal === 'help' ? 'help' : c.day.goal; };
+  ok(calm({}, { sociability: 0, caution: 1 }, () => 0.5) !== 'help' && calm({}, {}, () => 0.5) === 'help', 'a cautious loner mostly walks on; a sociable, bold bot mostly helps');
+  ok(calm({ hp: 40 }) !== 'help' && calm({ players: [{ id: 2, x: 0, z: 60 }, { ...VEX, hp: 90 }] }) !== 'help' && calm({ players: [{ id: 2, x: 0, z: 60 }, { ...VEX, x: 60 }], mobs: [mob(50, 61, 70)] }) !== 'help', 'not when it is hurt itself, not a healthy player with one wolf, not 50 m away');
+  ok(calm({ names: new Map([[4, { name: 'Vex', bot: true }]]) }) !== 'help' && calm({ mobs: [mob(50, 11, 70, 'warden')] }) !== 'help' && calm({ mobs: [mob(50, 11, 70, 'wolf', { engaged: false })] }) !== 'help', 'not a bot, not a boss, not a monster that is not fighting');
+  const many = stub({ names: NAMES(), players: [{ id: 2, x: 0, z: 60 }, { ...VEX, hp: 95 }], mobs: [mob(50, 11, 70), mob(51, 9, 70), mob(52, 10, 72)] }, kind);
+  ok(inTrouble(many)?.n === 3 && !inTrouble(many).low, 'three on a healthy player is trouble too');
+  const twice = stub({ names: NAMES(), players: [{ id: 2, x: 0, z: 60 }, { ...VEX }], mobs: [mob(50, 11, 70)] });
+  turn(twice, 3, PV(twice), unlucky); turn(twice, 20, PV(twice), lucky);
+  ok(twice.day.goal !== 'help' && twice.day.helpSeen.get(4) > twice.t, 'it makes up its mind once per scrape, not every second');
+}
+{ // teaming up with another free bot
+  const soc = { sociability: 1 };
+  const b = stub({ names: NAMES(), players: [{ id: 2, x: 0, z: 60, lvl: 6 }, { ...WREN }] }, soc);
+  ok(!peersNear(b).length && scoreGoals(b, facts(b), rng(1)).find(g => g.id === 'group').score === 0, 'nobody it knows to have a day: no teaming up');
+  b.dayPeers = () => [7];
+  b.dayPicker = (bot, ask) => { ask.done('group'); return true; };
+  turn(b, 1, PV(b), rng(2));
+  ok(peersNear(b)[0]?.id === 7 && b.plan?.day === 'group' && b.plan.by === 7 && b.cmd?.k === 'come' && b.cmd.by === 7 && dayText(b) === 'Teaming up with Wren: hunting is better together', `another free bot 30 m off: it walks up to it (${dayText(b)})`);
+  ok(!b.sent.some(m => m.type === 'invite'), 'no invite before it is there');
+  b.x = 27; turn(b, 1, PV(b), rng(2));
+  ok(b.sent.filter(m => m.type === 'invite' && m.id === 7).length === 1 && /Wren/.test(b.said.at(-1)), `there: a word and the invite ("${b.said.at(-1)}")`);
+  turn(b, 2, PV(b), rng(2));
+  ok(b.sent.filter(m => m.type === 'invite').length === 1, '...once');
+  // it said yes: a party of two, ours to lead
+  b.party = 9; b.players[1].party = 9; b.dayPicker = null;
+  const mate = { id: 7, name: 'Wren' };
+  turn(b, 12, GV(b, mate), rng(2));
+  ok(b.plan?.day === 'hunt' && / with Wren: better together$/.test(dayText(b)) && b.day.log[0].g === 'group' && b.day.log[0].how === 'done' && b.day.groupUntil > b.t + 300, `together: the leader hunts with it (${dayText(b)})`);
+  const solo = stub(), duo = stub({ party: 9, players: [{ id: 2, x: 0, z: 60, party: 9 }, { ...WREN, party: 9 }], names: NAMES() });
+  ok(planFor('hunt', duo, facts(duo), rng(5)).steps.at(-1).n > planFor('hunt', solo, facts(solo), rng(5)).steps.at(-1).n, 'a longer hunt for two');
+  // had enough: it says so and leaves; no new group for a while
+  b.day.groupUntil = b.t - 1; b.tgtId = 5; turn(b, 1, GV(b, mate), rng(2));
+  const stays = !b.sent.some(m => m.type === 'leave');
+  b.tgtId = null; turn(b, 0.5, GV(b, mate), rng(2));
+  ok(stays && b.sent.some(m => m.type === 'leave') && !b.plan && /off|around|company/i.test(b.said.at(-1)) && b.day.groupT === b.t, `time is up: never mid-fight, then a goodbye and it leaves ("${b.said.at(-1)}")`);
+  b.party = 0; b.players[1].party = 0; turn(b, 10, PV(b), rng(2));
+  ok(b.plan?.day && b.plan.day !== 'group' && scoreGoals(b, facts(b), rng(1)).find(g => g.id === 'group').score === 0, 'alone again: on with its day, and no teaming up for five minutes');
+  // nobody came
+  const c = stub({ names: NAMES(), players: [{ id: 2, x: 0, z: 60, lvl: 6 }, { ...WREN, x: 4 }], dayPeers: () => [7] }, soc);
+  c.dayPicker = (bot, ask) => { ask.done('group'); return true; };
+  turn(c, 1, PV(c), rng(2)); c.dayPicker = null; turn(c, 14, PV(c), rng(2));
+  ok(c.day.log.some(e => e.g === 'group' && e.how === 'no luck') && c.plan?.day && c.plan.day !== 'group', 'no answer: it shrugs and goes on alone');
+  // asked by another bot
+  const asked = (o = {}, r = lucky) => { const x = stub({ names: NAMES(), dayPeers: () => [7], ...o }); turn(x, 0.5, PV(x), rng(3)); Object.assign(x, o.then || {}); return dayInvite(x, { from: 7 }, r); };
+  ok(asked() && !asked({}, unlucky) && !asked({ dayPeers: () => [8] }), 'asked by a bot with a day: it joins when it feels like it; never a bot without one');
+  ok(!asked({ then: { plan: { steps: [], by: 4 } } }) && !asked({ then: { party: 5 } }) && !asked({ then: { cmd: { k: 'stay', by: 4 } } }), 'not on a player\'s plan or order, not from inside a party');
+  // the one that follows
+  const f = stub({ names: NAMES(), party: 9, players: [{ id: 2, x: 0, z: 60, party: 9 }, { ...WREN, party: 9 }] });
+  turn(f, 0.5, PV(f), rng(3)); turn(f, 5, GV(f, mate, 7), rng(3));
+  ok(!f.plan && f.day.goal === 'with' && dayText(f) === 'Out with Wren: better together' && f.day.log[0].how === 'joined', `in another bot's party it drops its own plan and is out with it (${dayText(f)})`);
+  f.party = 0; turn(f, 8, PV(f), rng(3));
+  ok(f.plan?.day && f.day.log[0].g === 'with' && f.day.groupT > 0, 'the party is gone: its own day again');
+}
+{ // asking a player along
+  const keen = { sociability: 1, chattiness: 1, aggression: 0 };
+  const near = () => [{ id: 2, x: 0, z: 60, lvl: 4 }, { ...VEX, hp: 100, x: 5, z: 62 }];
+  const b = stub({ names: NAMES(), players: near(), me: { lvl: 4 } }, keen);
+  turn(b, 0.5, PV(b), lucky);
+  ok(b.plan?.day === 'hunt' && b.plan.steps[0].k === 'wait' && b.day.ask && !b.said.length, 'a sociable bot with a player near: its hunt waits a moment');
+  turn(b, 1, PV(b), lucky);
+  ok(b.said.length === 1 && /^Anyone for .+\?$/.test(b.said[0]) && b.day.askedAt.get(4) > 0, `...and it asks ("${b.said[0]}")`);
+  ok(!dayChat(b, { id: 7, text: 'yes', ch: 's' }) && !dayChat(b, { id: 4, text: 'yes but first tell me everything about how the smith works', ch: 's' }) && !dayChat(b, { id: 4, text: 'nah', ch: 's' }) && !b.sent.length, 'a bot\'s yes, a long sentence and a no are not a yes');
+  ok(dayChat(b, { id: 4, text: 'Sure!', ch: 's' }) && J(b.sent) === J([{ type: 'invite', id: 4 }]) && !b.day.ask, 'a player\'s "sure": the invite goes out, once');
+  ok(!dayChat(b, { id: 4, text: 'yes', ch: 's' }), 'no second invite');
+  // not again for twenty minutes
+  b.plan.st = { ...b.plan.st }; b.plan = null; b.cmd = null; b.day.hold = 0; turn(b, 12, PV(b), lucky);
+  ok(b.plan?.day && b.said.length === 1 && !b.day.ask, 'the next hunt, minutes later: the same player is not asked again');
+  b.t += ASK_AGAIN; b.day.restT = b.day.sameT = b.day.seenT = b.t; b.plan = null; b.cmd = null; b.day.goal = ''; b.day.hold = 0; turn(b, 3, PV(b), lucky);
+  ok(b.said.length === 2, `twenty minutes on, it may ask again ("${b.said[1]}")`);
+  // too late, and the shy
+  const late = stub({ names: NAMES(), players: near(), me: { lvl: 4 } }, keen);
+  turn(late, 2, PV(late), lucky); late.t += 30;
+  ok(!dayChat(late, { id: 4, text: 'yes', ch: 's' }), 'a yes half a minute later is too late');
+  const shy = stub({ names: NAMES(), players: near(), me: { lvl: 4 } }, { sociability: 0.2, chattiness: 0 });
+  turn(shy, 2, PV(shy), lucky);
+  ok(shy.plan?.day === 'hunt' && !shy.said.length, 'a shy bot asks nobody');
+  // at the boss's level a bold one asks about the boss, and says so once the player is in its party
+  const bold = stub({ names: NAMES(), players: [{ id: 2, x: 0, z: 60, lvl: 6 }, { ...VEX, hp: 100, x: 5, z: 62 }] }, { ...keen, aggression: 1 });
+  turn(bold, 2, PV(bold), lucky);
+  ok(/Warden/.test(bold.said[0] || ''), `at the boss's level: "${bold.said[0]}"`);
+  dayChat(bold, { id: 4, text: 'ok', ch: 's' }); bold.party = 3;
+  turn(bold, 1, PV(bold, [{ id: 4 }]), lucky);
+  ok(!bold.plan && /Warden/.test(bold.said.at(-1)) && bold.said.length === 2 && !bold.day.goal, `the player joined: it is theirs to lead ("${bold.said.at(-1)}")`);
+}
+
 // ---------- 4. the real brain on a fake socket ----------
 class FakeWS {
   constructor() { this.readyState = 1; this.sent = []; this.h = {}; }
@@ -177,7 +286,7 @@ function makeBot(inv, behaviour = 'own') {
   b.ws.emit('message', { type: 'inv', life: {}, ...inv });
   return b;
 }
-const snap = (b, events = [], mobs = []) => b.ws.emit('message', { type: 'snap', me: { cds: [0, 0, 0, 0], dodge: 0, lvl: 5, ccd: {} }, w: { mobs, gate: [0, 0, 0], events, players: [row(3, b.x, b.z, 100, 1, 0), row(4, 30, 30, 100, 3, 9)] } });
+const snap = (b, events = [], mobs = []) => b.ws.emit('message', { type: 'snap', me: { cds: [0, 0, 0, 0], dodge: 0, lvl: 5, ccd: {} }, w: { mobs, gate: [0, 0, 0], events, players: [row(3, b.x, b.z, 100, 1, 0), row(4, 150, 30, 100, 3, 9)] } }); // (Vex: far off)
 const chats = b => b.ws.sent.filter(m => m.type === 'chat').map(m => m.text);
 {
   const inv = { gold: 40, cons: { potion: 0 }, bag: [{ u: 5, name: 'Old Axe' }, { u: 6, name: 'Cap' }] };
@@ -215,6 +324,36 @@ const chats = b => b.ws.sent.filter(m => m.type === 'chat').map(m => m.text);
   const f = makeBot({ gold: 0, cons: { potion: 3 }, bag: [] }, 'field');
   for (let i = 0; i < 5; i++) snap(f);
   ok(!f.plan && !f.day && f.goal === 'Farming the field', 'a bot told to farm the field has no day');
+  // company, through the real brain. A player in trouble out in the field: it runs to the wolf on them
+  const world = (bot, players, mobs = [], events = []) => bot.ws.emit('message', { type: 'snap', me: { cds: [0, 0, 0, 0], dodge: 0, lvl: 5, ccd: {} }, w: { mobs, gate: [0, 0, 0], events, players: [row(3, bot.x, bot.z, 100, 1, bot.party || 0), ...players] } });
+  const realRandom = Math.random;
+  const h = makeBot({ gold: 0, cons: { potion: 3 }, bag: [] });
+  h.ws.emit('message', { type: 'welcome', id: 3, x: 0, z: 90, seq: 0 });
+  for (let i = 0; i < 3; i++) world(h, [row(4, 150, 30, 100, 3, 9)]);
+  const wolf = [mobRow(80, 'wolf', 13, 100, 2)], hurt = [row(4, 12, 99, 30, 3, 9)];
+  Math.random = () => 0.01;
+  for (let i = 0; i < 40; i++) world(h, hurt, wolf);
+  Math.random = realRandom;
+  ok(h.day.goal === 'help' && h.cmd?.k === 'attack' && h.cmd.tgt === 80 && h.tgtId === 80 && h.mode === 'attack' && chats(h).some(t => /Vex/.test(t)) && /Helping Vex/.test(dayText(h)), `the real brain: a player in trouble 15 m off, and it goes for the wolf on them (${h.goal}; "${chats(h).at(-1)}")`);
+  for (let i = 0; i < 60; i++) world(h, [row(4, 12, 99, 80, 3, 9)]);
+  ok(h.day.log[0]?.g === 'help' && !h.cmd?.day, 'the wolf is gone: the rescue is over');
+  // another bot's invite: a bot with a day decides for itself; one without a day says yes as before
+  const invite = (bot, peers, luck) => { bot.dayPeers = () => peers; bot.ws.emit('message', { type: 'roster', players: [...ROSTER, { id: 5, name: 'Wren', cls: 'ranger', bot: true }] }); const n0 = bot.ws.sent.length; Math.random = () => luck; world(bot, [row(5, bot.x + 3, bot.z, 100, 3, 0)], [], [{ t: 'invite', to: 3, from: 5, name: 'Wren' }]); Math.random = realRandom; return bot.ws.sent.slice(n0).filter(m => m.type === 'accept' || m.type === 'decline').map(m => m.type).join(); };
+  const d1 = makeBot({ gold: 0, cons: { potion: 3 }, bag: [] }); for (let i = 0; i < 3; i++) snap(d1);
+  const d2 = makeBot({ gold: 0, cons: { potion: 3 }, bag: [] }); for (let i = 0; i < 3; i++) snap(d2);
+  const d3 = makeBot({ gold: 0, cons: { potion: 3 }, bag: [] }); for (let i = 0; i < 3; i++) snap(d3);
+  const f2 = makeBot({ gold: 0, cons: { potion: 3 }, bag: [] }, 'field'); for (let i = 0; i < 3; i++) snap(f2);
+  ok(invite(d1, [5], 0.01) === 'accept' && invite(d2, [5], 0.99) === 'decline' && invite(d3, [], 0.01) === 'decline' && invite(f2, [], 0.99) === 'accept', 'another bot\'s invite: a bot with a day joins when it feels like it and only a bot with a day; a bot without a day says yes as before');
+  // "Anyone for boars?" and a player's yes, through the chat it hears
+  const a = makeBot({ gold: 0, cons: { potion: 3 }, bag: [] });
+  a.ws.emit('message', { type: 'welcome', id: 3, x: 0, z: 90, seq: 0 });
+  const by = [row(4, 6, 92, 100, 3, 0)];
+  Math.random = () => 0.01;
+  for (let i = 0; i < 40; i++) world(a, by);
+  Math.random = realRandom;
+  const asked = chats(a).find(t => /^Anyone (up )?for /.test(t));
+  world(a, by, [], [{ t: 'chat', id: 4, from: 'Vex', text: 'sure', ch: 's', x: 6, z: 92 }]);
+  ok(asked && a.ws.sent.some(m => m.type === 'invite' && m.id === 4) && chats(a).some(t => /Invite's out/.test(t)), `a player near as its hunt starts: "${asked}", their "sure", and the invite goes out ("${chats(a).at(-1)}")`);
 }
 
 // ---------- 5. live ----------
@@ -243,6 +382,7 @@ try {
   const bots = ['Rook', 'Wren', 'Tamsin'].map((name, i) => startTeam({ url, WebSocket, roles: [['swordsman', 'ranger', 'guardian'][i]], names: [name], inviteHumans: false, behaviour: 'own', skill: 4 }).team[0]);
   ok(await until(() => bots.every(b => b.plan?.day && b.day?.goal), 15000), `live: three free bots each chose something to do (${bots.map(b => b.goal).join(' | ')})`);
   const [rook, wren, tam] = bots;
+  const known = new Set(bots.map(b => b.id)); for (const b of bots) b.peers = known; // (the server does not flag a test's bots: they know each other, as a team's do)
   // Rook believes it is out of potions and has gold: off to the merchant
   rook.send({ type: 'test', gold: 60 });
   await until(() => rook.gold >= 60, 3000);
@@ -268,7 +408,21 @@ try {
   ok(await until(() => { h.ws.send(J({ type: 'pbot', op: 'list' })); return /^(Hunting|Resting|Looking around|Hanging out|Restocking) .*: /.test(zed()?.doing || ''); }, 20000) && zed().mode === 'own', `live: a bot added out of the party lives its own day; its card says what and why (${zed()?.doing})`);
   h.ws.send(J({ type: 'pbot', op: 'edit', bid: zed().bid, mode: 'field' }));
   ok(await until(() => { h.ws.send(J({ type: 'pbot', op: 'list' })); return zed()?.mode === 'field' && zed().doing === 'Farming the field'; }, 8000), 'live: its creator can still tell it to farm the field instead');
-  for (const b of bots) b.stop();
+  // two free bots team up: one walks up to the other and invites it; one leads the hunt, the other is out with it; then they part
+  const [ada, bo] = ['Ada', 'Bo'].map((name, i) => startTeam({ url, WebSocket, roles: [['swordsman', 'cleric'][i]], names: [name], inviteHumans: false, behaviour: 'own', skill: 4 }).team[0]);
+  await until(() => ada.id && bo.id && ada.day?.goal && bo.day?.goal, 15000);
+  known.add(ada.id); known.add(bo.id); ada.peers = bo.peers = known;
+  ada.dayPeers = () => [bo.id]; bo.dayPeers = () => [ada.id];
+  bo.persona = { ...bo.persona, t: { ...bo.persona.t, sociability: 1 } }; // (a yes nearly every time)
+  ada.dayPicker = (bot, ask) => { ask.done('group'); return true; };
+  const together = () => !!ada.party && ada.party === bo.party;
+  ok(await until(() => { if (!together() && ada.day.goal && ada.day.goal !== 'group' && ada.plan) { ada.day.groupT = null; bo.day.groupT = null; ada.plan = null; ada.cmd = null; } return together(); }, 120000), `live: a free bot walks up to another and they team up (Ada: ${dayLog(ada, 2)})`);
+  ada.dayPicker = null;
+  const lead = () => [ada, bo].find(b => b.plan?.day), tail = () => [ada, bo].find(b => b.day.goal === 'with');
+  ok(await until(() => lead() && tail() && lead() !== tail() && / with /.test(dayText(lead())), 40000), `live: one leads the hunt, the other is out with it (${ada.name}: ${dayText(ada)} | ${bo.name}: ${dayText(bo)})`);
+  const t = tail(); if (t) t.day.groupUntil = 0;
+  ok(await until(() => !ada.party && !bo.party, 60000) && await until(() => ada.plan?.day && bo.plan?.day && ada.day.goal !== 'with' && bo.day.goal !== 'with', 30000), `live: when one has had enough it leaves, and each goes on with its own day (${dayText(ada)} | ${dayText(bo)})`);
+  for (const b of [...bots, ada, bo]) b.stop();
   h.ws.close();
 } catch (err) { console.error(err); console.error(srvLog.slice(-2000)); failed++; }
 console.log(failed ? `${failed} of ${n} checks failed` : `all ${n} checks passed`);

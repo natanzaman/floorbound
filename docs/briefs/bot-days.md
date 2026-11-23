@@ -96,6 +96,13 @@ as hints. Jev answers with a probability for every goal; the bot rolls from thos
   AI spend on the admin page; at the cap the rules take over until midnight UTC.
 - `BOT_DAY_PICK=rules` turns Jev off. The blind test runs both ways, so we learn whether Jev is worth keeping.
 
+## Built differently from the table above (2026-11-23)
+- **Group up:** not "at the well": a bot walks up to another free bot wherever it is and invites it. Only bots living
+  their own day are asked (`b.dayPeers`, from the server), so a bot a player told to stay or farm is never pulled away.
+- **Boss tries:** a party of bots never goes for a boss by itself. Today a boss kill by ordinary bots alone is
+  announced like a player's ("Floor cleared", the banner), and the quiet rule covers only the Named. A bold bot at the
+  boss's level asks the players around instead ("Anyone up for the Warden?") and follows the one who says yes.
+
 ## Not in this version
 Crafting, gathering and gardens of their own, smith upgrades, trading with players, joining guilds, weapon swap,
 saved lives across restarts, the proactive mind (phase C), learned movement (phase D), and growth (phase E, the

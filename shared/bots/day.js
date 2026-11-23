@@ -9,13 +9,20 @@
 //            admin page, the AI mind's prompt, `/b <name>: status`)
 //   wins     an order or a plan from a player, a town raid, a party with a human in it: the day waits, and picks up
 //            RESUME seconds after the order ends
+//   company  help: a player in trouble within HELP_R is helped (an attack order on what is on them), then the day goes
+//            on. group: it walks up to another free bot with a day (b.dayPeers, set by the server) and invites it;
+//            a party of bots is a day group for a while: the leader's day goes on, the others are "out with" it, and
+//            each leaves when it has had enough. ask along: before a hunt a sociable bot may ask the people around
+//            ("Anyone for wolves?", at boss level "Anyone up for the Warden?"); it invites a player only after a yes
+//            (dayChat), and asks any one player at most once in ASK_AGAIN seconds. No boss tries without a player
 //   picker   b.dayPicker(b, ask) may answer for the scores (Jev, server/ai/daypick.js): it calls ask.done(id) or
 //            leaves it; with no answer in PICK_WAIT seconds the top score is taken
 //
 // BOT_DAYS=0: `own` is `field` (today's game). Pure where it can be: facts, needs, scoreGoals, pickKind and planFor
 // take a state and a random source, so tests replay them from a seed.
-import { MOBS, inTown } from '../data.js';
-import { floorOf, floorUnlocked } from '../floor2.js';
+import { MOBS, PARTY_MAX, inTown, inArena } from '../data.js';
+import { floorOf, floorUnlocked, inArena2 } from '../floor2.js';
+import { inArena3 } from '../floor3.js';
 import { CONSUMABLES } from '../items.js';
 import { traitOf } from './personality.js';
 import { PLACES, mobName } from './plan.js';
@@ -26,6 +33,18 @@ export const RESUME = 20;     // s after an order ends before the day goes on
 export const PICK_WAIT = 0.4; // s a picker (Jev) has to answer
 const RETHINK = 5;            // s between looks at a running goal (is something urgent?)
 const LOG = 8;                // goals remembered
+const HELP_R = 40;            // m: how far off a player in trouble is noticed
+const HELP_SECS = 35;         // s: the longest one rescue lasts
+const HELP_AGAIN = 45;        // s before the same player's trouble is weighed again
+const PEER_R = 90;            // m: another free bot this close can be walked up to
+const GROUP_REST = 300;       // s after a group (or a "no") before the next try
+export const ASK_AGAIN = 1200; // s before the same player is asked along again
+const ASK_OPEN = 25;          // s a question stays open for a yes
+const BOSS_NAME = { 1: 'the Warden', 2: 'the Sovereign', 3: 'the Colossus' };
+const inBossRoom = (x, z) => inArena(x, z) || inArena2(x, z) || inArena3(x, z);
+const isBot = (b, id) => !!b.names?.get(id)?.bot || !!b.peers?.has(id); // (peers: bots started together that the server doesn't flag, as in the brain)
+const nameOf = (b, id) => b.names?.get(id)?.name || 'you';
+const pick = (rnd, list) => list[Math.min(list.length - 1, Math.floor(rnd() * list.length))];
 const BOSS_LVL = { 1: 5, 2: 15, 3: 25 };
 const clamp = v => Math.max(0, Math.min(1, v));
 
@@ -40,15 +59,26 @@ export const hasDay = b => b?.behaviour === 'own' && !b.script && daysEnabled();
 export function facts(b, d = b.day || {}) {
   const fl = floorOf(b.x), lvl = b.me?.lvl || 1, t = b.t;
   const near = (b.players || []).filter(p => p.id !== b.id && !p.dead && floorOf(p.x) === fl && d2(p.x, p.z, b.x, b.z) < 30);
+  const mates = b.party ? (b.players || []).filter(p => p.id !== b.id && p.party === b.party) : [];
   return {
+    free: peersNear(b).length, mates: mates.length, with: mates.map(p => nameOf(b, p.id)), sinceGroup: t - (d.groupT ?? -1e9),
     lvl, fl, hp: b.maxHp ? clamp(b.hp / b.maxHp) : 1,
     pots: b.cons ? b.cons.potion || 0 : null, // (null: not told yet)
     gold: b.gold || 0, spare: spareGear(b).length, bag: (b.bag || []).length,
     town: inTown(b.x, b.z),
     sinceRest: t - (d.restT ?? d.t0 ?? t), sameFor: t - (d.sameT ?? t), alone: t - (d.seenT ?? d.t0 ?? t),
-    deaths: d.deaths || 0, poor: d.poor ?? -99, people: near.length, humans: near.filter(p => !(b.names?.get(p.id)?.bot)).length,
+    deaths: d.deaths || 0, poor: d.poor ?? -99, people: near.length, humans: near.filter(p => !isBot(b, p.id)).length,
     last: d.log?.[0]?.g || '',
   };
+}
+
+// Other free bots with a day close enough to walk up to: same floor, alive, in no party, within five levels.
+// b.dayPeers(b) → their player ids (the server knows who has a day: server/botmanager.js); without it, nobody.
+export function peersNear(b) {
+  const ids = b.dayPeers?.(b); if (!ids?.length) return [];
+  const fl = floorOf(b.x), lvl = b.me?.lvl || 1;
+  return (b.players || []).filter(p => p.id !== b.id && ids.includes(p.id) && !p.dead && !p.party && floorOf(p.x) === fl && Math.abs((p.lvl || 1) - lvl) <= 5 && d2(p.x, p.z, b.x, b.z) < PEER_R)
+    .sort((a, c) => d2(a.x, a.z, b.x, b.z) - d2(c.x, c.z, b.x, b.z));
 }
 
 // How many potions this bot likes to carry (3 to 6), and when it feels short (2 or 3).
@@ -75,8 +105,8 @@ export function needs(b, f) {
 export const GOALS = {
   hunt: {
     name: 'Hunting', cool: 0.9,
-    score: (n, f, T) => clamp(0.42 + T('aggression') * 0.2 - n.rest * 0.3 - (canShop(f) ? n.supplies * 0.5 : 0) - n.bag * 0.25),
-    why: (n, f) => (f.pots === 0 && !canShop(f) ? 'no gold for potions' : f.lvl < (BOSS_LVL[f.fl] || 99) ? 'levelling up' : 'earning gold'),
+    score: (n, f, T) => clamp(0.42 + T('aggression') * 0.2 + (f.mates ? 0.15 : 0) - n.rest * 0.3 - (canShop(f) ? n.supplies * 0.5 : 0) - n.bag * 0.25),
+    why: (n, f) => (f.mates ? 'better together' : f.pots === 0 && !canShop(f) ? 'no gold for potions' : f.lvl < (BOSS_LVL[f.fl] || 99) ? 'levelling up' : 'earning gold'),
   },
   restock: {
     name: 'Restocking', cool: 0.3,
@@ -97,6 +127,11 @@ export const GOALS = {
     name: 'Hanging out', cool: 0.4,
     score: (n, f, T) => clamp(n.company * (0.45 + T('sociability') * 0.8) * (f.people || f.town ? 1 : 0.7)),
     why: (n, f) => (f.humans ? 'people are about' : 'wants company'),
+  },
+  group: { // walk up to another free bot and team up (never while following; a leader may fetch a third)
+    name: 'Teaming up', cool: 0.2,
+    score: (n, f, T) => (!f.free || f.mates >= 2 || f.sinceGroup < GROUP_REST ? 0 : clamp((0.14 + n.company * 0.7) * (0.35 + T('sociability') * 0.9) * (f.mates ? 0.5 : 1))),
+    why: (n, f) => (f.mates ? 'room for one more' : 'hunting is better together'),
   },
 };
 export const GOAL_IDS = Object.keys(GOALS);
@@ -135,7 +170,8 @@ export function planFor(id, b, f, rnd = Math.random, o = {}) {
   switch (id) {
     case 'hunt': {
       const kind = pickKind(b, f, rnd, o), n = between(rnd, 10, 18 + T('aggression') * 10), fl = kindFloor(kind);
-      return { kind, text: `Hunting ${mobName(kind, 2)}`, steps: [...(fl !== f.fl ? [{ k: 'goto', place: campOf(fl) }] : []), { k: 'farm', mob: kind, n }] };
+      const crew = f.with?.length ? ` with ${f.with.slice(0, 2).join(' and ')}` : '';
+      return { kind, text: `Hunting ${mobName(kind, 2)}${crew}`, steps: [...(o.ask ? [{ k: 'wait', n: 8 }] : []), ...(fl !== f.fl ? [{ k: 'goto', place: campOf(fl) }] : []), { k: 'farm', mob: kind, n: Math.round(n * (1 + 0.4 * (f.mates || 0))) }] };
     }
     case 'restock': {
       const want = Math.max(1, potionsWanted(b) - (f.pots || 0));
@@ -152,6 +188,10 @@ export function planFor(id, b, f, rnd = Math.random, o = {}) {
       const stop = p => [{ k: 'goto', place: p }, { k: 'wait', n: between(rnd, 12, 40) }];
       return { sights: two ? [a, two] : [a], text: `Looking around (${PLACES[a].name})`, steps: [...stop(a), ...(two ? stop(two) : [])] };
     }
+    case 'group': { // up to the nearest free bot, then a moment for its answer (the invite goes out on arrival: dayTurn)
+      const c = peersNear(b)[0]; if (!c) return null;
+      return { by: c.id, cand: c.id, text: `Teaming up with ${nameOf(b, c.id)}`, steps: [{ k: 'come' }, { k: 'wait', n: 7 }] };
+    }
     case 'hangout':
       return { text: f.fl === 1 ? 'Hanging out by the well' : 'Hanging out in camp', steps: [{ k: 'goto', place: f.fl === 1 ? 'well' : 'camp' }, { k: 'wait', n: between(rnd, 60, 120 + T('sociability') * 120) }] };
   }
@@ -159,7 +199,8 @@ export function planFor(id, b, f, rnd = Math.random, o = {}) {
 }
 
 // ---------- the day itself ----------
-const fresh = b => ({ t0: b.t, goal: '', why: '', text: '', since: b.t, log: [], restT: b.t, sameT: b.t, seenT: b.t, deaths: 0, deadSeen: false, hold: 0, lookT: 0, sights: [], skip: [], kind: '', urgent: 0, pending: null, picked: 0, asked: 0 });
+const fresh = b => ({ t0: b.t, goal: '', why: '', text: '', since: b.t, log: [], restT: b.t, sameT: b.t, seenT: b.t, deaths: 0, deadSeen: false, hold: 0, lookT: 0, sights: [], skip: [], kind: '', urgent: 0, pending: null, picked: 0, asked: 0,
+  help: null, helpSeen: new Map(), helpT: 0, helped: 0, groupUntil: null, groupT: null, leftT: -9, lead: 0, cand: 0, inv: 0, ask: null, askedAt: new Map() });
 
 // The goal is over (done, stopped, or dropped for an order): into the log.
 function close(b, d, how = 'done') {
@@ -169,37 +210,174 @@ function close(b, d, how = 'done') {
   if (d.goal === 'rest' && how === 'done') { d.restT = b.t; d.deaths = 0; }
   if (d.goal === 'restock' && b.cons) d.poor = (b.cons.potion || 0) < potionsShort(b) ? b.gold || 0 : null; // (still short: the gold wasn't enough)
   if (d.goal !== d.log[1]?.g) d.sameT = d.since; // (a different thing from the one before: the "same old" clock runs from its start)
-  d.goal = ''; d.text = ''; d.why = '';
+  d.goal = ''; d.text = ''; d.why = ''; d.help = null; d.cand = 0; d.inv = 0; d.lead = 0;
 }
 
 // Take goal id: make its plan and start it. Returns false when it cannot be planned.
 function begin(b, d, id, why, api, rnd) {
-  const f = facts(b, d), made = planFor(id, b, f, rnd, { floors: b.dayFloors?.(b) || null, skip: d.skip });
-  if (!made || !setPlan(b, made.steps, { by: 0, quiet: true, day: id }, api)) return false;
-  Object.assign(d, { goal: id, why, text: made.text, since: b.t, urgent: 0 });
+  const f = facts(b, d), ask = id === 'hunt' && askAlong(b, d, f, api, rnd);
+  const made = planFor(id, b, f, rnd, { floors: b.dayFloors?.(b) || null, skip: d.skip, ask });
+  if (!made || !setPlan(b, made.steps, { by: made.by || 0, adm: true, quiet: true, day: id }, api)) return false;
+  Object.assign(d, { goal: id, why, text: made.text, since: b.t, urgent: 0, cand: made.cand || 0, inv: 0 });
   if (made.kind) d.kind = made.kind;
   if (made.sights) d.sights = [...made.sights, ...d.sights].slice(0, 6);
+  if (ask) d.ask.kind = d.kind;
   return true;
+}
+
+// ----- help: a player in trouble nearby -----
+// The player (not a bot, alive, on our floor, within HELP_R, outside a boss room) with the most on them, and the
+// monster to take off them: { p, mob, low } or null. Trouble: under 45% health with a monster on them, or three on them.
+export function inTrouble(b, only = 0) {
+  const fl = floorOf(b.x), lvl = b.me?.lvl || 1;
+  let best = null;
+  for (const p of b.players || []) {
+    if (p.id === b.id || p.dead || isBot(b, p.id) || (only && p.id !== only) || floorOf(p.x) !== fl || d2(p.x, p.z, b.x, b.z) > HELP_R || inBossRoom(p.x, p.z) || inTown(p.x, p.z)) continue;
+    const on = (b.mobs || []).filter(m => m.engaged && !m.def.boss && !m.def.prop && !m.def.duel && !m.def.academy && !m.def.lab && (m.def.level || 1) <= lvl + 3 && d2(m.x, m.z, p.x, p.z) < m.def.radius + 4.5);
+    const low = p.maxHp > 0 && p.hp / p.maxHp < 0.45;
+    if (!on.length || !(low || on.length >= 3)) continue;
+    const mob = on.sort((a, c) => d2(a.x, a.z, p.x, p.z) - d2(c.x, c.z, p.x, p.z))[0];
+    if (!best || on.length > best.n) best = { p, mob, low, n: on.length };
+  }
+  return best;
+}
+const HELP_LINES = ['Hang on, {who}!', 'I\'ve got you, {who}.', 'Coming, {who}!', 'On my way, {who}.'];
+const HELPED_LINES = ['There. You all right, {who}?', 'That\'s the last of them.', 'Careful out here, {who}.'];
+const attack = (b, mob, api) => { api.command(b, { k: 'attack', tgt: mob.id, by: 0, adm: true, quiet: true }); if (b.cmd?.k === 'attack' && b.cmd.tgt === mob.id) { b.cmd.day = 1; b.cmd.prev = null; return true; } return false; };
+// True while this bot is busy helping (the rest of the day waits).
+function helpTurn(b, d, api, rnd) {
+  const T = k => traitOf(b, k);
+  if (d.goal === 'help') {
+    if (b.cmd?.day && b.t < d.help.until) return true; // on it
+    if (b.cmd?.day) b.cmd = null;
+    const more = b.t < d.help.until ? inTrouble(b, d.help.pid) : null; // the next one on them
+    if (more && attack(b, more.mob, api)) return true;
+    const p = (b.players || []).find(q => q.id === d.help.pid);
+    if (p && !p.dead && rnd() < 0.3 + T('chattiness') * 0.5) api.say?.(b, 'dayHelped', {}, { force: true, ch: 's', text: pick(rnd, HELPED_LINES).replace('{who}', nameOf(b, p.id)) });
+    d.helped++;
+    close(b, d, 'done');
+    d.hold = b.t + 2 + rnd() * 3;
+    return true;
+  }
+  if (b.t < d.helpT || d.goal === 'with') return false;
+  d.helpT = b.t + 1.5;
+  if (b.maxHp && b.hp / b.maxHp < 0.5) return false;
+  if (d.goal === 'restock' && b.cons && !(b.cons.potion > 0)) return false; // no potions: not now
+  const tr = inTrouble(b);
+  if (!tr || b.t < (d.helpSeen.get(tr.p.id) || 0)) return false;
+  d.helpSeen.set(tr.p.id, b.t + HELP_AGAIN); // weighed once per scrape
+  if (rnd() > clamp(0.4 + T('sociability') * 0.5 - T('caution') * 0.35 + (tr.low ? 0.1 : 0))) return false;
+  if (b.plan?.day) endPlan(b);
+  close(b, d, 'cut short');
+  if (!attack(b, tr.mob, api)) return false;
+  Object.assign(d, { goal: 'help', text: `Helping ${nameOf(b, tr.p.id)}`, why: tr.low ? 'they were in trouble' : 'too many on them', since: b.t, help: { pid: tr.p.id, until: b.t + HELP_SECS }, pending: null });
+  api.say?.(b, 'dayHelp', {}, { force: true, ch: 's', text: pick(rnd, HELP_LINES).replace('{who}', nameOf(b, tr.p.id)) });
+  return true;
+}
+
+// ----- ask along: "Anyone for wolves?" -----
+const ASK_LINES = ['Anyone for {what}?', 'Heading out for {what}. Room for one more.', 'Going after {what}. Anyone want in?'];
+const BOSS_LINES = ['Anyone up for {what}?', 'I\'d try {what} if someone comes along.'];
+const YES = /\b(yes|yeah|yep|yup|sure|ok|okay|me|i'?m in|count me in|let'?s go|coming|i'?ll come|why not)\b/i;
+// Before a hunt: ask the players around (never one asked in the last ASK_AGAIN s). True when it asked: the hunt
+// waits a few seconds for an answer. At the boss's level the question is about the boss.
+function askAlong(b, d, f, api, rnd) {
+  if (!f.humans || f.mates + 1 >= PARTY_MAX) return false;
+  const fl = f.fl, near = (b.players || []).filter(p => p.id !== b.id && !p.dead && !isBot(b, p.id) && floorOf(p.x) === fl && d2(p.x, p.z, b.x, b.z) < 30);
+  const fresh = near.filter(p => b.t - (d.askedAt.get(p.id) ?? -1e9) >= ASK_AGAIN);
+  if (!fresh.length || fresh.length < near.length) return false; // (someone here heard it not long ago)
+  const T = k => traitOf(b, k);
+  if (rnd() > clamp((T('sociability') - 0.25) * 0.9 + T('chattiness') * 0.25)) return false;
+  for (const p of fresh) d.askedAt.set(p.id, b.t);
+  const boss = f.lvl >= (BOSS_LVL[fl] || 99) && rnd() < 0.3 + T('aggression') * 0.5 ? BOSS_NAME[fl] : '';
+  d.ask = { until: b.t + ASK_OPEN, boss, kind: '', said: false };
+  return true;
+}
+// A chat line (the brain's onChat): a yes from a player nearby to an open question gets the invite.
+export function dayChat(b, e) {
+  const d = b.day, a = d?.ask;
+  if (!a || !a.said || b.t > a.until || e.id === b.id || isBot(b, e.id) || e.ch === 'p') return false;
+  const p = (b.players || []).find(q => q.id === e.id);
+  if (!p || p.dead || floorOf(p.x) !== floorOf(b.x) || d2(p.x, p.z, b.x, b.z) > 35) return false;
+  const text = String(e.text || '');
+  if (text.length > 40 || !YES.test(text)) return false;
+  d.ask = null;
+  b.send({ type: 'invite', id: p.id });
+  d.invited = { id: p.id, at: b.t, boss: a.boss };
+  return true;
+}
+
+// ----- a day group: a party of bots -----
+const groupSecs = (b, rnd) => 420 + rnd() * 360 + traitOf(b, 'sociability') * 240;
+const BYE_LINES = ['Good hunting, all. I\'m off.', 'That was fun. See you around.', 'I\'ll head off. Thanks for the company.'];
+const JOIN_LINES = ['Want to team up, {who}?', '{who}, hunt together for a bit?', 'Room for one more, {who}?'];
+// An invite from another bot (the brain's onInvite, for a bot with a day): join it?
+export function dayInvite(b, e, rnd = Math.random) {
+  const d = b.day; if (!d || b.party || b.dead) return false;
+  const peers = b.dayPeers?.(b);
+  if (peers && !peers.includes(e.from)) return false; // (only bots with a day of their own)
+  if ((b.plan && !b.plan.day) || (b.cmd && !b.cmd.plan && !b.cmd.day)) return false; // on a player's order
+  if (d.goal === 'help' || (d.goal === 'restock' && b.cons && !(b.cons.potion > 0)) || b.t - (d.groupT ?? -1e9) < GROUP_REST) return false;
+  return rnd() < 0.5 + traitOf(b, 'sociability') * 0.45;
 }
 
 // Once per think turn, before the plan runner. P: the party view; api: { command, say } (as for plans).
 // rnd: the luck (tests pass a seeded one).
 export function dayTurn(b, P, api, rnd = Math.random) {
-  if (!hasDay(b)) { if (b.day) { if (b.plan?.day) endPlan(b); b.day = null; } return; }
+  if (!hasDay(b)) { if (b.day) { if (b.plan?.day) endPlan(b); if (b.cmd?.day) b.cmd = null; b.day = null; } return; }
   const d = (b.day ||= fresh(b));
   if (b.dead) return;
   d.deadSeen = false;
   if ((b.players || []).some(p => p.id !== b.id && !p.dead && d2(p.x, p.z, b.x, b.z) < 15)) d.seenT = b.t; // company
-  const mine = !!b.plan?.day;
-  // not ours to choose: in a party with a player, following another bot's lead, somebody's plan or order, a raid
-  const led = P.humans.length > 0 || (!!b.party && P.botLeader && P.botLeader.id !== b.id);
-  if (led || (b.plan && !mine) || (!b.plan && b.cmd)) {
+  const mine = !!b.plan?.day, helping = !!b.cmd?.day;
+  // not ours to choose: in a party with a player, somebody's plan or order, a raid
+  if (P.humans.length > 0 || (b.plan && !mine) || (!b.plan && b.cmd && !helping)) {
     if (mine) endPlan(b);
-    close(b, d, 'order'); d.pending = null;
+    if (helping) b.cmd = null;
+    if (d.invited && P.humans.some(h => h.id === d.invited.id)) { // the player we asked along came
+      if (d.invited.boss) api.say?.(b, 'dayAsk', {}, { force: true, ch: 'p', text: `Lead on to ${d.invited.boss} when you're ready.` });
+      d.invited = null;
+    }
+    close(b, d, 'order'); d.pending = null; d.ask = null;
     d.hold = b.t + RESUME;
     return;
   }
+  if (d.ask && !d.ask.said && b.t - d.since > 0.5) { // the question, once the hunt is set
+    d.ask.said = true;
+    const what = d.ask.boss || mobName(d.ask.kind || d.kind || 'boar', 2).toLowerCase();
+    api.say?.(b, 'dayAsk', {}, { force: true, ch: 's', text: pick(rnd, d.ask.boss ? BOSS_LINES : ASK_LINES).replace('{what}', what) });
+  }
+  if (d.ask && b.t > d.ask.until) d.ask = null;
+  // a party of bots: a day group. The leader's day goes on; the others are out with it; each leaves in its own time
+  if (b.party && P.mates.length && b.t - d.leftT > 2) {
+    d.groupUntil ??= b.t + groupSecs(b, rnd);
+    const lead = P.botLeader && P.botLeader.id !== b.id ? P.botLeader : null;
+    if (b.t > d.groupUntil && !b.tgtId && !helping) {
+      if (mine) endPlan(b);
+      api.say?.(b, 'dayBye', {}, { force: true, ch: 'p', text: pick(rnd, BYE_LINES) });
+      b.send({ type: 'leave' });
+      close(b, d, 'done');
+      Object.assign(d, { groupUntil: null, groupT: b.t, leftT: b.t, pending: null, hold: b.t + 2 + rnd() * 3 });
+      return;
+    }
+    if (lead) {
+      if (mine) endPlan(b);
+      if (d.goal !== 'with' || d.lead !== lead.id) { close(b, d, d.goal === 'group' ? 'done' : 'joined'); Object.assign(d, { goal: 'with', lead: lead.id, text: `Out with ${lead.name || nameOf(b, lead.id)}`, why: 'better together', since: b.t }); }
+      d.pending = null;
+      return;
+    }
+  } else if (!b.party && d.groupUntil != null) { d.groupUntil = null; d.groupT = b.t; } // the group broke up
+  if (d.goal === 'with') { close(b, d, 'done'); d.hold = b.t + 1 + rnd() * 3; }
+  if (helpTurn(b, d, api, rnd)) return;
   if (mine) { // a goal is running: is something more urgent?
+    if (d.goal === 'group') { // by the other bot's side (the wait step): the invite, once
+      if (b.plan.i >= 1 && !d.inv && d.cand) {
+        d.inv = d.cand;
+        api.say?.(b, 'dayGroup', {}, { force: true, ch: 's', text: pick(rnd, JOIN_LINES).replace('{who}', nameOf(b, d.cand)) });
+        b.send({ type: 'invite', id: d.cand });
+      }
+      return;
+    }
     if (b.cmd?.defend || d.goal !== 'hunt') return;
     if (b.t >= d.lookT) { // out of potions with the means to buy some: back to town once this fight is over
       d.lookT = b.t + RETHINK;
@@ -213,7 +391,9 @@ export function dayTurn(b, P, api, rnd = Math.random) {
   if (d.goal) {
     const stopped = b.dayStop; b.dayStop = null;
     if (stopped && d.goal === 'hunt' && d.kind) d.skip = [d.kind, ...d.skip].slice(0, 4); // (none of that kind about: another next time)
-    close(b, d, stopped ? 'stopped' : 'done');
+    const alone = d.goal === 'group' && !P.mates.length;
+    if (alone) d.groupT = b.t; // nobody came: not again for a while
+    close(b, d, stopped ? 'stopped' : alone ? 'no luck' : 'done');
     d.hold = Math.max(d.hold, b.t + 1 + rnd() * 3); // a breath between two things
   }
   if (b.t < d.hold || b.tgtId) return;

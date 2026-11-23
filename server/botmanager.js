@@ -145,6 +145,7 @@ export class BotManager {
       join: { bot: this.key, lvl, f2: behaviour === 'floor2' || behaviour === 'floor3' || behaviour === 'follow' ? 1 : 0, f3: behaviour === 'floor3' || behaviour === 'follow' ? 1 : 0, ...(join || {}) },
     });
     const out = group.team.map(b => ({ bid: bid || this.nextBid++, b, group, behaviour, follow, team, lvl, at: Date.now(), creator: null, allow: [] }));
+    for (const e of out) e.b.dayPeers = () => this.dayPeers(e); // who else has a day of its own (shared/bots/day.js: teaming up)
     this.bots.push(...out);
     return out.map(e => this.view(e));
   }
@@ -201,6 +202,11 @@ export class BotManager {
       const busy = sent || (e.b.tgtId && (inArena(p.x, p.z) || inArena2(p.x, p.z) || inArena3(p.x, p.z))); // don't pull it out of a boss fight
       if (t && !t.dead && !busy && Date.now() - (e.caughtUp || 0) > 8000 && (floorOf(p.x) !== floorOf(t.x) || Math.hypot(p.x - t.x, p.z - t.z) > 45)) { e.caughtUp = Date.now(); this.catchUp(p, t); }
     }
+  }
+
+  // The other bots living a day of their own (behaviour `own`, never the Named): their player ids.
+  dayPeers(e) {
+    return this.bots.filter(x => x !== e && !x.named && x.behaviour === 'own' && x.b.id && !x.b.closed).map(x => x.b.id);
   }
 
   // A bot out of a party: back to roaming on its own (kicked, or its party broke up). Its orders are cleared.
