@@ -1,7 +1,7 @@
 # Bot days: free bots that choose what to do (phase B of "bots that feel like real players")
 
 Plan doc: https://claude.ai/artifact/ET4pP7qqX3hefDepXzmPmX (layer 2, the life layer). Owner's go for the brief:
-2026-11-23 ("Merge, then start phase B"). Owner 2026-11-23: Jev decides for every bot with a day. Residents: his call is still open.
+2026-11-23 ("Merge, then start phase B"). Owner 2026-11-23: Jev decides for every bot with a day. Residents: yes, six, shown to him first (built after the merge).
 
 ## Goal
 A free bot today farms the field for ever. A real player hunts for a while, runs low on potions, walks back to town,
@@ -94,12 +94,33 @@ The 5 Hz tier is what pays for the floors nobody is on. 30 bots fit the free pla
 Render: read the columns against each other). Past about 62 bots the adds stop sticking in this container, so 100 was
 really 62: `MAX_BOTS` stays 30.
 
-## Residents (owner call)
+## Residents (owner call: yes, 2026-11-23; built on top of the merged phase B)
 Today a free bot exists only while the player who added it is online, so with nobody adding bots there is nobody to
-have a day. Proposal: the server keeps `RESIDENTS=6` bots of its own while at least one player is online: fixed names
-and personalities, mixed classes, levels spread up to the active players' level, behaviour `own`, on floors where
-players are. They count toward `MAX_BOTS`, show in the Bots list as the server's, and anyone may invite them.
-`RESIDENTS=0` turns it off. Their levels and gold are not saved in this version.
+have a day. So the server keeps bots of its own (`shared/residents.js`, `server/residents.js`) while at least one
+player is online. The owner asked to see them first and whether they are one party: they are not; each lives its own
+day, and the sociable ones team up with another free bot now and then, as any free bot does.
+
+| Name | Class | Personality (rolled from the name) | Skill | Level |
+| --- | --- | --- | --- | --- |
+| Marlo | Guardian | Steady | 3 Average | the top online player's |
+| Gideon | Cleric | Chatterbox | 3 Average | 90% of it |
+| Talia | Lancer | Explorer | 3 Average | 85% |
+| Pip | Berserker | Hothead | 2 Casual | 75% |
+| Rosalind | Bard | Joker | 2 Casual | 65% |
+| Brenna | Ranger | Quiet | 2 Casual | 55% |
+
+- **When:** with a player online the missing ones join, one every 2 s tick (no burst); nobody online for
+  `RESIDENT_GRACE` (60 s): they all leave (a quick reconnect keeps them). Nothing about them is saved.
+- **Where and how:** behaviour `own`, free to travel; each joins at its level in that level's premade gear (the same
+  as a player-added bot's: `premadeOutfit` in `server/playerbots.js`), next to the waypoint of the floor most players
+  are on.
+- **Whose:** nobody's (no creator, empty allow list), so anyone may invite or order one; the Bots list tags them
+  "resident". They count toward `MAX_BOTS`: with the limit reached a resident waits for a slot.
+- **Names:** a name a player has taken: the resident joins as "Pip 2", keeping Pip's personality.
+- **Admin:** removing one (a row's remove, or "remove all") keeps it out for `RESIDENT_AWAY` (30 min), then it comes
+  back. `GET /api/admin/bots` carries `residents` (who is in, and how long a removed one stays out).
+- **Switch:** on by default only on Render (`RENDER` is set there, as `server/shutdown.js` uses), so test and local
+  servers are as before; `RESIDENTS=<n>` keeps the first n anywhere, `RESIDENTS=0` none. Test: `test/residents.js`.
 
 ## A decision model picks the goal (built 2026-11-23; owner: for every bot with a day, not only those near players)
 `server/ai/providers/decisions.js` talks to OpenRouter's decisions endpoint (`POST /api/alpha/decisions`), next to
@@ -155,7 +176,7 @@ saved bot's profile, lessons and goal preferences, which the chooser here would 
 2. The chooser, the solo goals (hunt, restock, rest, wander, hang out), `b.day`, the card and admin line, `own`.
 3. Company: help, group up, boss tries, ask along.
 4. Unseen bots: go home, think rates, perfbench with free bots.
-5. Jev: the provider, the cap, the fallback. 6. Residents (if OK).
+5. Jev: the provider, the cap, the fallback. 6. Residents (owner's yes; after the merge, with its own review).
 Then an independent review, fixes, the owner's OK, merge.
 
 ## Checks

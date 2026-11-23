@@ -176,7 +176,7 @@ export class BotManager {
       party: party ? party.members.filter(id => id !== p.id).map(id => g.players.get(id)?.name).filter(Boolean) : [],
       behaviour: e.behaviour, follow: e.follow, team: e.team, owner: this.ownedRec?.(e.bid)?.ownerName || '', skill: e.b.skill, skillName: skillName(e.b.skill), persona: e.persona || 'auto', personaText: describePersona(e.b.persona), status: e.b.closed ? 'gone' : p ? 'online' : 'joining', since: e.at,
       goal: p?.dead ? 'Down' : e.b.goal || '', role: e.b.role, order: e.b.cmd ? { cmd: e.b.cmd.k, by: e.b.cmd.byName || '' } : null, partyLead: e.b.anchor?.name || '', look: e.look || '',
-      creator: e.creator?.name || '', allow: e.allow || [],
+      creator: e.creator?.name || '', allow: e.allow || [], resident: e.resident || '', // (resident: one of the server's six, server/residents.js)
     };
   }
 

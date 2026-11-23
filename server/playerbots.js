@@ -384,7 +384,7 @@ export class PlayerBots {
       return {
         bid: v.bid, id: v.id, name: v.name, cls: v.cls, lvl: v.lvl, hp: v.hp, maxHp: v.maxHp, dead: v.dead, area: v.area, floor: v.floor,
         skill: v.skill, skillName: v.skillName, owner, creator: owner, mine, can: mine || this.canManage(p, e, admin), mode: rec?.mode || null, behaviour: e.behaviour, doing, // (creator: '' for an admin-made bot, a server bot to players; its creator stays for the rules)
-        party: v.party, myParty: inMine, loadout: rec?.loadout || null, partied: !!rec?.partied, where: this.where(b),
+        party: v.party, myParty: inMine, loadout: rec?.loadout || null, partied: !!rec?.partied, where: this.where(b), resident: !!e.resident,
         kit: (mine || this.canManage(p, e, admin)) && b ? this.kit(b) : null,
         ctl: { invite: this.ctl(inv), kick: this.ctl(kick) },
       };
@@ -404,7 +404,7 @@ export class PlayerBots {
       const kick = !inMine ? 'Not in your party.' : this.mgr.controlBlock(who, e, 'botKick');
       return {
         bid: e.bid, pid: b?.id || 0, name: b?.name || e.b.name, cls: e.b.cls, lvl: b?.lvl ?? e.lvl, dead: !!b?.dead, mine, creator: rec ? (this.ownerOf(rec)?.name || rec.ownerName) : '',
-        myParty: inMine, where: this.where(b), ctl: { invite: this.ctl(inv), kick: this.ctl(kick) },
+        myParty: inMine, where: this.where(b), resident: !!e.resident, ctl: { invite: this.ctl(inv), kick: this.ctl(kick) },
         ...(rec && this.canManage(p, e, admin) ? { allow: !e.allow?.length ? 'anyone' : e.allow.every(a => a.id === ALLOW_CREATOR) ? 'just the creator' : allowLabel(e.allow.filter(a => a.id !== ALLOW_CREATOR)), allowList: (e.allow || []).filter(a => a.id !== ALLOW_CREATOR).map(a => a.name), canAllow: true } : {}),
       };
     });
@@ -422,22 +422,7 @@ export class PlayerBots {
 
   // ---------- premade loadout ----------
   outfit(b, rec) {
-    const g = this.game, L = loadoutFor(b.lvl), role = CLASSES[b.cls]?.role || 'Damage', mid = () => 0.5; // mid-roll stats
-    const make = (slot, kind) => {
-      try { return makeItem(slot, L.rarity, b.cls, mid, kind); }
-      catch { const it = makeItem(slot, L.rarity, 'swordsman', mid, kind); it.cls = b.cls; it.name = `${CLASSES[b.cls].name}'s Weapon`; return it; } // a class without weapon names yet
-    };
-    b.inv.eq = { ...b.inv.eq, weapon: make('weapon'), armor: make('armor'), charm: make('charm', charmFor(role)) };
-    for (const s of SLOTS) botAffixes(b.inv.eq[s], b.cls); // role-fit affixes, mid rolls (shared/loot.js)
-    const pts = MASTERY.need[L.mastery] || 0;
-    for (const [sk, m] of Object.entries(b.mastery || {})) {
-      m.pts = Math.max(m.pts || 0, pts);
-      if (L.evolved && !m.br) m.br = defaultBranch(sk);
-    }
-    g.autoSpendTalents?.(b); // talent tree, if there is one
-    g.botSpecialise?.(b); // its role's subclass from level 15 (shared/subclasses.js BOT_SUB, server/subclasses.js)
-    g.recompute(b); b.hp = b.maxHp;
-    b.invDirty = true; b.masteryDirty = true; b.masteryNow = true;
+    const L = premadeOutfit(this.game, b);
     b.pbOwned = true; // (no XP of its own)
     rec.pid = b.id;
     rec.loadout = { rarity: L.rarityName, mastery: L.mastery, evolved: L.evolved };
@@ -543,4 +528,27 @@ export class PlayerBots {
   }
 
   removeAll() { for (const bid of [...this.owned.keys()]) this.mgr.remove(bid); this.owned.clear(); }
+}
+
+
+// The premade setup for a bot's level (gear, mastery, talents, subclass): a player-added bot's, and a resident's
+// (server/residents.js). Returns the loadout row (shared/playerbots.js loadoutFor).
+export function premadeOutfit(g, b) {
+  const L = loadoutFor(b.lvl), role = CLASSES[b.cls]?.role || 'Damage', mid = () => 0.5; // mid-roll stats
+  const make = (slot, kind) => {
+    try { return makeItem(slot, L.rarity, b.cls, mid, kind); }
+    catch { const it = makeItem(slot, L.rarity, 'swordsman', mid, kind); it.cls = b.cls; it.name = `${CLASSES[b.cls].name}'s Weapon`; return it; } // a class without weapon names yet
+  };
+  b.inv.eq = { ...b.inv.eq, weapon: make('weapon'), armor: make('armor'), charm: make('charm', charmFor(role)) };
+  for (const s of SLOTS) botAffixes(b.inv.eq[s], b.cls); // role-fit affixes, mid rolls (shared/loot.js)
+  const pts = MASTERY.need[L.mastery] || 0;
+  for (const [sk, m] of Object.entries(b.mastery || {})) {
+    m.pts = Math.max(m.pts || 0, pts);
+    if (L.evolved && !m.br) m.br = defaultBranch(sk);
+  }
+  g.autoSpendTalents?.(b); // talent tree, if there is one
+  g.botSpecialise?.(b); // its role's subclass from level 15 (shared/subclasses.js BOT_SUB, server/subclasses.js)
+  g.recompute(b); b.hp = b.maxHp;
+  b.invDirty = true; b.masteryDirty = true; b.masteryNow = true;
+  return L;
 }

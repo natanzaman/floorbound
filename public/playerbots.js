@@ -170,7 +170,7 @@ export function initPlayerBots({ $, send, state, players, log, sfx, rerender, re
   // Duel: a bot or one of the Named that's in the world and up (main.js binds [data-duel]: public/duels.js challenge)
   const duelBtn = r => (r.pid && !r.dead && r.pid !== state.myId ? `<button data-duel="${r.pid}" title="Challenge to a duel (it accepts)">Duel</button>` : '');
   function listRow(b) {
-    const tag = b.mine ? '<span class="pb-own">yours</span>' : b.creator ? `<span class="pb-own">${esc(b.creator)}'s</span>` : '<span class="pb-own adm">server bot</span>';
+    const tag = b.mine ? '<span class="pb-own">yours</span>' : b.creator ? `<span class="pb-own">${esc(b.creator)}'s</span>` : b.resident ? '<span class="pb-own adm" title="Lives here: one of the server\'s own bots, living its own day. Anyone may invite it.">resident</span>' : '<span class="pb-own adm">server bot</span>';
     const where = b.where?.k === 'party' && b.myParty ? 'In your party' : b.where?.text || '';
     const key = `data-bid="${b.bid}"`, ok = { ok: true };
     const right = (b.myParty ? btn('kick', 'Kick', b.ctl.kick, key, 'danger') : btn('invite', 'Invite to party', b.ctl.invite, key)) + duelBtn(b);

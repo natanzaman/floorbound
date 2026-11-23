@@ -13,6 +13,7 @@ import { BotManager } from './botmanager.js';
 import { botMayNotSend } from '../shared/bots/social.js';
 import { makeLocalHub, deepFreeze } from './localws.js'; // in-process sockets for the server's own bots
 import { PlayerBots } from './playerbots.js';
+import { Residents, residentsOn } from './residents.js'; // the server's own six, living their days while a player is online (on Render by default; RESIDENTS=<n> anywhere, 0 = none)
 import { drain } from './shutdown.js';
 import { serveFile } from './static.js'; // static files: gzip, ETag, cache headers
 import { installAI } from './ai/index.js'; // AI companions (off unless AI_PROVIDER + key are set), server/ai/
@@ -68,6 +69,7 @@ const playerBots = new PlayerBots(game, bots); // bots players add in game (P â†
 game.director = new Director(game, bots); // plays cue sheets with bot actors (docs/ROADMAP.md F2)
 const named = namedOn() ? new NamedManager(game, bots) : null; // server/named.js (only while a human is online)
 if (named) new NamedQuests(named); // named.quests: requests and outreach (server/namedquests.js)
+if (residentsOn()) new Residents(game, bots); // game.residents (server/residents.js)
 
 const server = http.createServer(async (req, res) => {
   if (res.handled) return;
@@ -215,10 +217,10 @@ perf.cpu.fill(cpuSecs()); perf.t.fill(performance.now() / 1000);
 setInterval(() => { const k = ++perf.i % 61; perf.cpu[k] = cpuSecs(); perf.bytes[k] = perf.bytesAll; perf.t[k] = performance.now() / 1000; }, 1000).unref();
 function perfStats() {
   const k = perf.i % 61, o = (perf.i + 1) % 61, dt = Math.max(1e-3, perf.t[k] - perf.t[o]);
-  const kinds = { humans: 0, player: 0, admin: 0, named: 0 };
+  const kinds = { humans: 0, player: 0, admin: 0, named: 0, resident: 0 };
   const owned = new Set([...(playerBots.owned?.keys() || [])]);
   for (const p of game.players.values()) if (!p.bot) kinds.humans++;
-  for (const e of bots.bots) if (!e.b.closed) kinds[e.named ? 'named' : owned.has(e.bid) ? 'player' : 'admin']++;
+  for (const e of bots.bots) if (!e.b.closed) kinds[e.named ? 'named' : e.resident ? 'resident' : owned.has(e.bid) ? 'player' : 'admin']++;
   return {
     cpu: { pct: +((100 * (perf.cpu[k] - perf.cpu[o])) / dt).toFixed(1), s: +cpuSecs().toFixed(2) },
     bytes: { perSec: Math.round((perf.bytes[k] - perf.bytes[o]) / dt), total: perf.bytesAll },

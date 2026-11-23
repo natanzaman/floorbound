@@ -523,6 +523,7 @@ export async function handle(req, res, url) {
       return json(res, 200, {
         bots: bots.list(), max: bots.max, behaviours: BEHAVIOURS, skills: bots.skillTable(),
         players: bots.realPlayers().map(p => ({ id: p.id, name: p.name, cls: p.cls, lvl: p.lvl })),
+        residents: game.residents?.status() || [], // (server/residents.js: who is in, and how long a removed one stays out)
       }), true;
     }
     if (path === '/api/admin/bots' && m === 'POST') {
