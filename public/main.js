@@ -336,7 +336,7 @@ async function join(joinMsg) {
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   state.ws = ws;
   ws.onopen = () => ws.send(JSON.stringify(joinMsg));
-  const recv = data => { const t = performance.now(), msg = JSON.parse(data); netStats.parse(performance.now() - t, data.length); onMessage(msg, t); };
+  const recv = data => { const t = performance.now(), msg = JSON.parse(data); netStats.parse(performance.now() - t, data.length); onMessage(msg, t); awayTick(t); };
   ws.onmessage = netsim ? e => netsim.deliver(e.data, recv) : e => recv(e.data);
   ws.onclose = () => {
     if (state.ws !== ws) return; // replaced or denied
@@ -2250,8 +2250,29 @@ let sentLock = 0; // the locked mob last reported to the server (`target`)
 const projFx = new Map(); // thorn id -> effect
 let visLag = 0; // ms the drawn characters lag the snapshot clock (slow motion / hit-stop), eased back to 0 afterwards
 const camLow = new THREE.Vector3(), camDir = new THREE.Vector3(), camFrom = new THREE.Vector3();
+// Away from the tab: a hidden tab (or a fully covered window) gets no animation frames, but the socket keeps delivering
+// snapshots, so their events still run (sounds play, the log fills) and spawn effects, damage numbers and attack
+// animations that only age when a frame is drawn. Left alone they all pile up and play at once on return (and the
+// pile-up is what makes the first seconds back stutter). skipAhead ends them as if the time had passed: while away
+// (about once a second, as snapshots arrive) and once more on the first frame back. The world itself needs no help:
+// the snapshot clock jumps to the present (SnapClock.resync) and every position is the server's latest.
+const AWAY_MS = 1000; // no frame for this long: away
+let lastSkip = 0;
+function skipAhead(sec) {
+  fx.update(sec); // every effect spawned meanwhile ends (the spark pool too)
+  vfx.skip(sec); // the 3D skill effects' batches
+  while (nums.length) drop(nums[0]); // damage numbers and callouts over heads
+  for (const map of [players, mobs]) for (const e of map.values()) if (e.model?.anim?.shotAct) e.model.anim.update(Math.min(sec, 5)); // attack clips finish
+  hitStop = 0; slowMo = 0; visLag = 0; shakeAmt = 0; // no slow motion, freeze or shake left over from a moment you missed
+  if (bannerQ.length > 1) bannerQ.splice(0, bannerQ.length - 1); // queued banners: only the newest is still news
+}
+function awayTick(t) { // a message arrived: if no frame has been drawn for a while, age what it spawned
+  if (t - last < AWAY_MS || t - lastSkip < AWAY_MS) return;
+  skipAhead((t - Math.max(last, lastSkip)) / 1000); lastSkip = t;
+}
 function frame(now) {
   requestAnimationFrame(frame);
+  if (now - last > AWAY_MS) { skipAhead((now - last) / 1000); lastSkip = now; } // back: everything spawned while away ends
   const t0 = performance.now(), gap = now - last;
   const dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now; // (never negative: a clock that steps back must not grow the shake or slow-mo timers)
   hitStop = Math.max(0, hitStop - dt);

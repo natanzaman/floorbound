@@ -549,6 +549,12 @@ export function initVfx({ scene, state, players, mobs, fx, camera, project, bubb
       chainFrame();
       kickAmt *= Math.exp(-dt * 9);
     },
+    /** Skip `sec` seconds (main.js skipAhead: back from a hidden tab): every live effect ends. Twice: a delayed one
+     *  spends the first call on its delay. */
+    skip(sec) {
+      for (const b of batches) { b.update(sec); b.update(sec); }
+      kickAmt = 0;
+    },
     /** The loading screen's shader warm-up: show one (invisible) instance of everything while main.js compiles. */
     warm(on) {
       for (const b of batches) { if (on) { _m.makeScale(0, 0, 0).toArray(b.mesh.instanceMatrix.array, 0); b.mesh.count = 1; b.mesh.visible = true; } else if (!b.n) { b.mesh.count = 0; b.mesh.visible = false; } }
